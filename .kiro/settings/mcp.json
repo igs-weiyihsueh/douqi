@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "agend-夜鶯-t1547585386803372055": {
+      "command": "/root/.agend/instances/夜鶯-t1547585386803372055/mcp-wrapper-agend.sh",
+      "args": []
+    }
+  }
+}

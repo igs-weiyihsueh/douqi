@@ -1,0 +1,19 @@
+{
+  "name": "douqi-cutgrass",
+  "version": "0.1.0",
+  "private": true,
+  "description": "鬥氣割草 - 實驗性 H5 割草遊戲 MVP (Phaser 3 + TypeScript)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "phaser": "3.80.1"
+  },
+  "devDependencies": {
+    "typescript": "5.4.5",
+    "vite": "5.2.11"
+  }
+}
