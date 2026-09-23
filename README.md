@@ -60,3 +60,4 @@ npm run preview # 預覽正式版
 
 目前所有貼圖皆由 `BootScene` 以程式產生（色塊 / 帶描邊圓形），無外部素材檔，
 之後可直接替換成正式像素素材。
+# Manual trigger for deployment
