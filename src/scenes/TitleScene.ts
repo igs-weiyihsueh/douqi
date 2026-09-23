@@ -191,6 +191,26 @@ export class TitleScene extends Phaser.Scene {
     edBtn.on('pointerdown', () => this.openSceneEditor());
     this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.E).on('down', () => this.openSceneEditor());
 
+    // ── 地形編輯器入口：🏔️ 地形編輯器 (M) → TerrainEditorScene（獨立編輯器場景）──
+    const teBtnW = 200, teBtnH = 44;
+    const teX = w / 2, teY = h - teBtnH / 2 - 20; // 底部中央
+    const teBg = this.add
+      .rectangle(teX, teY, teBtnW, teBtnH, 0x7c2d12, 0.9)
+      .setStrokeStyle(2, 0xff4500, 0.9)
+      .setDepth(5);
+    this.add
+      .text(teX, teY, '🏔️ 地形編輯器 (M)', { fontFamily: 'monospace', fontSize: '16px', color: '#fed7aa', fontStyle: 'bold' })
+      .setOrigin(0.5).setDepth(6);
+    const teBtn = this.add.container(0, 0, [teBg]).setSize(teBtnW, teBtnH).setDepth(5);
+    teBtn.setInteractive(
+      new Phaser.Geom.Rectangle(teX - teBtnW / 2, teY - teBtnH / 2, teBtnW, teBtnH),
+      Phaser.Geom.Rectangle.Contains
+    );
+    teBtn.on('pointerover', () => teBg.setFillStyle(0x9a3412, 0.95));
+    teBtn.on('pointerout', () => teBg.setFillStyle(0x7c2d12, 0.9));
+    teBtn.on('pointerdown', () => this.scene.start('TerrainEditorScene'));
+    this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.M).on('down', () => this.scene.start('TerrainEditorScene'));
+
     // ── 小遊戲入口：🎮 小遊戲 (G) → MinigameMenuScene（與 fast/slow 開始戰鬥並列，互不干擾）──
     const mgBtnW = 200, mgBtnH = 44;
     const mgX = mgBtnW / 2 + 20, mgY = h - mgBtnH / 2 - 20; // 左下角
