@@ -1,6 +1,1 @@
-[
-  "cross-instance-messaging",
-  "model-discovery",
-  "scheduling",
-  "worker-collaboration"
-]
+["cross-instance-messaging","git-deployment","grill-me","scheduling","worker-collaboration","model-discovery","progress-tracking","meeting-notes","asset-import","visual-verify","asset-sorter","skill-authoring"]

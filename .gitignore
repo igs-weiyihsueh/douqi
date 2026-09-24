@@ -21,3 +21,6 @@ Thumbs.db
 
 # Kiro CLI
 .kiro/
+
+# Progress tracking (local state)
+PROGRESS.md
