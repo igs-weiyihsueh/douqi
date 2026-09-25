@@ -1,36 +1,361 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
-  <head>
-    <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-    />
-    <title>鬥氣割草</title>
-    <style>
-      html,
-      body {
-        margin: 0;
-        padding: 0;
-        width: 100%;
-        height: 100%;
-        overflow: hidden;
-        background: #0d0d12;
-        touch-action: none;
-        -webkit-tap-highlight-color: transparent;
-        overscroll-behavior: none;
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>簡潔關卡編輯器</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: Arial, sans-serif;
+      background: #1a1a1a;
+      color: white;
+      overflow: hidden;
+    }
+    
+    .container {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #1a1a1a;
+    }
+    
+    .preview-container {
+      background: #333;
+      border: 2px solid #555;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+    
+    .canvas-wrapper {
+      position: relative;
+      background: #2a2a2a;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    
+    canvas {
+      display: block;
+      background: #2a2a2a;
+    }
+    
+    .title {
+      text-align: center;
+      margin-bottom: 15px;
+      font-size: 1.2em;
+      color: #fff;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    }
+    
+    .info {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.8);
+      color: white;
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 12px;
+      line-height: 1.4;
+      min-width: 200px;
+    }
+    
+    .controls {
+      margin-top: 15px;
+      text-align: center;
+    }
+    
+    .controls button {
+      background: #444;
+      color: white;
+      border: 1px solid #666;
+      padding: 8px 16px;
+      margin: 0 4px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    
+    .controls button:hover {
+      background: #555;
+    }
+    
+    .controls button:disabled {
+      background: #222;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="preview-container">
+      <div class="title">簡潔關卡編輯器 v1.0</div>
+      
+      <div class="canvas-wrapper">
+        <canvas id="game-canvas"></canvas>
+        <div class="info" id="info">
+          載入中...
+        </div>
+      </div>
+      
+      <div class="controls">
+        <button onclick="loadTestLevel()">載入測試關卡</button>
+        <button onclick="resetView()">重置視角</button>
+        <button onclick="toggleGrid()">切換網格</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/pixi.js@7.2.4/dist/pixi.min.js"></script>
+  <script>
+    // === 簡潔的全域變數 ===
+    let app = null;
+    let container = null;
+    let entities = [];
+    let showGrid = true;
+    
+    // === 常數定義 ===
+    const CANVAS_WIDTH = 800;
+    const CANVAS_HEIGHT = 600;
+    const SCALE = 1.0;
+    const GRID_SIZE = 50;
+    
+    // === 初始化編輯器 ===
+    function initEditor() {
+      console.log('開始初始化編輯器...');
+      
+      try {
+        // 創建Pixi應用
+        app = new PIXI.Application({
+          width: CANVAS_WIDTH,
+          height: CANVAS_HEIGHT,
+          backgroundColor: 0x2a2a2a,
+          antialias: true,
+          resolution: window.devicePixelRatio || 1,
+          autoDensity: true
+        });
+        
+        // 將canvas添加到頁面
+        const canvas = document.getElementById('game-canvas');
+        canvas.parentNode.replaceChild(app.view, canvas);
+        app.view.id = 'game-canvas';
+        
+        console.log('Pixi應用創建成功');
+        
+        // 創建主容器
+        container = new PIXI.Container();
+        container.x = CANVAS_WIDTH / 2;
+        container.y = CANVAS_HEIGHT / 2;
+        container.scale.set(SCALE);
+        
+        app.stage.addChild(container);
+        console.log('主容器創建完成');
+        
+        // 創建網格
+        createGrid();
+        console.log('網格創建完成');
+        
+        // 更新信息顯示
+        updateInfo();
+        console.log('編輯器初始化完成！');
+        
+      } catch (error) {
+        console.error('編輯器初始化失敗:', error);
+        document.getElementById('info').textContent = '錯誤: ' + error.message;
       }
-      #game {
-        width: 100%;
-        height: 100%;
+    }
+    
+    // === 創建網格 ===
+    function createGrid() {
+      const gridContainer = new PIXI.Container();
+      const graphics = new PIXI.Graphics();
+      
+      graphics.lineStyle(1, 0x444444, 0.5);
+      
+      // 繪製垂直線
+      for (let x = -1000; x <= 1000; x += GRID_SIZE) {
+        graphics.moveTo(x, -1000);
+        graphics.lineTo(x, 1000);
       }
-      canvas {
-        display: block;
+      
+      // 繪製水平線
+      for (let y = -1000; y <= 1000; y += GRID_SIZE) {
+        graphics.moveTo(-1000, y);
+        graphics.lineTo(1000, y);
       }
-    </style>
-    <script type="module" crossorigin src="./assets/index-Dle8TFAs.js"></script>
-  </head>
-  <body>
-    <div id="game"></div>
-  </body>
+      
+      // 繪製原點十字
+      graphics.lineStyle(2, 0x888888, 0.8);
+      graphics.moveTo(-50, 0);
+      graphics.lineTo(50, 0);
+      graphics.moveTo(0, -50);
+      graphics.lineTo(0, 50);
+      
+      gridContainer.addChild(graphics);
+      container.addChild(gridContainer);
+      
+      // 儲存網格引用
+      container.gridContainer = gridContainer;
+    }
+    
+    // === 載入測試關卡 ===
+    function loadTestLevel() {
+      console.log('載入測試關卡...');
+      
+      // 清除舊實體
+      entities.forEach(entity => {
+        container.removeChild(entity);
+      });
+      entities = [];
+      
+      // 創建測試實體
+      const testEntities = [
+        { type: 'enemy', x: -200, y: 0, color: 0xff4444 },
+        { type: 'enemy', x: 200, y: 0, color: 0xff4444 },
+        { type: 'item', x: 0, y: -150, color: 0x44ff44 },
+        { type: 'item', x: 0, y: 150, color: 0x44ff44 },
+        { type: 'powerup', x: -100, y: -100, color: 0x4444ff },
+        { type: 'powerup', x: 100, y: 100, color: 0x4444ff }
+      ];
+      
+      testEntities.forEach(entityData => {
+        const entity = createEntity(entityData);
+        entities.push(entity);
+        container.addChild(entity);
+      });
+      
+      updateInfo();
+      console.log(`載入了 ${entities.length} 個測試實體`);
+    }
+    
+    // === 創建實體 ===
+    function createEntity(data) {
+      const graphics = new PIXI.Graphics();
+      
+      // 根據類型設定大小
+      let size = 10;
+      switch(data.type) {
+        case 'enemy': size = 14; break;
+        case 'item': size = 8; break;
+        case 'powerup': size = 12; break;
+      }
+      
+      // 繪製實體
+      graphics.beginFill(data.color);
+      graphics.drawCircle(0, 0, size);
+      graphics.endFill();
+      
+      // 繪製邊框
+      graphics.lineStyle(2, 0xffffff, 0.8);
+      graphics.drawCircle(0, 0, size);
+      
+      // 設定位置
+      graphics.x = data.x;
+      graphics.y = data.y;
+      
+      return graphics;
+    }
+    
+    // === 重置視角 ===
+    function resetView() {
+      container.x = CANVAS_WIDTH / 2;
+      container.y = CANVAS_HEIGHT / 2;
+      container.scale.set(SCALE);
+      container.rotation = 0;
+      
+      updateInfo();
+      console.log('視角已重置');
+    }
+    
+    // === 切換網格顯示 ===
+    function toggleGrid() {
+      showGrid = !showGrid;
+      if (container.gridContainer) {
+        container.gridContainer.visible = showGrid;
+      }
+      updateInfo();
+    }
+    
+    // === 更新信息顯示 ===
+    function updateInfo() {
+      const info = document.getElementById('info');
+      if (!info) return;
+      
+      info.innerHTML = `
+        位置: (${Math.round(container.x)}, ${Math.round(container.y)})
+        縮放: ${container.scale.x.toFixed(2)}x
+        實體數量: ${entities.length}
+        網格: ${showGrid ? '顯示' : '隱藏'}
+      `;
+    }
+    
+    // === 滑鼠交互 ===
+    function setupInteraction() {
+      const canvas = document.getElementById('game-canvas');
+      let isDragging = false;
+      let lastPos = { x: 0, y: 0 };
+      
+      // 滑鼠滾輪縮放
+      canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        
+        const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+        const newScale = Math.max(0.1, Math.min(3.0, container.scale.x * zoomFactor));
+        
+        container.scale.set(newScale);
+        updateInfo();
+      });
+      
+      // 滑鼠拖拽平移
+      canvas.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        lastPos.x = e.clientX;
+        lastPos.y = e.clientY;
+        canvas.style.cursor = 'grabbing';
+      });
+      
+      canvas.addEventListener('mousemove', (e) => {
+        if (isDragging) {
+          const deltaX = e.clientX - lastPos.x;
+          const deltaY = e.clientY - lastPos.y;
+          
+          container.x += deltaX;
+          container.y += deltaY;
+          
+          lastPos.x = e.clientX;
+          lastPos.y = e.clientY;
+          
+          updateInfo();
+        }
+      });
+      
+      canvas.addEventListener('mouseup', () => {
+        isDragging = false;
+        canvas.style.cursor = 'grab';
+      });
+      
+      canvas.addEventListener('mouseleave', () => {
+        isDragging = false;
+        canvas.style.cursor = 'default';
+      });
+      
+      canvas.style.cursor = 'grab';
+    }
+    
+    // === 啟動編輯器 ===
+    window.addEventListener('load', () => {
+      initEditor();
+      setupInteraction();
+    });
+  </script>
+</body>
 </html>
