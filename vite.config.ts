@@ -9,7 +9,13 @@ export default defineConfig({
   },
   build: {
     target: 'es2020',
-    outDir: 'dist'
+    outDir: 'dist',
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'game.html'),
+        editor: resolve(__dirname, 'index.html')
+      }
+    }
   },
   resolve: {
     alias: {
