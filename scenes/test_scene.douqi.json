@@ -1,0 +1,113 @@
+{
+  "_format": "douqi-scene",
+  "_version": "1.0.0",
+  "metadata": {
+    "name": "test_scene",
+    "description": "測試場景 - 鬥氣割草編輯器整合測試用",
+    "created": "2026-09-24",
+    "editor": "douqi-scene-editor"
+  },
+  "scene": {
+    "name": "測試場景",
+    "ambientColor": "#ffffff",
+    "ambientIntensity": 0.3,
+    "sunColor": "#fff8dc",
+    "sunIntensity": 1.0,
+    "sunDirection": [100, 300, 150],
+    "fog": {
+      "enabled": false,
+      "color": "#cccccc",
+      "near": 10,
+      "far": 1000
+    }
+  },
+  "objects": [
+    {
+      "id": "obj_floor_001",
+      "name": "地面",
+      "type": "static_mesh",
+      "modelPath": "ground_tile.fbx",
+      "position": [0, 0, 0],
+      "rotation": [0, 0, 0],
+      "scale": [10, 1, 10],
+      "collider": {
+        "type": "box",
+        "isStatic": true,
+        "isTrigger": false
+      },
+      "textures": {
+        "0": {
+          "map": "ground_texture.jpg",
+          "tiling": [4, 4],
+          "offset": [0, 0]
+        }
+      },
+      "tags": ["ground", "walkable"]
+    },
+    {
+      "id": "obj_wall_001", 
+      "name": "牆壁",
+      "type": "static_mesh",
+      "modelPath": "wall_segment.fbx",
+      "position": [5, 0, 0],
+      "rotation": [0, 0, 0],
+      "scale": [1, 2, 1],
+      "collider": {
+        "type": "box",
+        "isStatic": true,
+        "isTrigger": false
+      },
+      "textures": {
+        "0": {
+          "map": "wall_texture.jpg",
+          "tiling": [1, 1],
+          "offset": [0, 0]
+        }
+      },
+      "tags": ["wall", "obstacle"]
+    },
+    {
+      "id": "obj_spawn_001",
+      "name": "玩家起始點",
+      "type": "spawn_point", 
+      "position": [-2, 0.5, -2],
+      "rotation": [0, 45, 0],
+      "scale": [1, 1, 1],
+      "properties": {
+        "playerType": "default",
+        "respawnPoint": true
+      },
+      "tags": ["spawn", "player"]
+    }
+  ],
+  "lights": [
+    {
+      "id": "light_main",
+      "type": "directional",
+      "color": "#ffffff",
+      "intensity": 1.0,
+      "position": [10, 10, 10],
+      "direction": [-1, -1, -1],
+      "castShadows": true
+    },
+    {
+      "id": "light_ambient",
+      "type": "ambient",
+      "color": "#404040", 
+      "intensity": 0.2
+    }
+  ],
+  "effects": [
+    {
+      "id": "particle_dust",
+      "type": "particle_system",
+      "position": [0, 1, 0],
+      "properties": {
+        "particleCount": 50,
+        "lifetime": 5.0,
+        "emissionRate": 10,
+        "texture": "dust_particle.png"
+      }
+    }
+  ]
+}
