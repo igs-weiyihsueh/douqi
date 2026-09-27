@@ -7,7 +7,6 @@ import { LevelConfigScanner } from '@/managers/LevelConfigScanner';
  * 與現有的敵人生成、可破壞物件生成系統整合
  */
 export class ObjectReplacementSystem {
-  private scene: Phaser.Scene;
   private configScanner: LevelConfigScanner;
   private currentLevelId: number = 1;
   private currentSubZone: 'A' | 'B' = 'A';
@@ -19,8 +18,7 @@ export class ObjectReplacementSystem {
   private items: GameEntity[] = [];         // 道具配置
   private decorations: GameEntity[] = [];   // 裝飾物件
 
-  constructor(scene: Phaser.Scene) {
-    this.scene = scene;
+  constructor(_scene: Phaser.Scene) {
     this.configScanner = new LevelConfigScanner();
   }
 
@@ -177,7 +175,7 @@ export class ObjectReplacementSystem {
 
     return {
       name: this.loadedConfig.metadata.name,
-      version: this.loadedConfig.metadata.version,
+      version: this.loadedConfig.metadata.version || '1.0',
       totalEntities: this.loadedConfig.entities.length,
       staticObjects: this.staticObjects.length,
       enemies: this.enemies.length,

@@ -5709,7 +5709,6 @@ export class GameScene extends Phaser.Scene {
     const cfg = GameConfig.breakable;
     
     // 階段2：檢查是否有物件替換配置
-    let defaultObjects: any[] = [];
     if (this.objectReplacement?.hasReplacementFor('static')) {
       console.log('[GameScene] 使用編輯器配置替換可破壞物件');
       const replacedObjects = this.objectReplacement.replaceStaticObjects([]);

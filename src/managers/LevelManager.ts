@@ -682,6 +682,27 @@ export class LevelManager {
           timeOfDay: "noon",
           shadowQuality: "medium"
         }
+      },
+      objectives: [
+        {
+          id: "obj_collect",
+          type: "collect",
+          description: "收集所有道具",
+          target: this.countCollectiblesInEditorData(editorData.entities),
+          reward: 500
+        },
+        {
+          id: "obj_survive",
+          type: "survive", 
+          description: "存活到時間結束",
+          target: 1,
+          reward: 300
+        }
+      ],
+      settings: {
+        difficulty: "normal",
+        allowRespawn: true,
+        showMinimap: true
       }
     };
   }
@@ -733,7 +754,7 @@ export class LevelManager {
   /**
    * 根據編輯器類型生成遊戲屬性
    */
-  private generateEntityProperties(editorType: string, color?: number): EntityProperties {
+  private generateEntityProperties(editorType: string, _color?: number): EntityProperties {
     switch (editorType) {
       case 'wooden_box':
         return {

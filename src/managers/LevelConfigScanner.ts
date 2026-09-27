@@ -164,15 +164,42 @@ export class LevelConfigScanner {
 
     // 轉換為標準LevelData格式
     const levelData: LevelData = {
+      _format: 'douqi-level',
+      _version: '1.0',
       metadata: {
         name: rawData.name,
         version: rawData.version,
         author: rawData.author || '編輯器',
-        description: rawData.description || `從 ${configName} 載入的關卡配置`
+        description: rawData.description || `從 ${configName} 載入的關卡配置`,
+        created: new Date().toISOString(),
+        editor: rawData.author || '編輯器'
+      },
+      level: {
+        id: configName,
+        name: rawData.name,
+        description: rawData.description || '',
+        difficulty: 'normal' as const,
+        timeLimit: 300,
+        scoreTarget: 1000
+      },
+      gameplay: {
+        playerStartPosition: [0, 0, 0] as [number, number, number],
+        playerStartRotation: [0, 0, 0] as [number, number, number],
+        cameraSettings: {
+          type: 'follow' as const
+        },
+        objectives: []
       },
       objectives: rawData.objectives || [],
       entities: rawData.entities,
       events: rawData.events || [],
+      config: {
+        backgroundMusic: 'default',
+        lighting: {
+          timeOfDay: 'noon' as const,
+          shadowQuality: 'medium' as const
+        }
+      },
       settings: rawData.settings || {}
     };
 

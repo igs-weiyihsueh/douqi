@@ -9,6 +9,8 @@ export interface LevelMetadata {
   created: string;
   editor: string;
   baseScene?: string;
+  version?: string;
+  author?: string;
 }
 
 export interface LevelConfig {
@@ -105,6 +107,8 @@ export interface LevelData {
   entities: GameEntity[];
   events: GameEvent[];
   config: LevelEnvironmentConfig;
+  objectives: Objective[];
+  settings: any;
 }
 
 // Phaser 專用的轉換型別
