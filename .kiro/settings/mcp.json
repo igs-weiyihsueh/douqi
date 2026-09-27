@@ -3,6 +3,14 @@
     "agend-夜鶯-t1547585386803372055": {
       "command": "/root/.agend/instances/夜鶯-t1547585386803372055/mcp-wrapper-agend.sh",
       "args": []
+    },
+    "agend-異靈-t1519684766109007943": {
+      "command": "/root/.agend/instances/異靈-t1519684766109007943/mcp-wrapper-agend.sh",
+      "args": []
+    },
+    "agend-征騎-h5-t1546045968682844223": {
+      "command": "/root/.agend/instances/征騎-h5-t1546045968682844223/mcp-wrapper-agend.sh",
+      "args": []
     }
   }
 }

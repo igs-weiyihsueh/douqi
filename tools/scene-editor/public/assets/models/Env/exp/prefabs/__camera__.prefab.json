@@ -1,0 +1,10 @@
+{
+  "id": "__camera__",
+  "name": "🎥 攝影機",
+  "model": "models/__camera__",
+  "scale": [
+    1,
+    1,
+    1
+  ]
+}

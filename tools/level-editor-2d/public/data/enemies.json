@@ -1,0 +1,45 @@
+[
+  {
+    "type": "enemy",
+    "subType": "grunt",
+    "name": "步兵",
+    "description": "基礎敵人單位",
+    "defaultProperties": {
+      "health": 100,
+      "speed": 50,
+      "damage": 20,
+      "aiType": "patrol",
+      "detectionRange": 100,
+      "attackRange": 30
+    }
+  },
+  {
+    "type": "enemy",
+    "subType": "archer",
+    "name": "弓兵",
+    "description": "遠程攻擊敵人",
+    "defaultProperties": {
+      "health": 80,
+      "speed": 40,
+      "damage": 30,
+      "aiType": "guard",
+      "detectionRange": 150,
+      "attackRange": 100
+    }
+  },
+  {
+    "type": "enemy",
+    "subType": "mage",
+    "name": "法師",
+    "description": "魔法攻擊敵人",
+    "defaultProperties": {
+      "health": 60,
+      "speed": 30,
+      "damage": 40,
+      "aiType": "chase",
+      "detectionRange": 120,
+      "attackRange": 80,
+      "manaPoints": 100
+    }
+  }
+]

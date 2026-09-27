@@ -1,0 +1,79 @@
+[
+  {
+    "type": "trigger",
+    "eventType": "area",
+    "name": "區域觸發",
+    "description": "玩家進入指定區域時觸發",
+    "defaultProperties": {
+      "triggerOnce": false,
+      "requireAllPlayers": false,
+      "delay": 0
+    },
+    "actions": [
+      {
+        "type": "spawnEnemies",
+        "name": "生成敵人",
+        "parameters": {
+          "enemyType": "grunt",
+          "count": 3,
+          "spawnArea": { "x": 0, "y": 0, "width": 100, "height": 100 }
+        }
+      },
+      {
+        "type": "showMessage",
+        "name": "顯示訊息",
+        "parameters": {
+          "message": "敵人出現了！",
+          "duration": 3
+        }
+      },
+      {
+        "type": "playSound",
+        "name": "播放音效",
+        "parameters": {
+          "soundId": "enemy_spawn",
+          "volume": 1.0
+        }
+      }
+    ]
+  },
+  {
+    "type": "trigger",
+    "eventType": "time",
+    "name": "時間觸發",
+    "description": "經過指定時間後觸發",
+    "defaultProperties": {
+      "triggerTime": 30,
+      "repeat": false,
+      "repeatInterval": 60
+    }
+  },
+  {
+    "type": "trigger",
+    "eventType": "condition",
+    "name": "條件觸發",
+    "description": "滿足特定條件時觸發",
+    "defaultProperties": {
+      "conditionType": "enemyCount",
+      "operator": "lessThan",
+      "value": 5
+    },
+    "conditions": [
+      {
+        "type": "enemyCount",
+        "name": "敵人數量",
+        "operators": ["equals", "lessThan", "greaterThan"]
+      },
+      {
+        "type": "playerHealth",
+        "name": "玩家血量",
+        "operators": ["equals", "lessThan", "greaterThan", "percentage"]
+      },
+      {
+        "type": "scoreReached",
+        "name": "分數達到",
+        "operators": ["equals", "greaterThan"]
+      }
+    ]
+  }
+]

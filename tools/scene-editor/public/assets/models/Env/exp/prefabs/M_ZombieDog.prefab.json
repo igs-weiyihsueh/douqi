@@ -1,0 +1,35 @@
+{
+  "id": "M_ZombieDog",
+  "name": "M_ZombieDog",
+  "model": "models/M_ZombieDog.fbx",
+  "scale": [
+    1,
+    1,
+    1
+  ],
+  "collider": {
+    "type": "capsule",
+    "isStatic": true,
+    "isTrigger": false,
+    "radiusOverride": 65,
+    "heightOverride": 200,
+    "offset": [
+      0,
+      0,
+      -20
+    ]
+  },
+  "textures": {
+    "0": {
+      "map": "textures/M_ZombieDog_slot0_map.png",
+      "tiling": [
+        1,
+        1
+      ],
+      "offset": [
+        0,
+        0
+      ]
+    }
+  }
+}

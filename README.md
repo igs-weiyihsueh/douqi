@@ -17,10 +17,12 @@
 
 ```bash
 npm install     # 安裝依賴
-npm run dev     # 啟動開發伺服器（預設 http://localhost:5173）
+# ⚠️ 注意：請使用 npm run build 而非 npm run dev
+# npm run dev 會啟動持續運行的開發服務器，導致 AgEnD 實例卡住
+npm run build   # 建置專案，然後可以透過靜態檔案服務查看
 ```
 
-打開瀏覽器到終端機顯示的網址即可遊玩。
+如需開發預覽，建議使用外部工具（如 Live Server 擴展）來服務建置後的檔案。
 
 其他指令：
 

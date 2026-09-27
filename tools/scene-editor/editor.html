@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>場景編輯器 - Scene Editor</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+    body { display: flex; flex-direction: column; background: #1e1e2e; color: #cdd6f4; }
+
+    #toolbar {
+      min-height: 38px; background: #11111b; display: flex; align-items: center;
+      padding: 4px 12px; gap: 6px; border-bottom: 1px solid #313244;
+      flex-wrap: wrap; flex-shrink: 0;
+    }
+    #toolbar .title { font-size: 13px; font-weight: 600; color: #89b4fa; margin-right: 16px; }
+    .toolbar-btn {
+      padding: 4px 10px; background: #45475a; color: #cdd6f4; border: none;
+      border-radius: 4px; font-size: 11px; cursor: pointer;
+    }
+    .toolbar-btn:hover { background: #585b70; }
+    .toolbar-btn.active { background: #89b4fa; color: #1e1e2e; }
+    .toolbar-btn.disabled { opacity: 0.4; pointer-events: none; }
+    .toolbar-btn.btn-play { background: #a6e3a1; color: #1e1e2e; }
+    .toolbar-btn.btn-play:hover { background: #b8f0b4; }
+    .toolbar-btn.btn-pause { background: #f38ba8; color: #1e1e2e; }
+    .toolbar-btn.btn-pause:hover { background: #f5a0bb; }
+    .toolbar-sep { width: 1px; height: 20px; background: #313244; }
+    .toolbar-shortcut { font-size: 9px; color: #6c7086; margin-left: 2px; }
+
+    #main { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+
+    #left-panel {
+      width: 260px; min-width: 260px; background: #181825; border-right: 1px solid #313244;
+      display: flex; flex-direction: column; overflow-y: auto; flex-shrink: 0;
+    }
+    .panel { padding: 10px; border-bottom: 1px solid #313244; }
+    .panel h3 {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;
+      color: #a6adc8; margin-bottom: 6px;
+    }
+
+    #object-list { list-style: none; max-height: 200px; overflow-y: auto; }
+    #object-list li {
+      padding: 5px 8px; cursor: pointer; border-radius: 4px; font-size: 11px;
+      margin-bottom: 2px;
+    }
+    #object-list li:hover { background: #313244; }
+    #object-list li.active { background: #89b4fa; color: #1e1e2e; font-weight: 600; }
+
+    #asset-list { list-style: none; max-height: 180px; overflow-y: auto; margin-top: 4px; }
+    #asset-list li {
+      padding: 4px 8px; display: flex; justify-content: space-between; align-items: center;
+      border-radius: 4px; margin-bottom: 2px;
+    }
+    #asset-list li:hover { background: #313244; }
+    .asset-name { font-size: 11px; }
+    .asset-spawn { cursor: pointer; }
+
+    #prefab-list { list-style: none; max-height: 200px; overflow-y: auto; margin-top: 4px; }
+    #prefab-list li {
+      padding: 4px 8px; display: flex; justify-content: space-between; align-items: center;
+      border-radius: 4px; margin-bottom: 2px; border-left: 3px solid #89b4fa;
+    }
+    #prefab-list li:hover { background: #313244; }
+    .prefab-info { font-size: 11px; display: flex; flex-direction: column; }
+    .prefab-info .prefab-model { font-size: 9px; color: #6c7086; }
+    .prefab-actions { display: flex; gap: 2px; }
+
+    .file-label {
+      display: block; padding: 7px; border: 2px dashed #45475a; border-radius: 5px;
+      text-align: center; cursor: pointer; font-size: 11px;
+    }
+    .file-label:hover { border-color: #89b4fa; }
+    input[type="file"] { display: none; }
+
+    /* Center area: viewport + timeline vertical split */
+    #center-area {
+      flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden;
+    }
+    #viewport-wrapper {
+      flex: 1; position: relative; min-height: 200px; overflow: hidden;
+    }
+    #viewport-wrapper canvas { display: block; }
+    #viewport { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
+
+    /* Timeline Panel */
+    #timeline-resizer {
+      height: 5px; background: #313244; cursor: row-resize; flex-shrink: 0;
+    }
+    #timeline-resizer:hover { background: #89b4fa; }
+
+    #timeline-panel {
+      height: 200px; min-height: 80px; max-height: 50vh;
+      background: #11111b; border-top: 1px solid #313244;
+      display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0;
+    }
+    #timeline-toolbar {
+      height: 28px; display: flex; align-items: center; padding: 0 8px; gap: 6px;
+      background: #181825; border-bottom: 1px solid #313244; flex-shrink: 0;
+    }
+    #timeline-toolbar button {
+      background: none; border: none; color: #cdd6f4; cursor: pointer; font-size: 13px;
+      padding: 2px 4px; border-radius: 3px;
+    }
+    #timeline-toolbar button:hover { background: #313244; }
+    #timeline-toolbar button.active { background: #45475a; color: #89b4fa; }
+    #timeline-toolbar .tl-sep { width: 1px; height: 16px; background: #313244; }
+    #timeline-toolbar .tl-frame {
+      font-size: 11px; color: #a6adc8; margin-left: auto; font-family: monospace;
+    }
+
+    #timeline-body {
+      flex: 1; display: flex; overflow: hidden;
+    }
+    #timeline-tracks {
+      width: 160px; min-width: 160px; background: #181825; border-right: 1px solid #313244;
+      overflow-y: auto; flex-shrink: 0; padding-top: 20px; /* offset for ruler height */
+    }
+    #timeline-tracks .tl-track-label {
+      height: 28px; display: flex; align-items: center; padding: 0 8px;
+      font-size: 10px; color: #a6adc8; border-bottom: 1px solid #1e1e2e;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    #timeline-tracks .tl-track-label.active { color: #89b4fa; background: #1e1e2e; }
+
+    #timeline-canvas-wrap {
+      flex: 1; position: relative; overflow-x: auto; overflow-y: auto;
+    }
+    #timeline-canvas {
+      display: block; cursor: pointer;
+    }
+
+    #right-panel {
+      width: 280px; min-width: 280px; background: #181825; border-left: 1px solid #313244;
+      overflow-y: auto; display: flex; flex-direction: column; flex-shrink: 0;
+    }
+    .hidden { display: none !important; }
+
+    .input-row { display: flex; gap: 4px; align-items: center; margin-top: 4px; }
+    .input-row label { font-size: 10px; min-width: 20px; color: #a6adc8; }
+    .input-row input[type="number"], .input-row input[type="text"] {
+      flex: 1; padding: 3px 5px; background: #313244; border: 1px solid #45475a;
+      border-radius: 3px; color: #cdd6f4; font-size: 11px; width: 50px;
+    }
+    input[type="range"] { flex: 1; accent-color: #89b4fa; height: 14px; }
+    input[type="color"] { width: 26px; height: 20px; border: none; background: none; cursor: pointer; }
+    .range-val { font-size: 10px; min-width: 30px; text-align: right; color: #89b4fa; }
+
+    .btn {
+      display: inline-block; padding: 5px 10px; background: #89b4fa; color: #1e1e2e;
+      border: none; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer;
+    }
+    .btn:hover { background: #b4d0fb; }
+    .btn-secondary { background: #45475a; color: #cdd6f4; }
+    .btn-secondary:hover { background: #585b70; }
+    .btn-danger { background: #f38ba8; color: #1e1e2e; }
+    .btn-danger:hover { background: #f5a0bb; }
+
+    .action-row { display: flex; gap: 4px; margin-top: 6px; }
+    .action-row .btn { flex: 1; text-align: center; }
+
+    .hint { font-size: 9px; color: #6c7086; margin-top: 4px; }
+
+    .mat-slot { background: #1e1e2e; border-radius: 5px; padding: 6px 8px; margin-bottom: 6px; border: 1px solid #313244; }
+    .mat-slot-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
+    .mat-slot-name { font-size: 11px; font-weight: 600; color: #cdd6f4; }
+    .mat-slot-mesh { font-size: 9px; color: #6c7086; }
+    .mat-slot-status { font-size: 10px; margin-bottom: 4px; }
+    .mat-slot-actions { display: flex; gap: 3px; }
+    .mat-slot-actions .btn-mini { flex: 1; }
+    .mat-slot-tiling { margin-top: 4px; border-top: 1px solid #313244; padding-top: 4px; }
+    .mat-slot-tiling .input-row input[type="number"] { width: 52px; }
+    .btn-mini {
+      padding: 3px 6px; background: #45475a; color: #cdd6f4; border-radius: 3px;
+      font-size: 9px; text-align: center; cursor: pointer; border: none;
+    }
+    .btn-mini:hover { background: #585b70; }
+    .btn-mini input[type="file"] { display: none; }
+
+    @keyframes toastFade {
+      0% { opacity: 1; }
+      70% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+
+    #camera-preview-panel.hidden { display: none !important; }
+  
+    /* Collapsible panel with enable toggle */
+    .panel-collapsible {
+      background: #1e1e2e; border: 1px solid #313244; border-radius: 8px;
+      margin-bottom: 8px; overflow: hidden;
+    }
+    .panel-collapsible.disabled { opacity: 0.5; }
+    .panel-header {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 10px; cursor: pointer; user-select: none;
+      background: #181825; border-bottom: 1px solid #313244;
+    }
+    .panel-header:hover { background: #1e1e30; }
+    .panel-header .toggle-arrow { font-size: 10px; color: #6c7086; transition: transform 0.2s; }
+    .panel-header .toggle-arrow.open { transform: rotate(90deg); }
+    .panel-header .panel-title { font-size: 12px; font-weight: 600; color: #cdd6f4; flex: 1; }
+    .panel-header .enable-check { margin-left: auto; }
+    .panel-body { padding: 8px 10px; display: none; }
+    .panel-body.open { display: block; }
+    .panel-collapsible.disabled .panel-body { display: none !important; }
+
+  
+    /* Editor overlay (blocks interaction during load/save) */
+    .editor-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(17, 17, 27, 0.85);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 99999;
+      transition: opacity 0.3s;
+    }
+    .editor-overlay.hidden { display: none; }
+    .overlay-content { text-align: center; }
+    .overlay-spinner {
+      width: 40px; height: 40px; margin: 0 auto 12px;
+      border: 4px solid #313244; border-top-color: #a6e3a1;
+      border-radius: 50%; animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .overlay-text { font-size: 16px; color: #cdd6f4; font-weight: 500; }
+
+  </style>
+</head>
+<body>
+
+  <!-- Loading/Saving Overlay -->
+  <div id="editor-overlay" class="editor-overlay hidden">
+    <div class="overlay-content">
+      <div class="overlay-spinner"></div>
+      <div class="overlay-text" id="overlay-text">處理中...</div>
+    </div>
+  </div>
+
+  <!-- Toolbar -->
+  <div id="toolbar">
+    <span class="title">場景編輯器</span>
+    <button class="toolbar-btn active" id="mode-translate">移動 <span class="toolbar-shortcut">W</span></button>
+    <button class="toolbar-btn" id="mode-rotate">旋轉 <span class="toolbar-shortcut">E</span></button>
+    <button class="toolbar-btn" id="mode-scale">縮放 <span class="toolbar-shortcut">R</span></button>
+    <div class="toolbar-sep"></div>
+    <button class="toolbar-btn" id="undo-btn">⟲ 復原 <span class="toolbar-shortcut">Ctrl+Z</span></button>
+    <button class="toolbar-btn" id="redo-btn">⟳ 重做 <span class="toolbar-shortcut">Ctrl+Y</span></button>
+    <div class="toolbar-sep"></div>
+    <button class="toolbar-btn" id="new-scene-btn">🗒 新場景</button>
+    <button class="toolbar-btn" id="save-scene-btn">💾 儲存場景</button>
+    <button class="toolbar-btn" id="load-scene-btn">📂 載入場景</button>
+    <button class="toolbar-btn" id="export-game-btn">🎮 匯出遊戲用</button>
+    <button class="toolbar-btn" id="export-standalone-btn">📦 匯出獨立遊戲</button>
+    <div class="toolbar-sep"></div>
+    <button class="toolbar-btn btn-play" id="play-btn">▶ 執行</button>
+    <button class="toolbar-btn btn-pause hidden" id="stop-btn">⏹ 停止</button>
+    <button class="toolbar-btn hidden" id="debug-btn">🐛 Debug</button>
+    <div class="toolbar-sep"></div>
+    <button class="toolbar-btn" id="add-camera-btn">🎥 攝影機</button>
+    <button class="toolbar-btn" id="vfx-editor-btn">💥 特效工具</button>
+    <button class="toolbar-btn" id="export-spinningtop-btn" style="background:#1a5c2a;">🎯 匯出 鬥氣割草</button>
+    <input type="file" id="load-scene-input" accept=".json" style="display:none" />
+  </div>
+
+  <div id="main">
+    <!-- Left Panel: Object Hierarchy -->
+    <aside id="left-panel">
+      <div class="panel">
+        <h3>場景物件</h3>
+        <label class="file-label" for="add-model-input">＋ 載入 FBX 模型到場景</label>
+        <input type="file" id="add-model-input" accept=".fbx" />
+        <ul id="object-list"></ul>
+      </div>
+
+      <div class="panel">
+        <h3>素材庫</h3>
+        <p class="hint">已載入的模型可重複放置到場景</p>
+        <ul id="asset-list"></ul>
+      </div>
+
+      <div class="panel">
+        <h3>💎 Prefab（預製物件）</h3>
+        <p class="hint">含材質+碰撞體+動畫的完整物件模板</p>
+        <ul id="prefab-list"></ul>
+        <div class="input-row" style="margin-top:6px">
+          <label class="file-label" for="import-prefab-input" style="flex:1;margin:0">📥 匯入 Prefab 檔案</label>
+          <input type="file" id="import-prefab-input" accept=".json,.prefab.json" />
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>場景設定</h3>
+        <div class="input-row">
+          <label>名稱</label>
+          <input type="text" id="scene-name" placeholder="my_scene" style="flex:1" />
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>燈光</h3>
+        <div class="input-row">
+          <label>環境</label>
+          <input type="range" id="ed-ambient" min="0" max="3" step="0.05" value="1.5" />
+          <span class="range-val" id="ed-ambient-val">1.50</span>
+          <input type="color" id="ed-ambient-color" value="#ffffff" />
+        </div>
+        <div class="input-row">
+          <label>太陽</label>
+          <input type="range" id="ed-sun" min="0" max="4" step="0.05" value="2.0" />
+          <span class="range-val" id="ed-sun-val">2.00</span>
+          <input type="color" id="ed-sun-color" value="#ffffff" />
+        </div>
+      </div>
+    </aside>
+
+    <!-- Center Area: Viewport + Timeline -->
+    <div id="center-area">
+      <!-- 3D Viewport -->
+      <div id="viewport-wrapper">
+        <div id="viewport">
+          <!-- FPS Counter -->
+          <div id="fps-counter" style="
+            position: absolute; top: 8px; left: 8px; z-index: 50;
+            font-size: 12px; font-family: monospace; color: #a6e3a1;
+            background: rgba(0,0,0,0.5); padding: 2px 6px; border-radius: 3px;
+            display: none; pointer-events: none;
+          ">FPS: 0</div>
+          <!-- Floating Camera Preview -->
+          <div id="camera-preview-panel" class="hidden" style="
+            position: absolute; bottom: 12px; right: 12px; width: 320px; height: 200px;
+            background: #11111b; border: 2px solid #89b4fa; border-radius: 8px;
+            overflow: hidden; z-index: 100; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            display: flex; flex-direction: column;
+          ">
+            <div id="camera-preview-header" style="
+              display: flex; justify-content: space-between; align-items: center;
+              padding: 4px 8px; background: #181825; border-bottom: 1px solid #313244;
+              cursor: move; user-select: none;
+            ">
+              <span style="font-size: 10px; color: #89b4fa; font-weight: 600;">🎥 攝影機預覽</span>
+              <button id="camera-preview-close" style="
+                background: none; border: none; color: #f38ba8; cursor: pointer; font-size: 12px;
+              ">✕</button>
+            </div>
+            <canvas id="camera-preview-canvas" style="flex: 1; width: 100%; display: block;"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Resizer -->
+      <div id="timeline-resizer"></div>
+
+      <!-- Timeline Panel -->
+      <div id="timeline-panel">
+        <div id="timeline-toolbar">
+          <button id="tl-btn-start" title="回到開頭">⏮</button>
+          <button id="tl-btn-prev" title="上一幀">⏪</button>
+          <button id="tl-btn-play" title="播放/暫停">▶</button>
+          <button id="tl-btn-next" title="下一幀">⏩</button>
+          <button id="tl-btn-end" title="跳到結尾">⏭</button>
+          <span class="tl-sep"></span>
+          <button id="tl-btn-loop" title="循環播放">🔁</button>
+          <span class="tl-sep"></span>
+          <span class="tl-frame">Frame: <span id="tl-current-frame">0</span> / <span id="tl-total-frames">0</span></span>
+          <span class="tl-sep"></span>
+          <span id="tl-speed-control" style="display:none; font-size:11px; color:#cdd6f4; align-items:center; gap:4px;">
+            速度: <input id="tl-seg-speed" type="number" min="0.1" max="5" step="0.1" value="1.0" style="width:45px; font-size:10px; padding:2px 4px; background:#313244; color:#cdd6f4; border:1px solid #45475a; border-radius:3px;" />×
+          </span>
+        </div>
+        <div id="timeline-body">
+          <div id="timeline-tracks">
+            <div class="tl-track-label">🎬 Animation</div>
+            <div class="tl-track-label">💥 VFX</div>
+            <div class="tl-track-label">🔊 Audio</div>
+          </div>
+          <div id="timeline-canvas-wrap">
+            <canvas id="timeline-canvas"></canvas>
+          </div>
+        </div>
+        <!-- Marker Properties (shown when a marker is selected) -->
+        <div id="tl-marker-props" class="hidden" style="
+          height: 28px; display: flex; align-items: center; padding: 0 10px; gap: 8px;
+          background: #181825; border-top: 1px solid #313244; flex-shrink: 0;
+        ">
+          <span style="font-size: 10px; color: #a6adc8;">◆ Marker:</span>
+          <select id="tl-marker-preset" style="font-size: 10px; padding: 2px 4px; background: #313244; color: #cdd6f4; border: 1px solid #45475a; border-radius: 3px;">
+            <optgroup label="命中特效">
+              <option value="hit_spark">打擊火花</option>
+              <option value="hit_blood">血液飛濺</option>
+              <option value="hit_dust">灰塵</option>
+            </optgroup>
+            <optgroup label="攻擊特效">
+              <option value="attack_slash">斬擊揮砍</option>
+              <option value="attack_punch">拳擊衝擊</option>
+              <option value="attack_energy">能量波動</option>
+            </optgroup>
+            <optgroup label="其他">
+              <option value="death_explosion">死亡爆炸</option>
+              <option value="heal_sparkle">治癒光芒</option>
+            </optgroup>
+          </select>
+          <span style="font-size: 10px; color: #6c7086;">尺寸:</span>
+          <input id="tl-marker-scale" type="number" step="0.1" min="0.1" max="10" value="1.0" style="width: 48px; font-size: 10px; padding: 2px 4px; background: #313244; color: #cdd6f4; border: 1px solid #45475a; border-radius: 3px;">
+          <label style="font-size: 10px; color: #6c7086; margin-left: 4px;"><input type="checkbox" id="tl-marker-follow" style="margin-right:2px;" />跟隨</label>
+          <span style="font-size: 10px; color: #6c7086; margin-left: auto;" id="tl-marker-frame-label">Frame: 0</span>
+          <button id="tl-marker-mode-translate" title="位移 (W)" style="font-size: 11px; background: #45475a; border: none; color: #00ffff; cursor: pointer; padding: 2px 5px; border-radius: 3px;">↔</button>
+          <button id="tl-marker-mode-rotate" title="旋轉 (E)" style="font-size: 11px; background: none; border: none; color: #cdd6f4; cursor: pointer; padding: 2px 5px; border-radius: 3px;">↻</button>
+          <button id="tl-marker-delete" style="font-size: 10px; background: none; border: none; color: #f38ba8; cursor: pointer;">🗑 刪除</button>
+        </div>
+        <!-- Combat Marker Properties (2-row panel, shown when combat marker selected) -->
+        <div id="tl-combat-props" class="hidden" style="
+          height: 84px; display: flex; flex-direction: column; padding: 0 10px;
+          background: #181825; border-top: 1px solid #313244; flex-shrink: 0;
+        ">
+          <div style="height: 28px; display: flex; align-items: center; gap: 8px;">
+            <span style="font-size:10px; color:#a6adc8;">⚔️ 戰鬥判定:</span>
+            <span id="tl-combat-frame-label" style="font-size:10px; color:#6c7086;">幀: 0</span>
+            <label style="font-size:10px; color:#6c7086;">傷害</label>
+            <input id="tl-combat-damage" type="number" min="0" value="10" style="width:44px; font-size:10px; padding:2px 4px; background:#313244; color:#cdd6f4; border:1px solid #45475a; border-radius:3px;" />
+            <label style="font-size:10px; color:#6c7086;">距離</label>
+            <input id="tl-combat-range" type="number" min="1" value="30" style="width:44px; font-size:10px; padding:2px 4px; background:#313244; color:#cdd6f4; border:1px solid #45475a; border-radius:3px;" />
+            <button id="tl-combat-delete" style="font-size:10px; background:none; border:none; color:#f38ba8; cursor:pointer; margin-left:auto;">🗑 刪除</button>
+          </div>
+          <div style="height: 28px; display: flex; align-items: center; gap: 8px;">
+            <label style="font-size:10px; color:#6c7086;">角度</label>
+            <input id="tl-combat-angle" type="number" min="1" max="360" value="120" style="width:44px; font-size:10px; padding:2px 4px; background:#313244; color:#cdd6f4; border:1px solid #45475a; border-radius:3px;" />
+            <label style="font-size:10px; color:#6c7086;">冷卻</label>
+            <input id="tl-combat-cooldown" type="number" step="0.1" min="0.1" value="1.0" style="width:44px; font-size:10px; padding:2px 4px; background:#313244; color:#cdd6f4; border:1px solid #45475a; border-radius:3px;" />
+            <label style="font-size:10px; color:#6c7086;">擊退力</label>
+            <input id="tl-combat-kb-force" type="number" step="10" min="0" value="0" style="width:44px; font-size:10px; padding:2px 4px; background:#313244; color:#cdd6f4; border:1px solid #45475a; border-radius:3px;" placeholder="力度" />
+            <label style="font-size:10px; color:#6c7086;">上升力</label>
+            <input id="tl-combat-kb-up" type="number" step="10" min="0" value="0" style="width:44px; font-size:10px; padding:2px 4px; background:#313244; color:#cdd6f4; border:1px solid #45475a; border-radius:3px;" placeholder="上升" />
+          </div>
+          <div style="height: 28px; display: flex; align-items: center; gap: 8px;">
+            <label style="font-size:10px; color:#6c7086;">形狀</label>
+            <select id="tl-combat-shape" style="font-size:10px; padding:2px 4px; background:#313244; color:#cdd6f4; border:1px solid #45475a; border-radius:3px;">
+              <option value="cone">扇形</option>
+              <option value="circle">圓形AOE</option>
+              <option value="rectangle">矩形</option>
+            </select>
+            <label style="font-size:10px; color:#6c7086;">前方偏移</label>
+            <input id="tl-combat-offset" type="number" step="10" min="0" value="0" style="width:44px; font-size:10px; padding:2px 4px; background:#313244; color:#cdd6f4; border:1px solid #45475a; border-radius:3px;" />
+            <label id="tl-combat-width-label" style="font-size:10px; color:#6c7086; display:none;">寬度</label>
+            <input id="tl-combat-width" type="number" step="10" min="1" value="60" style="width:44px; font-size:10px; padding:2px 4px; background:#313244; color:#cdd6f4; border:1px solid #45475a; border-radius:3px; display:none;" />
+            <label style="font-size:10px; color:#6c7086; margin-left:8px;">
+              <input id="tl-combat-indicator" type="checkbox" style="vertical-align:middle;"> 顯示預警
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Panel: Inspector -->
+    <aside id="right-panel">
+      <!-- VFX Editor Panel (hidden by default, shown when 💥 mode active) -->
+      <div id="vfx-editor-panel" class="hidden" style="height:100%; overflow-y:auto; padding:8px;">
+        <style>
+          #vfx-editor-panel input[type="number"] { -moz-appearance: textfield; }
+          #vfx-editor-panel input[type="number"]::-webkit-outer-spin-button,
+          #vfx-editor-panel input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        </style>
+        <div class="panel">
+          <h3>💥 特效編輯器 <button id="vfx-editor-close" style="float:right; background:none; border:none; color:#f38ba8; cursor:pointer; font-size:14px;">✕</button></h3>
+
+          <!-- Preset list -->
+          <div class="input-row" style="margin-bottom:6px;">
+            <select id="vfx-ed-preset-list" style="flex:1;"><option value="">— 新特效 —</option></select>
+            <button class="btn btn-sm" id="vfx-ed-load-preset" style="font-size:10px;">載入</button>
+          </div>
+
+          <!-- Parameters -->
+          <div style="font-size:11px;">
+            <div class="input-row"><label>名稱</label><input type="text" id="vfx-ed-name" value="新特效" style="flex:1;" /></div>
+
+            <div class="input-row"><label>數量</label><input type="number" id="vfx-ed-count" value="15" min="1" max="200" style="width:50px;" title="粒子數量 (顆) | 範圍: 1~200" /></div>
+
+            <div class="input-row">
+              <label>大小</label><input type="number" id="vfx-ed-size" value="12" step="1" min="1" style="width:40px;" title="起始大小 (px) | 最小: 1" />
+              <label>→</label><input type="number" id="vfx-ed-size-end" value="2" step="1" min="0" style="width:40px;" title="結束大小 (px) | 最小: 0" />
+            </div>
+
+            <div class="input-row">
+              <label>速度</label><input type="number" id="vfx-ed-speed" value="150" step="10" style="width:50px;" title="噴發速度 (單位/秒) | 0=靜止" />
+              <label>±</label><input type="number" id="vfx-ed-speed-var" value="60" step="5" style="width:40px;" title="速度隨機變異 (單位/秒) | 0=無變化" />
+            </div>
+
+            <div class="input-row">
+              <label>壽命</label><input type="number" id="vfx-ed-life" value="0.35" step="0.05" min="0.05" style="width:50px;" title="粒子存活時間 (秒) | 最小: 0.05" />
+              <label>±</label><input type="number" id="vfx-ed-life-var" value="0.1" step="0.05" style="width:40px;" title="壽命隨機變異 (秒) | 0=全部同壽命" />
+            </div>
+
+            <div class="input-row">
+              <label>顏色</label><input type="color" id="vfx-ed-color" value="#4488ff" style="width:36px;height:24px;" />
+              <label>→</label><input type="color" id="vfx-ed-color-end" value="#2244aa" style="width:36px;height:24px;" />
+            </div>
+
+            <div class="input-row">
+              <label>透明度</label><input type="number" id="vfx-ed-opacity" value="1" step="0.1" min="0" max="1" style="width:40px;" title="起始透明度 | 範圍: 0~1 (0=全透明, 1=不透明)" />
+              <label>→</label><input type="number" id="vfx-ed-opacity-end" value="0" step="0.1" min="0" max="1" style="width:40px;" title="結束透明度 | 範圍: 0~1 (0=全透明, 1=不透明)" />
+            </div>
+
+            <div class="input-row">
+              <label>重力</label><input type="number" id="vfx-ed-gravity" value="200" step="10" style="width:50px;" title="向下加速度 (單位/秒²) | 0=無重力, 負值=向上飄" />
+            </div>
+
+            <div class="input-row">
+              <label>散射角</label><input type="number" id="vfx-ed-spread" value="120" step="5" min="0" max="360" style="width:50px;" title="噴發錐形角度 (度) | 範圍: 0~360 | 0=直線, 360=球形散射" />
+            </div>
+
+            <div class="input-row">
+              <label>方向</label>
+              <input type="number" id="vfx-ed-dir-x" value="0" step="0.1" style="width:36px;" title="X方向分量 | -1~1" />
+              <input type="number" id="vfx-ed-dir-y" value="1" step="0.1" style="width:36px;" title="Y方向分量 | -1~1 (1=上, -1=下)" />
+              <input type="number" id="vfx-ed-dir-z" value="0" step="0.1" style="width:36px;" title="Z方向分量 | -1~1 (1=前, -1=後)" />
+            </div>
+
+            <div class="input-row">
+              <label>貼圖</label>
+              <select id="vfx-ed-texture" style="flex:1;">
+                <option value="circle">● 圓形</option>
+                <option value="spark">✦ 火花</option>
+                <option value="ring">○ 圓環</option>
+                <option value="star">★ 星形</option>
+              </select>
+            </div>
+
+            <!-- Extended parameters -->
+            <div style="margin-top:6px; border-top:1px solid #444; padding-top:6px;">
+              <div class="input-row">
+                <label>渲染模式</label>
+                <select id="vfx-ed-render-mode" style="flex:1;">
+                  <option value="billboard">Billboard</option>
+                  <option value="stretched">Stretched（速度拉伸）</option>
+                  <option value="trail">Trail（拖尾）</option>
+                </select>
+              </div>
+              <div class="input-row" id="vfx-ed-stretch-row">
+                <label>拉伸倍率</label><input type="number" id="vfx-ed-length-factor" value="3" step="0.5" min="0.5" style="width:50px;" title="速度方向拉伸倍率 | 最小: 0.5 | 越大粒子越長" />
+                <label>Trail長度</label><input type="number" id="vfx-ed-trail-length" value="10" step="1" min="1" style="width:50px;" title="拖尾長度 (單位) | 最小: 1" />
+              </div>
+
+              <div class="input-row">
+                <label>發射形狀</label>
+                <select id="vfx-ed-emitter-shape" style="flex:1;">
+                  <option value="point">點</option>
+                  <option value="sphere">球形</option>
+                  <option value="cone">錐形</option>
+                  <option value="circle">圓形</option>
+                </select>
+                <label>半徑</label><input type="number" id="vfx-ed-emitter-radius" value="1" step="1" min="0" style="width:40px;" title="發射區域半徑 (單位) | 最小: 0 | 0=從中心點發射" />
+              </div>
+
+              <div class="input-row">
+                <label>軌道力</label><input type="number" id="vfx-ed-orbital" value="0" step="5" style="width:50px;" title="粒子繞中心旋轉力 (度/秒) | 0=不旋轉 | 正值=逆時針" />
+                <label>阻力</label><input type="number" id="vfx-ed-drag" value="0" step="0.05" min="0" max="1" style="width:40px;" title="速度衰減 | 範圍: 0~1 | 0=無阻力, 1=立即停止" />
+              </div>
+
+              <div class="input-row">
+                <label>發射模式</label>
+                <select id="vfx-ed-emission-mode" style="width:80px;">
+                  <option value="burst">爆發</option>
+                  <option value="continuous">持續</option>
+                </select>
+                <label>發射率</label><input type="number" id="vfx-ed-emission-rate" value="20" step="5" min="1" style="width:40px;" title="每秒發射粒子數 (顆/秒) | 最小: 1 | 僅持續模式有效" />
+                <label>時長</label><input type="number" id="vfx-ed-duration" value="1" step="0.1" min="0.1" style="width:40px;" title="持續發射的總時間 (秒) | 最小: 0.1 | 僅持續模式有效" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Preview & Save -->
+          <div style="margin-top:8px; display:flex; gap:4px; flex-wrap:wrap;">
+            <button class="btn btn-sm" id="vfx-ed-preview" style="background:#45a049;">▶ 預覽</button>
+            <button class="btn btn-sm" id="vfx-ed-loop" style="background:#555;">🔁 循環</button>
+            <button class="btn btn-sm" id="vfx-ed-save" style="background:#2266aa;">💾 存檔</button>
+            <button class="btn btn-sm" id="vfx-ed-load-file" style="background:#446600;">📂 載入</button>
+            <button class="btn btn-sm" id="vfx-ed-delete" style="background:#882222;">🗑️ 刪除</button>
+          </div>
+          <input type="file" id="vfx-ed-file-input" accept=".json,.vfx.json" style="display:none;" />
+
+          <p class="hint" style="margin-top:6px;">預覽在場景中心播放。儲存後可在 Timeline VFX marker 中選用。</p>
+        </div>
+      </div>
+
+      <div id="inspector" class="hidden">
+        <div class="panel">
+          <h3>物件屬性</h3>
+          <div class="input-row">
+            <label>名稱</label>
+            <input type="text" id="insp-name" style="flex:1" />
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>位置 (Position)</h3>
+          <div class="input-row">
+            <label>X</label><input type="number" id="pos-x" step="1" />
+            <label>Y</label><input type="number" id="pos-y" step="1" />
+            <label>Z</label><input type="number" id="pos-z" step="1" />
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>旋轉 (Rotation°)</h3>
+          <div class="input-row">
+            <label>X</label><input type="number" id="rot-x" step="1" />
+            <label>Y</label><input type="number" id="rot-y" step="1" />
+            <label>Z</label><input type="number" id="rot-z" step="1" />
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>縮放 (Scale)</h3>
+          <div class="input-row">
+            <label>X</label><input type="number" id="scl-x" step="0.01" />
+            <label>Y</label><input type="number" id="scl-y" step="0.01" />
+            <label>Z</label><input type="number" id="scl-z" step="0.01" />
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>材質列表</h3>
+          <div id="material-slots"></div>
+        </div>
+
+        <div class="panel">
+          <h3>操作</h3>
+          <div class="action-row">
+            <button class="btn btn-secondary" id="duplicate-btn">複製</button>
+            <button class="btn btn-danger" id="delete-btn">🗑 刪除</button>
+          </div>
+          <div class="action-row" style="margin-top:4px">
+            <button class="btn" id="save-prefab-btn">💎 存為 Prefab</button>
+            <button class="btn btn-secondary" id="update-prefab-btn">💎 更新 Prefab</button>
+          </div>
+        </div>
+
+        <div class="panel hidden" id="camera-panel">
+          <h3>🎥 攝影機參數</h3>
+          <div class="input-row">
+            <label>FOV</label>
+            <input type="number" id="cam-fov" step="1" min="10" max="120" value="60" style="width:60px" />
+            <span class="hint" style="margin-left:4px">°</span>
+          </div>
+          <div class="input-row">
+            <label>比例</label>
+            <select id="cam-aspect" style="width:80px">
+              <option value="1.777">16:9</option>
+              <option value="1.333">4:3</option>
+              <option value="2.333">21:9</option>
+              <option value="1.6">16:10</option>
+              <option value="1.0">1:1</option>
+              <option value="custom">自訂</option>
+            </select>
+          </div>
+          <div class="input-row" id="cam-aspect-custom" style="display:none">
+            <label>寬</label>
+            <input type="number" id="cam-aspect-w" step="1" min="1" value="1920" style="width:55px" />
+            <label>高</label>
+            <input type="number" id="cam-aspect-h" step="1" min="1" value="1080" style="width:55px" />
+          </div>
+          <div class="input-row">
+            <label>Near</label>
+            <input type="number" id="cam-near" step="0.1" min="0.01" value="1" style="width:60px" />
+            <label>Far</label>
+            <input type="number" id="cam-far" step="100" min="1" value="5000" style="width:60px" />
+          </div>
+          <hr style="border:none;border-top:1px solid #313244;margin:8px 0" />
+          <h3>🎯 跟隨目標</h3>
+          <div class="input-row">
+            <label><input type="checkbox" id="cam-follow-enabled" /> 啟用跟隨</label>
+          </div>
+          <div id="cam-follow-settings" class="hidden">
+            <div class="input-row">
+              <label>目標</label>
+              <select id="cam-follow-target" style="flex:1"></select>
+            </div>
+            <div class="input-row">
+              <label>偏移</label>
+              <input type="number" id="cam-follow-ox" step="10" value="0" style="width:50px" />
+              <input type="number" id="cam-follow-oy" step="10" value="250" style="width:50px" />
+              <input type="number" id="cam-follow-oz" step="10" value="350" style="width:50px" />
+            </div>
+            <div class="input-row">
+              <label>看向偏移</label>
+              <input type="number" id="cam-look-ox" step="10" value="0" style="width:50px" />
+              <input type="number" id="cam-look-oy" step="10" value="30" style="width:50px" />
+              <input type="number" id="cam-look-oz" step="10" value="0" style="width:50px" />
+            </div>
+            <p class="hint">相對目標物件中心的攝影機位置偏移</p>
+          </div>
+          <p class="hint">未啟用跟隨 = 固定鏡頭（使用攝影機的位置和角度）</p>
+        </div>
+
+        <div class="panel hidden" id="anim-panel">
+          <h3>🎬 動畫</h3>
+          <div id="anim-no-data"><p class="hint">此物件無動畫資料</p></div>
+          <div id="anim-content" class="hidden">
+            <label class="file-label" for="extra-anim-input" style="margin-bottom:6px">＋ 載入額外動作 .fbx</label>
+            <input type="file" id="extra-anim-input" accept=".fbx" />
+            <p style="font-size:10px;color:#a6adc8;margin:4px 0">動作列表</p>
+            <ul id="anim-clip-list"></ul>
+            <hr style="border:none;border-top:1px solid #313244;margin:8px 0" />
+            <p style="font-size:10px;color:#a6adc8">自訂動作區段</p>
+            <div class="input-row">
+              <label>來源</label><select id="seg-clip-src" style="flex:1"></select>
+            </div>
+            <div class="input-row">
+              <label>名稱</label><input type="text" id="seg-name-input" placeholder="idle_loop" style="flex:1" />
+            </div>
+            <div class="input-row">
+              <label>起始</label><input type="number" id="seg-start-input" value="0" min="0" style="width:50px" />
+              <label>結尾</label><input type="number" id="seg-end-input" value="30" min="1" style="width:50px" />
+            </div>
+            <div class="input-row">
+              <button class="btn btn-sm" id="seg-add-btn">新增區段</button>
+            </div>
+            <ul id="seg-list" style="margin-top:4px"></ul>
+          </div>
+        </div>
+
+        <!-- Collider Panel (Collapsible) -->
+        <div class="panel-collapsible" id="collider-panel-wrap">
+          <div class="panel-header" onclick="togglePanel('collider')">
+            <span class="toggle-arrow open" id="collider-arrow">▶</span>
+            <span class="panel-title">碰撞體 (Collider)</span>
+            <input type="checkbox" class="enable-check" id="collider-enabled" checked onclick="event.stopPropagation(); togglePanelEnabled('collider')" />
+          </div>
+          <div class="panel-body open" id="collider-body">
+            <div class="input-row">
+              <label>類型</label>
+              <select id="collider-type">
+                <option value="none">無</option>
+                <option value="box">方塊 (Box)</option>
+                <option value="sphere">球體 (Sphere)</option>
+                <option value="capsule">膠囊 (Capsule)</option>
+                <option value="mesh">網格 (Mesh)</option>
+              </select>
+            </div>
+            <div class="input-row">
+              <label><input type="checkbox" id="collider-static" /> 靜態</label>
+              <label><input type="checkbox" id="collider-trigger" /> 觸發器</label>
+            </div>
+            <div id="collider-size-panel" class="hidden">
+              <div class="input-row">
+                <label>W</label><input type="number" id="col-size-x" step="1" min="0.1" />
+                <label>H</label><input type="number" id="col-size-y" step="1" min="0.1" />
+                <label>D</label><input type="number" id="col-size-z" step="1" min="0.1" />
+              </div>
+              <p class="hint">方塊半寬 (half-extents)</p>
+            </div>
+            <div id="collider-sphere-panel" class="hidden">
+              <div class="input-row">
+                <label>半徑</label><input type="number" id="col-radius" step="1" min="0.1" />
+              </div>
+            </div>
+            <div id="collider-capsule-panel" class="hidden">
+              <div class="input-row">
+                <label>半徑</label><input type="number" id="col-cap-radius" step="1" min="0.1" />
+                <label>高度</label><input type="number" id="col-cap-height" step="1" min="0.1" />
+              </div>
+            </div>
+            <div class="input-row" style="margin-top:4px">
+              <button class="btn btn-secondary btn-sm" id="col-auto-fit">自動適配大小</button>
+              <button class="btn btn-secondary btn-sm" id="col-toggle-vis">👁 顯示/隱藏</button>
+            </div>
+            <div class="input-row">
+              <label>偏移</label>
+              <input type="number" id="col-offset-x" step="1" style="width:45px" />
+              <input type="number" id="col-offset-y" step="1" style="width:45px" />
+              <input type="number" id="col-offset-z" step="1" style="width:45px" />
+            </div>
+            <p class="hint">靜態=不受物理影響 觸發器=偵測進入但不阻擋</p>
+          </div>
+        </div>
+
+
+
+        <!-- Behavior Panel (Collapsible) -->
+        <div class="panel-collapsible" id="behavior-panel-wrap">
+          <div class="panel-header" onclick="togglePanel('behavior')">
+            <span class="toggle-arrow" id="behavior-arrow">▶</span>
+            <span class="panel-title">🎯 行為設定</span>
+            <input type="checkbox" class="enable-check" id="behavior-enabled" onclick="event.stopPropagation(); togglePanelEnabled('behavior')" />
+          </div>
+          <div class="panel-body" id="behavior-body">
+            <div class="input-row">
+              <label><input type="checkbox" id="behavior-is-player" /> 🎮 玩家控制</label>
+            </div>
+            <div class="input-row">
+              <label><input type="checkbox" id="behavior-walk-enabled" checked /> 走路動作</label>
+              <select id="behavior-walk" style="flex:1"><option value="">（未指定）</option></select>
+            </div>
+            <div class="input-row">
+              <label><input type="checkbox" id="behavior-idle-enabled" checked /> 待機動作</label>
+              <select id="behavior-idle" style="flex:1"><option value="">（未指定）</option></select>
+            </div>
+            <div class="input-row">
+              <label>移動速度</label>
+              <input type="number" id="behavior-speed" step="5" min="0" value="40" style="width:60px" />
+            </div>
+            <p class="hint">玩家控制=WASD操控 未勾選=AI巡邏</p>
+          </div>
+        </div>
+
+        <!-- Combat Panel (Collapsible) -->
+        <div class="panel-collapsible" id="combat-panel-wrap">
+          <div class="panel-header" onclick="togglePanel('combat')">
+            <span class="toggle-arrow" id="combat-arrow">▶</span>
+            <span class="panel-title">⚔️ 戰鬥設定</span>
+            <input type="checkbox" class="enable-check" id="combat-enabled" onclick="event.stopPropagation(); togglePanelEnabled('combat')" />
+          </div>
+          <div class="panel-body" id="combat-body">
+            <div class="input-row">
+              <label>HP</label>
+              <input type="number" id="combat-hp" step="10" min="1" value="100" style="width:60px" />
+              <label>陣營</label>
+              <select id="combat-team" style="width:80px">
+                <option value="0">玩家方</option>
+                <option value="1">敵方</option>
+                <option value="2">中立</option>
+              </select>
+            </div>
+            <div class="input-row">
+              <label style="font-size:11px;">可攻擊:</label>
+              <label><input type="checkbox" id="combat-target-0" /> 玩家方</label>
+              <label><input type="checkbox" id="combat-target-1" checked /> 敵方</label>
+              <label><input type="checkbox" id="combat-target-2" /> 中立</label>
+            </div>
+            <div class="input-row">
+              <label>攻擊動作</label>
+              <select id="combat-attack-seg" style="flex:1"><option value="">（未指定）</option></select>
+            </div>
+            <!-- Multi-attack list -->
+            <div id="multi-attack-section" style="margin: 4px 0; padding: 4px; border: 1px solid #444; border-radius: 4px; background: #1a1a2e;">
+              <div class="input-row" style="margin-bottom:2px">
+                <label style="font-size:11px; flex:1;">🗡️ 多招式設定</label>
+                <button class="btn btn-sm" id="multi-attack-add" style="font-size:10px; padding:1px 6px;">+ 新增招式</button>
+              </div>
+              <div id="multi-attack-list" style="max-height:150px; overflow-y:auto;"></div>
+              <div class="input-row" style="margin-top:2px">
+                <label style="font-size:10px;">AI策略</label>
+                <select id="combat-attack-strategy" style="width:90px; font-size:10px;">
+                  <option value="random">隨機</option>
+                  <option value="sequential">循環</option>
+                  <option value="distance">距離</option>
+                </select>
+              </div>
+              <p class="hint" style="font-size:9px; margin:2px 0 0;">有招式列表時忽略上方「攻擊動作」；空=退回單招模式</p>
+            </div>
+            <!-- Dash settings -->
+            <div id="dash-section" style="margin: 4px 0; padding: 4px; border: 1px solid #444; border-radius: 4px; background: #1a2a1e;">
+              <div class="input-row" style="margin-bottom:2px">
+                <label><input type="checkbox" id="dash-enabled" /> 💨 啟用衝刺</label>
+              </div>
+              <div id="dash-fields" style="display:none;">
+                <div class="input-row">
+                  <label style="font-size:10px;">按鍵</label>
+                  <input type="text" id="dash-key-input" readonly value="Shift" style="width:50px; font-size:10px; text-align:center; cursor:pointer; background:#2a2a4a; border:1px solid #555; border-radius:3px; color:#fff;" title="點擊後按鍵綁定" />
+                  <label style="font-size:10px;">距離</label>
+                  <input type="number" id="dash-distance" value="120" step="10" min="10" style="width:40px; font-size:10px;" />
+                </div>
+                <div class="input-row">
+                  <label style="font-size:10px;">時間(秒)</label>
+                  <input type="number" id="dash-duration" value="0.2" step="0.05" min="0.05" style="width:40px; font-size:10px;" />
+                  <label style="font-size:10px;">冷卻</label>
+                  <input type="number" id="dash-cooldown" value="1.5" step="0.1" min="0" style="width:40px; font-size:10px;" />
+                </div>
+                <div class="input-row">
+                  <label style="font-size:10px;">動作</label>
+                  <select id="dash-segment" style="flex:1; font-size:10px;"><option value="">（未指定）</option></select>
+                </div>
+                <div class="input-row">
+                  <label style="font-size:10px;"><input type="checkbox" id="dash-invincible" checked /> 無敵</label>
+                  <label style="font-size:10px;"><input type="checkbox" id="dash-phase-through" checked /> 穿越角色</label>
+                </div>
+              </div>
+            </div>
+            <div class="input-row">
+              <label>受擊動作</label>
+              <select id="combat-hit-seg" style="flex:1"><option value="">（未指定）</option></select>
+            </div>
+            <div class="input-row">
+              <label>死亡動作</label>
+              <select id="combat-death-seg" style="flex:1"><option value="">（未指定）</option></select>
+            </div>
+            <div class="input-row">
+              <label><input type="checkbox" id="combat-aggressive" /> 🔴 主動攻擊</label>
+            </div>
+            <div class="input-row">
+              <label>仇恨範圍</label>
+              <input type="number" id="combat-aggro-range" step="10" min="0" value="150" style="width:60px" />
+            </div>
+            <p class="hint">空白鍵/J鍵=玩家攻擊 主動攻擊=AI會追擊玩家</p>
+            <p class="hint">傷害/距離/角度/冷卻/特效 → Timeline ⚔️ Combat Track</p>
+            <div class="input-row" style="margin-top:4px">
+              <button class="btn btn-secondary btn-sm" id="combat-toggle-vis">👁 攻擊範圍顯示/隱藏</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- SpinningTop Tag Panel -->
+        <div class="panel-collapsible" id="st-panel-wrap">
+          <div class="panel-header" onclick="togglePanel('st')">
+            <span class="toggle-arrow" id="st-arrow">▶</span>
+            <span class="panel-title">🎯 鬥氣割草 設定</span>
+          </div>
+          <div class="panel-body" id="st-body">
+            <div class="input-row">
+              <label>類型</label>
+              <select id="st-tag" style="flex:1;">
+                <option value="none">無</option>
+                <option value="spawnPoint">🧟 出怪點</option>
+                <option value="obstacle">🧱 障礙物</option>
+                <option value="itemZone">💎 道具區</option>
+                <option value="boundary">🔲 邊界</option>
+              </select>
+            </div>
+            <!-- SpawnPoint Config (shown when tag=spawnPoint) -->
+            <div id="st-spawn-config" style="display:none; margin-top:4px; padding:4px; border:1px solid #444; border-radius:4px; background:#1a2a1e;">
+              <div class="input-row">
+                <label>殭屍類型</label>
+                <select id="st-zombie-type" style="flex:1;">
+                  <option value="zombie_small">小殭屍</option>
+                  <option value="zombie_big">大殭屍</option>
+                  <option value="zombie_bomb">炸彈殭屍</option>
+                  <option value="zombie_bouncing">彈跳殭屍</option>
+                  <option value="zombie_golden">黃金殭屍</option>
+                  <option value="zombie_black">黑暗殭屍</option>
+                  <option value="zombie_boss">Boss</option>
+                </select>
+              </div>
+              <div class="input-row">
+                <label>波次</label><input type="number" id="st-wave" value="1" min="1" style="width:40px;" title="第幾波出現" />
+                <label>數量</label><input type="number" id="st-count" value="1" min="1" style="width:40px;" title="一次出幾隻" />
+              </div>
+              <div class="input-row">
+                <label>間隔(秒)</label><input type="number" id="st-interval" value="2" min="0.1" step="0.1" style="width:50px;" title="出怪間隔" />
+                <label>上限</label><input type="number" id="st-max-alive" value="5" min="1" style="width:40px;" title="同時存活上限" />
+              </div>
+            </div>
+            <!-- ItemZone Config (shown when tag=itemZone) -->
+            <div id="st-item-config" style="display:none; margin-top:4px; padding:4px; border:1px solid #444; border-radius:4px; background:#1a1a2e;">
+              <div class="input-row">
+                <label>道具類型</label>
+                <select id="st-item-type" style="flex:1;">
+                  <option value="coin">🪙 金幣</option>
+                  <option value="ticket">🎟️ 抽獎券</option>
+                  <option value="key">🔑 鑰匙</option>
+                  <option value="powerup">⚡ 強化道具</option>
+                </select>
+              </div>
+              <div class="input-row">
+                <label>半徑</label><input type="number" id="st-item-radius" value="30" min="1" style="width:50px;" title="生成區域半徑" />
+                <label>重生(秒)</label><input type="number" id="st-item-respawn" value="10" min="1" step="1" style="width:50px;" title="重新生成等待時間" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel toggle script -->
+        <script>
+          function togglePanel(name) {
+            const body = document.getElementById(name + '-body');
+            const arrow = document.getElementById(name + '-arrow');
+            const isOpen = body.classList.contains('open');
+            body.classList.toggle('open', !isOpen);
+            arrow.classList.toggle('open', !isOpen);
+          }
+          function togglePanelEnabled(name) {
+            const wrap = document.getElementById(name + '-panel-wrap');
+            const check = document.getElementById(name + '-enabled');
+            wrap.classList.toggle('disabled', !check.checked);
+            if (check.checked) {
+              document.getElementById(name + '-body').classList.add('open');
+              document.getElementById(name + '-arrow').classList.add('open');
+            }
+          }
+        </script>
+      </div>
+
+      <div class="panel">
+        <p class="hint">快捷鍵：W=移動 E=旋轉 R=縮放 Del=刪除 Esc=取消選取</p>
+        <p class="hint">點擊 3D 物件選取，拖曳 Gizmo 調整 Transform</p>
+      </div>
+    </aside>
+  </div>
+
+  <script type="module" src="/src/editor/editorApp.ts"></script>
+</body>
+</html>

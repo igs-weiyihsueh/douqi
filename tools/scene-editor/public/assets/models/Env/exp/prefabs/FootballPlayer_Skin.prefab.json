@@ -1,0 +1,37 @@
+{
+  "id": "FootballPlayer_Skin",
+  "name": "FootballPlayer_Skin",
+  "model": "models/FootballPlayer_Skin.fbx",
+  "scale": [
+    1,
+    1,
+    1
+  ],
+  "collider": {
+    "type": "capsule",
+    "isStatic": true,
+    "isTrigger": false,
+    "radiusOverride": 130,
+    "heightOverride": 300,
+    "offset": [
+      0,
+      0,
+      20
+    ]
+  },
+  "textures": {
+    "0": {
+      "map": "textures/FootballPlayer_Skin_slot0_map.png",
+      "tiling": [
+        1,
+        1
+      ],
+      "offset": [
+        0,
+        0
+      ],
+      "color": "#c4c4c4",
+      "brightness": 0.5
+    }
+  }
+}

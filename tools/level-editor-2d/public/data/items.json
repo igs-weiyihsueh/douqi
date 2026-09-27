@@ -1,0 +1,56 @@
+[
+  {
+    "type": "item",
+    "subType": "coin",
+    "name": "金幣",
+    "description": "基礎貨幣道具",
+    "defaultProperties": {
+      "value": 10,
+      "type": "coin",
+      "respawn": false,
+      "magnetism": true,
+      "disappearTime": 30
+    }
+  },
+  {
+    "type": "item",
+    "subType": "gem",
+    "name": "寶石",
+    "description": "高價值貨幣道具",
+    "defaultProperties": {
+      "value": 100,
+      "type": "gem",
+      "respawn": false,
+      "magnetism": true,
+      "disappearTime": 60,
+      "rarity": "rare"
+    }
+  },
+  {
+    "type": "item",
+    "subType": "health",
+    "name": "補血包",
+    "description": "恢復生命值道具",
+    "defaultProperties": {
+      "value": 50,
+      "type": "health",
+      "respawn": true,
+      "respawnTime": 120,
+      "healAmount": 50
+    }
+  },
+  {
+    "type": "item",
+    "subType": "powerup",
+    "name": "強化道具",
+    "description": "臨時能力提升",
+    "defaultProperties": {
+      "value": 0,
+      "type": "powerup",
+      "respawn": false,
+      "effectType": "speed",
+      "effectDuration": 10,
+      "effectMultiplier": 1.5
+    }
+  }
+]

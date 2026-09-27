@@ -1,0 +1,33 @@
+{
+  "id": "ModernCity_House_01",
+  "name": "ModernCity_House_01",
+  "model": "models/ModernCity_House_01.fbx",
+  "scale": [
+    1,
+    1,
+    1
+  ],
+  "collider": {
+    "type": "box",
+    "isStatic": true,
+    "isTrigger": false,
+    "sizeOverride": [
+      7,
+      3.7,
+      6.5
+    ]
+  },
+  "textures": {
+    "0": {
+      "map": "textures/ModernCity_House_01_slot0_map.png",
+      "tiling": [
+        1,
+        1
+      ],
+      "offset": [
+        0,
+        0
+      ]
+    }
+  }
+}

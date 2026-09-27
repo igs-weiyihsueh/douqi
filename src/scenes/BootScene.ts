@@ -59,8 +59,18 @@ export class BootScene extends Phaser.Scene {
     this.makeGroundTexture();
     this.makeParticleTexture();
 
-    // v16：貼圖產生完 → 先進標題畫面（按下開始才進 GameScene 生怪）
-    this.scene.start('TitleScene');
+    // 檢查URL參數，決定跳轉到哪個場景
+    const urlParams = new URLSearchParams(window.location.search);
+    const startScene = urlParams.get('scene');
+    
+    if (startScene === 'levelSelect') {
+      // 編輯器測試模式：直接跳轉到關卡選擇
+      console.log('[BootScene] 編輯器測試模式：直接進入關卡選擇');
+      this.scene.start('LevelSelectScene');
+    } else {
+      // 正常流程：進入標題畫面
+      this.scene.start('TitleScene');
+    }
   }
 
   /** ★寶箱怪貼圖:金色寶箱——金邊描邊 + 箱身漸層 + 蓋縫 + 中央鎖扣 + 高光,金光閃閃。 */

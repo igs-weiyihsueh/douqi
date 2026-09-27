@@ -170,6 +170,26 @@ export class TitleScene extends Phaser.Scene {
     // v47：空白鍵 = 確認【目前選中(黃框)】的模式進入
     this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE).once('down', () => this.startGame(this.selected));
 
+    // ── 關卡模式入口：🎯 關卡模式 (L) → LevelSelectScene（自訂關卡遊玩）──
+    const lvBtnW = 200, lvBtnH = 44;
+    const lvX = lvBtnW / 2 + 20, lvY = h - lvBtnH * 2 - 30; // 左下角，小遊戲按鈕上方
+    const lvBg = this.add
+      .rectangle(lvX, lvY, lvBtnW, lvBtnH, 0x1e3a5f, 0.9)
+      .setStrokeStyle(2, 0x3b82f6, 0.9)
+      .setDepth(5);
+    this.add
+      .text(lvX, lvY, '🎯 關卡模式 (L)', { fontFamily: 'monospace', fontSize: '16px', color: '#dbeafe', fontStyle: 'bold' })
+      .setOrigin(0.5).setDepth(6);
+    const lvBtn = this.add.container(0, 0, [lvBg]).setSize(lvBtnW, lvBtnH).setDepth(5);
+    lvBtn.setInteractive(
+      new Phaser.Geom.Rectangle(lvX - lvBtnW / 2, lvY - lvBtnH / 2, lvBtnW, lvBtnH),
+      Phaser.Geom.Rectangle.Contains
+    );
+    lvBtn.on('pointerover', () => lvBg.setFillStyle(0x1e40af, 0.95));
+    lvBtn.on('pointerout', () => lvBg.setFillStyle(0x1e3a5f, 0.9));
+    lvBtn.on('pointerdown', () => this.scene.start('LevelSelectScene'));
+    this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.L).on('down', () => this.scene.start('LevelSelectScene'));
+
     // ── 開發入口：Spine 場景編輯器（開發/美術團隊用工具，在遊戲中以全螢幕 iframe 開啟）──
     // 角落按鈕 + 快捷鍵 E。不擋原本模式選擇/開始流程。
     const edBtnW = 200, edBtnH = 44;

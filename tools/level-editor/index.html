@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>鬥氣割草 - 關卡編輯器</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #1a1a2e; color: #e0e0e0; }
+    body { display: flex; flex-direction: column; }
+
+    #toolbar {
+      height: 36px; display: flex; align-items: center; padding: 0 12px; gap: 6px;
+      background: #16213e; border-bottom: 1px solid #0f3460; flex-shrink: 0;
+    }
+    #toolbar .title { font-size: 13px; font-weight: 600; color: #4fc3f7; margin-right: 12px; }
+    .tb-btn {
+      padding: 4px 10px; font-size: 11px; background: #0f3460; border: 1px solid #1a4a7a;
+      color: #e0e0e0; border-radius: 4px; cursor: pointer;
+    }
+    .tb-btn:hover { background: #1a5276; }
+    .tb-btn.active { background: #4fc3f7; color: #1a1a2e; }
+    .tb-sep { width: 1px; height: 20px; background: #333; margin: 0 4px; }
+
+    #main { display: flex; flex: 1; overflow: hidden; }
+
+    #viewport { flex: 1; position: relative; background: #111; }
+    #viewport canvas { width: 100%; height: 100%; display: block; }
+
+    #panel {
+      width: 280px; min-width: 200px; max-width: 500px; background: #16213e; border-left: 1px solid #0f3460;
+      overflow-y: auto; overflow-x: hidden; padding: 8px; flex-shrink: 0; position: relative;
+    }
+    #panel-resizer {
+      position: absolute; left: 0; top: 0; bottom: 0; width: 5px; cursor: col-resize; z-index: 10;
+      background: transparent;
+    }
+    #panel-resizer:hover, #panel-resizer.active { background: #4fc3f7; opacity: 0.5; }
+    #panel h3 { font-size: 12px; color: #4fc3f7; margin-bottom: 6px; border-bottom: 1px solid #333; padding-bottom: 4px; }
+    .prop-row { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; font-size: 11px; flex-wrap: wrap; }
+    .prop-row label { width: 55px; flex-shrink: 0; color: #aaa; }
+    .prop-row input, .prop-row select { flex: 1; min-width: 0; font-size: 11px; padding: 2px 4px; background: #0f3460; color: #e0e0e0; border: 1px solid #1a4a7a; border-radius: 3px; }
+    .prop-row input[type="number"] { width: 55px; flex: unset; }
+
+    #object-list { list-style: none; margin-top: 6px; }
+    #object-list li { padding: 3px 6px; cursor: pointer; border-radius: 3px; font-size: 11px; border-left: 2px solid transparent; overflow: hidden; }
+    #object-list li:hover { background: #1a4a7a; }
+    #object-list li.selected { background: #0f3460; border-left-color: #4fc3f7; }
+
+    .section { margin-bottom: 12px; overflow: hidden; }
+    .hint { font-size: 9px; color: #666; margin-top: 2px; }
+
+    #status { height: 20px; background: #0f3460; display: flex; align-items: center; padding: 0 10px; font-size: 10px; color: #888; flex-shrink: 0; }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <span class="title">🎯 鬥氣割草 關卡編輯器</span>
+    <button class="tb-btn" id="btn-new">🗒 新關卡</button>
+    <button class="tb-btn" id="btn-load">📂 載入</button>
+    <button class="tb-btn" id="btn-save">💾 存檔</button>
+    <div class="tb-sep"></div>
+    <button class="tb-btn" id="btn-add-spawn">🧟 +出怪點</button>
+    <button class="tb-btn" id="btn-add-obstacle">🧱 +障礙物</button>
+    <button class="tb-btn" id="btn-add-item">💎 +道具</button>
+    <button class="tb-btn" id="btn-add-player">🎮 +出生點</button>
+    <div class="tb-sep"></div>
+    <button class="tb-btn" id="btn-delete">🗑️ 刪除</button>
+    <div class="tb-sep"></div>
+    <button class="tb-btn" id="btn-export-game" style="background:#1a5a1a;border-color:#2a7a2a;">🎮 另存遊戲格式</button>
+    <div class="tb-sep"></div>
+    <span style="font-size:10px;color:#888;">遊戲場景</span>
+    <input type="text" id="target-scene" title="存檔會寫進 public/scenes/<名稱>.douqi.json；遊戲預設讀 default"
+           style="width:78px;background:#16213e;border:1px solid #2a3f6a;color:#ddd;font-size:10px;padding:2px 4px;border-radius:3px;" />
+    <input type="file" id="file-input" accept=".json" style="display:none;" />
+  </div>
+
+  <div id="main">
+    <div id="viewport"></div>
+    <aside id="panel">
+      <div id="panel-resizer"></div>
+      <div class="section">
+        <h3>物件列表</h3>
+        <ul id="object-list"></ul>
+      </div>
+      <div class="section" id="props-section" style="display:none;">
+        <h3 id="props-title">屬性</h3>
+        <div id="props-content"></div>
+      </div>
+      <div id="scene-settings-section" style="display:none; font-size:11px;">
+        <div class="section"><h3>關卡資訊</h3>
+          <div class="prop-row"><label>名稱</label><input type="text" id="level-name" value="Level 01" /></div>
+          <div class="prop-row"><label>邊界形狀</label><select id="arena-shape"><option value="circle">⭕ 圓形</option><option value="rectangle">⬜ 矩形</option><option value="capsule">💊 膠囊</option></select></div>
+          <div id="shape-circle-fields"><div class="prop-row"><label>半徑</label><input type="number" id="arena-radius" value="480" /></div></div>
+          <div id="shape-rect-fields" style="display:none;"><div class="prop-row"><label>寬度</label><input type="number" id="arena-rect-w" value="1600" /></div><div class="prop-row"><label>高度</label><input type="number" id="arena-rect-h" value="900" /></div></div>
+          <div id="shape-capsule-fields" style="display:none;"><div class="prop-row"><label>長度</label><input type="number" id="arena-cap-length" value="800" /></div><div class="prop-row"><label>半徑</label><input type="number" id="arena-cap-radius" value="400" /></div><div class="prop-row"><label>方向</label><select id="arena-cap-dir"><option value="horizontal">水平</option><option value="vertical">垂直</option></select></div></div>
+          <div class="prop-row"><label>地面色</label><input type="color" id="arena-color" value="#2d5a27" style="width:36px;height:22px;" /></div>
+          <div class="prop-row"><label>底圖</label><input type="file" id="bg-image-input" accept="image/*" style="width:130px;font-size:10px;" /></div>
+          <div class="prop-row"><label></label><span id="bg-image-name" style="font-size:9px;color:#888;">未設定</span></div>
+        </div>
+        <div class="section"><h3>🧟 出怪規則</h3>
+          <div class="prop-row"><label>出怪模式</label><select id="spawn-mode"><option value="edge_random">邊緣隨機</option><option value="fixed_points">固定出怪點</option><option value="mixed">混合</option></select></div>
+          <div class="prop-row"><label>最大存活</label><input type="number" id="spawn-max-alive" value="26" min="1" /></div>
+          <div class="prop-row"><label>小殭屍上限</label><input type="number" id="spawn-max-small" value="20" min="1" /></div>
+          <div class="prop-row"><label>大型上限</label><input type="number" id="spawn-max-big" value="6" min="0" /></div>
+          <div class="prop-row"><label>大型機率%</label><input type="number" id="spawn-big-chance" value="30" min="0" max="100" /></div>
+          <div class="prop-row"><label>出怪間隔(秒)</label><input type="number" id="spawn-interval" value="1.5" step="0.1" min="0.1" /></div>
+          <div class="prop-row"><label>開始延遲(秒)</label><input type="number" id="spawn-delay" value="2" step="0.5" min="0" /></div>
+          <p class="hint">大型分佈(%)：</p>
+          <div class="prop-row"><label>紫大</label><input type="number" id="dist-big" value="50" style="width:40px;" /><label>炸彈</label><input type="number" id="dist-bomb" value="33" style="width:40px;" /><label>彈跳</label><input type="number" id="dist-bounce" value="17" style="width:40px;" /></div>
+        </div>
+        <div class="section"><h3>👹 Boss 設定</h3>
+          <div class="prop-row"><label>觸發方式</label><select id="boss-trigger"><option value="kill_count">擊殺數</option><option value="timer">時間</option><option value="wave">波次觸發</option></select></div>
+          <div class="prop-row"><label>觸發值</label><input type="number" id="boss-trigger-value" value="80" min="1" /></div>
+          <div class="prop-row"><label>Boss類型</label><select id="boss-type"><option value="zombie_boss">大猩猩Boss</option><option value="zombie_car">車Boss</option></select></div>
+          <div class="prop-row"><label>生成位置</label><select id="boss-pos"><option value="center">場地中心</option><option value="custom">指定座標</option></select></div>
+          <div class="prop-row" id="boss-custom-pos" style="display:none;"><label>X</label><input type="number" id="boss-x" value="960" style="width:55px;" /><label>Y</label><input type="number" id="boss-y" value="540" style="width:55px;" /></div>
+        </div>
+        <div class="section"><h3>🧱 障礙物生成</h3>
+          <div class="prop-row"><label>隨機數量</label><input type="number" id="obs-random-count" value="3" min="0" /></div>
+          <div class="prop-row"><label>最小間距</label><input type="number" id="obs-min-dist" value="100" min="10" /></div>
+        </div>
+        <div class="section"><h3>🌊 波次系統</h3>
+          <div class="prop-row"><label>波間休息(秒)</label><input type="number" id="wave-rest" value="3" step="0.5" min="0" /></div>
+          <div id="wave-list"></div>
+          <button class="tb-btn" id="btn-add-wave" style="margin-top:4px; font-size:10px;">+ 新增波次</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <div id="status">Ready</div>
+
+  <script type="module" src="./editor.ts"></script>
+</body>
+</html>

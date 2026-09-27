@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>簡潔關卡編輯器</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: Arial, sans-serif;
+      background: #1a1a1a;
+      color: white;
+      overflow: hidden;
+    }
+    
+    .container {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #1a1a1a;
+    }
+    
+    .preview-container {
+      background: #333;
+      border: 2px solid #555;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+    
+    .canvas-wrapper {
+      position: relative;
+      background: #2a2a2a;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    
+    canvas {
+      display: block;
+      background: #2a2a2a;
+    }
+    
+    .title {
+      text-align: center;
+      margin-bottom: 15px;
+      color: #fff;
+      font-size: 18px;
+      font-weight: bold;
+    }
+    
+    .info {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.8);
+      color: white;
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      z-index: 100;
+    }
+    
+    .controls {
+      text-align: center;
+      margin-top: 15px;
+    }
+    
+    .controls button {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      margin: 0 5px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    
+    .controls button:hover {
+      background: #45a049;
+    }
+    
+    .controls button:disabled {
+      background: #666;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="preview-container">
+      <div class="title">遊戲預覽 (16:9)</div>
+      
+      <div class="canvas-wrapper">
+        <canvas id="game-canvas"></canvas>
+        <div class="info" id="info">
+          載入中...
+        </div>
+      </div>
+      
+      <div class="controls">
+        <button onclick="loadTestLevel()">載入測試關卡</button>
+        <button onclick="resetView()">重置視角</button>
+        <button onclick="toggleGrid()">切換網格</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/pixi.js@7.2.4/dist/pixi.min.js"></script>
+  <script>
+    // === 簡潔的全域變數 ===
+    let app = null;
+    let container = null;
+    let entities = [];
+    let showGrid = true;
+    
+    // === 16:9 比例設定 ===
+    const CANVAS_WIDTH = 960;   // 16:9 比例
+    const CANVAS_HEIGHT = 540;  // 16:9 比例
+    const SCALE = 0.8;          // 初始縮放
+    
+    // === 初始化 PIXI ===
+    function initEditor() {
+      const canvas = document.getElementById('game-canvas');
+      
+      // 設定 Canvas 尺寸
+      canvas.width = CANVAS_WIDTH;
+      canvas.height = CANVAS_HEIGHT;
+      canvas.style.width = `${CANVAS_WIDTH}px`;
+      canvas.style.height = `${CANVAS_HEIGHT}px`;
+      
+      // 創建 PIXI Application
+      app = new PIXI.Application({
+        view: canvas,
+        width: CANVAS_WIDTH,
+        height: CANVAS_HEIGHT,
+        backgroundColor: 0x2a2a2a,
+        antialias: true
+      });
+      
+      // 創建主容器
+      container = new PIXI.Container();
+      app.stage.addChild(container);
+      
+      // 設定初始位置和縮放
+      container.x = CANVAS_WIDTH / 2;
+      container.y = CANVAS_HEIGHT / 2;
+      container.scale.set(SCALE);
+      
+      // 創建背景網格
+      createGrid();
+      
+      // 更新資訊顯示
+      updateInfo();
+      
+      console.log('簡潔編輯器初始化完成');
+      console.log(`Canvas: ${CANVAS_WIDTH}x${CANVAS_HEIGHT}`);
+      console.log(`容器中心: (${container.x}, ${container.y})`);
+      console.log(`初始縮放: ${SCALE}`);
+    }
+    
+    // === 創建背景網格 ===
+    function createGrid() {
+      const gridContainer = new PIXI.Container();
+      const graphics = new PIXI.Graphics();
+      
+      // 網格設定
+      const gridSize = 100;
+      const gridColor = 0x444444;
+      const centerColor = 0x666666;
+      
+      graphics.lineStyle(1, gridColor, 0.3);
+      
+      // 繪製網格線
+      for (let x = -1000; x <= 1000; x += gridSize) {
+        graphics.moveTo(x, -1000);
+        graphics.lineTo(x, 1000);
+      }
+      
+      for (let y = -1000; y <= 1000; y += gridSize) {
+        graphics.moveTo(-1000, y);
+        graphics.lineTo(1000, y);
+      }
+      
+      // 繪製中心十字線
+      graphics.lineStyle(2, centerColor, 0.6);
+      graphics.moveTo(-50, 0);
+      graphics.lineTo(50, 0);
+      graphics.moveTo(0, -50);
+      graphics.lineTo(0, 50);
+      
+      gridContainer.addChild(graphics);
+      container.addChild(gridContainer);
+      
+      // 儲存網格引用
+      container.gridContainer = gridContainer;
+    }
+    
+    // === 載入測試關卡 ===
+    function loadTestLevel() {
+      // 清除舊實體
+      entities.forEach(entity => {
+        container.removeChild(entity);
+      });
+      entities = [];
+      
+      // 創建測試實體
+      const testEntities = [
+        { type: 'enemy', x: -200, y: 0, color: 0xff4444 },
+        { type: 'enemy', x: 200, y: 0, color: 0xff4444 },
+        { type: 'item', x: 0, y: -150, color: 0x44ff44 },
+        { type: 'item', x: 0, y: 150, color: 0x44ff44 },
+        { type: 'powerup', x: -100, y: -100, color: 0x4444ff },
+        { type: 'powerup', x: 100, y: 100, color: 0x4444ff }
+      ];
+      
+      testEntities.forEach(entityData => {
+        const entity = createEntity(entityData);
+        entities.push(entity);
+        container.addChild(entity);
+      });
+      
+      updateInfo();
+      console.log(`載入了 ${entities.length} 個測試實體`);
+    }
+    
+    // === 創建實體 ===
+    function createEntity(data) {
+      const graphics = new PIXI.Graphics();
+      
+      // 根據類型設定大小
+      let size = 10;
+      switch(data.type) {
+        case 'enemy': size = 14; break;
+        case 'item': size = 8; break;
+        case 'powerup': size = 12; break;
+      }
+      
+      // 繪製實體
+      graphics.beginFill(data.color);
+      graphics.drawCircle(0, 0, size);
+      graphics.endFill();
+      
+      // 繪製邊框
+      graphics.lineStyle(2, 0xffffff, 0.8);
+      graphics.drawCircle(0, 0, size);
+      
+      // 設定位置
+      graphics.x = data.x;
+      graphics.y = data.y;
+      
+      return graphics;
+    }
+    
+    // === 重置視角 ===
+    function resetView() {
+      container.x = CANVAS_WIDTH / 2;
+      container.y = CANVAS_HEIGHT / 2;
+      container.scale.set(SCALE);
+      container.rotation = 0;
+      
+      updateInfo();
+      console.log('視角已重置');
+    }
+    
+    // === 切換網格顯示 ===
+    function toggleGrid() {
+      showGrid = !showGrid;
+      if (container.gridContainer) {
+        container.gridContainer.visible = showGrid;
+      }
+      updateInfo();
+    }
+    
+    // === 更新資訊顯示 ===
+    function updateInfo() {
+      const info = document.getElementById('info');
+      info.innerHTML = `
+        尺寸: ${CANVAS_WIDTH}×${CANVAS_HEIGHT}<br>
+        比例: 16:9<br>
+        縮放: ${container ? container.scale.x.toFixed(2) : 'N/A'}<br>
+        實體: ${entities.length}<br>
+        網格: ${showGrid ? '顯示' : '隱藏'}
+      `;
+    }
+    
+    // === 滑鼠交互 ===
+    function setupInteraction() {
+      const canvas = document.getElementById('game-canvas');
+      let isDragging = false;
+      let lastPos = { x: 0, y: 0 };
+      
+      // 滑鼠滾輪縮放
+      canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        
+        const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+        const newScale = Math.max(0.1, Math.min(3.0, container.scale.x * zoomFactor));
+        
+        container.scale.set(newScale);
+        updateInfo();
+      });
+      
+      // 滑鼠拖拽平移
+      canvas.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        lastPos.x = e.clientX;
+        lastPos.y = e.clientY;
+        canvas.style.cursor = 'grabbing';
+      });
+      
+      canvas.addEventListener('mousemove', (e) => {
+        if (isDragging) {
+          const deltaX = e.clientX - lastPos.x;
+          const deltaY = e.clientY - lastPos.y;
+          
+          container.x += deltaX;
+          container.y += deltaY;
+          
+          lastPos.x = e.clientX;
+          lastPos.y = e.clientY;
+          
+          updateInfo();
+        }
+      });
+      
+      canvas.addEventListener('mouseup', () => {
+        isDragging = false;
+        canvas.style.cursor = 'grab';
+      });
+      
+      canvas.addEventListener('mouseleave', () => {
+        isDragging = false;
+        canvas.style.cursor = 'default';
+      });
+      
+      canvas.style.cursor = 'grab';
+    }
+    
+    // === 啟動編輯器 ===
+    window.addEventListener('load', () => {
+      initEditor();
+      setupInteraction();
+      loadTestLevel();
+    });
+  </script>
+</body>
+</html>

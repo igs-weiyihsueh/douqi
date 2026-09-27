@@ -9,6 +9,8 @@ import { CollectRaceScene } from './scenes/CollectRaceScene';
 import { PushSurvivalScene } from './scenes/PushSurvivalScene';
 import { BombArenaScene } from './scenes/BombArenaScene';
 import { TerrainEditorScene } from './scenes/TerrainEditorScene';
+import { LevelSelectScene } from './scenes/LevelSelectScene';
+import { LevelGameScene } from './scenes/LevelGameScene';
 import { GameConfig } from './config';
 
 const config: Phaser.Types.Core.GameConfig = {
@@ -29,7 +31,7 @@ const config: Phaser.Types.Core.GameConfig = {
       debug: false
     }
   },
-  scene: [BootScene, TitleScene, GameScene, UIScene, GameOverScene, MinigameMenuScene, CollectRaceScene, PushSurvivalScene, BombArenaScene, TerrainEditorScene]
+  scene: [BootScene, TitleScene, GameScene, UIScene, GameOverScene, MinigameMenuScene, CollectRaceScene, PushSurvivalScene, BombArenaScene, TerrainEditorScene, LevelSelectScene, LevelGameScene]
 };
 
 const game = new Phaser.Game(config);
