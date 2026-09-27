@@ -8,6 +8,63 @@ import { VFXPositionGizmo } from './VFXPositionGizmo';
 import { MarkerManager } from './MarkerManager';
 import * as THREE from 'three';
 
+// --- Level Naming System ---
+class LevelNamingSystem {
+  private lastDirHandle: any = null;
+
+  /**
+   * 根據關卡ID生成下一個可用的檔案名稱
+   * 格式：level{levelId}_{編號}.json
+   */
+  async generateFileName(levelId: string): Promise<string> {
+    const prefix = `level${levelId}_`;
+    
+    // 如果有記憶的資料夾，檢查現有檔案
+    if (this.lastDirHandle) {
+      try {
+        const existingNumbers: number[] = [];
+        
+        // 遍歷資料夾中的檔案
+        for await (const [name, handle] of this.lastDirHandle.entries()) {
+          if (handle.kind === 'file' && name.startsWith(prefix) && name.endsWith('.json')) {
+            // 提取編號部分，例如 level1_005.json → 005
+            const match = name.match(new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\d+)\\.json$`));
+            if (match) {
+              existingNumbers.push(parseInt(match[1], 10));
+            }
+          }
+        }
+        
+        // 找到下一個可用編號
+        const nextNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
+        return `${prefix}${nextNumber.toString().padStart(3, '0')}`;
+        
+      } catch (err) {
+        console.warn('無法檢查現有檔案，使用預設編號:', err);
+      }
+    }
+    
+    // 預設情況：使用 001
+    return `${prefix}001`;
+  }
+
+  /**
+   * 記住最後使用的資料夾
+   */
+  setLastDirHandle(handle: any) {
+    this.lastDirHandle = handle;
+  }
+
+  /**
+   * 取得最後使用的資料夾
+   */
+  getLastDirHandle() {
+    return this.lastDirHandle;
+  }
+}
+
+const levelNaming = new LevelNamingSystem();
+
 
 // --- Editor Overlay (block interaction during load/save) ---
 function showOverlay(text: string) {
@@ -1217,22 +1274,29 @@ sunColor.addEventListener('input', () => editor.setSun(parseFloat(sunSlider.valu
 
 // --- Scene Save / Load (File System Access API for directory memory) ---
 
-let lastDirHandle: any = null;
-
 async function saveSceneWithPicker() {
   showOverlay('儲存中...');
-  const name = (document.getElementById('scene-name') as HTMLInputElement).value.trim() || 'untitled';
+  
+  // 取得目前選擇的關卡和自動生成的檔案名稱
+  const levelSelector = document.getElementById('level-selector') as HTMLSelectElement;
+  const levelId = levelSelector.value;
+  const sceneNameInput = document.getElementById('scene-name') as HTMLInputElement;
+  const fileName = sceneNameInput.value || await levelNaming.generateFileName(levelId);
 
   if ('showSaveFilePicker' in window) {
     let handle: any;
     try {
       const opts: any = {
-        suggestedName: `${name}.scene.json`,
-        types: [{ description: 'Scene File', accept: { 'application/octet-stream': ['.json', '.gz'] } }],
+        suggestedName: `${fileName}.json`,
+        types: [{ description: 'Level Scene File', accept: { 'application/json': ['.json'] } }],
       };
-      if (lastDirHandle) opts.startIn = lastDirHandle;
+      
+      // 使用關卡命名系統的目錄記憶
+      const lastDir = levelNaming.getLastDirHandle();
+      if (lastDir) opts.startIn = lastDir;
+      
       handle = await (window as any).showSaveFilePicker(opts);
-      lastDirHandle = handle;
+      levelNaming.setLastDirHandle(handle);
     } catch (err: any) {
       if (err.name === 'AbortError') { hideOverlay(); return; }
       // Fall through to fallback
@@ -1241,12 +1305,15 @@ async function saveSceneWithPicker() {
 
     if (handle) {
       try {
-        const blob = await editor.exportBundle(name);
+        const blob = await editor.exportBundle(fileName);
         const writable = await handle.createWritable();
         await writable.write(blob);
         await writable.close();
         hideOverlay();
-        showToast('✅ 場景已儲存');
+        showToast(`✅ 關卡場景已儲存: ${fileName}.json`);
+        
+        // 更新檔案名稱顯示，準備下次儲存
+        await updateSceneFileName();
         return;
       } catch (err) {
         hideOverlay();
@@ -1259,17 +1326,21 @@ async function saveSceneWithPicker() {
 
   // Fallback download
   try {
-    const blob = await editor.exportBundle(name);
+    const blob = await editor.exportBundle(fileName);
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${name}.scene.json`;
+    a.download = `${fileName}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    showToast('✅ 場景已下載');
+    showToast(`✅ 關卡場景已下載: ${fileName}.json`);
+    
+    // 更新檔案名稱顯示，準備下次儲存
+    await updateSceneFileName();
   } catch (err) {
     alert('存檔失敗: ' + (err as Error).message);
   }
+  hideOverlay();
 }
 
 async function loadSceneWithPicker() {
@@ -1277,13 +1348,19 @@ async function loadSceneWithPicker() {
   if ('showOpenFilePicker' in window) {
     try {
       const opts: any = {
-        types: [{ description: 'Scene File', accept: { 'application/octet-stream': ['.json', '.gz'] } }],
+        types: [{ description: 'Level Scene File', accept: { 'application/json': ['.json'], 'application/octet-stream': ['.gz'] } }],
       };
-      if (lastDirHandle) opts.startIn = lastDirHandle;
+      const lastDir = levelNaming.getLastDirHandle();
+      if (lastDir) opts.startIn = lastDir;
+      
       const [handle] = await (window as any).showOpenFilePicker(opts);
-      lastDirHandle = handle;
+      levelNaming.setLastDirHandle(handle);
+      
       const file = await handle.getFile();
       await processSceneFile(file);
+      
+      // 根據載入的檔案名稱更新關卡選擇器
+      await updateLevelSelectorFromFileName(file.name);
       return;
     } catch (err: any) {
       if (err.name === 'AbortError') { hideOverlay(); return; }
@@ -1298,7 +1375,9 @@ async function processSceneFile(file: File) {
 
     // Update UI
     const data = editor.exportScene('');
-    (document.getElementById('scene-name') as HTMLInputElement).value = data.name || '';
+    const sceneNameInput = document.getElementById('scene-name') as HTMLInputElement;
+    sceneNameInput.value = data.name || file.name.replace(/\.(json|gz)$/, '');
+    
     ambientSlider.value = String(data.ambientIntensity);
     sunSlider.value = String(data.sunIntensity);
     document.getElementById('ed-ambient-val')!.textContent = data.ambientIntensity.toFixed(2);
@@ -1321,29 +1400,65 @@ async function processSceneFile(file: File) {
   }
 }
 
+/**
+ * 根據檔案名稱更新關卡選擇器
+ */
+async function updateLevelSelectorFromFileName(fileName: string): Promise<void> {
+  const match = fileName.match(/^level(\d+)_\d+\.json$/);
+  if (match) {
+    const levelId = match[1];
+    const levelSelector = document.getElementById('level-selector') as HTMLSelectElement;
+    levelSelector.value = levelId;
+    
+    // 更新檔案名稱顯示
+    await updateSceneFileName();
+  }
+}
+
+/**
+ * 更新場景檔案名稱顯示
+ */
+async function updateSceneFileName(): Promise<void> {
+  const levelSelector = document.getElementById('level-selector') as HTMLSelectElement;
+  const levelId = levelSelector.value;
+  const sceneNameInput = document.getElementById('scene-name') as HTMLInputElement;
+  
+  try {
+    const fileName = await levelNaming.generateFileName(levelId);
+    sceneNameInput.value = fileName;
+  } catch (err) {
+    console.warn('無法生成檔案名稱，使用預設:', err);
+    sceneNameInput.value = `level${levelId}_001`;
+  }
+}
+
 document.getElementById('save-scene-btn')!.addEventListener('click', () => saveSceneWithPicker());
 document.getElementById('load-scene-btn')!.addEventListener('click', () => loadSceneWithPicker());
 
 // --- Export for Game Runtime ---
 document.getElementById('export-game-btn')!.addEventListener('click', async () => {
-  const name = (document.getElementById('scene-name') as HTMLInputElement).value.trim() || 'untitled';
+  const sceneNameInput = document.getElementById('scene-name') as HTMLInputElement;
+  const fileName = sceneNameInput.value.trim() || 'untitled';
   showOverlay('匯出遊戲中...');
 
   if ('showDirectoryPicker' in window) {
     try {
       const opts: any = { mode: 'readwrite' };
-      if (lastDirHandle) opts.startIn = lastDirHandle;
+      const lastDir = levelNaming.getLastDirHandle();
+      if (lastDir) opts.startIn = lastDir;
+      
       const dirHandle = await (window as any).showDirectoryPicker(opts);
+      levelNaming.setLastDirHandle(dirHandle);
 
-      const { sceneJson, prefabs, textureFiles, modelFiles } = await editor.exportForGame(name);
+      const { sceneJson, prefabs, textureFiles, modelFiles } = await editor.exportForGame(fileName);
 
       // Create subdirectories
       const prefabDir = await dirHandle.getDirectoryHandle('prefabs', { create: true });
       const texDir = await dirHandle.getDirectoryHandle('textures', { create: true });
       const modelDir = await dirHandle.getDirectoryHandle('models', { create: true });
 
-      // Write scene JSON
-      const jsonHandle = await dirHandle.getFileHandle(`${name}.scene.json`, { create: true });
+      // Write scene JSON (使用 .douqi.json 副檔名以符合遊戲格式)
+      const jsonHandle = await dirHandle.getFileHandle(`${fileName}.douqi.json`, { create: true });
       const jsonW = await jsonHandle.createWritable();
       await jsonW.write(sceneJson);
       await jsonW.close();
@@ -1377,7 +1492,7 @@ document.getElementById('export-game-btn')!.addEventListener('click', async () =
 
       alert(
         `匯出完成！\n` +
-        `📄 場景: ${name}.scene.json\n` +
+        `📄 場景: ${fileName}.douqi.json\n` +
         `🧩 Prefab: ${prefabs.length} 個\n` +
         `🖼️ 貼圖: ${textureFiles.length} 個\n` +
         `📦 模型: ${modelFiles.length} 個`
@@ -1389,7 +1504,7 @@ document.getElementById('export-game-btn')!.addEventListener('click', async () =
     hideOverlay();
   } else {
     // Fallback: download files individually
-    const { sceneJson, prefabs, textureFiles, modelFiles } = await editor.exportForGame(name);
+    const { sceneJson, prefabs, textureFiles, modelFiles } = await editor.exportForGame(fileName);
 
     const download = (content: string | Blob, fileName: string) => {
       const blob = typeof content === 'string' ? new Blob([content], { type: 'application/json' }) : content;
@@ -1399,7 +1514,7 @@ document.getElementById('export-game-btn')!.addEventListener('click', async () =
       URL.revokeObjectURL(url);
     };
 
-    download(sceneJson, `${name}.scene.json`);
+    download(sceneJson, `${fileName}.douqi.json`);
     for (const pf of prefabs) download(pf.json, pf.path.replace('prefabs/', ''));
     for (const tf of textureFiles) download(tf.blob, tf.path.replace('textures/', ''));
     for (const mf of modelFiles) download(mf.blob, mf.path.replace('models/', ''));
@@ -3231,3 +3346,18 @@ async function exportSpinningTopScene() {
 }
 
 document.getElementById('export-spinningtop-btn')!.addEventListener('click', exportSpinningTopScene);
+
+// --- Level Selector Initialization ---
+document.addEventListener('DOMContentLoaded', async () => {
+  const levelSelector = document.getElementById('level-selector') as HTMLSelectElement;
+  
+  // 關卡選擇器變更事件
+  levelSelector.addEventListener('change', async () => {
+    await updateSceneFileName();
+  });
+  
+  // 初始化檔案名稱
+  await updateSceneFileName();
+  
+  console.log('✅ 關卡選擇器與自動命名系統已初始化');
+});

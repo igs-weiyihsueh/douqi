@@ -293,9 +293,23 @@
       <div class="panel">
         <h3>場景設定</h3>
         <div class="input-row">
-          <label>名稱</label>
-          <input type="text" id="scene-name" placeholder="my_scene" style="flex:1" />
+          <label>關卡</label>
+          <select id="level-selector" style="flex:1; padding:3px 5px; background:#313244; border:1px solid #45475a; border-radius:3px; color:#cdd6f4; font-size:11px;">
+            <option value="1">關卡 1：新手村</option>
+            <option value="2">關卡 2：森林</option>
+            <option value="3">關卡 3：沙漠</option>
+            <option value="4">關卡 4：火山 (BOSS)</option>
+            <option value="5">關卡 5：雪山</option>
+            <option value="6">關卡 6：海底</option>
+            <option value="7">關卡 7：城堡</option>
+            <option value="8">關卡 8：天空</option>
+          </select>
         </div>
+        <div class="input-row">
+          <label>檔名</label>
+          <input type="text" id="scene-name" placeholder="level1_001" style="flex:1" readonly />
+        </div>
+        <div class="hint">檔案名稱將自動生成：level{關卡ID}_{編號}.json</div>
       </div>
 
       <div class="panel">
