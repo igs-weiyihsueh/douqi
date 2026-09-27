@@ -7,6 +7,7 @@ import { LevelConfigScanner } from '@/managers/LevelConfigScanner';
  * 與現有的敵人生成、可破壞物件生成系統整合
  */
 export class ObjectReplacementSystem {
+  private _scene: Phaser.Scene;
   private configScanner: LevelConfigScanner;
   private currentLevelId: number = 1;
   private currentSubZone: 'A' | 'B' = 'A';
@@ -19,6 +20,7 @@ export class ObjectReplacementSystem {
   private decorations: GameEntity[] = [];   // 裝飾物件
 
   constructor(_scene: Phaser.Scene) {
+    this._scene = _scene;
     this.configScanner = new LevelConfigScanner();
   }
 
@@ -39,8 +41,21 @@ export class ObjectReplacementSystem {
    */
   async loadRandomConfig(): Promise<boolean> {
     try {
-      console.log(`[ObjectReplacement] 為關卡 ${this.currentLevelId}-${this.currentSubZone} 載入隨機配置...`);
+      console.log(`[ObjectReplacement] 為關卡 ${this.currentLevelId}-${this.currentSubZone} 載入配置...`);
       
+      // 優先檢查是否有匯入的配置
+      const scene = this._scene as any; // 獲取scene引用
+      if (scene?.levelImporter) {
+        const importedConfig = scene.levelImporter.getImportedConfig(this.currentLevelId);
+        if (importedConfig) {
+          console.log(`[ObjectReplacement] 使用匯入的配置: ${importedConfig.name || 'Imported Config'}`);
+          this.loadedConfig = importedConfig;
+          this.categorizeObjects();
+          return true;
+        }
+      }
+      
+      // 若無匯入配置，則從遠端載入
       this.loadedConfig = await this.configScanner.randomLoadConfig(this.currentLevelId);
       
       if (!this.loadedConfig) {

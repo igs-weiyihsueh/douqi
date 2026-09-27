@@ -8,6 +8,7 @@ import { Bullet } from '../objects/Bullet';
 import { Breakable } from '../objects/Breakable';
 import { LevelManager } from '@/managers/LevelManager';
 import { ObjectReplacementSystem } from '@/systems/ObjectReplacementSystem';
+import { LevelImporter } from '@/systems/LevelImporter';
 
 /**
  * GameScene（v6：本地單機模擬 4 人共玩）：
@@ -26,6 +27,7 @@ export class GameScene extends Phaser.Scene {
   // 階段2：關卡管理和物件替換系統
   private levelManager?: LevelManager;
   private objectReplacement?: ObjectReplacementSystem;
+  private levelImporter?: LevelImporter;
 
   private enemies!: Phaser.Physics.Arcade.Group;  private items!: Phaser.Physics.Arcade.Group;
   private bullets!: Phaser.Physics.Arcade.Group;
@@ -356,6 +358,9 @@ export class GameScene extends Phaser.Scene {
     if (this.controlMode === 'slow') this.player.empoweredForm = true;
     // ★UI調整①:慢速調參面板改由 config.debug.showSlowTuningPanel 控制(預設關)。
     if (this.controlMode === 'slow') this.createSlowTuningPanel();
+    
+    // ★關卡匯入按鈕：關卡模式下顯示匯入關卡檔案按鈕
+    if (this.levelMode) this.createImportButton();
 
     // B 鍵：逐一加入 BOT 夥伴（最多湊滿 characters.count）
     this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.B).on('down', () => {
@@ -457,6 +462,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   private resetState(): void {
+    // 清理匯入系統
+    if (this.levelImporter) {
+      this.levelImporter.destroy();
+      this.levelImporter = undefined;
+    }
+    
     this.characters = [];
     this.survivalMs = 0;
     this.gameOver = false;
@@ -1493,6 +1504,93 @@ export class GameScene extends Phaser.Scene {
       mkBtn(cx + 92, '−', -row.step);
       mkBtn(cx + 132, '+', row.step);
     });
+  }
+
+  /**
+   * 創建關卡匯入按鈕
+   */
+  private createImportButton(): void {
+    const DEPTH = 45; // 高於其他UI元素
+    
+    // 按鈕位置：左上角
+    const btnX = 20;
+    const btnY = 20;
+    const btnW = 150;
+    const btnH = 40;
+    
+    // 創建按鈕背景
+    const buttonBg = this.add.rectangle(btnX + btnW/2, btnY + btnH/2, btnW, btnH, 0x2563eb, 0.9)
+      .setStrokeStyle(2, 0x3b82f6, 1)
+      .setDepth(DEPTH)
+      .setInteractive({ useHandCursor: true });
+    
+    // 按鈕文字
+    const buttonText = this.add.text(btnX + btnW/2, btnY + btnH/2, '匯入關卡', {
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '16px',
+      color: '#ffffff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(DEPTH + 1);
+    
+    // 按鈕互動效果
+    buttonBg.on('pointerover', () => {
+      buttonBg.setFillStyle(0x3b82f6, 1);
+      buttonText.setStyle({ color: '#f0f9ff' });
+    });
+    
+    buttonBg.on('pointerout', () => {
+      buttonBg.setFillStyle(0x2563eb, 0.9);
+      buttonText.setStyle({ color: '#ffffff' });
+    });
+    
+    buttonBg.on('pointerdown', () => {
+      buttonBg.setFillStyle(0x1d4ed8, 1);
+    });
+    
+    buttonBg.on('pointerup', () => {
+      buttonBg.setFillStyle(0x3b82f6, 1);
+      // 觸發檔案選擇
+      this.triggerFileImport();
+    });
+    
+    // 創建說明文字 (較小的字體，顯示在按鈕右邊)
+    this.add.text(btnX + btnW + 10, btnY + btnH/2, 'JSON', {
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '12px',
+      color: '#94a3b8'
+    }).setOrigin(0, 0.5).setDepth(DEPTH);
+  }
+
+  /**
+   * 觸發檔案匯入
+   */
+  private triggerFileImport(): void {
+    if (this.levelImporter) {
+      this.levelImporter.openFileDialog();
+    } else {
+      console.warn('[GameScene] 關卡匯入系統未初始化');
+      
+      // 顯示錯誤提示
+      const errorText = this.add.text(
+        this.cameras.main.width / 2,
+        this.cameras.main.height / 2,
+        '關卡匯入系統未初始化\n請在關卡模式下使用',
+        {
+          fontSize: '24px',
+          color: '#ef4444',
+          align: 'center',
+          stroke: '#000000',
+          strokeThickness: 2
+        }
+      ).setOrigin(0.5).setScrollFactor(0).setDepth(1000);
+
+      this.tweens.add({
+        targets: errorText,
+        alpha: { from: 1, to: 0 },
+        duration: 3000,
+        onComplete: () => errorText.destroy()
+      });
+    }
   }
 
   /**
@@ -5669,10 +5767,118 @@ export class GameScene extends Phaser.Scene {
     try {
       this.levelManager = new LevelManager(this);
       this.objectReplacement = this.levelManager.getObjectReplacementSystem();
+      
+      // 初始化關卡匯入系統
+      this.levelImporter = new LevelImporter(this);
+      this.setupImporterEvents();
+      
       console.log('[GameScene] 關卡管理系統初始化完成');
     } catch (error) {
       console.error('[GameScene] 關卡管理系統初始化失敗:', error);
     }
+  }
+
+  /**
+   * 設定關卡匯入系統事件監聽
+   */
+  private setupImporterEvents(): void {
+    if (!this.levelImporter) return;
+
+    // 監聽關卡配置匯入事件
+    this.events.on('level-config-imported', (data: { configKey: string, config: any }) => {
+      console.log(`[GameScene] 收到關卡配置匯入事件: ${data.configKey}`);
+      
+      // 如果匯入的配置對應當前關卡，立即重新載入
+      const levelPattern = /^level(\d+)_/;
+      const match = data.configKey.match(levelPattern);
+      
+      if (match) {
+        const importedLevelId = parseInt(match[1]);
+        if (importedLevelId === this.currentLevel) {
+          console.log(`[GameScene] 匯入的配置對應當前關卡 ${this.currentLevel}，立即重新載入`);
+          this.reloadCurrentSubZone();
+        }
+      }
+    });
+  }
+
+  /**
+   * 重新載入當前子區配置
+   */
+  private reloadCurrentSubZone(): void {
+    if (!this.levelManager || !this.levelImporter) return;
+    
+    // 檢查是否有匯入的配置
+    const importedConfig = this.levelImporter.getImportedConfig(this.currentLevel);
+    if (importedConfig) {
+      console.log(`[GameScene] 使用匯入的配置重新載入關卡 ${this.currentLevel}`);
+      
+      // 清除當前物件
+      this.clearAllBreakables();
+      
+      // 使用匯入的配置重新生成物件
+      this.applyImportedConfig(importedConfig);
+      
+      // 顯示重新載入提示
+      this.showConfigReloadMessage(importedConfig.name || `關卡 ${this.currentLevel}`);
+    }
+  }
+
+  /**
+   * 應用匯入的配置
+   */
+  private applyImportedConfig(config: any): void {
+    if (!config.entities || !Array.isArray(config.entities)) return;
+    
+    for (const entity of config.entities) {
+      try {
+        if (entity.type === 'wooden_box' || entity.type === 'crate') {
+          const breakable = this.breakables.get(entity.position[0], entity.position[1]) as Breakable | null;
+          if (breakable) {
+            breakable.spawnBreakable(entity.position[0], entity.position[1], 'crate');
+          }
+        } else if (entity.type === 'barrel') {
+          const breakable = this.breakables.get(entity.position[0], entity.position[1]) as Breakable | null;
+          if (breakable) {
+            breakable.spawnBreakable(entity.position[0], entity.position[1], 'barrel');
+          }
+        }
+      } catch (error) {
+        console.warn(`[GameScene] 無法生成實體 ${entity.id}:`, error);
+      }
+    }
+  }
+
+  /**
+   * 顯示配置重新載入訊息
+   */
+  private showConfigReloadMessage(configName: string): void {
+    // 創建臨時文字顯示
+    const message = this.add.text(
+      this.cameras.main.width / 2,
+      this.cameras.main.height * 0.3,
+      `已載入關卡配置：${configName}`,
+      {
+        fontSize: '32px',
+        color: '#00ff00',
+        stroke: '#000000',
+        strokeThickness: 4
+      }
+    ).setOrigin(0.5).setScrollFactor(0).setDepth(1000);
+
+    // 動畫效果
+    this.tweens.add({
+      targets: message,
+      alpha: { from: 0, to: 1 },
+      scale: { from: 1.5, to: 1 },
+      duration: 500,
+      ease: 'Back.easeOut',
+      yoyo: true,
+      delay: 1000,
+      onComplete: () => {
+        message.destroy();
+      }
+    });
   }
 
   /**
