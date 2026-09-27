@@ -211,6 +211,9 @@ export class TitleScene extends Phaser.Scene {
     edBtn.on('pointerdown', () => this.openSceneEditor());
     this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.E).on('down', () => this.openSceneEditor());
 
+    // ── 地形編輯器入口已隱藏 ──
+    // 註釋：用戶要求隱藏地形編輯器按鈕
+    /*
     // ── 地形編輯器入口：🏔️ 地形編輯器 (M) → TerrainEditorScene（獨立編輯器場景）──
     const teBtnW = 200, teBtnH = 44;
     const teX = w / 2, teY = h - teBtnH / 2 - 20; // 底部中央
@@ -230,6 +233,7 @@ export class TitleScene extends Phaser.Scene {
     teBtn.on('pointerout', () => teBg.setFillStyle(0x7c2d12, 0.9));
     teBtn.on('pointerdown', () => this.scene.start('TerrainEditorScene'));
     this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.M).on('down', () => this.scene.start('TerrainEditorScene'));
+    */
 
     // ── 小遊戲入口：🎮 小遊戲 (G) → MinigameMenuScene（與 fast/slow 開始戰鬥並列，互不干擾）──
     const mgBtnW = 200, mgBtnH = 44;
