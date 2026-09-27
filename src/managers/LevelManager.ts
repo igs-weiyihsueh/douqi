@@ -1,6 +1,8 @@
 import { LevelLoader } from '@/managers/LevelLoader';
+import { LevelConfigScanner } from '@/managers/LevelConfigScanner';
 import { EntitySpawner } from '@/systems/EntitySpawner';
 import { EventTrigger } from '@/systems/EventTrigger';
+import { ObjectReplacementSystem } from '@/systems/ObjectReplacementSystem';
 import type { 
   LevelData, 
   LevelState, 
@@ -17,8 +19,10 @@ import type {
 export class LevelManager {
   private scene: Phaser.Scene;
   private levelLoader: LevelLoader;
+  private configScanner: LevelConfigScanner;
   private entitySpawner: EntitySpawner;
   private eventTrigger: EventTrigger;
+  private objectReplacement: ObjectReplacementSystem;
   
   private currentLevel: LevelData | null = null;
   private levelState: LevelState;
@@ -32,8 +36,10 @@ export class LevelManager {
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
     this.levelLoader = new LevelLoader();
+    this.configScanner = new LevelConfigScanner();
     this.entitySpawner = new EntitySpawner(scene);
     this.eventTrigger = new EventTrigger(scene);
+    this.objectReplacement = new ObjectReplacementSystem(scene);
     
     // 初始化關卡狀態
     this.levelState = {
@@ -768,6 +774,65 @@ export class LevelManager {
   }
 
   /**
+   * 載入指定關卡和子區的隨機配置
+   * 用於AB區切換時載入編輯器配置
+   * @param levelId 關卡ID (1-8)
+   * @param subZone 子區 ('A' 或 'B')
+   * @returns Promise<boolean> 是否成功載入配置
+   */
+  async loadSubZoneConfig(levelId: number, subZone: 'A' | 'B' = 'A'): Promise<boolean> {
+    try {
+      console.log(`[LevelManager] 載入關卡 ${levelId}-${subZone} 的隨機配置...`);
+      
+      // 設定物件替換系統的關卡資訊
+      this.objectReplacement.setCurrentLevel(levelId, subZone);
+      
+      // 載入隨機配置
+      const success = await this.objectReplacement.loadRandomConfig();
+      
+      if (success) {
+        const configInfo = this.objectReplacement.getConfigInfo();
+        console.log(`[LevelManager] 子區配置載入成功:`, configInfo);
+      } else {
+        console.warn(`[LevelManager] 關卡 ${levelId}-${subZone} 沒有可用的編輯器配置，使用預設生成`);
+      }
+      
+      return success;
+      
+    } catch (error) {
+      console.error(`[LevelManager] 載入子區配置失敗:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * 檢查關卡是否有編輯器配置
+   * @param levelId 關卡ID (1-8)
+   * @returns Promise<{total: number, cached: boolean}> 配置統計
+   */
+  async checkLevelConfigs(levelId: number): Promise<{total: number, cached: boolean}> {
+    return await this.configScanner.getConfigStats(levelId);
+  }
+
+  /**
+   * 取得物件替換系統
+   * 讓GameScene可以在生成物件時調用替換功能
+   * @returns ObjectReplacementSystem 物件替換系統實例
+   */
+  getObjectReplacementSystem(): ObjectReplacementSystem {
+    return this.objectReplacement;
+  }
+
+  /**
+   * 清除當前的子區配置
+   * 在離開關卡或切換子區時調用
+   */
+  clearSubZoneConfig(): void {
+    this.objectReplacement.clearConfig();
+    console.log('[LevelManager] 已清除子區配置');
+  }
+
+  /**
    * 計算編輯器資料中可收集物件的數量
    */
   private countCollectiblesInEditorData(entities: any[]): number {
@@ -786,6 +851,7 @@ export class LevelManager {
     
     this.entitySpawner.clearAllEntities();
     this.eventTrigger.clearAllEvents();
+    this.objectReplacement.clearConfig();
     
     this.currentLevel = null;
     this.levelState.isLoaded = false;
@@ -799,5 +865,6 @@ export class LevelManager {
   destroy(): void {
     this.cleanup();
     this.levelLoader.clearCache();
+    this.configScanner.clearCache();
   }
 }

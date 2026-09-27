@@ -6,6 +6,8 @@ import { Item, type SkillType } from '../objects/Item';
 import { updateRefillLatch, shouldSpawnMore, type WaveSpawnState } from '../systems/waveMath';
 import { Bullet } from '../objects/Bullet';
 import { Breakable } from '../objects/Breakable';
+import { LevelManager } from '@/managers/LevelManager';
+import { ObjectReplacementSystem } from '@/systems/ObjectReplacementSystem';
 
 /**
  * GameScene（v6：本地單機模擬 4 人共玩）：
@@ -20,6 +22,10 @@ export class GameScene extends Phaser.Scene {
   private get player(): Character {
     return this.characters[0];
   }
+
+  // 階段2：關卡管理和物件替換系統
+  private levelManager?: LevelManager;
+  private objectReplacement?: ObjectReplacementSystem;
 
   private enemies!: Phaser.Physics.Arcade.Group;  private items!: Phaser.Physics.Arcade.Group;
   private bullets!: Phaser.Physics.Arcade.Group;
@@ -424,6 +430,9 @@ export class GameScene extends Phaser.Scene {
 
     // v57：開場第一波灑幾個可打破物件
     this.spawnBreakablesForWave();
+
+    // 階段2：初始化關卡管理和物件替換系統
+    this.setupLevelManagement();
 
     // ★關卡制:關卡 1-A 開場——靜態布置 A 物件 + A 子區隨機(純波次 或 事件),顯示關卡標題。
     if (this.levelMode) {
@@ -2862,7 +2871,37 @@ export class GameScene extends Phaser.Scene {
 
   /** 靜態布置可破壞物件(木箱/桶),依選邊配置,座標為子區內比例。不進 spawn 循環=不重生。 */
   private placeStaticBreakables(choice: 'L' | 'R'): void {
-    // ★每區隨機布置:數量+位置隨機,不再每區都一樣。保留選邊基調(R 側多桶)。避開中心與邊緣、彼此不重疊。
+    // 階段2：首先嘗試載入當前關卡的配置
+    if (this.levelManager) {
+      this.loadSubZoneConfig(this.currentLevel, this.currentSub).then(() => {
+        this.placeStaticBreakablesWithReplacement(choice);
+      }).catch(error => {
+        console.warn('[GameScene] 載入配置失敗，使用預設布置:', error);
+        this.placeStaticBreakablesWithReplacement(choice);
+      });
+    } else {
+      this.placeStaticBreakablesWithReplacement(choice);
+    }
+  }
+
+  /** 實際執行靜態物件布置（支援物件替換） */
+  private placeStaticBreakablesWithReplacement(choice: 'L' | 'R'): void {
+    // 檢查是否有物件替換配置
+    if (this.objectReplacement?.hasReplacementFor('static')) {
+      console.log(`[GameScene] 使用編輯器配置替換靜態物件 (選擇: ${choice})`);
+      const replacedObjects = this.objectReplacement.replaceStaticObjects([]);
+      
+      // 生成替換物件
+      for (const obj of replacedObjects) {
+        const breakable = new Breakable(this, obj.x, obj.y);
+        const kind = obj.type === 'barrel' ? 'barrel' : 'crate';
+        breakable.spawnBreakable(obj.x, obj.y, kind);
+        this.breakables.add(breakable);
+      }
+      return; // 使用編輯器配置，不執行預設生成
+    }
+
+    // 預設生成邏輯（原有代碼）
     const cfg = GameConfig.stage.breakablesRandom;
     const a = this.arena;
     const minWH = Math.min(a.width, a.height);
@@ -5618,13 +5657,76 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ---------------------------------------------------------------------------
+  // 階段2：關卡管理和物件替換系統
+  // ---------------------------------------------------------------------------
+  
+  /**
+   * 初始化關卡管理和物件替換系統
+   */
+  private setupLevelManagement(): void {
+    if (!this.levelMode) return; // 只在關卡模式中啟用
+    
+    try {
+      this.levelManager = new LevelManager(this);
+      this.objectReplacement = this.levelManager.getObjectReplacementSystem();
+      console.log('[GameScene] 關卡管理系統初始化完成');
+    } catch (error) {
+      console.error('[GameScene] 關卡管理系統初始化失敗:', error);
+    }
+  }
+
+  /**
+   * 載入指定子區的隨機配置
+   * @param levelId 關卡ID (1-8) 
+   * @param subZone 子區 ('A' 或 'B')
+   */
+  private async loadSubZoneConfig(levelId: number, subZone: 'A' | 'B' = 'A'): Promise<void> {
+    if (!this.levelManager) return;
+    
+    try {
+      console.log(`[GameScene] 載入關卡 ${levelId}-${subZone} 配置...`);
+      const success = await this.levelManager.loadSubZoneConfig(levelId, subZone);
+      
+      if (success && this.objectReplacement) {
+        const configInfo = this.objectReplacement.getConfigInfo();
+        console.log(`[GameScene] 子區配置載入成功:`, configInfo);
+      } else {
+        console.log(`[GameScene] 關卡 ${levelId}-${subZone} 沒有編輯器配置，使用預設生成`);
+      }
+    } catch (error) {
+      console.error(`[GameScene] 載入子區配置失敗:`, error);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // v57 可打破物件（瓶罐/箱子）
   // ---------------------------------------------------------------------------
   /** v57/v59：每波開始成堆灑可打破物件——幾堆、每堆幾個聚在一起，堆遠離場地中心、避開玩家/彼此。 */
   private spawnBreakablesForWave(): void {
     // ★關卡制:可破壞物件改【進入子區時靜態布置】(placeStaticBreakables),不隨波次重生。
     if (this.levelMode) return;
+    
     const cfg = GameConfig.breakable;
+    
+    // 階段2：檢查是否有物件替換配置
+    let defaultObjects: any[] = [];
+    if (this.objectReplacement?.hasReplacementFor('static')) {
+      console.log('[GameScene] 使用編輯器配置替換可破壞物件');
+      const replacedObjects = this.objectReplacement.replaceStaticObjects([]);
+      
+      // 生成替換物件
+      for (const obj of replacedObjects) {
+        if (this.breakables.countActive(true) >= cfg.maxAlive) break;
+        
+        const breakable = new Breakable(this, obj.x, obj.y);
+        const kind = obj.type === 'barrel' ? 'barrel' : 'crate';
+        breakable.spawnBreakable(obj.x, obj.y, kind);
+        this.breakables.add(breakable);
+      }
+      return; // 使用編輯器配置，不執行預設生成
+    }
+    
+    // 預設生成邏輯（原有代碼）
     const inset = cfg.edgeInset;
     const ccx = this.arena.centerX, ccy = this.arena.centerY;
     const clusterCenters: Array<{ x: number; y: number }> = [];
