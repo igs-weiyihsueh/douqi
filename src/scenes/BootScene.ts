@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { LightGameConfig } from '../config-light';
+import { GameConfig } from '../config';
 
 /**
  * BootScene：程序化產生占位像素貼圖（不依賴外部素材檔）。
@@ -12,12 +12,12 @@ export class BootScene extends Phaser.Scene {
 
   create(): void {
     // v17：4 個角色改「程式繪製人型剪影」（不同顏色；朝右=aimAngle 0），與敵人圓塊區隔
-    const colors = LightGameConfig.characters.colors;
-    for (let i = 0; i < LightGameConfig.characters.count; i++) {
-      this.makeHumanoidTexture(`char-${i}`, LightGameConfig.player.radius, colors[i], 0xffffff);
+    const colors = GameConfig.characters.colors;
+    for (let i = 0; i < GameConfig.characters.count; i++) {
+      this.makeHumanoidTexture(`char-${i}`, GameConfig.player.radius, colors[i], 0xffffff);
     }
     // 各敵人類型各一張貼圖
-    const types = LightGameConfig.enemy.types;
+    const types = GameConfig.enemy.types;
     this.makeCircleTexture('enemy-normal', types.normal.radius, types.normal.color, types.normal.stroke);
     this.makeCircleTexture('enemy-bomber', types.bomber.radius, types.bomber.color, types.bomber.stroke);
     this.makeCircleTexture('enemy-boss', GameConfig.boss.radius, GameConfig.boss.color, GameConfig.boss.stroke);

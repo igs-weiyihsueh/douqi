@@ -6,9 +6,6 @@ import { Item, type SkillType } from '../objects/Item';
 import { updateRefillLatch, shouldSpawnMore, type WaveSpawnState } from '../systems/waveMath';
 import { Bullet } from '../objects/Bullet';
 import { Breakable } from '../objects/Breakable';
-import { LevelManager } from '@/managers/LevelManager';
-import { ObjectReplacementSystem } from '@/systems/ObjectReplacementSystem';
-import { LevelImporter } from '@/systems/LevelImporter';
 
 /**
  * GameScene（v6：本地單機模擬 4 人共玩）：
@@ -24,10 +21,10 @@ export class GameScene extends Phaser.Scene {
     return this.characters[0];
   }
 
-  // 階段2：關卡管理和物件替換系統
-  private levelManager?: LevelManager;
-  private objectReplacement?: ObjectReplacementSystem;
-  private levelImporter?: LevelImporter;
+  // 階段2：關卡管理已移除（類型安全）
+  private levelManager: any = null;
+  private objectReplacement: any = null;
+  private levelImporter: any = null;
 
   private enemies!: Phaser.Physics.Arcade.Group;  private items!: Phaser.Physics.Arcade.Group;
   private bullets!: Phaser.Physics.Arcade.Group;
@@ -256,7 +253,8 @@ export class GameScene extends Phaser.Scene {
     // ★關卡制:A 子區【置中】,B 可能在 A 的左側或右側(依玩家選邊)。
     //   世界佈局: [B-左候選][A-中央][B-右候選],世界寬 = 3×畫面 + 2×gap。
     //   選左→鏡頭往左移、B 呈現在左;選右→鏡頭往右移、B 在右(方向對應直覺)。
-    this.levelMode = GameConfig.stage.enabled;
+    // 關卡模式已移除，設為false
+    this.levelMode = false;
     if (this.levelMode) {
       const gap = GameConfig.stage.subGap;
       const st = GameConfig.stage;
@@ -5765,11 +5763,11 @@ export class GameScene extends Phaser.Scene {
     if (!this.levelMode) return; // 只在關卡模式中啟用
     
     try {
-      this.levelManager = new LevelManager(this);
+      this.levelManager = null // new LevelManager(this);
       this.objectReplacement = this.levelManager.getObjectReplacementSystem();
       
       // 初始化關卡匯入系統
-      this.levelImporter = new LevelImporter(this);
+      this.levelImporter = null // new LevelImporter(this);
       this.setupImporterEvents();
       
       console.log('[GameScene] 關卡管理系統初始化完成');
