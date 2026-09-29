@@ -454,7 +454,8 @@ export class GameScene extends Phaser.Scene {
 
     this.emitStats();
 
-    // 啟動UI場景
+    // 啟動UI場景（唯一啟動點）
+    console.log('[GameScene] 啟動UIScene');
     this.scene.launch('UIScene');
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -5500,9 +5501,12 @@ export class GameScene extends Phaser.Scene {
     // 清殘留 tween/timer，避免重啟後回呼觸及已銷毀物件（沿用 GameOver 的乾淨重啟做法）
     this.tweens.killAll();
     this.time.removeAllEvents();
+    console.log('[GameScene] 重啟遊戲：停止UIScene');
     this.scene.stop('UIScene');
+    console.log('[GameScene] 重啟遊戲：啟動新GameScene');
     this.scene.start('GameScene', { controlMode: this.controlMode }); // v46：重開保留當前操作模式
-    this.scene.launch('UIScene');
+    // 移除重複的UIScene啟動，新的GameScene會自己啟動UIScene
+    console.log('[GameScene] UIScene將由新GameScene負責');
   }
 
   private aliveCount(): number {

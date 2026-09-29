@@ -131,6 +131,11 @@ export class UIScene extends Phaser.Scene {
   create(): void {
     console.log('[UIScene] 開始創建UI元件...');
     
+    // 檢查UIScene是否已經存在並運行
+    if (this.scene.isActive('UIScene')) {
+      console.log('[UIScene] 警告：UIScene已經在運行中！');
+    }
+    
     // 根因修復：重啟時 rows 殘留上一局已銷毀物件會崩潰，每次 create 先清空
     this.rows = [];
     this.comboNodes = [];
@@ -367,6 +372,7 @@ export class UIScene extends Phaser.Scene {
 
     this.input.on('pointerdown', () => this.game.events.emit('ui-attack'));
 
+    console.log('[UIScene] 註冊事件監聽器');
     this.game.events.on('stats', this.updateStats, this);
     this.game.events.on('aim', this.updateAim, this);
     this.game.events.on('boss-hp', this.updateBossHp, this);
@@ -374,6 +380,7 @@ export class UIScene extends Phaser.Scene {
     this.game.events.on('items-state', this.updateItemToggleBtn, this);
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      console.log('[UIScene] 清理事件監聽器和資源');
       this.game.events.off('stats', this.updateStats, this);
       this.game.events.off('aim', this.updateAim, this);
       this.game.events.off('boss-hp', this.updateBossHp, this);
@@ -383,6 +390,8 @@ export class UIScene extends Phaser.Scene {
       for (const ic of this.nodeIcons) ic.destroy();
       if (this.rewardIcon) this.rewardIcon.destroy();
     });
+    
+    console.log('[UIScene] UI場景創建完成');
   }
 
   /** ★道具開關按鈕面:隨 itemsEnabled 狀態即時更新色/字(開=綠ON、關=紅OFF)。由 GameScene 'items-state' 事件驅動。 */

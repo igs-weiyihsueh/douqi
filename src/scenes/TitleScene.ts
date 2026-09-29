@@ -293,7 +293,9 @@ export class TitleScene extends Phaser.Scene {
   private startGame(mode: 'fast' | 'slow' = 'fast'): void {
     if (this.started) return; // 防重入（同時點擊+按鍵）
     this.started = true;
+    console.log('[TitleScene] 啟動遊戲，模式:', mode);
     this.scene.start('GameScene', { controlMode: mode });
-    this.scene.launch('UIScene');
+    // 移除重複的UIScene啟動，GameScene會自己啟動UIScene
+    console.log('[TitleScene] 已啟動GameScene，UIScene將由GameScene負責');
   }
 }

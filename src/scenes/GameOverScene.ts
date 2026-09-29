@@ -133,9 +133,12 @@ export class GameOverScene extends Phaser.Scene {
     this.restarting = true;
     // 根因修復③：GameScene 已被 stop（非 pause，見 triggerGameOver），這裡乾淨全新啟動。
     // 先停 UI 與自己，再 start GameScene（會重跑 init/create，狀態全新）+ 重啟 UIScene。
+    console.log('[GameOverScene] 重啟遊戲：停止UIScene');
     this.scene.stop('UIScene');
+    console.log('[GameOverScene] 重啟遊戲：啟動GameScene');
     this.scene.start('GameScene', { controlMode: this.controlMode }); // v46：沿用本場模式
-    this.scene.launch('UIScene');
+    // 移除重複的UIScene啟動，GameScene會自己啟動UIScene
+    console.log('[GameOverScene] UIScene將由GameScene負責');
     this.scene.stop(); // 停掉自己（GameOverScene），放最後避免中斷上面的排程
   }
 }
