@@ -411,16 +411,17 @@ export class BootScene extends Phaser.Scene {
     console.log('[BootScene] 開始創建ground貼圖，尺寸:', tile, 'x', tile);
     
     const g = this.add.graphics();
-    g.fillStyle(0x1b1d2a, 1);
+    // 改用更明亮的顏色來測試
+    g.fillStyle(0x4a5568, 1);  // 改為較亮的灰藍色
     g.fillRect(0, 0, tile, tile);
-    g.lineStyle(2, 0x252a3d, 1);
+    g.lineStyle(2, 0x6b7280, 1); // 更亮的邊框
     g.strokeRect(0, 0, tile, tile);
     // 內部小點綴
-    g.fillStyle(0x222538, 1);
+    g.fillStyle(0x64748b, 1);  // 更亮的點綴色
     g.fillRect(tile / 2 - 3, tile / 2 - 3, 6, 6);
     
     g.generateTexture('ground', tile, tile);
-    console.log('[BootScene] ground貼圖生成完成');
+    console.log('[BootScene] ground貼圖生成完成，使用較亮顏色');
     
     g.destroy();
     

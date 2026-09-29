@@ -61,7 +61,7 @@ export class GameScene extends Phaser.Scene {
   private intermissionUntil = 0;
 
   // ★關卡系統(第一階段骨架)
-  private levelMode = false;               // 是否啟用關卡制
+  private levelMode = true;               // 是否啟用關卡制 - 改為true測試
   private currentLevel = 1;                // 1..totalLevels
   private currentSub: 'A' | 'B' = 'A';     // 當前子區
   private eventBag: string[] = [];         // ★事件洗牌佇列(shuffle bag):一輪內 tower/guard/capture 各出一次不重複,pop 空→重洗
@@ -447,16 +447,22 @@ export class GameScene extends Phaser.Scene {
 
     // ★關卡制:關卡 1-A 開場——靜態布置 A 物件 + A 子區隨機(純波次 或 事件),顯示關卡標題。
     if (this.levelMode) {
+      console.log('[GameScene] 關卡模式已啟用，設置關卡環境');
       this.placeStaticBreakables('L'); // 1-A 用預設一套布置
       this.progressPhase = 'playing';
       this.rollSubZoneContent(true);   // 1-A 隨機:純波次(wavesA) 或 事件
       // 純波次才開場生一組怪(事件由 startEvent 自管生怪)
       if (this.waveState === 'spawning' && GameConfig.spawn.spawnOnStart) {
+        console.log('[GameScene] 關卡模式：開場生成怪物');
         this.spawnFormation();
       }
+      console.log('[GameScene] 顯示關卡橫幅');
       this.showLevelBanner();
-    } else if (GameConfig.spawn.spawnOnStart) {
-      this.spawnFormation();
+    } else {
+      console.log('[GameScene] 標準模式：直接生成怪物');
+      if (GameConfig.spawn.spawnOnStart) {
+        this.spawnFormation();
+      }
     }
 
     this.emitStats();
