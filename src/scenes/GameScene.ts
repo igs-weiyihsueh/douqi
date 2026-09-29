@@ -286,11 +286,17 @@ export class GameScene extends Phaser.Scene {
       this.arena = new Phaser.Geom.Rectangle(arenaX, arenaY, arenaW, arenaH);
       this.physics.world.setBounds(arenaX, arenaY, arenaW, arenaH);
       this.cameras.main.setBounds(0, 0, GameConfig.width, GameConfig.height);
+      
+      console.log('[GameScene] 競技場尺寸:', arenaX, arenaY, arenaW, arenaH);
+      console.log('[GameScene] 檢查ground貼圖存在:', this.textures.exists('ground'));
+      
       // 地板 + 圍欄
-      this.add
+      const groundSprite = this.add
         .tileSprite(arenaX, arenaY, arenaW, arenaH, 'ground')
         .setOrigin(0, 0)
         .setDepth(0);
+      console.log('[GameScene] ground貼圖創建:', groundSprite ? '成功' : '失敗');
+      
       const border = this.add.graphics().setDepth(1);
       border.lineStyle(
         GameConfig.arena.borderThickness,
@@ -298,6 +304,7 @@ export class GameScene extends Phaser.Scene {
         1
       );
       border.strokeRect(arenaX, arenaY, arenaW, arenaH);
+      console.log('[GameScene] 競技場邊框創建完成');
     }
 
     // 敵群

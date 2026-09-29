@@ -408,6 +408,8 @@ export class BootScene extends Phaser.Scene {
   }
   private makeGroundTexture(): void {
     const tile = 64;
+    console.log('[BootScene] 開始創建ground貼圖，尺寸:', tile, 'x', tile);
+    
     const g = this.add.graphics();
     g.fillStyle(0x1b1d2a, 1);
     g.fillRect(0, 0, tile, tile);
@@ -416,8 +418,19 @@ export class BootScene extends Phaser.Scene {
     // 內部小點綴
     g.fillStyle(0x222538, 1);
     g.fillRect(tile / 2 - 3, tile / 2 - 3, 6, 6);
+    
     g.generateTexture('ground', tile, tile);
+    console.log('[BootScene] ground貼圖生成完成');
+    
     g.destroy();
+    
+    // 驗證貼圖是否真的被創建
+    console.log('[BootScene] ground貼圖驗證:', this.textures.exists('ground'));
+    
+    // 創建測試用的可見ground貼圖來驗證
+    const testGroundSprite = this.add.image(100, 100, 'ground');
+    testGroundSprite.setVisible(false); // 立即隱藏，只是為了測試
+    console.log('[BootScene] 測試ground貼圖創建:', testGroundSprite ? '成功' : '失敗');
   }
 
   /** 產生粒子/命中特效用的小白塊 */

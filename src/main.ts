@@ -44,5 +44,16 @@ game.events.once('ready', () => {
   if (bootScene && bootScene.textures) {
     console.log('檢查ground貼圖:', bootScene.textures.exists('ground'));
     console.log('可用貼圖數量:', Object.keys(bootScene.textures.list).length);
+    
+    // 列出一些關鍵貼圖
+    const keyTextures = ['ground', 'char-0', 'enemy-normal', 'item-A'];
+    keyTextures.forEach(key => {
+      console.log(`貼圖 ${key}:`, bootScene.textures.exists(key));
+    });
   }
+  
+  // 添加貼圖載入錯誤監聽
+  game.events.on('textureloaderror', (event: any) => {
+    console.error('貼圖載入錯誤:', event);
+  });
 });

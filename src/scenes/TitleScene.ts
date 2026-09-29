@@ -29,9 +29,15 @@ export class TitleScene extends Phaser.Scene {
     const w = LightGameConfig.width;
     const h = LightGameConfig.height;
 
+    console.log('[TitleScene] 畫面尺寸:', w, 'x', h);
+    console.log('[TitleScene] 檢查ground貼圖存在:', this.textures.exists('ground'));
+
     // 背景（沿用地板貼圖鋪滿 + 半透明暗底，讓文字清楚）
-    this.add.tileSprite(0, 0, w, h, 'ground').setOrigin(0, 0).setDepth(0);
-    this.add.rectangle(0, 0, w, h, 0x0a0c14, 0.55).setOrigin(0, 0).setDepth(1);
+    const groundSprite = this.add.tileSprite(0, 0, w, h, 'ground').setOrigin(0, 0).setDepth(0);
+    console.log('[TitleScene] ground貼圖創建:', groundSprite ? '成功' : '失敗');
+    
+    const overlay = this.add.rectangle(0, 0, w, h, 0x0a0c14, 0.55).setOrigin(0, 0).setDepth(1);
+    console.log('[TitleScene] 背景遮罩創建:', overlay ? '成功' : '失敗');
 
     // 標題
     this.add
