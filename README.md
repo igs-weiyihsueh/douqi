@@ -62,3 +62,18 @@ npm run preview # 預覽正式版
 
 目前所有貼圖皆由 `BootScene` 以程式產生（色塊 / 帶描邊圓形），無外部素材檔，
 之後可直接替換成正式像素素材。
+
+## 部署
+
+- **線上版本**: https://igs-weiyihsueh.github.io/douqi/
+- **部署分支**: `gh-pages`（GitHub Pages 自動讀取）
+- **開發分支**: `deploy_test`（當前活躍）、`main`（主要開發）
+
+### 部署流程
+```bash
+npm run build                    # 構建
+git checkout gh-pages            # 切換到部署分支
+cp -r dist/* .                  # 複製構建產物
+git add . && git commit -m "🚀 部署"
+git push origin gh-pages         # 推送部署
+```
