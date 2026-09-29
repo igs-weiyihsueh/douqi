@@ -13,7 +13,7 @@ export const GameConfig = {
     showSlowTuningPanel: false
   },
 
-  /** ★波次進度 HUD(關卡制:節點序列 ●─●─◆);關卡模式已移除 */
+  /** ★波次進度 HUD(關卡制:節點序列 ●─●─◆);關卡系統已移除，保持停用 */
   waveHud: {
     enabled: false,
     /** 節點序列置中的畫面座標(setScrollFactor0 固定);上方 */
