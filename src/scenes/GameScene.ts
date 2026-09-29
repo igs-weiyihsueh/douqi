@@ -6,7 +6,7 @@ import { Item, type SkillType } from '../objects/Item';
 import { updateRefillLatch, shouldSpawnMore, type WaveSpawnState } from '../systems/waveMath';
 import { Bullet } from '../objects/Bullet';
 import { Breakable } from '../objects/Breakable';
-import { UIScene } from './UIScene';
+// 移除UIScene import，因為它會造成循環依賴
 
 /**
  * GameScene（v6：本地單機模擬 4 人共玩）：
@@ -453,6 +453,9 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.emitStats();
+
+    // 啟動UI場景
+    this.scene.launch('UIScene');
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.game.events.off('ui-attack', this.queuePlayerAttack, this);
