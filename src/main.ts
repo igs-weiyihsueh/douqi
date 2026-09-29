@@ -38,4 +38,11 @@ console.log('Phaser遊戲實例創建完成！');
 game.events.once('ready', () => {
   console.log('遊戲初始化完成，所有場景已註冊');
   console.log('註冊的場景:', game.scene.keys);
+  
+  // 檢查關鍵貼圖是否存在
+  const bootScene = game.scene.getScene('BootScene') as any;
+  if (bootScene && bootScene.textures) {
+    console.log('檢查ground貼圖:', bootScene.textures.exists('ground'));
+    console.log('可用貼圖數量:', Object.keys(bootScene.textures.list).length);
+  }
 });

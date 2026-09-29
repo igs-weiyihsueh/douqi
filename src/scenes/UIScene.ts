@@ -129,11 +129,15 @@ export class UIScene extends Phaser.Scene {
   }
 
   create(): void {
+    console.log('[UIScene] 開始創建UI元件...');
+    
     // 根因修復：重啟時 rows 殘留上一局已銷毀物件會崩潰，每次 create 先清空
     this.rows = [];
     this.comboNodes = [];
     const w = GameConfig.width;
     const h = GameConfig.height;
+
+    console.log('[UIScene] 畫面尺寸:', w, 'x', h);
 
     // 團隊總分 + 時間（上方中央）——★用戶要求隱藏這兩個上方文字(保留物件供 stats 更新,不顯示)
     this.teamText = this.add

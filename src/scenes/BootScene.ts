@@ -11,11 +11,15 @@ export class BootScene extends Phaser.Scene {
   }
 
   create(): void {
+    console.log('[BootScene] 開始創建貼圖資源...');
+    
     // v17：4 個角色改「程式繪製人型剪影」（不同顏色；朝右=aimAngle 0），與敵人圓塊區隔
     const colors = GameConfig.characters.colors;
     for (let i = 0; i < GameConfig.characters.count; i++) {
       this.makeHumanoidTexture(`char-${i}`, GameConfig.player.radius, colors[i], 0xffffff);
     }
+    console.log('[BootScene] 角色貼圖創建完成');
+    
     // 各敵人類型各一張貼圖
     const types = GameConfig.enemy.types;
     this.makeCircleTexture('enemy-normal', types.normal.radius, types.normal.color, types.normal.stroke);
@@ -52,8 +56,13 @@ export class BootScene extends Phaser.Scene {
     this.makeCollectShapeTexture('collect-gem', 0x4ade80, 0x0a5a2a);
     // 小遊戲「炸彈人對戰」:炸彈貼圖(黑圓身 + 引信 + 高光)
     this.makeBombTexture('bomb');
+    console.log('[BootScene] 道具和特效貼圖創建完成');
+    
     this.makeGroundTexture();
+    console.log('[BootScene] ground貼圖創建完成');
+    
     this.makeParticleTexture();
+    console.log('[BootScene] 所有貼圖創建完成，準備跳轉場景');
 
     // 檢查URL參數，決定跳轉到哪個場景
     const urlParams = new URLSearchParams(window.location.search);
@@ -65,6 +74,7 @@ export class BootScene extends Phaser.Scene {
       this.scene.start('LevelSelectScene');
     } else {
       // 正常流程：進入標題畫面
+      console.log('[BootScene] 正常流程：進入標題畫面');
       this.scene.start('TitleScene');
     }
   }
