@@ -66,14 +66,14 @@ npm run preview # 預覽正式版
 ## 部署
 
 - **線上版本**: https://igs-weiyihsueh.github.io/douqi/
-- **部署分支**: `gh-pages`（GitHub Pages 自動讀取）
+- **部署分支**: `stable-deploy-0929-1603`（GitHub Pages 自動讀取）
 - **開發分支**: `master`（主要開發和推送分支）
 
 ### 部署流程
 ```bash
 npm run build                    # 構建
-git checkout gh-pages            # 切換到部署分支
+git checkout stable-deploy-0929-1603  # 切換到部署分支
 cp -r dist/* .                  # 複製構建產物
 git add . && git commit -m "🚀 部署"
-git push origin gh-pages         # 推送部署
+git push origin stable-deploy-0929-1603  # 推送部署
 ```

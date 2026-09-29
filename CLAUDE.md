@@ -4,7 +4,7 @@
 - **專案名稱**：鬥氣割草 (Douqi)
 - **類型**：H5 網頁遊戲 (TypeScript + Phaser + Vite)
 - **工作目錄**：`/mnt/d/3C/douqi`
-- **版本控制**：Git + GitHub Pages 部署
+- **版本控制**：Git + GitHub Pages 部署 (stable-deploy-0929-1603)
 
 ## 👥 **團隊成員**
 
@@ -82,7 +82,7 @@ npm run lint
 ### **技術棧**
 - **前端**：TypeScript 5.4+ + Phaser + Vite 5.2+
 - **編輯器**：React 19 + Three.js 0.182 (移植套件)
-- **部署**：GitHub Pages (手動推送)
+- **部署**：GitHub Pages (stable-deploy-0929-1603 分支)
 
 ### **已完成**
 - ✅ 專案架構建立

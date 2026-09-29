@@ -373,7 +373,7 @@
    - 優化圖片和音效資源
    - 清理未使用的檔案
 
-3. **部署到 GitHub Pages**
+3. **部署到 GitHub Pages (stable-deploy-0929-1603)**
    ```bash
    npm run deploy
    # 或手動推送 dist/ 目錄
