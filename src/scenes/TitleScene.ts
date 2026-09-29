@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GameConfig } from '../config';
+import { LightGameConfig } from '../config-light';
 
 /**
  * TitleScene（v16）：進入遊戲的第一個畫面。
@@ -26,8 +26,8 @@ export class TitleScene extends Phaser.Scene {
 
   create(): void {
     this.started = false;
-    const w = GameConfig.width;
-    const h = GameConfig.height;
+    const w = LightGameConfig.width;
+    const h = LightGameConfig.height;
 
     // 背景（沿用地板貼圖鋪滿 + 半透明暗底，讓文字清楚）
     this.add.tileSprite(0, 0, w, h, 'ground').setOrigin(0, 0).setDepth(0);

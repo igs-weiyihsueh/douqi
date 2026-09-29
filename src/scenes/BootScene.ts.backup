@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GameConfig } from '../config';
+import { LightGameConfig } from '../config-light';
 
 /**
  * BootScene：程序化產生占位像素貼圖（不依賴外部素材檔）。
@@ -12,17 +12,13 @@ export class BootScene extends Phaser.Scene {
 
   create(): void {
     // v17：4 個角色改「程式繪製人型剪影」（不同顏色；朝右=aimAngle 0），與敵人圓塊區隔
-    const colors = GameConfig.characters.colors;
-    for (let i = 0; i < GameConfig.characters.count; i++) {
-      this.makeHumanoidTexture(`char-${i}`, GameConfig.player.radius, colors[i], 0xffffff);
+    const colors = LightGameConfig.characters.colors;
+    for (let i = 0; i < LightGameConfig.characters.count; i++) {
+      this.makeHumanoidTexture(`char-${i}`, LightGameConfig.player.radius, colors[i], 0xffffff);
     }
     // 各敵人類型各一張貼圖
-    const types = GameConfig.enemy.types;
+    const types = LightGameConfig.enemy.types;
     this.makeCircleTexture('enemy-normal', types.normal.radius, types.normal.color, types.normal.stroke);
-    this.makeCircleTexture('enemy-tank', types.tank.radius, types.tank.color, types.tank.stroke);
-    this.makeCircleTexture('enemy-shielder', types.shielder.radius, types.shielder.color, types.shielder.stroke);
-    this.makeCircleTexture('enemy-shooter', types.shooter.radius, types.shooter.color, types.shooter.stroke);
-    this.makeCircleTexture('enemy-charger', types.charger.radius, types.charger.color, types.charger.stroke);
     this.makeCircleTexture('enemy-bomber', types.bomber.radius, types.bomber.color, types.bomber.stroke);
     this.makeCircleTexture('enemy-boss', GameConfig.boss.radius, GameConfig.boss.color, GameConfig.boss.stroke);
     this.makeCircleTexture('enemy-tower', GameConfig.event.tower.radius, GameConfig.event.tower.color, GameConfig.event.tower.stroke);

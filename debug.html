@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3C大亂鬥 - 載入診斷測試</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      background: #12131a;
+      color: white;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    #game { max-width: 100vw; max-height: 100vh; display: block; }
+    .loading {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center; color: white; font-size: 24px;
+      z-index: 1000;
+    }
+    .loading::after {
+      content: ''; display: inline-block;
+      width: 24px; height: 24px; margin-left: 10px;
+      border: 3px solid #333; border-top: 3px solid #fff;
+      border-radius: 50%; animation: spin 1s linear infinite;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .debug { position: fixed; top: 10px; left: 10px; font-size: 14px; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; z-index: 999; }
+  </style>
+</head>
+<body>
+  <div class="debug" id="debug">
+    載入狀態：正在初始化...
+  </div>
+  
+  <div id="game">
+    <div class="loading" id="loading">正在載入遊戲...</div>
+  </div>
+  
+  <script type="module">
+    const debugEl = document.getElementById('debug');
+    function updateDebug(msg) {
+      console.log(msg);
+      debugEl.textContent = msg;
+    }
+    
+    updateDebug('步驟1：開始載入JavaScript模組...');
+    
+    try {
+      // 動態載入簡化版本
+      updateDebug('步驟2：嘗試載入simple版本...');
+      await import('./src/main-simple.js');
+      updateDebug('步驟3：載入成功！遊戲應該正在啟動...');
+    } catch (error) {
+      updateDebug('錯誤：' + error.message);
+      console.error('載入錯誤：', error);
+      
+      // 顯示詳細錯誤信息
+      document.getElementById('loading').innerHTML = `
+        <div style="color: #ff4444;">載入失敗</div>
+        <div style="font-size: 14px; margin-top: 10px;">${error.message}</div>
+        <div style="font-size: 12px; margin-top: 10px;">請檢查瀏覽器控制台了解詳細錯誤信息</div>
+      `;
+    }
+    
+    // 超時檢測
+    setTimeout(() => {
+      if (document.getElementById('loading').style.display !== 'none') {
+        updateDebug('警告：載入超時，可能存在問題');
+      }
+    }, 10000);
+  </script>
+</body>
+</html>
