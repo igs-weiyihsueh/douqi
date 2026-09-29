@@ -13,9 +13,9 @@ export const GameConfig = {
     showSlowTuningPanel: false
   },
 
-  /** ★波次進度 HUD(關卡制:節點序列 ●─●─◆);只純波次顯示,事件/BOSS 隱藏 */
+  /** ★波次進度 HUD(關卡制:節點序列 ●─●─◆);關卡模式已移除 */
   waveHud: {
-    enabled: true,
+    enabled: false,
     /** 節點序列置中的畫面座標(setScrollFactor0 固定);上方 */
     x: 640,
     y: 30,
