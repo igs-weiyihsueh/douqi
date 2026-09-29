@@ -6,6 +6,7 @@ import { Item, type SkillType } from '../objects/Item';
 import { updateRefillLatch, shouldSpawnMore, type WaveSpawnState } from '../systems/waveMath';
 import { Bullet } from '../objects/Bullet';
 import { Breakable } from '../objects/Breakable';
+import { UIScene } from './UIScene';
 
 /**
  * GameScene（v6：本地單機模擬 4 人共玩）：

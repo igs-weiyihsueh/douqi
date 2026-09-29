@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { BootScene } from './scenes/BootScene';
 import { TitleScene } from './scenes/TitleScene';
 import { GameScene } from './scenes/GameScene';
+import { UIScene } from './scenes/UIScene';
+import { GameOverScene } from './scenes/GameOverScene';
 import { GameConfig } from './config';
 
 const config: Phaser.Types.Core.GameConfig = {
@@ -22,7 +24,7 @@ const config: Phaser.Types.Core.GameConfig = {
       debug: false
     }
   },
-  scene: [BootScene, TitleScene, GameScene]
+  scene: [BootScene, TitleScene, GameScene, UIScene, GameOverScene]
 };
 
 console.log('正在創建Phaser遊戲實例...');
