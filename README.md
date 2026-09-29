@@ -67,7 +67,7 @@ npm run preview # 預覽正式版
 
 - **線上版本**: https://igs-weiyihsueh.github.io/douqi/
 - **部署分支**: `gh-pages`（GitHub Pages 自動讀取）
-- **開發分支**: `deploy_test`（當前活躍）、`main`（主要開發）
+- **開發分支**: `master`（主要開發和推送分支）
 
 ### 部署流程
 ```bash
