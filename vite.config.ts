@@ -12,7 +12,7 @@ export default defineConfig({
     outDir: 'dist',
     rollupOptions: {
       input: {
-        main: resolve(__dirname, 'game.html')
+        main: resolve(__dirname, 'index.html')
       }
     }
   },
