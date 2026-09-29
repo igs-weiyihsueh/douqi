@@ -33,3 +33,9 @@ const game = new Phaser.Game(config);
 // 除錯用把 game 實例掛到 window
 (window as unknown as { __game: Phaser.Game }).__game = game;
 console.log('Phaser遊戲實例創建完成！');
+
+// 添加遊戲初始化檢測
+game.events.once('ready', () => {
+  console.log('遊戲初始化完成，所有場景已註冊');
+  console.log('註冊的場景:', game.scene.keys);
+});
