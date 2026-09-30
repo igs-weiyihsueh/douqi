@@ -48,6 +48,47 @@ npm start
 vite
 vite dev
 yarn dev
+```
+
+### 🔍 **部署安全規範**
+
+**每次部署前必須執行的安全檢查**：
+
+1. **JS 引用一致性檢查**
+   ```bash
+   # 檢查 HTML 中的所有 JS 引用
+   grep -n "main-.*\.js" index.html
+   
+   # 確認實際檔案存在
+   ls assets/main-*.js
+   
+   # 驗證引用與實際檔案一致
+   ```
+
+2. **雙重引用防護**
+   - index.html 不得同時引用多個不同的 main-*.js
+   - 靜態 script 標籤與動態載入必須使用相同檔名
+   - 部署前必須統一所有引用
+
+3. **建置產物驗證**
+   ```bash
+   # 檢查檔案大小合理性 (約1.6-1.8MB)
+   du -sh assets/main-*.js
+   
+   # 檢查檔案完整性
+   file assets/main-*.js  # 應為 ASCII text
+   ```
+
+4. **回滾準備**
+   - 每次部署前記錄當前 commit hash
+   - 確認上一個穩定版本的位置
+   - 測試失敗時立即回滾，不要嘗試多次修復
+
+**違反安全規範的後果**：
+- ❌ JS 檔案 404 錯誤
+- ❌ 遊戲無法載入
+- ❌ 用戶體驗中斷
+- ❌ 緊急修復成本高
 pnpm dev
 
 # ❌ 其他阻塞性命令
@@ -141,43 +182,158 @@ git push origin deploy_test
 ```
 
 ### **第二階段：生產部署**
+
+**⚠️ 部署安全檢查清單 - 必須逐項確認**
+
+#### **部署前檢查 (Pre-Deploy)**
 ```bash
 # 1. 切換到部署分支
 git checkout deploy-pure
 
-# 2. 從 deploy_test 複製完整建置產物
-git checkout deploy_test -- assets/  # 複製 assets 目錄
-cp index.html ../temp_index.html && git checkout deploy_test -- index.html || cp ../temp_index.html index.html
+# 2. 檢查當前 JS 檔案引用
+grep -n "main-.*\.js" index.html  # 必須檢查所有 JS 引用
+grep -n "assets/main" index.html   # 包含動態載入的引用
+
+# 3. 記錄當前引用的檔名
+echo "當前 index.html 引用的 JS 檔："
+grep -o "main-[^.]*\.js" index.html | sort | uniq
+
+# 4. 從 deploy_test 複製建置產物
+git checkout deploy_test
+npm run build  # 確保是最新建置
+ls -la dist/assets/main-*.js  # 記錄實際檔名
+
+# 5. 檢查檔名一致性
+echo "實際檔案名稱："
+ls dist/assets/main-*.js | head -1
+```
+
+#### **檔案同步 (File Sync)**
+```bash
+# 6. 切回 deploy-pure 並同步
+git checkout deploy-pure
+
+# 7. 複製建置產物
+cp -r ../temp_deploy_test/dist/assets/* assets/ 2>/dev/null || (
+  git checkout deploy_test -- assets/ &&
+  cp assets/* ../temp_assets/ &&
+  git checkout deploy-pure &&
+  cp ../temp_assets/* assets/
+)
+
+# 8. 更新 index.html 中的所有 JS 引用
+NEW_JS=$(ls assets/main-*.js | head -1 | sed 's|assets/||')
+echo "新的 JS 檔名: $NEW_JS"
+
+# 手動檢查並更新所有引用
+sed -i "s|main-[^.]*.js|$NEW_JS|g" index.html
+```
+
+#### **部署後驗證 (Post-Deploy Verification)**
+```bash
+# 9. 最終檢查
+echo "=== 最終檢查 ==="
+echo "實際 JS 檔案:"
+ls -la assets/main-*.js
+
+echo "index.html 引用:"
+grep -n "main-.*\.js" index.html
+
+echo "引用一致性檢查:"
+JS_FILE=$(ls assets/main-*.js | head -1 | sed 's|assets/||')
+if grep -q "$JS_FILE" index.html; then
+  echo "✅ 檔案引用一致"
+else
+  echo "❌ 檔案引用不一致！停止部署！"
+  exit 1
+fi
+
+# 10. 提交並部署
+git add .
+git commit -m "🚀 部署: [版本描述] (JS: $JS_FILE)"
+git push origin deploy-pure
+```
 
 # 3. 檢查部署檔案完整性
+echo "=== 檔案完整性檢查 ==="
 ls -la  # 確認: index.html, assets/, editor/, scenes/
 du -sh assets/*.js  # 檢查JS檔案大小 (應該約1.7MB)
 
-# 4. 提交並部署
+echo "=== JS 引用最終確認 ==="
+echo "HTML 引用的檔案:"
+grep -o "main-[^.]*\.js" index.html
+
+echo "實際存在的檔案:"
+ls assets/main-*.js | xargs basename
+
+# 4. 部署安全驗證
+if [ $(grep -o "main-[^.]*\.js" index.html | sort | uniq | wc -l) -gt 1 ]; then
+  echo "❌ 警告：index.html 引用多個不同的 JS 檔案！"
+  echo "請檢查並統一引用"
+  exit 1
+fi
+
+# 5. 提交並部署
 git add .
 git commit -m "🚀 部署: [版本描述]"
 git push origin deploy-pure  # 觸發 GitHub Pages 自動部署
 
-# 5. 部署後驗證 (約2-5分鐘後)
-# 開啟 https://igs-weiyihsueh.github.io/douqi/
-# 檢查遊戲載入、場景切換、功能正常
+# 6. 部署後驗證 (約2-5分鐘後)
+echo "🌐 部署完成，請在 2-5 分鐘後檢查："
+echo "URL: https://igs-weiyihsueh.github.io/douqi/"
+echo "檢查項目：遊戲載入、場景切換、功能正常"
 ```
 
 ### **第三階段：故障排除**
+
+#### **常見部署問題**
+
+**1. JS 檔案缺失 (404錯誤)**
+```bash
+# 症狀：瀏覽器控制台顯示 main-XXX.js 404
+# 原因：index.html 引用的檔名與實際檔案不符
+
+# 診斷
+grep -o "main-[^.]*\.js" index.html  # 查看引用的檔名
+ls assets/main-*.js                  # 查看實際檔案
+
+# 修復
+NEW_JS=$(ls assets/main-*.js | head -1 | sed 's|assets/||')
+sed -i "s|main-[^.]*.js|$NEW_JS|g" index.html
+git add . && git commit -m "🔧 修復JS檔案路徑"
+git push origin deploy-pure
+```
+
+**2. 雙重引用不一致**
+```bash
+# 症狀：index.html 中有多處不同的 JS 檔案引用
+# 原因：靜態引用和動態載入使用不同檔名
+
+# 診斷
+grep -n "main-.*\.js" index.html  # 找出所有引用位置
+
+# 修復：統一為同一個檔案
+TARGET_JS="main-CbaDQGVi.js"  # 使用最新的檔案
+sed -i "s|main-[^.]*.js|$TARGET_JS|g" index.html
+```
+
+**3. 緊急回滾**
 ```bash
 # 回滾到上一個工作版本
 git checkout deploy-pure
 git log --oneline -5  # 查看最近提交
 git reset --hard [上一個工作的commit]  # 回滾
 git push --force origin deploy-pure  # 強制推送回滾
+```
 
-# 緊急修復流程
+**4. 緊急修復流程**
+```bash
 git checkout deploy_test
 # 快速修復...
 npm run build
 git add . && git commit -m "🔧 緊急修復"
 git push origin deploy_test
-# 然後重複第二階段部署流程
+# 然後重複第二階段部署流程（包含安全檢查）
 ```
 
 ### **強制啟動檢查**
