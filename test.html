@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3C大亂鬥 - H5版 (測試版本)</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      background: #12131a;
+      color: white;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    .container {
+      text-align: center;
+      padding: 20px;
+    }
+    .title {
+      font-size: 48px;
+      margin-bottom: 20px;
+    }
+    .status {
+      font-size: 24px;
+      color: #4aa3ff;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="title">🎮 3C大亂鬥</div>
+    <div class="status">測試版本 - 遊戲正常載入！</div>
+    <p>如果您看到這個頁面，表示GitHub Pages正常運作。</p>
+  </div>
+  
+  <script>
+    console.log('Test page loaded successfully!');
+    // 簡單的測試腳本
+    setTimeout(() => {
+      const status = document.querySelector('.status');
+      status.textContent = '✅ JavaScript 執行正常！';
+    }, 1000);
+  </script>
+</body>
+</html>
