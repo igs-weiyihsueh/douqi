@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>3C大亂鬥 - H5版</title>
+  <title>3C大亂鬥 - UI獨立化測試版</title>
   <style>
     * {
       margin: 0;
@@ -27,10 +27,67 @@
       max-height: 100vh;
       display: block;
     }
+    
+    #loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 18px;
+      color: #60a5fa;
+    }
+    
+    .debug-info {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background: rgba(0,0,0,0.8);
+      padding: 10px;
+      font-size: 12px;
+      font-family: monospace;
+      color: #60a5fa;
+      border-radius: 4px;
+      z-index: 9999;
+    }
   </style>
-  <script type="module" crossorigin src="./assets/main-CbaDQGVi.js"></script>
 </head>
 <body>
+  <div class="debug-info">
+    UI獨立化測試版<br>
+    Status: <span id="status">Loading...</span><br>
+    Time: <span id="time"></span>
+  </div>
+  <div id="loading">🎮 載入UI獨立化測試版本...</div>
   <div id="game"></div>
+  
+  <script>
+    // 調試信息
+    document.getElementById('time').textContent = new Date().toLocaleTimeString();
+    
+    // 更新狀態
+    function updateStatus(msg) {
+      document.getElementById('status').textContent = msg;
+      console.log('🎮 [UI Test]', msg);
+    }
+    
+    updateStatus('Initializing...');
+    
+    // 檢查JS載入
+    window.addEventListener('error', (e) => {
+      updateStatus('❌ Error: ' + e.message);
+      console.error('載入錯誤:', e);
+    });
+    
+    // JS載入成功後隱藏loading
+    window.addEventListener('load', () => {
+      updateStatus('✅ Loaded');
+      setTimeout(() => {
+        const loading = document.getElementById('loading');
+        if (loading) loading.style.display = 'none';
+      }, 2000);
+    });
+  </script>
+  
+  <script type="module" crossorigin src="./assets/main-CbaDQGVi.js"></script>
 </body>
 </html>
