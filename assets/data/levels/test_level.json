@@ -1,0 +1,122 @@
+{
+  "_format": "douqi-level",
+  "_version": "1.0.0",
+  "metadata": {
+    "name": "test_level",
+    "description": "測試關卡 - 鬥氣割草編輯器整合測試用",
+    "created": "2026-09-24",
+    "editor": "douqi-level-editor",
+    "baseScene": "test_scene"
+  },
+  "level": {
+    "id": "level_001",
+    "name": "測試關卡",
+    "description": "用於測試編輯器整合功能的示範關卡",
+    "difficulty": "easy",
+    "timeLimit": 180,
+    "scoreTarget": 1000
+  },
+  "gameplay": {
+    "playerStartPosition": [-2, 0.5, -2],
+    "playerStartRotation": [0, 45, 0],
+    "cameraSettings": {
+      "type": "follow",
+      "distance": 8,
+      "height": 6,
+      "angle": 30
+    },
+    "objectives": [
+      {
+        "id": "obj_001",
+        "type": "collect",
+        "description": "收集10個能量球",
+        "target": 10,
+        "reward": 500
+      },
+      {
+        "id": "obj_002", 
+        "type": "defeat",
+        "description": "擊敗5個敵人",
+        "target": 5,
+        "reward": 300
+      }
+    ]
+  },
+  "entities": [
+    {
+      "id": "enemy_001",
+      "type": "enemy",
+      "name": "測試敵人",
+      "position": [3, 0, 3],
+      "rotation": [0, 180, 0],
+      "properties": {
+        "health": 100,
+        "attackPower": 20,
+        "moveSpeed": 2.0,
+        "aiType": "patrol"
+      },
+      "patrolPoints": [
+        [3, 0, 3],
+        [3, 0, -3],
+        [-3, 0, -3],
+        [-3, 0, 3]
+      ]
+    },
+    {
+      "id": "collectible_001",
+      "type": "collectible",
+      "name": "能量球",
+      "position": [1, 1, 1],
+      "rotation": [0, 0, 0],
+      "properties": {
+        "value": 50,
+        "effectType": "energy",
+        "autoRotate": true,
+        "rotateSpeed": 90
+      }
+    },
+    {
+      "id": "powerup_001",
+      "type": "powerup", 
+      "name": "攻擊強化",
+      "position": [-1, 1, -1],
+      "rotation": [0, 0, 0],
+      "properties": {
+        "effectType": "attack_boost",
+        "duration": 10.0,
+        "multiplier": 1.5
+      }
+    }
+  ],
+  "events": [
+    {
+      "id": "wave_001",
+      "type": "enemy_wave",
+      "triggerTime": 30,
+      "description": "第一波敵人襲來",
+      "enemies": [
+        {"type": "basic_enemy", "count": 3, "spawnPoints": ["spawn_enemy_01", "spawn_enemy_02", "spawn_enemy_03"]}
+      ]
+    },
+    {
+      "id": "bonus_time",
+      "type": "bonus_event", 
+      "triggerTime": 90,
+      "description": "雙倍得分時間",
+      "duration": 20,
+      "effect": "double_score"
+    }
+  ],
+  "config": {
+    "backgroundMusic": "battle_theme_01.ogg",
+    "ambientSounds": ["wind.ogg", "birds.ogg"],
+    "weatherEffects": {
+      "type": "clear",
+      "windStrength": 0.3
+    },
+    "lighting": {
+      "timeOfDay": "noon",
+      "shadowQuality": "medium"
+    }
+  }
+}
