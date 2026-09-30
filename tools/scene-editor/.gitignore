@@ -1,7 +1,0 @@
-node_modules/
-dist/
-build-output/
-release/
-*.log
-.DS_Store
-Thumbs.db
