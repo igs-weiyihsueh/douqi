@@ -4,7 +4,7 @@
 - **專案名稱**：鬥氣割草 (Douqi)
 - **類型**：H5 網頁遊戲 (TypeScript + Phaser + Vite)
 - **工作目錄**：`/mnt/d/3C/douqi`
-- **版本控制**：Git + GitHub Pages 部署
+- **版本控制**：Git + GitHub Pages 部署 (stable-deploy-0929-1603)
 
 ## 👥 **團隊成員**
 
@@ -13,7 +13,7 @@
 - **責任**：規劃優先級、協調團隊、品質把關
 
 ### **翼騎** (main developer + terrain editor)
-- **角色**：主力開發、地形編輯器專家 (66KB 完整移植)
+- **角色**：主力開發、H5 遊戲程式開發
 - **責任**：核心功能開發、編輯器移植、技術實現
 
 ### **征騎** (副手開發·槽環)
@@ -82,11 +82,11 @@ npm run lint
 ### **技術棧**
 - **前端**：TypeScript 5.4+ + Phaser + Vite 5.2+
 - **編輯器**：React 19 + Three.js 0.182 (移植套件)
-- **部署**：GitHub Pages (手動推送)
+- **部署**：GitHub Pages (stable-deploy-0929-1603 分支)
 
 ### **已完成**
 - ✅ 專案架構建立
-- ✅ 地形編輯器移植 (66KB 完整功能)
+- ✅ 遊戲系統移植 (完整功能)
 - ✅ Git 部署流程測試 (https://igs-weiyihsueh.github.io/douqi/)
 - ✅ 進度追蹤機制 (CLAUDE.md + PROGRESS.md)
 - ✅ 12個 AI 技能部署
