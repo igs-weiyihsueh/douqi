@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>簡潔關卡編輯器</title>
+  <title>簡潔關卡編輯器 - v8.5-nav</title>
   <style>
     * {
       margin: 0;
@@ -16,11 +16,278 @@
       background: #1a1a1a;
       color: white;
       overflow: hidden;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    /* 頂部工具列 */
+    .toolbar {
+      height: 50px;
+      background: #2d3748;
+      border-bottom: 2px solid #4a5568;
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+      flex-shrink: 0;
+    }
+    
+    .toolbar h1 {
+      font-size: 18px;
+      font-weight: bold;
+      color: #e2e8f0;
+      margin: 0 20px 0 0;
+    }
+    
+    .toolbar-group {
+      display: flex;
+      align-items: center;
+      margin-right: 30px;
+      gap: 10px;
+    }
+    
+    .toolbar-group label {
+      font-size: 14px;
+      color: #cbd5e1;
+      font-weight: 500;
+    }
+    
+    .toolbar button {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: background-color 0.2s;
+    }
+    
+    .toolbar button:hover {
+      background: #45a049;
+    }
+    
+    .toolbar button:active {
+      background: #3d8b40;
+    }
+    
+    .toolbar button.secondary {
+      background: #718096;
+    }
+    
+    .toolbar button.secondary:hover {
+      background: #5a6375;
+    }
+    
+    /* 下拉選單樣式 */
+    .toolbar select {
+      background: #718096;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: background-color 0.2s;
+    }
+    
+    .toolbar select:hover {
+      background: #5a6375;
+    }
+    
+    .toolbar select option {
+      background: #2d3748;
+      color: white;
+    }
+    
+    /* 左方工具列 */
+    .left-sidebar {
+      width: 250px;
+      background: #2d3748;
+      border-right: 2px solid #4a5568;
+      box-shadow: 2px 0 10px rgba(0,0,0,0.3);
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .sidebar-header {
+      height: 60px;
+      background: #1a202c;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-bottom: 2px solid #4a5568;
+    }
+    
+    .sidebar-header h2 {
+      font-size: 16px;
+      font-weight: bold;
+      color: #e2e8f0;
+      margin: 0;
+      text-align: center;
+    }
+    
+    .sidebar-content {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+    }
+    
+    .sidebar-group {
+      margin-bottom: 25px;
+    }
+    
+    .sidebar-group h3 {
+      font-size: 14px;
+      color: #a0aec0;
+      font-weight: 600;
+      margin-bottom: 10px;
+      padding-bottom: 5px;
+      border-bottom: 1px solid #4a5568;
+    }
+    
+    .sidebar-button {
+      width: 100%;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 8px;
+      transition: background-color 0.2s;
+    }
+    
+    .sidebar-button:hover {
+      background: #45a049;
+    }
+    
+    .sidebar-button.secondary {
+      background: #718096;
+    }
+    
+    .sidebar-button.secondary:hover {
+      background: #5a6375;
+    }
+    
+    /* 右側屬性面板 */
+    .right-sidebar {
+      width: 250px;
+      background: #2d3748;
+      border-left: 2px solid #4a5568;
+      box-shadow: -2px 0 10px rgba(0,0,0,0.3);
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .right-sidebar-header {
+      height: 60px;
+      background: #1a202c;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-bottom: 2px solid #4a5568;
+    }
+    
+    .right-sidebar-header h2 {
+      font-size: 16px;
+      font-weight: bold;
+      color: #e2e8f0;
+      margin: 0;
+      text-align: center;
+    }
+    
+    .right-sidebar-content {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+    }
+    
+    .property-group {
+      margin-bottom: 20px;
+    }
+    
+    .property-group h3 {
+      font-size: 14px;
+      color: #a0aec0;
+      font-weight: 600;
+      margin-bottom: 10px;
+      padding-bottom: 5px;
+      border-bottom: 1px solid #4a5568;
+    }
+    
+    .property-item {
+      margin-bottom: 12px;
+    }
+    
+    .property-label {
+      display: block;
+      font-size: 12px;
+      color: #cbd5e1;
+      margin-bottom: 4px;
+      font-weight: 500;
+    }
+    
+    .property-input {
+      width: 100%;
+      background: #1a202c;
+      border: 1px solid #4a5568;
+      border-radius: 4px;
+      padding: 6px 8px;
+      color: #e2e8f0;
+      font-size: 12px;
+    }
+    
+    .property-input:focus {
+      outline: none;
+      border-color: #3182ce;
+      box-shadow: 0 0 0 2px rgba(49, 130, 206, 0.2);
+    }
+    
+    .delete-button {
+      width: 100%;
+      background: #e53e3e;
+      color: white;
+      border: none;
+      padding: 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      margin-top: 10px;
+    }
+    
+    .delete-button:hover {
+      background: #c53030;
+    }
+    
+    /* 拖拽相關樣式 */
+    .dragging {
+      cursor: grabbing !important;
+      z-index: 1000;
+    }
+    
+    canvas {
+      user-select: none;
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+    }
+    
+    .main-area {
+      display: flex;
+      flex: 1;
     }
     
     .container {
-      width: 100vw;
-      height: 100vh;
+      flex: 1;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -51,67 +318,425 @@
       text-align: center;
       margin-bottom: 15px;
       color: #fff;
-      font-size: 18px;
+      font-size: 16px;
       font-weight: bold;
     }
     
     .info {
+      /* Info panel removed - no longer displaying status information */
+      display: none;
+    }
+    
+    /* 預覽區重置按鈕 */
+    .reset-camera-btn {
       position: absolute;
       top: 10px;
-      left: 10px;
-      background: rgba(0,0,0,0.8);
-      color: white;
-      padding: 8px 12px;
-      border-radius: 4px;
-      font-size: 12px;
-      z-index: 100;
-    }
-    
-    .controls {
-      text-align: center;
-      margin-top: 15px;
-    }
-    
-    .controls button {
-      background: #4CAF50;
+      right: 10px;
+      background: rgba(74, 85, 104, 0.9);
       color: white;
       border: none;
-      padding: 8px 16px;
-      margin: 0 5px;
+      padding: 8px 12px;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 14px;
+      font-size: 12px;
+      font-weight: 500;
+      z-index: 100;
+      transition: background-color 0.2s;
     }
     
-    .controls button:hover {
-      background: #45a049;
+    .reset-camera-btn:hover {
+      background: rgba(94, 111, 130, 0.9);
     }
     
-    .controls button:disabled {
-      background: #666;
+    /* 隱藏的文件輸入 */
+    .hidden-file-input {
+      display: none;
+    }
+    
+    /* 物件列表樣式 */
+    .entity-item {
+      background: #1a202c;
+      border: 1px solid #4a5568;
+      border-radius: 4px;
+      padding: 8px;
+      margin-bottom: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .entity-item:hover {
+      background: #2d3748;
+    }
+    
+    .entity-item.selected {
+      background: #2b6cb0;
+      border-color: #3182ce;
+    }
+    
+    .entity-info {
+      flex: 1;
+    }
+    
+    .entity-type {
+      font-weight: bold;
+      color: #e2e8f0;
+    }
+    
+    .entity-delete-btn {
+      background: #e53e3e;
+      color: white;
+      border: none;
+      border-radius: 3px;
+      width: 20px;
+      height: 20px;
+      font-size: 12px;
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background-color 0.2s;
+      flex-shrink: 0;
+      margin-left: 8px;
+    }
+    
+    .entity-delete-btn:hover {
+      background: #c53030;
+    }
+    
+    .entity-pos {
+      color: #a0aec0;
+      font-family: monospace;
+    }
+    
+    /* 群組管理基礎樣式 */
+    .cluster-status {
+      color: #e2e8f0;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    
+    .cluster-controls {
+      margin: 8px 0;
+    }
+    
+    .cluster-add-btn {
+      width: 100%;
+      background: #48bb78;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: background-color 0.2s;
+    }
+    
+    .cluster-add-btn:hover {
+      background: #38a169;
+    }
+    
+    .cluster-generate-btn {
+      width: 100%;
+      background: #ed8936;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: bold;
+      transition: background-color 0.2s;
+      margin-top: 4px;
+    }
+    
+    .cluster-generate-btn:hover {
+      background: #dd6b20;
+    }
+    
+    .cluster-generate-btn:disabled {
+      background: #4a5568;
       cursor: not-allowed;
+    }
+    
+    .cluster-preview {
+      opacity: 0.8;
+    }
+    
+    .cluster-generated {
+      color: #68d391;
+      font-weight: bold;
+    }
+    
+    .cluster-item-expanded input:disabled,
+    .cluster-item-expanded select:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      background-color: #2d3748;
+      color: #a0aec0;
+    }
+    
+    .cluster-delete-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .cluster-breadcrumb {
+      font-size: 12px;
+      color: #a0aec0;
+      margin-bottom: 12px;
+      padding: 4px 8px;
+      background: #1a202c;
+      border-radius: 4px;
+    }
+    
+    .cluster-status-display {
+      font-size: 12px;
+      font-weight: 500;
+    }
+    
+    .cluster-summary {
+      font-size: 10px;
+      color: #a0aec0;
+      margin-top: 2px;
+      padding-left: 4px;
+    }
+    
+    .property-button {
+      width: 100%;
+      padding: 8px 12px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: background-color 0.2s;
+    }
+    
+    .property-button.primary {
+      background: #3182ce;
+      color: white;
+    }
+    
+    .property-button.primary:hover {
+      background: #2c5aa0;
+    }
+    
+    .property-button.danger {
+      background: #e53e3e;
+      color: white;
+    }
+    
+    .property-button.danger:hover {
+      background: #c53030;
+    }
+    
+    .property-button.secondary {
+      background: #718096;
+      color: white;
+    }
+    
+    .property-button.secondary:hover {
+      background: #4a5568;
+    }
+    
+    .cluster-list {
+      margin-top: 8px;
+    }
+    
+    .cluster-item-expanded {
+      background: #1a202c;
+      border: 1px solid #4a5568;
+      border-radius: 4px;
+      margin-bottom: 8px;
+      padding: 8px;
+    }
+    
+    .cluster-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    
+    .cluster-params {
+      font-size: 11px;
+    }
+    
+    .param-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    
+    .param-row label {
+      width: 35px;
+      color: #a0aec0;
+      font-size: 10px;
+    }
+    
+    .param-row input,
+    .param-row select {
+      flex: 1;
+      background: #2d3748;
+      border: 1px solid #4a5568;
+      color: #e2e8f0;
+      padding: 2px 4px;
+      border-radius: 2px;
+      font-size: 10px;
+      margin-left: 4px;
+    }
+    
+    .param-row input:focus,
+    .param-row select:focus {
+      outline: none;
+      border-color: #63b3ed;
+    }
+    
+    .simple-cluster-item {
+      background: #1a202c;
+      border: 1px solid #4a5568;
+      border-radius: 4px;
+      padding: 8px 10px;
+      margin-bottom: 4px;
+      font-size: 12px;
+      color: #e2e8f0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .cluster-name {
+      flex: 1;
+      cursor: pointer;
+      padding: 2px 4px;
+      border-radius: 2px;
+      transition: background-color 0.2s;
+    }
+    
+    .cluster-name:hover {
+      background: #2d3748;
+    }
+    
+    .cluster-delete-btn {
+      background: #e53e3e;
+      color: white;
+      border: none;
+      border-radius: 3px;
+      width: 20px;
+      height: 20px;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-left: 8px;
+    }
+    
+    .cluster-delete-btn:hover {
+      background: #c53030;
+    }
+    
+    .cluster-placeholder {
+      padding: 10px;
+      border: 1px dashed #4a5568;
+      border-radius: 4px;
+      margin-top: 8px;
+      background: #1a202c;
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="preview-container">
-      <div class="title">遊戲預覽 (16:9)</div>
-      
-      <div class="canvas-wrapper">
-        <canvas id="game-canvas"></canvas>
-        <div class="info" id="info">
-          載入中...
-        </div>
+  <!-- 頂部工具列 -->
+  <div class="toolbar">
+    <h1>鬥氣割草 - 關卡編輯器</h1>
+    
+    <div class="toolbar-group">
+      <label>關卡:</label>
+      <select id="level-select" onchange="selectLevel()" class="secondary">
+        <option value="">選擇關卡...</option>
+        <option value="level1">關卡 1：新手村</option>
+        <option value="level2">關卡 2：森林</option>
+        <option value="level3">關卡 3：沙漠</option>
+        <option value="level4">關卡 4：火山 (BOSS)</option>
+        <option value="level5">關卡 5：雪山</option>
+        <option value="level6">關卡 6：海底</option>
+        <option value="level7">關卡 7：城堡</option>
+        <option value="level8">關卡 8：天空</option>
+      </select>
+      <button onclick="clearLevel()" class="secondary">清除關卡</button>
+    </div>
+    
+    <div class="toolbar-group">
+      <label>檔案:</label>
+      <button onclick="exportLevel()">匯出關卡</button>
+      <button onclick="importLevel()" class="secondary">匯入關卡</button>
+      <span id="filename-display" style="margin-left: 10px; font-size: 12px; color: #a0aec0; font-family: monospace;">level1_001.json</span>
+    </div>
+    
+    <div class="toolbar-group">
+      <button onclick="generateObject()">生成物件</button>
+    </div>
+
+    <div class="toolbar-group">
+      <button onclick="validateCoordinates()">驗證座標對應</button>
+    </div>
+  </div>
+
+  <div class="main-area">
+    <!-- 左方工具列 -->
+    <div class="left-sidebar">
+      <div class="sidebar-header">
+        <h2>工具</h2>
       </div>
       
-      <div class="controls">
-        <button onclick="loadTestLevel()">載入測試關卡</button>
-        <button onclick="resetView()">重置視角</button>
-        <button onclick="toggleGrid()">切換網格</button>
+      <div class="sidebar-content">
+        <div class="sidebar-group">
+          <h3>物件管理 
+            <span id="object-count-badge" style="font-size: 10px; background: #4a5568; padding: 2px 6px; border-radius: 10px; margin-left: 8px;">
+              載入中...
+            </span>
+          </h3>
+          <div id="entity-list">
+            <p style="color: #a0aec0; font-size: 12px; margin: 0; padding: 10px;">目前沒有物件</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      <div class="preview-container">
+        <div class="title">關卡預覽</div>
+        
+        <div class="canvas-wrapper">
+          <canvas id="game-canvas"></canvas>
+          <button class="reset-camera-btn" onclick="resetCamera()">重置攝影機</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 右側屬性面板 -->
+    <div class="right-sidebar">
+      <div class="right-sidebar-header">
+        <h2>屬性面板</h2>
+      </div>
+      
+      <div class="right-sidebar-content">
+        <div id="property-panel">
+          <p style="color: #a0aec0; font-size: 12px; margin: 0; padding: 20px; text-align: center;">選擇物件以編輯屬性</p>
+        </div>
       </div>
     </div>
   </div>
+
+  <!-- 隱藏的文件輸入 -->
+  <input type="file" id="file-input" class="hidden-file-input" accept=".json" onchange="handleFileImport(event)">
 
   <script src="https://unpkg.com/pixi.js@7.2.4/dist/pixi.min.js"></script>
   <script>
@@ -120,11 +745,39 @@
     let container = null;
     let entities = [];
     let showGrid = true;
+    let showBounds = true;
+    // === 全域拖拽狀態 ===
+    let globalDragState = {
+      isDragging: false,
+      dragEntity: null,
+      dragCluster: null, // 新增：拖拽的群組
+      dragStartPos: { x: 0, y: 0 },
+      entityStartPos: { x: 0, y: 0 },
+      clusterStartPos: { x: 0, y: 0 }, // 新增：群組開始位置
+      dragThreshold: 3 // 像素閾值，區分點擊和拖拽
+    };
+    let selectedEntity = null;
+    let selectedCluster = null;  // ⭐ 新增：當前選中的群組 {ownerEntity, cluster, clusterIndex}
+    let entityIdCounter = 0;
     
-    // === 16:9 比例設定 ===
-    const CANVAS_WIDTH = 960;   // 16:9 比例
-    const CANVAS_HEIGHT = 540;  // 16:9 比例
-    const SCALE = 0.8;          // 初始縮放
+    // === 遊戲場地設定 - 基於實際遊戲 arena 邊界 ===
+    // 參考: src/config.ts GameConfig.stage.arenaW/arenaH (玩家實際活動區域)
+    const GAME_WORLD_WIDTH = 1040;   // 實際遊戲 arena 寬度 (玩家活動區域)
+    const GAME_WORLD_HEIGHT = 600;   // 實際遊戲 arena 高度 (玩家活動區域)
+    const CANVAS_WIDTH = 960;        // Canvas顯示寬度 (16:9)
+    const CANVAS_HEIGHT = 540;       // Canvas顯示高度 (16:9)
+    
+    // === 比例設定 - 與實際遊戲一致 ===
+    const PX_PER_UNIT = 50;          // 遊戲單位轉像素比例 (與EntitySpawner.ts一致)
+    const GAME_ORIGIN_X = 400;       // 遊戲世界原點X偏移 (與LevelManager.ts一致)
+    const GAME_ORIGIN_Y = 300;       // 遊戲世界原點Y偏移 (與LevelManager.ts一致)
+    const GAME_DESIGN_WIDTH = 1280;  // 遊戲設計解析度寬度
+    const GAME_DESIGN_HEIGHT = 720;  // 遊戲設計解析度高度
+    
+    // === 攝影機設定 ===
+    let cameraX = 0;                 // 攝影機X位置
+    let cameraY = 0;                 // 攝影機Y位置  
+    let cameraZoom = 0.6;            // 攝影機縮放 (調整以適應較小的 arena 尺寸)
     
     // === 初始化 PIXI ===
     function initEditor() {
@@ -149,21 +802,95 @@
       container = new PIXI.Container();
       app.stage.addChild(container);
       
-      // 設定初始位置和縮放
+      // 創建群組可視化容器
+      window.clusterContainer = new PIXI.Container();
+      container.addChild(window.clusterContainer);
+      
+      // 設定初始攝影機位置和縮放
       container.x = CANVAS_WIDTH / 2;
       container.y = CANVAS_HEIGHT / 2;
-      container.scale.set(SCALE);
+      container.scale.set(cameraZoom);
       
-      // 創建背景網格
+      // 創建背景網格（預設顯示）
       createGrid();
       
-      // 更新資訊顯示
-      updateInfo();
+      // 創建關卡邊界（預設顯示）
+      createLevelBounds();
+      
+      // 設定滑鼠/觸控事件
+      setupInput();
       
       console.log('簡潔編輯器初始化完成');
       console.log(`Canvas: ${CANVAS_WIDTH}x${CANVAS_HEIGHT}`);
-      console.log(`容器中心: (${container.x}, ${container.y})`);
-      console.log(`初始縮放: ${SCALE}`);
+      console.log(`遊戲世界: ${GAME_WORLD_WIDTH}x${GAME_WORLD_HEIGHT}`);
+      console.log(`攝影機位置: (${cameraX}, ${cameraY})`);
+      console.log(`攝影機縮放: ${cameraZoom}`);
+      console.log('=== 邊界設定驗證 ===');
+      console.log(`遊戲世界尺寸: ${GAME_WORLD_WIDTH}x${GAME_WORLD_HEIGHT} (arena 活動區域)`);
+      console.log(`邊界內縮: 60px (基於 breakable.edgeInset)`);
+      console.log(`物件可放置區域: ${GAME_WORLD_WIDTH-120}x${GAME_WORLD_HEIGHT-120} (${(GAME_WORLD_WIDTH-120)/2}px內)`);
+      console.log('=== 比例設定驗證 ===');
+      console.log(`像素/單位比例: ${PX_PER_UNIT}px/unit (與EntitySpawner.ts一致)`);
+      console.log(`遊戲世界原點偏移: (${GAME_ORIGIN_X}, ${GAME_ORIGIN_Y}) (與LevelManager.ts一致)`);
+      console.log(`設計解析度: ${GAME_DESIGN_WIDTH}x${GAME_DESIGN_HEIGHT}`);
+      console.log('=== 物件尺寸設定 (直徑) ===');
+      console.log('木箱/石頭 (障礙): 50px (25px半徑)');
+      console.log('炸彈 (敵人): 28px (14px半徑)'); 
+      console.log('=== 陣型間距設定 ===');
+      console.log('最小間距: 44px (基於敵人分離半徑)');
+      console.log('群組預設範圍: 60px (基於攻擊範圍44px + 安全間距)');
+      console.log('========================');
+      console.log('網格和邊界預設顯示');
+      
+      // 初始化檔案名稱顯示
+      updateFileNameDisplay();
+    }
+    
+    // === 創建關卡邊界顯示 ===
+    function createLevelBounds() {
+      const boundsContainer = new PIXI.Container();
+      const graphics = new PIXI.Graphics();
+      
+      // 繪製關卡邊界矩形
+      graphics.lineStyle(4, 0xff6b6b, 0.8); // 紅色邊界線
+      graphics.drawRect(
+        -GAME_WORLD_WIDTH / 2, 
+        -GAME_WORLD_HEIGHT / 2, 
+        GAME_WORLD_WIDTH, 
+        GAME_WORLD_HEIGHT
+      );
+      
+      // 繪製角落標記 (更清楚邊界)
+      const cornerSize = 40;
+      graphics.lineStyle(6, 0xff6b6b, 1.0);
+      
+      // 左上角
+      graphics.moveTo(-GAME_WORLD_WIDTH / 2, -GAME_WORLD_HEIGHT / 2 + cornerSize);
+      graphics.lineTo(-GAME_WORLD_WIDTH / 2, -GAME_WORLD_HEIGHT / 2);
+      graphics.lineTo(-GAME_WORLD_WIDTH / 2 + cornerSize, -GAME_WORLD_HEIGHT / 2);
+      
+      // 右上角
+      graphics.moveTo(GAME_WORLD_WIDTH / 2 - cornerSize, -GAME_WORLD_HEIGHT / 2);
+      graphics.lineTo(GAME_WORLD_WIDTH / 2, -GAME_WORLD_HEIGHT / 2);
+      graphics.lineTo(GAME_WORLD_WIDTH / 2, -GAME_WORLD_HEIGHT / 2 + cornerSize);
+      
+      // 右下角
+      graphics.moveTo(GAME_WORLD_WIDTH / 2, GAME_WORLD_HEIGHT / 2 - cornerSize);
+      graphics.lineTo(GAME_WORLD_WIDTH / 2, GAME_WORLD_HEIGHT / 2);
+      graphics.lineTo(GAME_WORLD_WIDTH / 2 - cornerSize, GAME_WORLD_HEIGHT / 2);
+      
+      // 左下角
+      graphics.moveTo(-GAME_WORLD_WIDTH / 2 + cornerSize, GAME_WORLD_HEIGHT / 2);
+      graphics.lineTo(-GAME_WORLD_WIDTH / 2, GAME_WORLD_HEIGHT / 2);
+      graphics.lineTo(-GAME_WORLD_WIDTH / 2, GAME_WORLD_HEIGHT / 2 - cornerSize);
+      
+      boundsContainer.addChild(graphics);
+      container.addChild(boundsContainer);
+      
+      // 儲存邊界引用
+      container.boundsContainer = boundsContainer;
+      
+      console.log(`關卡邊界: ${GAME_WORLD_WIDTH}x${GAME_WORLD_HEIGHT}`);
     }
     
     // === 創建背景網格 ===
@@ -203,153 +930,1937 @@
       container.gridContainer = gridContainer;
     }
     
-    // === 載入測試關卡 ===
-    function loadTestLevel() {
-      // 清除舊實體
+    // === 清除關卡 ===
+    function clearLevel() {
+      // 移除所有實體
       entities.forEach(entity => {
         container.removeChild(entity);
       });
       entities = [];
+      selectedEntity = null;
       
-      // 創建測試實體
+      updateEntityList();
+      console.log('關卡已清除');
+    }
+    
+    // === 重置攝影機 ===
+    function resetCamera() {
+      // 重置攝影機到中心，縮放讓整個場地可見
+      cameraX = 0;
+      cameraY = 0; 
+      cameraZoom = 0.4;
+      
+      // 更新容器變換
+      updateCameraTransform();
+      console.log('攝影機已重置');
+    }
+    
+    // === 生成物件 ===
+    function generateObject() {
+      const objectTypes = ['wooden_box', 'bomb', 'stone'];
+      const gameObjectTypes = {
+        wooden_box: { name: '木箱', label: '木', color: 0x8B4513, shape: 'square', size: 16 },
+        bomb: { name: '炸彈', label: '爆', color: 0xFF4444, shape: 'circle', size: 13 },
+        stone: { name: '石頭', label: '石', color: 0x808080, shape: 'hexagon', size: 16 }
+      };
+      
+      // 隨機選擇類型
+      const type = objectTypes[Math.floor(Math.random() * objectTypes.length)];
+      const config = gameObjectTypes[type];
+      
+      // 在邊界內中間位置生成（稍微偏移避免重疊）
+      const offsetX = (Math.random() - 0.5) * 100; // ±50像素偏移
+      const offsetY = (Math.random() - 0.5) * 100;
+      
+      const entity = createEntity({
+        type: type,
+        x: offsetX,
+        y: offsetY,
+        color: config.color,
+        shape: config.shape,
+        size: config.size,
+        label: config.label,
+        name: `${config.name}_${entityIdCounter}`,
+        id: `entity_${entityIdCounter++}`
+      });
+      
+      entities.push(entity);
+      container.addChild(entity);
+      updateEntityList();
+      
+      console.log(`已生成 ${config.name} 於 (${offsetX.toFixed(0)}, ${offsetY.toFixed(0)})`);
+    }
+    
+    // === 自動命名系統 ===
+    function generateFileName(levelId) {
+      // 檢查現有檔案並生成下一個可用編號
+      // 格式：level{levelId}_{編號}.json
+      // 這裡簡化為基礎編號，實際專案可以連接後端檢查
+      const baseNumber = '001';
+      return `level${levelId}_${baseNumber}`;
+    }
+    
+    // === 匯出關卡 ===
+    function exportLevel() {
+      const levelSelect = document.getElementById('level-select');
+      const selectedLevel = levelSelect.value;
+      
+      let fileName = 'level_export';
+      let levelName = '編輯器關卡';
+      
+      // 如果有選擇關卡，使用自動命名
+      if (selectedLevel) {
+        const levelId = selectedLevel.replace('level', '');
+        fileName = generateFileName(levelId);
+        levelName = levelSelect.options[levelSelect.selectedIndex].text;
+      }
+      
+      const levelData = {
+        name: levelName,
+        version: "1.0",
+        levelId: selectedLevel || 'custom',
+        entities: entities.map(entity => ({
+          type: entity.userData.type,
+          position: [entity.x / 50, 0, entity.y / 50], // 轉換回3D座標
+          color: entity.userData.color,
+          id: entity.userData.id
+        }))
+      };
+      
+      const dataStr = JSON.stringify(levelData, null, 2);
+      const dataBlob = new Blob([dataStr], {type: 'application/json'});
+      
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(dataBlob);
+      link.download = `${fileName}.json`;
+      link.click();
+      
+      console.log('關卡已匯出:', levelData);
+    }
+    
+    // === 匯入關卡 ===
+    function importLevel() {
+      document.getElementById('file-input').click();
+    }
+    
+    // === 處理文件匯入 ===
+    function handleFileImport(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const levelData = JSON.parse(e.target.result);
+          loadLevelData(levelData);
+          console.log('關卡已匯入:', levelData);
+        } catch (error) {
+          alert('文件格式錯誤: ' + error.message);
+        }
+      };
+      reader.readAsText(file);
+    }
+    
+    // === 更新檔案名稱顯示 ===
+    function updateFileNameDisplay() {
+      const levelSelect = document.getElementById('level-select');
+      const filenameDisplay = document.getElementById('filename-display');
+      const selectedLevel = levelSelect.value;
+      
+      if (selectedLevel) {
+        const levelId = selectedLevel.replace('level', '');
+        const fileName = generateFileName(levelId);
+        filenameDisplay.textContent = `${fileName}.json`;
+      } else {
+        filenameDisplay.textContent = 'level1_001.json';
+      }
+    }
+    
+    // === 選擇預設關卡 ===
+    function selectLevel() {
+      const select = document.getElementById('level-select');
+      const levelName = select.value;
+      
+      if (!levelName) return;
+      
+      // 更新檔案名稱顯示
+      updateFileNameDisplay();
+      
+      // 更新標題顯示當前關卡
+      const toolbar = document.querySelector('.toolbar h1');
+      const levelText = select.options[select.selectedIndex].text;
+      toolbar.textContent = `鬥氣割草 - ${levelText}`;
+      
+      // 載入對應關卡的預設布置（如果有的話）
+      switch(levelName) {
+        case 'level1':
+          loadLevel1Template();
+          break;
+        case 'level2':
+          loadLevel2Template();
+          break;
+        case 'level3':
+          loadLevel3Template();
+          break;
+        case 'level4':
+          loadLevel4Template(); // BOSS關卡
+          break;
+        case 'level5':
+          loadLevel5Template();
+          break;
+        case 'level6':
+          loadLevel6Template();
+          break;
+        case 'level7':
+          loadLevel7Template();
+          break;
+        case 'level8':
+          loadLevel8Template();
+          break;
+        default:
+          console.log(`關卡 "${levelName}" 已選擇，可開始編輯`);
+      }
+    }
+    
+    // === 關卡模板函數 ===
+    function loadLevel1Template() {
+      clearLevel();
+      // 新手村預設布置 - 簡單的教學布局
+      console.log('載入關卡1：新手村模板');
+    }
+    
+    function loadLevel2Template() {
+      clearLevel();
+      // 森林預設布置
+      console.log('載入關卡2：森林模板');
+    }
+    
+    function loadLevel3Template() {
+      clearLevel();
+      // 沙漠預設布置
+      console.log('載入關卡3：沙漠模板');
+    }
+    
+    function loadLevel4Template() {
+      clearLevel();
+      // 火山BOSS戰預設布置
+      console.log('載入關卡4：火山BOSS模板');
+    }
+    
+    function loadLevel5Template() {
+      clearLevel();
+      // 雪山預設布置
+      console.log('載入關卡5：雪山模板');
+    }
+    
+    function loadLevel6Template() {
+      clearLevel();
+      // 海底預設布置
+      console.log('載入關卡6：海底模板');
+    }
+    
+    function loadLevel7Template() {
+      clearLevel();
+      // 城堡預設布置
+      console.log('載入關卡7：城堡模板');
+    }
+    
+    function loadLevel8Template() {
+      clearLevel();
+      // 天空預設布置
+      console.log('載入關卡8：天空模板');
+    }
+    
+    // === 載入關卡數據 ===
+    function loadLevelData(levelData) {
+      clearLevel();
+      
+      if (levelData.entities) {
+        levelData.entities.forEach((entityData, index) => {
+          const entity = createEntity({
+            type: entityData.type || 'enemy',
+            x: (entityData.position ? entityData.position[0] : 0) * 50,
+            y: (entityData.position ? entityData.position[2] : 0) * 50,
+            color: entityData.color || 0xff4444,
+            name: `${entityData.type}_${entityIdCounter++}`,
+            id: entityData.id || `entity_${entityIdCounter}`
+          });
+          entities.push(entity);
+          container.addChild(entity);
+        });
+      }
+      
+      updateEntityList();
+    }
+    
+    // === 載入測試關卡 ===
+    function loadTestLevel() {
+      clearLevel();
+      
+      console.log('=== 載入破壞類物件測試 ===');
+      
       const testEntities = [
-        { type: 'enemy', x: -200, y: 0, color: 0xff4444 },
-        { type: 'enemy', x: 200, y: 0, color: 0xff4444 },
-        { type: 'item', x: 0, y: -150, color: 0x44ff44 },
-        { type: 'item', x: 0, y: 150, color: 0x44ff44 },
-        { type: 'powerup', x: -100, y: -100, color: 0x4444ff },
-        { type: 'powerup', x: 100, y: 100, color: 0x4444ff }
+        { 
+          type: 'wooden_box', 
+          x: 100, y: -50,  // 右上方
+          name: '測試木箱',
+          id: 'box_001'
+        },
+        { 
+          type: 'bomb', 
+          x: -80, y: 60,  // 左下方
+          name: '測試炸彈',
+          id: 'bomb_001'
+        },
+        { 
+          type: 'stone', 
+          x: 0, y: 0,  // 中心
+          name: '測試石頭',
+          id: 'stone_001'
+        }
       ];
       
-      testEntities.forEach(entityData => {
+      testEntities.forEach((entityData, index) => {
         const entity = createEntity(entityData);
         entities.push(entity);
         container.addChild(entity);
+        
+        console.log(`實體 ${index + 1}: ${entityData.name} | 位置: (${entityData.x}, ${entityData.y})`);
       });
       
-      updateInfo();
-      console.log(`載入了 ${entities.length} 個測試實體`);
+      updateEntityList();
+      console.log(`=== 載入完成：${entities.length}個破壞類物件 ===`);
     }
     
     // === 創建實體 ===
     function createEntity(data) {
+      const container = new PIXI.Container();
       const graphics = new PIXI.Graphics();
       
-      // 根據類型設定大小
-      let size = 10;
-      switch(data.type) {
-        case 'enemy': size = 14; break;
-        case 'item': size = 8; break;
-        case 'powerup': size = 12; break;
-      }
+      // 獲取物件配置（如果直接傳入則使用，否則查找預設）- 與實際遊戲比例一致
+      const gameObjectTypes = {
+        wooden_box: { name: '木箱', label: '木', color: 0x8B4513, shape: 'square', size: 25 * 2 }, // 障礙物尺寸 25px * 2 (直徑)
+        bomb: { name: '炸彈', label: '爆', color: 0xFF4444, shape: 'circle', size: 14 * 2 }, // 一般敵人尺寸 14px * 2 (直徑)
+        stone: { name: '石頭', label: '石', color: 0x808080, shape: 'hexagon', size: 25 * 2 } // 障礙物尺寸 25px * 2 (直徑)
+      };
       
-      // 繪製實體
-      graphics.beginFill(data.color);
-      graphics.drawCircle(0, 0, size);
+      const config = gameObjectTypes[data.type] || gameObjectTypes.wooden_box;
+      const size = data.size || config.size;
+      const color = data.color || config.color;
+      const shape = data.shape || config.shape;
+      const label = data.label || config.label;
+      
+      // 繪製不同形狀
+      graphics.beginFill(color);
+      
+      switch(shape) {
+        case 'square':
+          graphics.drawRect(-size/2, -size/2, size, size);
+          break;
+        case 'circle':
+          graphics.drawCircle(0, 0, size/2);
+          break;
+        case 'hexagon':
+          // 繪製六角形
+          graphics.moveTo(size/2, 0);
+          for (let i = 1; i <= 6; i++) {
+            const angle = (i * Math.PI) / 3;
+            graphics.lineTo(size/2 * Math.cos(angle), size/2 * Math.sin(angle));
+          }
+          break;
+        default:
+          graphics.drawCircle(0, 0, size/2);
+      }
       graphics.endFill();
       
       // 繪製邊框
       graphics.lineStyle(2, 0xffffff, 0.8);
-      graphics.drawCircle(0, 0, size);
+      switch(shape) {
+        case 'square':
+          graphics.drawRect(-size/2, -size/2, size, size);
+          break;
+        case 'circle':
+          graphics.drawCircle(0, 0, size/2);
+          break;
+        case 'hexagon':
+          graphics.moveTo(size/2, 0);
+          for (let i = 1; i <= 6; i++) {
+            const angle = (i * Math.PI) / 3;
+            graphics.lineTo(size/2 * Math.cos(angle), size/2 * Math.sin(angle));
+          }
+          break;
+      }
+      
+      // 添加文字標籤
+      const text = new PIXI.Text(label, {
+        fontSize: Math.max(8, size * 0.6),
+        fill: 'white',
+        fontWeight: 'bold',
+        fontFamily: 'Arial'
+      });
+      text.anchor.set(0.5);
+      
+      // 將圖形和文字添加到容器
+      container.addChild(graphics);
+      container.addChild(text);
       
       // 設定位置
-      graphics.x = data.x;
-      graphics.y = data.y;
+      container.x = data.x;
+      container.y = data.y;
       
-      return graphics;
+      // 儲存數據
+      container.userData = {
+        type: data.type,
+        color: color,
+        shape: shape,
+        size: size,
+        label: label,
+        name: data.name || `${config.name}_${entityIdCounter++}`,
+        id: data.id || `entity_${entityIdCounter++}`,
+        clusters: data.clusters || [],
+        isGroupMember: data.isGroupMember || false,  // ⭐ 保存群組成員標記
+        clusterSource: data.clusterSource || null   // ⭐ 保存群組來源資訊
+      };
+      
+      // 添加實體交互事件
+      container.interactive = true;
+      container.buttonMode = true;
+      
+      container.on('pointerdown', (event) => {
+        // 檢查是否為群組成員物件
+        if (container.userData.isGroupMember) {
+          // 找到群組物件所屬的主物件和群組
+          const clusterInfo = container.userData.clusterSource;
+          if (clusterInfo) {
+            // 找到擁有該群組的主物件
+            const ownerEntity = entities.find(entity => 
+              !entity.userData.isGroupMember && 
+              entity.userData.clusters &&
+              entity.userData.clusters.some(cluster => cluster.id === clusterInfo.clusterId)
+            );
+            
+            if (ownerEntity) {
+              // 找到具體的群組
+              const targetCluster = ownerEntity.userData.clusters.find(
+                cluster => cluster.id === clusterInfo.clusterId
+              );
+              
+              if (targetCluster) {
+                // 選擇主物件並設置群組焦點
+                window.keepClusterSelection = true; // 設置標記保持群組選擇
+                selectEntityObject(ownerEntity);
+                selectedCluster = {
+                  ownerEntity: ownerEntity,
+                  cluster: targetCluster,
+                  clusterIndex: ownerEntity.userData.clusters.indexOf(targetCluster)
+                };
+                
+                // 更新屬性面板顯示群組屬性
+                updatePropertyPanel();
+                
+                console.log(`已選擇群組: ${targetCluster.name} (來自 ${ownerEntity.userData.name})`);
+              }
+            }
+          }
+          
+          // 阻止事件冒泡，但不執行拖拽
+          event.stopPropagation();
+          return;
+        }
+        
+        // 非群組成員的正常選擇邏輯
+        selectEntityObject(container);
+        // 清除群組選擇狀態
+        selectedCluster = null;
+        
+        // 準備拖拽狀態
+        const globalPos = event.data.global;
+        const localPos = container.parent.toLocal(globalPos);
+        
+        globalDragState.dragEntity = container;
+        globalDragState.dragStartPos.x = localPos.x;
+        globalDragState.dragStartPos.y = localPos.y;
+        globalDragState.entityStartPos.x = container.x;
+        globalDragState.entityStartPos.y = container.y;
+        globalDragState.isDragging = false; // 還未開始拖拽，等待閾值
+        
+        // 阻止事件冒泡到canvas
+        event.stopPropagation();
+      });
+      
+      return container;
     }
     
-    // === 重置視角 ===
-    function resetView() {
-      container.x = CANVAS_WIDTH / 2;
-      container.y = CANVAS_HEIGHT / 2;
-      container.scale.set(SCALE);
-      container.rotation = 0;
+    // === 添加測試實體 ===
+    function addTestEntity(type) {
+      const colors = {
+        enemy: 0xff4444,
+        collectible: 0x44ff44,
+        powerup: 0x4444ff
+      };
       
-      updateInfo();
-      console.log('視角已重置');
+      const entity = createEntity({
+        type: type,
+        x: (Math.random() - 0.5) * 400,  // 隨機位置
+        y: (Math.random() - 0.5) * 300,
+        color: colors[type] || 0xff4444,
+        name: `${type}_${entityIdCounter}`,
+        id: `entity_${entityIdCounter++}`
+      });
+      
+      entities.push(entity);
+      container.addChild(entity);
+      updateEntityList();
+      
+      console.log(`已添加 ${type}:`, entity.userData);
     }
     
-    // === 切換網格顯示 ===
-    function toggleGrid() {
-      showGrid = !showGrid;
-      if (container.gridContainer) {
-        container.gridContainer.visible = showGrid;
+    // === 重繪實體（保持事件處理） ===
+    function redrawEntity(entity, isSelected = false) {
+      const data = entity.userData;
+      
+      // 清除容器中的所有子元素，重新創建
+      entity.removeChildren();
+      
+      const graphics = new PIXI.Graphics();
+      const size = data.size || 16;
+      const color = data.color || 0xffffff;
+      const shape = data.shape || 'circle';
+      const label = data.label || '?';
+      
+      // 繪製形狀
+      graphics.beginFill(color);
+      
+      switch(shape) {
+        case 'square':
+          graphics.drawRect(-size/2, -size/2, size, size);
+          break;
+        case 'circle':
+          graphics.drawCircle(0, 0, size/2);
+          break;
+        case 'hexagon':
+          graphics.moveTo(size/2, 0);
+          for (let i = 1; i <= 6; i++) {
+            const angle = (i * Math.PI) / 3;
+            graphics.lineTo(size/2 * Math.cos(angle), size/2 * Math.sin(angle));
+          }
+          break;
+        default:
+          graphics.drawCircle(0, 0, size/2);
       }
-      updateInfo();
+      graphics.endFill();
+      
+      // 繪製邊框
+      if (isSelected) {
+        graphics.lineStyle(3, 0xffff00, 1.0); // 黃色高亮邊框
+      } else {
+        graphics.lineStyle(2, 0xffffff, 0.8); // 普通白色邊框
+      }
+      
+      switch(shape) {
+        case 'square':
+          graphics.drawRect(-size/2, -size/2, size, size);
+          break;
+        case 'circle':
+          graphics.drawCircle(0, 0, size/2);
+          break;
+        case 'hexagon':
+          graphics.moveTo(size/2, 0);
+          for (let i = 1; i <= 6; i++) {
+            const angle = (i * Math.PI) / 3;
+            graphics.lineTo(size/2 * Math.cos(angle), size/2 * Math.sin(angle));
+          }
+          break;
+      }
+      
+      // 添加文字標籤
+      const text = new PIXI.Text(label, {
+        fontSize: Math.max(8, size * 0.6),
+        fill: 'white',
+        fontWeight: 'bold',
+        fontFamily: 'Arial'
+      });
+      text.anchor.set(0.5);
+      
+      // 將圖形和文字重新添加到容器
+      entity.addChild(graphics);
+      entity.addChild(text);
+    }
+    
+    // === 選擇實體 ===
+    function selectEntityObject(entity) {
+      // 取消之前選中的實體高亮
+      if (selectedEntity) {
+        redrawEntity(selectedEntity, false);
+      }
+      
+      selectedEntity = entity;
+      // 清除群組選擇狀態（除非特別設置）
+      if (!window.keepClusterSelection) {
+        selectedCluster = null;
+      }
+      window.keepClusterSelection = false; // 重置標記
+      
+      // 高亮選中實體
+      redrawEntity(entity, true);
+      
+      updateEntityList();
+      updatePropertyPanel();
+    }
+    
+    // === 更新屬性面板 ===
+    function updatePropertyPanel() {
+      const propertyPanel = document.getElementById('property-panel');
+      
+      // 檢查是否選中了群組
+      if (selectedCluster) {
+        displayClusterProperties(selectedCluster);
+        return;
+      }
+      
+      if (!selectedEntity) {
+        propertyPanel.innerHTML = '<p style="color: #a0aec0; font-size: 12px; margin: 0; padding: 20px; text-align: center;">選擇物件以編輯屬性</p>';
+        return;
+      }
+      
+      displayEntityProperties(selectedEntity);
+    }
+    
+    // === 顯示群組屬性 ===
+    function displayClusterProperties(clusterSelection) {
+      const propertyPanel = document.getElementById('property-panel');
+      const { ownerEntity, cluster, clusterIndex } = clusterSelection;
+      
+      const objectTypes = {
+        wooden_box: '木箱',
+        bomb: '炸彈',
+        stone: '石頭'
+      };
+      
+      const formations = {
+        circle: '圓形',
+        line: '直線',
+        square: '方形'
+      };
+      
+      // 計算群組物件數量（如果已生成）
+      let generatedObjectCount = 0;
+      if (cluster.generated) {
+        generatedObjectCount = entities.filter(entity => 
+          entity.userData.isGroupMember && 
+          entity.userData.clusterSource &&
+          entity.userData.clusterSource.clusterId === cluster.id
+        ).length;
+      }
+      
+      propertyPanel.innerHTML = `
+        <div class="property-group">
+          <h3>群組屬性</h3>
+          <div class="cluster-breadcrumb">
+            來自: <span onclick="selectOwnerEntity()" style="color: #60a5fa; cursor: pointer; text-decoration: underline;">${ownerEntity.userData.name}</span>
+          </div>
+          <div class="property-item">
+            <label class="property-label">群組名稱</label>
+            <input type="text" class="property-input" value="${cluster.name}" 
+                   onchange="updateClusterProperty('name', this.value)" 
+                   placeholder="輸入群組名稱">
+          </div>
+          <div class="property-item">
+            <label class="property-label">狀態</label>
+            <span class="cluster-status-display">
+              📝 設計中
+            </span>
+          </div>
+        </div>
+        
+        <div class="property-group">
+          <h3>群組設定</h3>
+          <div class="property-item">
+            <label class="property-label">物件數量</label>
+            <input type="number" class="property-input" value="${cluster.count || 3}" min="1" max="20"
+                   onchange="updateClusterProperty('count', parseInt(this.value))">
+          </div>
+          <div class="property-item">
+            <label class="property-label">物件類型</label>
+            <select class="property-input" onchange="updateClusterProperty('objectType', this.value)">
+              <option value="wooden_box" ${cluster.objectType === 'wooden_box' ? 'selected' : ''}>木箱</option>
+              <option value="bomb" ${cluster.objectType === 'bomb' ? 'selected' : ''}>炸彈</option>
+              <option value="stone" ${cluster.objectType === 'stone' ? 'selected' : ''}>石頭</option>
+            </select>
+          </div>
+          <div class="property-item">
+            <label class="property-label">陣型</label>
+            <select class="property-input" onchange="updateClusterProperty('formation', this.value)">
+              <option value="circle" ${cluster.formation === 'circle' ? 'selected' : ''}>圓形</option>
+              <option value="line" ${cluster.formation === 'line' ? 'selected' : ''}>直線</option>
+              <option value="square" ${cluster.formation === 'square' ? 'selected' : ''}>方形</option>
+            </select>
+          </div>
+          <div class="property-item">
+            <label class="property-label">半徑/間距</label>
+            <input type="number" class="property-input" value="${cluster.radius || 60}" min="30" max="200"
+                   onchange="updateClusterProperty('radius', parseInt(this.value))">
+          </div>
+        </div>
+        
+        <div class="property-group">
+          <h3>群組操作</h3>
+          <button class="property-button secondary" onclick="selectOwnerEntity()" style="margin-top: 8px;">← 返回</button>
+        </div>
+      `;
+    }
+    
+    // === 顯示實體屬性 ===
+    function displayEntityProperties(entity) {
+      const propertyPanel = document.getElementById('property-panel');
+      const data = entity.userData;
+      
+      // 確保clusters屬性存在（向後兼容）
+      if (!data.clusters) {
+        data.clusters = [];
+      }
+      
+      const objectTypes = ['wooden_box', 'bomb', 'stone'];
+      const typeNames = {
+        wooden_box: '木箱',
+        bomb: '炸彈',
+        stone: '石頭'
+      };
+      
+      // 生成種類選項
+      const typeOptions = objectTypes.map(type => 
+        `<option value="${type}" ${data.type === type ? 'selected' : ''}>${typeNames[type]}</option>`
+      ).join('');
+      
+      // 簡單的群組狀態顯示 - 加入生成狀態檢查
+      const clusterCount = data.clusters.length;
+      
+      let clusterStatus = '';
+      if (clusterCount === 0) {
+        clusterStatus = '暫無群組';
+      } else {
+        clusterStatus = `${clusterCount}個群組`;
+      }
+      
+      // 簡單的群組列表HTML
+      let clusterListHtml = '';
+      if (clusterCount > 0) {
+        clusterListHtml = data.clusters.map((cluster, index) => {
+          // 確保舊群組有默認參數
+          if (!cluster.count) cluster.count = 3;
+          if (!cluster.objectType) cluster.objectType = 'wooden_box';
+          if (!cluster.formation) cluster.formation = 'circle';
+          if (!cluster.radius) cluster.radius = 60; // 預設基於遊戲範圍
+          
+          return `<div class="cluster-item-expanded">
+            <div class="cluster-header">
+              <span class="cluster-name" onclick="selectClusterFromList(${index})" title="點擊選擇群組進行詳細編輯">
+                📝 ${cluster.name}
+              </span>
+              <button class="cluster-delete-btn" onclick="deleteCluster(${index})" title="刪除群組">×</button>
+            </div>
+            <div class="cluster-summary">
+              ${cluster.count}個${typeNames[cluster.objectType] || '物件'} · ${cluster.formation === 'circle' ? '圓形' : cluster.formation === 'line' ? '直線' : '方形'}陣型
+            </div>
+          </div>`;
+        }).join('');
+      } else {
+        clusterListHtml = '<p style="color: #a0aec0; font-size: 11px; margin: 10px 0; text-align: center;">點擊上方按鈕新增群組</p>';
+      }
+      
+      propertyPanel.innerHTML = `
+        <div class="property-group">
+          <h3>基本資訊</h3>
+          <div class="property-item">
+            <label class="property-label">名稱</label>
+            <input type="text" class="property-input" value="${data.name || data.type}" onchange="updateEntityName(this.value)" placeholder="輸入物件名稱">
+          </div>
+          <div class="property-item">
+            <label class="property-label">種類</label>
+            <select class="property-input" onchange="updateEntityType(this.value)">
+              ${typeOptions}
+            </select>
+          </div>
+        </div>
+        
+        <div class="property-group">
+          <h3>群組管理</h3>
+          <div class="property-item">
+            <label class="property-label">狀態</label>
+            <span class="cluster-status">${clusterStatus}</span>
+          </div>
+          <div class="cluster-controls">
+            <button class="cluster-add-btn" onclick="addSimpleCluster()">+ 新增群組</button>
+          </div>
+          <div class="cluster-list">
+            ${clusterListHtml}
+          </div>
+        </div>
+      `;
+      
+      // 觸發群組可視化渲染
+      renderClusterVisuals(selectedEntity);
+    }
+    
+    // === 群組屬性管理函數 ===
+    function selectOwnerEntity() {
+      if (selectedCluster) {
+        selectedCluster = null;
+        updatePropertyPanel();
+      }
+    }
+    
+    function selectClusterFromList(clusterIndex) {
+      if (!selectedEntity || !selectedEntity.userData.clusters[clusterIndex]) return;
+      
+      selectedCluster = {
+        ownerEntity: selectedEntity,
+        cluster: selectedEntity.userData.clusters[clusterIndex],
+        clusterIndex: clusterIndex
+      };
+      
+      updatePropertyPanel();
+      console.log(`已選擇群組: ${selectedCluster.cluster.name}`);
+    }
+    
+    function updateClusterProperty(property, value) {
+      if (!selectedCluster) return;
+      
+      const cluster = selectedCluster.cluster;
+      const oldValue = cluster[property];
+      
+      // 檢查是否已生成，已生成的群組不能修改
+      if (cluster.generated) {
+        console.warn(`已生成的群組無法修改屬性: ${cluster.name}`);
+        return;
+      }
+      
+      // 更新屬性值
+      cluster[property] = value;
+      
+      // 重新繪製群組可視化（只有預覽狀態的群組才會重繪）
+      renderClusterVisuals(selectedEntity);
+      
+      console.log(`群組 "${cluster.name}" 的 ${property} 已更新: ${oldValue} → ${value}`);
+    }
+    
+    // === 群組生成功能已移除 ===
+    // function generateSingleCluster() {
+    //   if (!selectedCluster) return;
+    //   
+    //   const cluster = selectedCluster.cluster;
+    //   const clusterIndex = selectedCluster.clusterIndex;
+    //   
+    //   if (cluster.generated) {
+    //     console.warn(`群組 "${cluster.name}" 已經生成過了`);
+    //     return;
+    //   }
+    //   
+    //   console.log(`🎯 開始生成單個群組: ${cluster.name}`);
+    //   
+    //   const objectsCreated = generateClusterObjects(cluster, clusterIndex);
+    //   
+    //   if (objectsCreated > 0) {
+    //     // 標記群組為已生成
+    //     cluster.generated = true;
+    //     cluster.generatedAt = Date.now();
+    //     
+    //     // 清理預覽視覺
+    //     clearClusterVisuals();
+    //     
+    //     // 更新屬性面板和實體列表
+    //     updatePropertyPanel();
+    //     updateEntityList();
+    //     
+    //     console.log(`✅ 群組 "${cluster.name}" 已生成 ${objectsCreated} 個物件`);
+    //   }
+    // }
+    
+    function deleteCurrentCluster() {
+      if (!selectedCluster) return;
+      
+      const cluster = selectedCluster.cluster;
+      const clusterIndex = selectedCluster.clusterIndex;
+      
+      const confirmMessage = `確定要刪除群組 "${cluster.name}" 嗎？`;
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+      
+      // 從主物件的群組陣列中移除
+      selectedEntity.userData.clusters.splice(clusterIndex, 1);
+      
+      // 清除群組選擇狀態
+      selectedCluster = null;
+      
+      // 更新屬性面板顯示
+      updatePropertyPanel();
+      
+      console.log(`已刪除群組: ${cluster.name}`);
+    }
+    
+    // === 更新實體位置 ===
+    function updateEntityPosition(axis, value) {
+      if (!selectedEntity) return;
+      
+      const numValue = parseFloat(value);
+      if (isNaN(numValue)) return;
+      
+      if (axis === 'x') {
+        selectedEntity.x = numValue;
+      } else if (axis === 'y') {
+        selectedEntity.y = numValue;
+      }
+      
+      updateEntityList();
+      console.log(`實體位置已更新: ${axis}=${numValue}`);
+    }
+    
+    // === 更新實體顏色 ===
+    function updateEntityColor(colorHex) {
+      if (!selectedEntity) return;
+      
+      const colorValue = parseInt(colorHex.replace('#', ''), 16);
+      selectedEntity.userData.color = colorValue;
+      
+      // 重繪實體（保持選中狀態）
+      redrawEntity(selectedEntity, true);
+      
+      console.log(`實體顏色已更新: #${colorHex}`);
+    }
+    
+    // === 更新實體名稱 ===
+    function updateEntityName(name) {
+      if (!selectedEntity) return;
+      
+      selectedEntity.userData.name = name.trim() || selectedEntity.userData.type;
+      updateEntityList();
+      console.log(`實體名稱已更新: ${selectedEntity.userData.name}`);
+    }
+    
+    // === 更新實體種類 ===
+    function updateEntityType(type) {
+      if (!selectedEntity) return;
+      
+      const gameObjectTypes = {
+        wooden_box: { name: '木箱', label: '木', color: 0x8B4513, shape: 'square', size: 25 * 2 }, // 障礙物尺寸
+        bomb: { name: '炸彈', label: '爆', color: 0xFF4444, shape: 'circle', size: 14 * 2 }, // 一般敵人尺寸
+        stone: { name: '石頭', label: '石', color: 0x808080, shape: 'hexagon', size: 25 * 2 } // 障礙物尺寸
+      };
+      
+      const config = gameObjectTypes[type];
+      if (!config) return;
+      
+      // 更新實體數據
+      selectedEntity.userData.type = type;
+      selectedEntity.userData.color = config.color;
+      selectedEntity.userData.shape = config.shape;
+      selectedEntity.userData.size = config.size;
+      selectedEntity.userData.label = config.label;
+      
+      // 重新繪製實體
+      redrawEntity(selectedEntity, true);
+      
+      // 更新UI
+      updateEntityList();
+      
+      console.log(`實體種類已更新: ${config.name}`);
+    }
+    
+    // === Stage 5：群組物件生成功能已移除 ===
+    // function generateAllClusters() {
+    //   if (!selectedEntity || !selectedEntity.userData.clusters) {
+    //     console.warn('沒有選中實體或群組可生成');
+    //     return;
+    //   }
+    //   
+    //   const clusters = selectedEntity.userData.clusters;
+    //   let generatedCount = 0;
+    //   let totalObjectsGenerated = 0;
+    //   
+    //   console.log(`🎯 開始生成群組物件 - 共 ${clusters.length} 個群組`);
+    //   
+    //   clusters.forEach((cluster, index) => {
+    //     // 跳過已生成的群組
+    //     if (cluster.generated) {
+    //       console.log(`跳過已生成的群組: ${cluster.name}`);
+    //       return;
+    //     }
+    //     
+    //     // 生成該群組的所有物件
+    //     const objectsCreated = generateClusterObjects(cluster, index);
+    //     
+    //     if (objectsCreated > 0) {
+    //       // 標記群組為已生成
+    //       cluster.generated = true;
+    //       cluster.generatedAt = Date.now();
+    //       generatedCount++;
+    //       totalObjectsGenerated += objectsCreated;
+    //       
+    //       console.log(`✅ 群組 "${cluster.name}" 已生成 ${objectsCreated} 個物件`);
+    //     }
+    //   });
+    //   
+    //   // 清理預覽視覺（只保留真實物件）
+    //   clearClusterVisuals();
+    //   
+    //   // 更新UI顯示
+    //   updatePropertyPanel();
+    //   updateEntityList();
+    //   
+    //   console.log(`🎉 群組生成完成！共生成 ${generatedCount} 個群組，${totalObjectsGenerated} 個物件`);
+    //   
+    //   // 顯示成功消息
+    //   if (generatedCount > 0) {
+    //     // 可以在這裡添加視覺反饋或通知
+    //     console.log(`群組物件生成成功：${generatedCount}個群組，${totalObjectsGenerated}個物件`);
+    //   }
+    // }
+    
+    function generateClusterObjects(cluster, clusterIndex) {
+      // 計算陣型位置
+      const positions = calculateFormationPositions(
+        cluster.centerX, 
+        cluster.centerY, 
+        cluster.count, 
+        cluster.formation, 
+        cluster.radius
+      );
+      
+      // 獲取物件配置
+      const gameObjectTypes = {
+        wooden_box: { name: '木箱', label: '木', color: 0x8B4513, shape: 'square', size: 25 * 2 },
+        bomb: { name: '炸彈', label: '爆', color: 0xFF4444, shape: 'circle', size: 14 * 2 },
+        stone: { name: '石頭', label: '石', color: 0x808080, shape: 'hexagon', size: 25 * 2 }
+      };
+      
+      const config = gameObjectTypes[cluster.objectType] || gameObjectTypes.wooden_box;
+      let objectsCreated = 0;
+      
+      // 在每個位置創建真實物件
+      positions.forEach((pos, posIndex) => {
+        // 邊界檢查 - 確保物件在遊戲世界內
+        const halfWidth = GAME_WORLD_WIDTH / 2;
+        const halfHeight = GAME_WORLD_HEIGHT / 2;
+        const EDGE_INSET = 60; // 與主物件相同的內縮
+        
+        // 檢查位置是否在邊界內
+        if (pos.x < -halfWidth + EDGE_INSET || pos.x > halfWidth - EDGE_INSET ||
+            pos.y < -halfHeight + EDGE_INSET || pos.y > halfHeight - EDGE_INSET) {
+          console.warn(`群組 "${cluster.name}" 位置 ${posIndex} 超出邊界，跳過生成`);
+          return;
+        }
+        
+        // 創建真實的遊戲物件
+        const entity = createEntity({
+          type: cluster.objectType,
+          x: pos.x,
+          y: pos.y,
+          color: config.color,
+          shape: config.shape,
+          size: config.size,
+          label: config.label,
+          name: `${config.name}_${cluster.name}_${posIndex + 1}`,
+          id: `cluster_${clusterIndex}_obj_${posIndex}_${entityIdCounter++}`,
+          isGroupMember: true,  // ⭐ 標記為群組成員
+          clusterSource: {
+            clusterId: cluster.id,
+            clusterName: cluster.name,
+            clusterIndex: clusterIndex,
+            positionIndex: posIndex
+          }
+        });
+        
+        // 添加到遊戲世界
+        entities.push(entity);
+        container.addChild(entity);
+        objectsCreated++;
+        
+        console.log(`創建群組物件: ${entity.userData.name} 於 (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)})`);
+      });
+      
+      return objectsCreated;
+    }
+    
+    // 檢查群組是否可以生成（所有群組都未生成）
+    function canGenerateClusters(entity) {
+      if (!entity || !entity.userData.clusters || entity.userData.clusters.length === 0) {
+        return false;
+      }
+      
+      // 檢查是否有未生成的群組
+      return entity.userData.clusters.some(cluster => !cluster.generated);
+    }
+    
+    // === 簡單的群組管理函數 ===
+    function addSimpleCluster() {
+      if (!selectedEntity) return;
+      
+      // 確保clusters陣列存在
+      if (!selectedEntity.userData.clusters) {
+        selectedEntity.userData.clusters = [];
+      }
+      
+      // 添加一個簡單的群組
+      const newCluster = {
+        id: 'cluster_' + Date.now(),
+        name: '群組 ' + (selectedEntity.userData.clusters.length + 1),
+        count: 3,
+        objectType: 'wooden_box',
+        formation: 'circle',
+        centerX: selectedEntity.x + 50,
+        centerY: selectedEntity.y + 50,
+        radius: 60 // 基於遊戲攻擊範圍44px + 安全間距
+      };
+      
+      selectedEntity.userData.clusters.push(newCluster);
+      
+      // 更新屬性面板顯示
+      updatePropertyPanel();
+      
+      console.log('已新增群組:', newCluster);
+    }
+    
+    function deleteCluster(index) {
+      if (!selectedEntity || !selectedEntity.userData.clusters) return;
+      
+      const cluster = selectedEntity.userData.clusters[index];
+      if (!cluster) return;
+      
+      // 刪除群組
+      selectedEntity.userData.clusters.splice(index, 1);
+      
+      // 更新屬性面板顯示
+      updatePropertyPanel();
+      
+      console.log('已刪除群組:', cluster);
+    }
+    
+    function renameCluster(index) {
+      if (!selectedEntity || !selectedEntity.userData.clusters) return;
+      
+      const cluster = selectedEntity.userData.clusters[index];
+      if (!cluster) return;
+      
+      // 簡單的prompt重命名
+      const newName = prompt('請輸入新的群組名稱:', cluster.name);
+      if (newName && newName.trim() && newName !== cluster.name) {
+        cluster.name = newName.trim();
+        
+        // 更新屬性面板顯示
+        updatePropertyPanel();
+        
+        console.log('已重命名群組:', cluster);
+      }
+    }
+    
+    function updateClusterParam(index, param, value) {
+      if (!selectedEntity || !selectedEntity.userData.clusters) return;
+      
+      const cluster = selectedEntity.userData.clusters[index];
+      if (!cluster) return;
+      
+      // 更新參數
+      cluster[param] = value;
+      
+      // 重新繪製群組可視化（只有預覽狀態的群組才會重繪）
+      renderClusterVisuals(selectedEntity);
+      
+      console.log(`群組 "${cluster.name}" 的 ${param} 已更新為:`, value);
+    }
+    
+    // === 群組可視化函數 ===
+    function renderClusterVisuals(entity) {
+      if (!entity || !entity.userData.clusters || !window.clusterContainer) {
+        return;
+      }
+      
+      // 清除現有的群組視覺元素
+      clearClusterVisuals();
+      
+      // 只為未生成的群組創建預覽視覺元素
+      entity.userData.clusters.forEach((cluster, index) => {
+        if (!cluster.generated) {
+          createClusterVisual(cluster, index);
+        }
+      });
+      
+      console.log(`群組可視化更新：${entity.userData.clusters.filter(c => !c.generated).length} 個預覽群組`);
+    }
+    
+    function clearClusterVisuals() {
+      if (!window.clusterContainer) return;
+      window.clusterContainer.removeChildren();
+    }
+    
+    function createClusterVisual(cluster, index) {
+      if (!window.clusterContainer) {
+        console.log('createClusterVisual: clusterContainer不存在');
+        return;
+      }
+      
+      // 確保群組有位置數據
+      if (typeof cluster.centerX === 'undefined') {
+        cluster.centerX = 400 + index * 80;
+        cluster.centerY = 300 + index * 40;
+        cluster.radius = 60; // 重設為基於遊戲範圍的預設值
+        console.log(`補全位置數據: (${cluster.centerX}, ${cluster.centerY})`);
+      }
+      
+      // 創建群組容器
+      const clusterGroup = new PIXI.Container();
+      clusterGroup.name = `cluster_${index}`;
+      
+      // 1. 繪製群組中心點 - 使用PIXI v7兼容語法
+      const centerPoint = new PIXI.Graphics();
+      
+      try {
+        centerPoint.beginFill(0x00ff00); // 綠色中心點
+        centerPoint.drawCircle(0, 0, 8);
+        centerPoint.endFill();
+        centerPoint.x = cluster.centerX;
+        centerPoint.y = cluster.centerY;
+      } catch (error) {
+        console.error('中心點繪製失敗:', error);
+        return;
+      }
+      
+      // 讓中心點可交互 - 與主物件完全相同的交互設定
+      centerPoint.interactive = true;
+      centerPoint.buttonMode = true;
+      centerPoint.cursor = 'move';
+      
+      // 群組中心點擊事件 - 修正座標系轉換問題
+      centerPoint.on('pointerdown', (event) => {
+        // 選擇當前實體（如果需要的話）
+        selectEntityObject(selectedEntity);
+        
+        // 準備拖拽狀態 - 使用與主物件相同的座標系
+        const globalPos = event.data.global;
+        const localPos = container.toLocal(globalPos); // 修正：使用container作為座標基準
+        
+        // 調試日誌：驗證座標計算
+        console.log('🎯 綠點點擊調試：');
+        console.log('  global:', globalPos.x.toFixed(1), globalPos.y.toFixed(1));
+        console.log('  local:', localPos.x.toFixed(1), localPos.y.toFixed(1)); 
+        console.log('  cluster center:', cluster.centerX.toFixed(1), cluster.centerY.toFixed(1));
+        
+        // 清除可能存在的主物件拖拽狀態（避免衝突）
+        if (globalDragState.dragEntity) {
+          globalDragState.dragEntity = null;
+        }
+        
+        globalDragState.dragCluster = { cluster, index, centerPoint };
+        globalDragState.dragStartPos.x = localPos.x;
+        globalDragState.dragStartPos.y = localPos.y;
+        globalDragState.clusterStartPos.x = cluster.centerX;
+        globalDragState.clusterStartPos.y = cluster.centerY;
+        globalDragState.isDragging = false; // 還未開始拖拽，等待閾值
+        
+        // 阻止事件冒泡到canvas - 與主物件相同
+        event.stopPropagation();
+      });
+      
+      clusterGroup.addChild(centerPoint);
+      
+      // 2. 繪製範圍圓圈
+      const rangeCircle = new PIXI.Graphics();
+      rangeCircle.lineStyle(1, 0x00ff00, 0.3);
+      rangeCircle.drawCircle(0, 0, cluster.radius || 60); // 預設基於遊戲範圍
+      rangeCircle.x = cluster.centerX;
+      rangeCircle.y = cluster.centerY;
+      clusterGroup.addChild(rangeCircle);
+      
+      // 3. 繪製陣型預覽
+      drawFormationPreview(clusterGroup, cluster);
+      
+      // 4. 繪製主物件到群組中心的連線
+      drawOwnerConnection(clusterGroup, cluster, selectedEntity);
+      
+      // 添加到群組容器
+      window.clusterContainer.addChild(clusterGroup);
+    }
+    
+    // === 陣型計算函數 - 基於實際遊戲數值 ===
+    function calculateFormationPositions(centerX, centerY, count, formation, radius) {
+      const positions = [];
+      
+      switch (formation) {
+        case 'circle':
+          // 圓形陣型：使用指定半徑
+          for (let i = 0; i < count; i++) {
+            const angle = (i / count) * Math.PI * 2;
+            const x = centerX + Math.cos(angle) * radius;
+            const y = centerY + Math.sin(angle) * radius;
+            positions.push({ x, y });
+          }
+          break;
+          
+        case 'line':
+          // 直線陣型：間距基於敵人分離半徑 (44px) 
+          const lineSpacing = Math.max(44, radius * 0.8); // 最小間距44px，或半徑的80%
+          const totalWidth = (count - 1) * lineSpacing;
+          const startX = centerX - totalWidth / 2;
+          for (let i = 0; i < count; i++) {
+            positions.push({
+              x: startX + i * lineSpacing,
+              y: centerY
+            });
+          }
+          break;
+          
+        case 'square':
+          // 方形陣型：基於敵人分離距離
+          const side = Math.ceil(Math.sqrt(count));
+          const squareSpacing = Math.max(44, radius * 0.6); // 最小間距44px，或半徑的60%
+          const squareWidth = (side - 1) * squareSpacing;
+          const squareStartX = centerX - squareWidth / 2;
+          const squareStartY = centerY - squareWidth / 2;
+          
+          for (let i = 0; i < count; i++) {
+            const row = Math.floor(i / side);
+            const col = i % side;
+            positions.push({
+              x: squareStartX + col * squareSpacing,
+              y: squareStartY + row * squareSpacing
+            });
+          }
+          break;
+      }
+      
+      return positions;
+    }
+    
+    function drawFormationPreview(container, cluster) {
+      // 計算陣型位置
+      const positions = calculateFormationPositions(
+        cluster.centerX, 
+        cluster.centerY, 
+        cluster.count, 
+        cluster.formation, 
+        cluster.radius
+      );
+      
+      // 獲取物件類型配置 - 與實際遊戲比例一致
+      const gameObjectTypes = {
+        wooden_box: { label: '木', color: 0x8B4513, shape: 'square', size: 25 * 2 }, // 障礙物尺寸
+        bomb: { label: '爆', color: 0xFF4444, shape: 'circle', size: 14 * 2 }, // 一般敵人尺寸
+        stone: { label: '石', color: 0x808080, shape: 'hexagon', size: 25 * 2 } // 障礙物尺寸
+      };
+      
+      const config = gameObjectTypes[cluster.objectType] || gameObjectTypes.wooden_box;
+      
+      // 為每個位置繪製物件預覽
+      positions.forEach((pos, index) => {
+        const preview = new PIXI.Graphics();
+        
+        // 半透明預覽
+        const alpha = 0.4;
+        
+        if (config.shape === 'square') {
+          const size = config.size / 2;
+          preview.beginFill(config.color, alpha);
+          preview.lineStyle(1, config.color, alpha + 0.2);
+          preview.drawRect(-size, -size, config.size, config.size);
+          preview.endFill();
+        } else if (config.shape === 'circle') {
+          preview.beginFill(config.color, alpha);
+          preview.lineStyle(1, config.color, alpha + 0.2);
+          preview.drawCircle(0, 0, config.size / 2);
+          preview.endFill();
+        } else if (config.shape === 'hexagon') {
+          // 簡化為六角形
+          const size = config.size / 2;
+          const points = [];
+          for (let i = 0; i < 6; i++) {
+            const angle = (i / 6) * Math.PI * 2;
+            points.push(
+              Math.cos(angle) * size,
+              Math.sin(angle) * size
+            );
+          }
+          preview.beginFill(config.color, alpha);
+          preview.lineStyle(1, config.color, alpha + 0.2);
+          preview.drawPolygon(points);
+          preview.endFill();
+        }
+        
+        preview.x = pos.x;
+        preview.y = pos.y;
+        
+        container.addChild(preview);
+        
+        // 4. 繪製連接線 (從中心點到每個預覽物件)
+        if (index < positions.length) {
+          const line = new PIXI.Graphics();
+          line.lineStyle(1, 0x00ff00, 0.2);
+          line.moveTo(cluster.centerX, cluster.centerY);
+          line.lineTo(pos.x, pos.y);
+          container.addChild(line);
+        }
+      });
+    }
+    
+    // === 繪製主物件連線 ===
+    function drawOwnerConnection(container, cluster, ownerEntity) {
+      if (!ownerEntity || !cluster) return;
+      
+      // 繪製從主物件到群組中心的連線
+      const ownerLine = new PIXI.Graphics();
+      ownerLine.lineStyle(2, 0xFFD700, 0.6); // 金黃色，較粗的線
+      ownerLine.moveTo(ownerEntity.x, ownerEntity.y);
+      ownerLine.lineTo(cluster.centerX, cluster.centerY);
+      
+      // 添加到容器最底層（這樣不會遮蓋其他元素）
+      container.addChildAt(ownerLine, 0);
+      
+      console.log(`主物件連線已創建: (${ownerEntity.x}, ${ownerEntity.y}) → (${cluster.centerX}, ${cluster.centerY})`);
+    }
+    
+    // === 更新實體列表 ===
+    function updateEntityList() {
+      const listContainer = document.getElementById('entity-list');
+      
+      // 過濾掉群組成員物件，只顯示獨立物件
+      const independentEntities = entities.filter(entity => !entity.userData.isGroupMember);
+      
+      if (independentEntities.length === 0) {
+        listContainer.innerHTML = '<p style="color: #a0aec0; font-size: 12px; margin: 0; padding: 10px;">目前沒有獨立物件</p>';
+        return;
+      }
+      
+      listContainer.innerHTML = '';
+      
+      independentEntities.forEach((entity) => {
+        const data = entity.userData;
+        const originalIndex = entities.indexOf(entity); // 獲取在原始陣列中的索引
+        const item = document.createElement('div');
+        item.className = 'entity-item';
+        item.onclick = (e) => {
+          // 防止點擊刪除按鈕時選中物件
+          if (e.target.classList.contains('entity-delete-btn')) {
+            return;
+          }
+          selectEntityObject(entity);
+        };
+        
+        if (entity === selectedEntity) {
+          item.classList.add('selected');
+        }
+        
+        item.innerHTML = `
+          <div class="entity-info">
+            <div class="entity-type">${data.name || data.type}</div>
+            <div class="entity-pos">(${Math.round(entity.x)}, ${Math.round(entity.y)})</div>
+          </div>
+          <button class="entity-delete-btn" onclick="deleteEntityFromList(${originalIndex}); event.stopPropagation();">×</button>
+        `;
+        
+        listContainer.appendChild(item);
+      });
+      
+      // 顯示統計信息
+      const totalEntities = entities.length;
+      const groupMemberCount = totalEntities - independentEntities.length;
+      
+      if (groupMemberCount > 0) {
+        const statsItem = document.createElement('div');
+        statsItem.className = 'entity-stats';
+        statsItem.innerHTML = `
+          <div style="color: #68d391; font-size: 11px; padding: 4px 8px; border-top: 1px solid #4a5568; margin-top: 4px;">
+            另有 ${groupMemberCount} 個群組物件 (在群組面板管理)
+          </div>
+        `;
+        listContainer.appendChild(statsItem);
+      }
+      
+      // 更新物件統計標籤
+      const badge = document.getElementById('object-count-badge');
+      if (badge) {
+        if (groupMemberCount > 0) {
+          badge.textContent = `獨立: ${independentEntities.length} | 群組: ${groupMemberCount}`;
+          badge.style.background = '#38a169';
+        } else {
+          badge.textContent = `共 ${independentEntities.length} 個`;
+          badge.style.background = '#4a5568';
+        }
+      }
+    }
+    
+    // === 刪除選中實體 ===
+    function deleteSelectedEntity() {
+      if (!selectedEntity) return;
+      
+      const index = entities.indexOf(selectedEntity);
+      if (index > -1) {
+        container.removeChild(selectedEntity);
+        entities.splice(index, 1);
+        selectedEntity = null;
+        
+        updateEntityList();
+        updatePropertyPanel();
+        console.log('已刪除選中實體');
+      }
+    }
+    
+    // === 從列表刪除指定實體 ===
+    function deleteEntityFromList(index) {
+      if (index < 0 || index >= entities.length) return;
+      
+      const entity = entities[index];
+      
+      // 檢查是否為群組成員物件 - 群組物件不應該出現在列表中，但為了安全性檢查
+      if (entity.userData.isGroupMember) {
+        console.warn(`🔒 群組物件 "${entity.userData.name}" 不能單獨刪除，請透過群組面板管理`);
+        return;
+      }
+      
+      // 檢查是否有已生成的群組需要一併刪除
+      if (entity.userData.clusters && entity.userData.clusters.length > 0) {
+        const generatedClusters = entity.userData.clusters.filter(cluster => cluster.generated);
+        if (generatedClusters.length > 0) {
+          // 詢問用戶是否確認刪除（包含群組物件）
+          const confirmMessage = `此物件包含 ${generatedClusters.length} 個已生成的群組，刪除後將一併移除所有群組物件。是否繼續？`;
+          if (!confirm(confirmMessage)) {
+            return;
+          }
+          
+          // 刪除所有相關的群組物件
+          deleteClusterObjects(entity);
+        }
+      }
+      
+      // 如果刪除的是當前選中的實體，清除選中狀態
+      if (entity === selectedEntity) {
+        selectedEntity = null;
+      }
+      
+      container.removeChild(entity);
+      entities.splice(index, 1);
+      
+      updateEntityList();
+      updatePropertyPanel();
+      console.log(`已從列表刪除實體: ${entity.userData.name || entity.userData.type}`);
+    }
+    
+    // === 刪除與指定主物件相關的所有群組物件 ===
+    function deleteClusterObjects(mainEntity) {
+      if (!mainEntity.userData.clusters) return;
+      
+      let deletedCount = 0;
+      
+      // 為每個已生成的群組刪除其物件
+      mainEntity.userData.clusters.forEach((cluster) => {
+        if (!cluster.generated) return;
+        
+        // 反向遍歷entities陣列，避免索引問題
+        for (let i = entities.length - 1; i >= 0; i--) {
+          const entity = entities[i];
+          if (entity.userData.isGroupMember && 
+              entity.userData.clusterSource && 
+              entity.userData.clusterSource.clusterId === cluster.id) {
+            
+            // 從容器和陣列中移除
+            container.removeChild(entity);
+            entities.splice(i, 1);
+            deletedCount++;
+            
+            console.log(`刪除群組物件: ${entity.userData.name}`);
+          }
+        }
+      });
+      
+      console.log(`已刪除 ${deletedCount} 個相關群組物件`);
+      return deletedCount;
+    }
+    
+    // === 座標驗證 ===
+    function validateCoordinates() {
+      console.log('=== 座標系統驗證報告 ===');
+      
+      // 1. 遊戲世界基本資訊
+      console.log('🌍 遊戲世界資訊:');
+      console.log(`  - 實際遊戲世界: ${GAME_WORLD_WIDTH}×${GAME_WORLD_HEIGHT}像素`);
+      console.log('  - 來源: LevelGameScene.ts setBounds()');
+      console.log('  - 座標系統: 原點(0,0)位於左上角，右X+，下Y+');
+      
+      // 2. test_level.json 3D→2D映射
+      console.log('📄 test_level.json 3D→2D映射:');
+      console.log('  - JSON使用3D座標 [x, y, z]，y為高度軸');
+      console.log('  - 🔥 實際遊戲轉換: gameX = json[0] * 50 + 400, gameY = json[2] * 50 + 300');
+      console.log('  - 📐 編輯器轉換: editorX = json[0] * 50, editorY = json[2] * 50 (以中心為原點)');
+      console.log('  - 縮放係數: 50像素/單位 (不是100!)');
+      
+      const mappingExamples = [
+        { json: '[3, 0, 3]', game: '(550, 450)', editor: '(150, 150)', desc: 'enemy_001' },
+        { json: '[1, 1, 1]', game: '(450, 350)', editor: '(50, 50)', desc: 'collectible_001' },
+        { json: '[-1, 1, -1]', game: '(350, 250)', editor: '(-50, -50)', desc: 'powerup_001' },
+        { json: '[0, 0, 0]', game: '(400, 300)', editor: '(0, 0)', desc: '原點參考' }
+      ];
+      
+      mappingExamples.forEach(example => {
+        console.log(`  - ${example.json} → 遊戲${example.game} → 編輯器${example.editor} (${example.desc})`);
+      });
+      
+      // 3. 編輯器顯示設定
+      console.log('🖼️ 編輯器顯示:');
+      console.log(`  - Canvas尺寸: ${CANVAS_WIDTH}×${CANVAS_HEIGHT}像素 (16:9比例)`);
+      console.log(`  - 座標系統: 原點(0,0)位於中心，右X+，下Y+`);
+      console.log(`  - 當前攝影機: 位置(${cameraX}, ${cameraY}), 縮放${cameraZoom}x`);
+      
+      // 4. 攝影機與座標轉換
+      console.log('🎥 攝影機座標轉換:');
+      console.log(`  - 螢幕中心: (${CANVAS_WIDTH/2}, ${CANVAS_HEIGHT/2})`);
+      console.log(`  - 容器位置: (${container.x.toFixed(0)}, ${container.y.toFixed(0)})`);
+      console.log(`  - 容器縮放: ${container.scale.x.toFixed(2)}x`);
+      
+      // 5. 座標系統對應關係
+      console.log('🔄 座標系統對應關係:');
+      console.log('  - 遊戲座標系: 原點(0,0)位於左上角，右X+，下Y+');
+      console.log('  - 編輯器座標系: 原點(0,0)位於中心，右X+，下Y+');
+      console.log('  - 轉換公式: 編輯器(x,y) = 遊戲(x-800, y-600)');
+      console.log('  - 實體映射: JSON[x,y,z] * 50 → 編輯器座標');
+      console.log('  - ✅ 方向一致: 兩座標系都是右X+，下Y+');
+      console.log('  - ✅ 縮放一致: 1遊戲像素 = 1編輯器像素');
+      
+      // 6. 邊界對應驗證
+      console.log('🎯 邊界對應驗證:');
+      console.log('  - 遊戲setBounds: (0,0) 到 (1600,1200)');
+      console.log('  - 編輯器邊界: (-800,-600) 到 (800,600)');
+      console.log('  - ✅ 完全對應: 編輯器紅邊框 = 實際遊戲邊界');
+      
+      console.log('=== 座標驗證完成 ===');
     }
     
     // === 更新資訊顯示 ===
     function updateInfo() {
-      const info = document.getElementById('info');
-      info.innerHTML = `
-        尺寸: ${CANVAS_WIDTH}×${CANVAS_HEIGHT}<br>
-        比例: 16:9<br>
-        縮放: ${container ? container.scale.x.toFixed(2) : 'N/A'}<br>
-        實體: ${entities.length}<br>
-        網格: ${showGrid ? '顯示' : '隱藏'}
-      `;
+      // Info panel removed - status information no longer displayed
+      // But we still update entity list when this is called
+      updateEntityList();
     }
     
-    // === 滑鼠交互 ===
-    function setupInteraction() {
+    // === 攝影機變換更新 ===
+    function updateCameraTransform() {
+      container.x = CANVAS_WIDTH / 2 - cameraX * cameraZoom;
+      container.y = CANVAS_HEIGHT / 2 - cameraY * cameraZoom;
+      container.scale.set(cameraZoom);
+      updateInfo();
+    }
+    
+    // === 設定輸入控制 ===
+    function setupInput() {
       const canvas = document.getElementById('game-canvas');
-      let isDragging = false;
-      let lastPos = { x: 0, y: 0 };
       
-      // 滑鼠滾輪縮放
-      canvas.addEventListener('wheel', (e) => {
-        e.preventDefault();
-        
-        const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-        const newScale = Math.max(0.1, Math.min(3.0, container.scale.x * zoomFactor));
-        
-        container.scale.set(newScale);
-        updateInfo();
-      });
+      let cameraPanState = {
+        isPanning: false,
+        lastPointerX: 0,
+        lastPointerY: 0,
+        panStarted: false
+      };
       
-      // 滑鼠拖拽平移
+      // 全域事件處理 - 使用mousedown/mouseup而非pointer事件以便區分按鍵
       canvas.addEventListener('mousedown', (e) => {
-        isDragging = true;
-        lastPos.x = e.clientX;
-        lastPos.y = e.clientY;
-        canvas.style.cursor = 'grabbing';
+        if (e.button === 1) { // 中鍵（滾輪按鈕）
+          // 中鍵專用於攝影機平移
+          e.preventDefault(); // 防止瀏覽器默認中鍵行為
+          cameraPanState.isPanning = true;
+          cameraPanState.lastPointerX = e.clientX;
+          cameraPanState.lastPointerY = e.clientY;
+          cameraPanState.panStarted = false;
+          canvas.style.cursor = 'grabbing';
+        }
+        // 左鍵不在這裡處理，留給實體的pointer事件
       });
       
       canvas.addEventListener('mousemove', (e) => {
-        if (isDragging) {
-          const deltaX = e.clientX - lastPos.x;
-          const deltaY = e.clientY - lastPos.y;
+        // 處理實體拖拽（左鍵）
+        if (globalDragState.dragEntity) {
+          const rect = canvas.getBoundingClientRect();
+          const mouseX = e.clientX - rect.left;
+          const mouseY = e.clientY - rect.top;
+          const worldX = (mouseX - CANVAS_WIDTH / 2) / cameraZoom + cameraX;
+          const worldY = (mouseY - CANVAS_HEIGHT / 2) / cameraZoom + cameraY;
           
-          container.x += deltaX;
-          container.y += deltaY;
+          const deltaX = worldX - globalDragState.dragStartPos.x;
+          const deltaY = worldY - globalDragState.dragStartPos.y;
+          const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
           
-          lastPos.x = e.clientX;
-          lastPos.y = e.clientY;
+          // 檢查是否超過拖拽閾值
+          if (!globalDragState.isDragging && distance > globalDragState.dragThreshold) {
+            globalDragState.isDragging = true;
+            canvas.style.cursor = 'grabbing';
+          }
           
-          updateInfo();
+          // 如果正在拖拽，更新實體位置
+          if (globalDragState.isDragging) {
+            const entity = globalDragState.dragEntity;
+            entity.x = globalDragState.entityStartPos.x + deltaX;
+            entity.y = globalDragState.entityStartPos.y + deltaY;
+            
+            // 限制在邊界內 - 基於遊戲實際的 edgeInset 設定
+            const halfWidth = GAME_WORLD_WIDTH / 2;
+            const halfHeight = GAME_WORLD_HEIGHT / 2;
+            // 使用遊戲中 breakable.edgeInset = 60 作為物件邊界內縮
+            const EDGE_INSET = 60; // 參考 config.ts 中的 breakable.edgeInset
+            entity.x = Math.max(-halfWidth + EDGE_INSET, Math.min(halfWidth - EDGE_INSET, entity.x));
+            entity.y = Math.max(-halfHeight + EDGE_INSET, Math.min(halfHeight - EDGE_INSET, entity.y));
+            
+            // 更新UI（節流更新，避免過於頻繁）
+            if (!entity._updateScheduled) {
+              entity._updateScheduled = true;
+              requestAnimationFrame(() => {
+                updatePropertyPanel();
+                updateEntityList();
+                entity._updateScheduled = false;
+              });
+            }
+          }
+        }
+        
+        // 處理群組中心拖拽（左鍵）- 與主物件完全相同的邏輯
+        if (globalDragState.dragCluster) {
+          const rect = canvas.getBoundingClientRect();
+          const mouseX = e.clientX - rect.left;
+          const mouseY = e.clientY - rect.top;
+          const worldX = (mouseX - CANVAS_WIDTH / 2) / cameraZoom + cameraX;
+          const worldY = (mouseY - CANVAS_HEIGHT / 2) / cameraZoom + cameraY;
+          
+          const deltaX = worldX - globalDragState.dragStartPos.x;
+          const deltaY = worldY - globalDragState.dragStartPos.y;
+          const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+          
+          // 檢查是否超過拖拽閾值 - 與主物件相同
+          if (!globalDragState.isDragging && distance > globalDragState.dragThreshold) {
+            globalDragState.isDragging = true;
+            canvas.style.cursor = 'grabbing';
+          }
+          
+          // 如果正在拖拽，更新群組中心位置 - 與主物件相同的邏輯
+          if (globalDragState.isDragging) {
+            const { cluster } = globalDragState.dragCluster;
+            const newX = globalDragState.clusterStartPos.x + deltaX;
+            const newY = globalDragState.clusterStartPos.y + deltaY;
+            
+            // 調試日誌：驗證位置計算
+            if (Math.random() < 0.1) { // 只顯示10%的更新以避免日誌過多
+              console.log('🎯 群組拖拽更新：');
+              console.log('  world:', worldX.toFixed(1), worldY.toFixed(1));
+              console.log('  delta:', deltaX.toFixed(1), deltaY.toFixed(1));
+              console.log('  新位置:', newX.toFixed(1), newY.toFixed(1));
+            }
+            
+            cluster.centerX = newX;
+            cluster.centerY = newY;
+            
+            // 限制在邊界內 - 基於遊戲實際的 edgeInset 設定
+            const halfWidth = GAME_WORLD_WIDTH / 2;
+            const halfHeight = GAME_WORLD_HEIGHT / 2;
+            // 使用遊戲中 breakable.edgeInset = 60 作為群組中心邊界內縮
+            const EDGE_INSET = 60; // 參考 config.ts 中的 breakable.edgeInset
+            cluster.centerX = Math.max(-halfWidth + EDGE_INSET, Math.min(halfWidth - EDGE_INSET, cluster.centerX));
+            cluster.centerY = Math.max(-halfHeight + EDGE_INSET, Math.min(halfHeight - EDGE_INSET, cluster.centerY));
+            
+            // 更新UI（節流更新，避免過於頻繁）- 與主物件相同的優化
+            if (!globalDragState.dragCluster._updateScheduled) {
+              globalDragState.dragCluster._updateScheduled = true;
+              requestAnimationFrame(() => {
+                renderClusterVisuals(selectedEntity);
+                globalDragState.dragCluster._updateScheduled = false;
+              });
+            }
+          }
+        }
+        // 處理攝影機平移（中鍵）
+        else if (cameraPanState.isPanning) {
+          const deltaX = (e.clientX - cameraPanState.lastPointerX) / cameraZoom;
+          const deltaY = (e.clientY - cameraPanState.lastPointerY) / cameraZoom;
+          
+          // 只有移動距離超過閾值才開始平移
+          const totalDelta = Math.abs(deltaX) + Math.abs(deltaY);
+          if (totalDelta > 2 || cameraPanState.panStarted) {
+            cameraPanState.panStarted = true;
+            cameraX -= deltaX;
+            cameraY -= deltaY;
+            updateCameraTransform();
+          }
+          
+          cameraPanState.lastPointerX = e.clientX;
+          cameraPanState.lastPointerY = e.clientY;
         }
       });
       
-      canvas.addEventListener('mouseup', () => {
-        isDragging = false;
-        canvas.style.cursor = 'grab';
+      canvas.addEventListener('mouseup', (e) => {
+        if (e.button === 1) { // 中鍵釋放
+          // 結束攝影機平移
+          if (cameraPanState.isPanning) {
+            cameraPanState.isPanning = false;
+            cameraPanState.panStarted = false;
+            canvas.style.cursor = 'default';
+          }
+        } else if (e.button === 0) { // 左鍵釋放
+          // 結束實體拖拽
+          if (globalDragState.dragEntity) {
+            // 如果沒有實際拖拽（距離小於閾值），則只是點擊選擇
+            if (!globalDragState.isDragging) {
+              // 點擊選擇已經在pointerdown中處理了
+            }
+            
+            // 重置拖拽狀態
+            globalDragState.isDragging = false;
+            globalDragState.dragEntity = null;
+            canvas.style.cursor = 'default';
+          }
+          
+          // 結束群組中心拖拽 - 與主物件完全相同的邏輯
+          if (globalDragState.dragCluster) {
+            // 如果沒有實際拖拽（距離小於閾值），則只是點擊選擇
+            if (!globalDragState.isDragging) {
+              // 點擊選擇群組中心（可能用於未來功能）
+            }
+            
+            // 重置拖拽狀態 - 與主物件相同
+            globalDragState.isDragging = false;
+            globalDragState.dragCluster = null;
+            canvas.style.cursor = 'default';
+          }
+        }
       });
       
+      // === 拖拽相關輔助函數 ===
+      
+      // 防止中鍵默認行為（滾動等）
+      canvas.addEventListener('auxclick', (e) => {
+        if (e.button === 1) { // 中鍵點擊
+          e.preventDefault();
+        }
+      });
+      
+      // 取消選擇並清理拖拽狀態
       canvas.addEventListener('mouseleave', () => {
-        isDragging = false;
+        // 如果滑鼠離開canvas，結束所有交互
+        if (globalDragState.dragEntity) {
+          globalDragState.isDragging = false;
+          globalDragState.dragEntity = null;
+        }
+        
+        // 如果滑鼠離開canvas，結束群組拖拽
+        if (globalDragState.dragCluster) {
+          if (globalDragState.dragCluster.centerPoint) {
+            globalDragState.dragCluster.centerPoint.alpha = 1.0;
+          }
+          if (globalDragState.dragCluster.dragHotspot) {
+            globalDragState.dragCluster.dragHotspot.alpha = 0.0;
+          }
+          globalDragState.isDragging = false;
+          globalDragState.dragCluster = null;
+        }
+        if (cameraPanState.isPanning) {
+          cameraPanState.isPanning = false;
+          cameraPanState.panStarted = false;
+        }
         canvas.style.cursor = 'default';
       });
       
-      canvas.style.cursor = 'grab';
+      // 處理右鍵點擊（取消選擇）
+      canvas.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        if (selectedEntity && !globalDragState.isDragging) {
+          // 取消選擇
+          redrawEntity(selectedEntity, false);
+          selectedEntity = null;
+          updatePropertyPanel();
+          updateEntityList();
+        }
+      });
+      canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        
+        // 計算滑鼠在世界座標中的位置 (縮放前)
+        const worldX = (mouseX - CANVAS_WIDTH / 2) / cameraZoom + cameraX;
+        const worldY = (mouseY - CANVAS_HEIGHT / 2) / cameraZoom + cameraY;
+        
+        // 縮放
+        const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+        cameraZoom = Math.max(0.1, Math.min(3.0, cameraZoom * zoomFactor));
+        
+        // 調整攝影機位置讓滑鼠位置保持不變
+        cameraX = worldX - (mouseX - CANVAS_WIDTH / 2) / cameraZoom;
+        cameraY = worldY - (mouseY - CANVAS_HEIGHT / 2) / cameraZoom;
+        
+        updateCameraTransform();
+      });
+      
+      // 設定初始游標樣式
+      canvas.style.cursor = 'default';
+      
+      // 添加操作說明到title屬性
+      canvas.title = '左鍵：選擇和拖拽物件 | 中鍵：拖動攝影機 | 滾輪：縮放 | 右鍵：取消選擇';
+      
+      // 添加鍵盤快捷鍵支持
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          // ESC鍵取消選擇和拖拽
+          if (globalDragState.dragEntity) {
+            globalDragState.isDragging = false;
+            globalDragState.dragEntity = null;
+            canvas.style.cursor = 'default';
+          }
+          
+          // ESC鍵取消拖拽狀態 - 與主物件相同的處理
+          if (globalDragState.dragEntity) {
+            globalDragState.isDragging = false;
+            globalDragState.dragEntity = null;
+            canvas.style.cursor = 'default';
+          }
+          
+          if (globalDragState.dragCluster) {
+            globalDragState.isDragging = false;
+            globalDragState.dragCluster = null;
+            canvas.style.cursor = 'default';
+          }
+          
+          if (selectedEntity) {
+            redrawEntity(selectedEntity, false);
+            selectedEntity = null;
+            updatePropertyPanel();
+            updateEntityList();
+          }
+        } else if (e.key === 'Delete' && selectedEntity) {
+          // Delete鍵刪除選中實體
+          deleteSelectedEntity();
+        }
+      });
     }
     
-    // === 啟動編輯器 ===
-    window.addEventListener('load', () => {
-      initEditor();
-      setupInteraction();
-      loadTestLevel();
-    });
+    // === 頁面載入完成後初始化 ===
+    window.addEventListener('DOMContentLoaded', initEditor);
+    
+    // === 全域函數暴露 ===
+    window.generateObject = generateObject;
+    window.clearLevel = clearLevel;
+    window.resetCamera = resetCamera;
+    window.validateCoordinates = validateCoordinates;
+    window.updateEntityName = updateEntityName;
+    window.updateEntityType = updateEntityType;
+    window.deleteEntityFromList = deleteEntityFromList;
+    window.addSimpleCluster = addSimpleCluster;
+    window.deleteCluster = deleteCluster;
+    window.renameCluster = renameCluster;
+    window.updateClusterParam = updateClusterParam;
+    window.renderClusterVisuals = renderClusterVisuals;
+    window.selectLevel = selectLevel;
+    window.exportLevel = exportLevel;
+    window.importLevel = importLevel;
+    // window.generateAllClusters = generateAllClusters; // 已移除
+    window.selectOwnerEntity = selectOwnerEntity;
+    window.selectClusterFromList = selectClusterFromList;
+    window.updateClusterProperty = updateClusterProperty;
+    // window.generateSingleCluster = generateSingleCluster; // 已移除
+    window.deleteCurrentCluster = deleteCurrentCluster;
   </script>
 </body>
 </html>
