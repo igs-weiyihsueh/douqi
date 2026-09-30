@@ -112,6 +112,74 @@ git checkout deploy-pure
 git push origin deploy-pure  # 部署到線上
 ```
 
+## 🚀 **完整開發部署工作流程**
+
+### **第一階段：開發與測試**
+```bash
+# 1. 確保在正確的分支
+git checkout deploy_test
+git pull origin deploy_test
+
+# 2. 開發新功能
+# (編輯程式碼...)
+
+# 3. 建置和測試
+npm run build
+npm run typecheck  # 型別檢查
+
+# 4. 檢查建置產物
+ls -la dist/  # 確認檔案生成
+# 檢查主要檔案：index.html, assets/*.js
+
+# 5. 本地驗證
+# 開啟 dist/index.html 或使用 npm run preview
+
+# 6. 提交變更
+git add .
+git commit -m "🎮 新功能: [描述]"
+git push origin deploy_test
+```
+
+### **第二階段：生產部署**
+```bash
+# 1. 切換到部署分支
+git checkout deploy-pure
+
+# 2. 從 deploy_test 複製完整建置產物
+git checkout deploy_test -- assets/  # 複製 assets 目錄
+cp index.html ../temp_index.html && git checkout deploy_test -- index.html || cp ../temp_index.html index.html
+
+# 3. 檢查部署檔案完整性
+ls -la  # 確認: index.html, assets/, editor/, scenes/
+du -sh assets/*.js  # 檢查JS檔案大小 (應該約1.7MB)
+
+# 4. 提交並部署
+git add .
+git commit -m "🚀 部署: [版本描述]"
+git push origin deploy-pure  # 觸發 GitHub Pages 自動部署
+
+# 5. 部署後驗證 (約2-5分鐘後)
+# 開啟 https://igs-weiyihsueh.github.io/douqi/
+# 檢查遊戲載入、場景切換、功能正常
+```
+
+### **第三階段：故障排除**
+```bash
+# 回滾到上一個工作版本
+git checkout deploy-pure
+git log --oneline -5  # 查看最近提交
+git reset --hard [上一個工作的commit]  # 回滾
+git push --force origin deploy-pure  # 強制推送回滾
+
+# 緊急修復流程
+git checkout deploy_test
+# 快速修復...
+npm run build
+git add . && git commit -m "🔧 緊急修復"
+git push origin deploy_test
+# 然後重複第二階段部署流程
+```
+
 ### **強制啟動檢查**
 
 每次啟動/重啟時**必須**：

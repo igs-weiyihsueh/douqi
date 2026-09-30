@@ -106,20 +106,117 @@ pnpm dev
 - **開發**: deploy_test 分支（完整專案）
 - **生產**: deploy-pure 分支（純建置產物，自動部署到 GitHub Pages）
 
-### 部署步驟
+## 完整開發部署流程
+
+### 📝 開發階段
+
 ```bash
-# 1. 在 deploy_test 分支開發和測試
-git checkout deploy_test
-# ... 開發工作 ...
-npm run build
+# 1. 環境準備
+git checkout deploy_test           # 切換到主開發分支
+git pull origin deploy_test        # 同步最新代碼
+npm install                        # 確保依賴已安裝
 
-# 2. 將建置產物同步到 deploy-pure 分支
-git checkout deploy-pure
-# 複製 deploy_test 分支的建置產物到 deploy-pure
-# （具體同步流程由團隊統一執行）
+# 2. 開發新功能
+# (編輯源碼...)
 
-# 3. 推送 deploy-pure 觸發自動部署
-git push origin deploy-pure
+# 3. 建置和驗證
+npm run typecheck                  # 型別檢查
+npm run build                      # 建置專案
+
+# 4. 檢查建置產物
+ls -la dist/                       # 確認檔案生成
+# 必須包含: index.html, assets/main-*.js, editor/, scenes/
+du -sh dist/assets/*.js            # 檢查JS檔案大小 (約1.7MB)
+
+# 5. 本地測試
+npm run preview                    # 預覽建置產物
+# 或直接開啟 dist/index.html 檢查功能
+
+# 6. 提交代碼
+git add .
+git commit -m "🎮 [功能描述]"
+git push origin deploy_test
 ```
 
-**注意**: deploy-pure 分支只包含建置產物，不包含源碼。所有開發都在 deploy_test 進行。
+### 🚀 部署階段
+
+```bash
+# 1. 準備部署
+git checkout deploy-pure           # 切換到部署分支
+git status                         # 確認乾淨的工作區
+
+# 2. 從開發分支複製建置產物
+# 方法A: 複製特定檔案
+git checkout deploy_test -- assets/
+git checkout deploy_test -- index.html
+
+# 方法B: 重新建置 (如果需要)
+git checkout deploy_test
+npm run build
+git checkout deploy-pure
+cp -r ../path/to/deploy_test/dist/* .
+
+# 3. 驗證部署內容
+ls -la                             # 檢查檔案結構
+# 應包含: index.html, assets/, editor/, scenes/
+file assets/*.js                   # 檢查JS檔案類型
+wc -c assets/*.js                  # 檢查檔案大小
+
+# 4. 執行部署
+git add .
+git commit -m "🚀 部署 v[日期] - [更新內容]"
+git push origin deploy-pure
+
+# 5. 部署驗證
+echo "部署已觸發，GitHub Pages 更新需要2-5分鐘"
+echo "請在約5分鐘後檢查: https://igs-weiyihsueh.github.io/douqi/"
+```
+
+### 🔧 故障排除
+
+```bash
+# 部署回滾
+git checkout deploy-pure
+git log --oneline -10              # 查看歷史提交
+git reset --hard [上個工作版本]    # 回滾到指定版本
+git push --force origin deploy-pure
+
+# 檢查部署狀態
+curl -I https://igs-weiyihsueh.github.io/douqi/
+# 檢查HTTP狀態碼和響應
+
+# 清除GitHub Pages快取
+# 在GitHub repo -> Settings -> Pages -> 重新選擇 deploy-pure 分支
+
+# 緊急熱修復流程
+git checkout deploy_test
+# 快速修復關鍵問題...
+npm run build
+git add . && git commit -m "🚨 緊急修復: [問題描述]"
+git push origin deploy_test
+# 立即執行上述部署流程
+```
+
+### 📋 部署檢查清單
+
+**建置前檢查**：
+- [ ] 在 deploy_test 分支
+- [ ] 代碼已提交並推送
+- [ ] `npm run typecheck` 無錯誤
+- [ ] `npm run build` 建置成功
+
+**建置產物檢查**：
+- [ ] `dist/index.html` 存在且大小正常 (~5KB)
+- [ ] `dist/assets/main-*.js` 存在且大小約1.7MB
+- [ ] `dist/editor/` 和 `dist/scenes/` 目錄存在
+
+**部署前檢查**：
+- [ ] 在 deploy-pure 分支
+- [ ] 建置產物已正確複製
+- [ ] 本地預覽功能正常
+
+**部署後檢查**：
+- [ ] GitHub Actions 部署成功
+- [ ] 線上版本可以訪問
+- [ ] 遊戲載入正常，無JavaScript錯誤
+- [ ] 主要功能（關卡、UI、操作）正常工作
