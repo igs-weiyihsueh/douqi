@@ -1,10 +1,17 @@
 # 地球宿舍 AI 團隊配置
 
 ## 🚀 **專案概況**
-- **專案名稱**：鬥氣割草 (Douqi)
+- **專案名稱**：3C大亂鬥 (3C鬥氣割草 H5版)
 - **類型**：H5 網頁遊戲 (TypeScript + Phaser + Vite)
 - **工作目錄**：`/mnt/d/3C/douqi`
-- **版本控制**：Git + GitHub Pages 部署 (stable-deploy-0929-1603)
+- **版本控制**：Git + GitHub Pages 部署
+
+## 📋 **分支架構**
+- **deploy_test** = 主開發分支（完整功能 + 專案文檔）
+- **deploy-pure** = 生產部署分支（GitHub Pages 用，純建置產物）
+- **master** = 暫時廢棄（存在系統性問題）
+
+**當前線上版本**: https://igs-weiyihsueh.github.io/douqi/ (deploy-pure 分支)
 
 ## 👥 **團隊成員**
 
@@ -75,21 +82,45 @@ npm run lint
 ## 🎯 **專案重點**
 
 ### **當前目標**
-1. **SpinningTop 編輯器套件移植** - 6個編輯器逐步移植
-2. **完善遊戲核心功能** - 基於 Phaser 引擎
-3. **建立 CI/CD 流程** - GitHub Pages 自動部署
+1. **H5 遊戲系統完善** - 基於 Phaser 引擎的完整遊戲功能
+2. **關卡與UI系統** - 關卡選擇、背景系統、遊戲循環
+3. **穩定部署流程** - deploy_test → deploy-pure 同步機制
 
-### **技術棧**
-- **前端**：TypeScript 5.4+ + Phaser + Vite 5.2+
-- **編輯器**：React 19 + Three.js 0.182 (移植套件)
-- **部署**：GitHub Pages (stable-deploy-0929-1603 分支)
+## 🛠️ **開發工作流程**
 
-### **已完成**
-- ✅ 專案架構建立
-- ✅ 遊戲系統移植 (完整功能)
-- ✅ Git 部署流程測試 (https://igs-weiyihsueh.github.io/douqi/)
-- ✅ 進度追蹤機制 (CLAUDE.md + PROGRESS.md)
-- ✅ 12個 AI 技能部署
+### **主要分支使用**
+1. **deploy_test** - 主開發分支
+   - 包含完整源碼和專案文檔
+   - 所有開發工作都在此進行
+   - 功能測試和驗證
+
+2. **deploy-pure** - 生產部署分支
+   - 只包含建置產物 (index.html + assets/)
+   - 用於 GitHub Pages 部署
+   - 從 deploy_test 同步更新
+
+### **開發流程**
+```bash
+# 1. 在 deploy_test 分支開發
+git checkout deploy_test
+# 開發新功能...
+npm run build  # 建置測試
+
+# 2. 功能完成後同步到 deploy-pure
+git checkout deploy-pure
+# 複製 deploy_test 的建置產物...
+git push origin deploy-pure  # 部署到線上
+```
+
+### **強制啟動檢查**
+
+每次啟動/重啟時**必須**：
+
+1. **讀取本檔案** - 確認最新規範和角色定義
+2. **檢查 PROGRESS.md** - 了解當前專案狀態
+3. **確認工作目錄** - 確保在 `/mnt/d/3C/douqi`
+4. **切換到 deploy_test** - 主開發分支
+5. **遵守安全規範** - 絕不執行禁止的阻塞命令
 
 ## 📞 **協作規範**
 

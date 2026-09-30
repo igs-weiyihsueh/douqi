@@ -1,7 +1,20 @@
-# 鬥氣割草 (Douqi Cutgrass)
+# 3C大亂鬥 H5
 
-實驗性 H5 割草遊戲 MVP。俯視 2D 像素、一鍵操作、無盡刷分。
-技術棧：**Phaser 3 + TypeScript + Vite**。
+《3C大亂鬥》的 H5 重寫版本 — 由原 Unity 專案改用 **Phaser 3 + TypeScript + Vite** 開發。
+
+一款兒童街機抽獎／兌換機的 2D 動作遊戲。
+
+## 🌐 線上版本
+
+**正式版**: https://igs-weiyihsueh.github.io/douqi/
+
+## 📋 分支架構
+
+- **deploy_test** = 主開發分支（完整源碼 + 專案文檔）
+- **deploy-pure** = 生產部署分支（GitHub Pages 用，純建置產物）  
+- **master** = 暫時廢棄（存在系統性問題）
+
+**所有開發工作都在 deploy_test 分支進行**
 
 ## 玩法
 
@@ -13,67 +26,100 @@
 - 怪碰到角色會扣血；血量歸零 → 結算畫面（擊殺數 + 存活時間），可重新開始。
 - 敵人從畫面四周持續生成、隨時間變密變多。
 
-## 如何啟動
+## 開發指令
+
+**⚠️ 重要：必須在 deploy_test 分支進行所有開發工作**
 
 ```bash
-npm install     # 安裝依賴
-# ⚠️ 注意：請使用 npm run build 而非 npm run dev
-# npm run dev 會啟動持續運行的開發服務器，導致 AgEnD 實例卡住
-npm run build   # 建置專案，然後可以透過靜態檔案服務查看
+git checkout deploy_test  # 切換到主開發分支
+npm install               # 安裝相依套件
+npm run build            # 型別檢查 + 產出 dist/
+npm run preview          # 預覽 build 產物
+npm run typecheck        # 只跑 tsc 型別檢查
 ```
 
-如需開發預覽，建議使用外部工具（如 Live Server 擴展）來服務建置後的檔案。
-
-其他指令：
-
+**⚠️ 禁止執行的命令**（會導致實例卡住）：
 ```bash
-npm run build   # 型別檢查 + 產生正式版到 dist/
-npm run preview # 預覽正式版
+# ❌ 這些命令會啟動持續運行的開發服務器
+npm run dev
+npm start
+vite dev
+yarn dev
+pnpm dev
 ```
+
+**正確的開發流程**：
+1. 修改程式碼
+2. `npm run build` 建置
+3. 開啟 `dist/` 目錄中的檔案預覽
+4. 或使用 `npm run preview` 預覽建置產物
 
 ## 專案結構
 
 ```
-實驗H5/
+/mnt/d/3C/douqi/  (deploy_test 分支)
 ├── index.html              # HTML 進入點
-├── package.json            # 依賴與指令
+├── package.json            # 相依套件與指令
 ├── tsconfig.json           # TypeScript 設定
 ├── vite.config.ts          # Vite 建置設定
+├── CLAUDE.md               # 團隊協作規範
+├── PROGRESS.md             # 開發進度記錄
+├── README.md               # 專案說明（本檔案）
+├── .kiro/                  # AgEnD 工具設定
+├── public/                 # 靜態資源（直接複製到 dist）
+│   └── assets/             # 遊戲資源
 └── src/
-    ├── main.ts             # Phaser 遊戲初始化、註冊場景
-    ├── config.ts           # ★ 所有可調數值集中於此
-    ├── objects/
-    │   ├── Player.ts       # 玩家角色
-    │   └── Enemy.ts        # 敵人
-    └── scenes/
-        ├── BootScene.ts    # 程序化產生占位像素貼圖
-        ├── GameScene.ts    # 核心玩法循環
-        ├── UIScene.ts      # HUD + 攻擊按鈕
-        └── GameOverScene.ts# 結算 / 重新開始
+    ├── main.ts             # 遊戲進入點（建立 Phaser.Game）
+    ├── config/             # 全域設定常數
+    ├── scenes/             # Phaser 場景
+    ├── systems/            # 遊戲系統邏輯
+    └── entities/           # 遊戲實體
 ```
 
-## 調校數值
+## 技術版本
 
-所有可調參數集中在 `src/config.ts`，包含：鬥氣量、傷害、血量、衝刺速度、
-爆發段數 / 傷害 / 範圍、敵人速度 / 血量 / 接觸傷害、生成速率與難度曲線、
-打擊感（震動 / 閃白 / 傷害數字）等。改完存檔即熱更新。
+| 項目       | 版本      |
+| ---------- | --------- |
+| Phaser     | ^3.90.0   |
+| TypeScript | ^5.6.3    |
+| Vite       | ^6.0.3    |
+| Node       | v22 (建議) |
 
-## 美術
+## 開發規範
 
-目前所有貼圖皆由 `BootScene` 以程式產生（色塊 / 帶描邊圓形），無外部素材檔，
-之後可直接替換成正式像素素材。
+詳細的團隊協作規範請參考 [`CLAUDE.md`](CLAUDE.md)，包含：
 
-## 部署
+- 🛡️ **安全規範** - 禁止執行的阻塞性命令
+- 👥 **團隊分工** - 各成員角色與責任
+- 🎯 **專案目標** - 當前開發重點
+- 📞 **協作流程** - 任務分派與溝通原則
 
-- **線上版本**: https://igs-weiyihsueh.github.io/douqi/
-- **部署分支**: `stable-deploy-0929-1603`（GitHub Pages 自動讀取）
-- **開發分支**: `master`（主要開發和推送分支）
+## 遊戲設計
 
-### 部署流程
+這是一款從 Unity 移植到 H5 的 2D 動作遊戲，設計目標是兒童街機抽獎/兌換機遊戲。
+
+具體的遊戲機制和數值設定請參考 `src/config/` 目錄中的設定檔案。
+
+## 部署流程
+
+### 當前部署架構
+- **開發**: deploy_test 分支（完整專案）
+- **生產**: deploy-pure 分支（純建置產物，自動部署到 GitHub Pages）
+
+### 部署步驟
 ```bash
-npm run build                    # 構建
-git checkout stable-deploy-0929-1603  # 切換到部署分支
-cp -r dist/* .                  # 複製構建產物
-git add . && git commit -m "🚀 部署"
-git push origin stable-deploy-0929-1603  # 推送部署
+# 1. 在 deploy_test 分支開發和測試
+git checkout deploy_test
+# ... 開發工作 ...
+npm run build
+
+# 2. 將建置產物同步到 deploy-pure 分支
+git checkout deploy-pure
+# 複製 deploy_test 分支的建置產物到 deploy-pure
+# （具體同步流程由團隊統一執行）
+
+# 3. 推送 deploy-pure 觸發自動部署
+git push origin deploy-pure
 ```
+
+**注意**: deploy-pure 分支只包含建置產物，不包含源碼。所有開發都在 deploy_test 進行。
