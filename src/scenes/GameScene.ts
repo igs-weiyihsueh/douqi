@@ -2989,7 +2989,8 @@ export class GameScene extends Phaser.Scene {
     const cam = this.cameras.main;
     const st = GameConfig.stage;
     cam.setBounds(slot.x, slot.y, slot.width, slot.height); // 跟隨限制在當前 slot→不會露出隔壁子區
-    cam.startFollow(this.player, true, st.followLerp, st.followLerp);
+    // 📹 用戶要求：X/Y軸分別設定，Y軸跟隨更溫和
+    cam.startFollow(this.player, true, st.followLerp, st.followLerpY);
     cam.setDeadzone(st.followDeadzoneW, st.followDeadzoneH);
   }
 

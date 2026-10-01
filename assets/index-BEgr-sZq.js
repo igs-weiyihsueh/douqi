@@ -146585,9 +146585,13 @@ const GameConfig = {
     sceneMargin: 190,
     /** 鏡頭跟隨的 deadzone(緩衝區)寬高——玩家在此框內鏡頭不動,超出才跟。 */
     followDeadzoneW: 360,
-    followDeadzoneH: 240,
+    followDeadzoneH: 400,
+    // 📹 用戶要求：增加Y軸死區 240→400，減少上下跟隨靈敏度
     /** 鏡頭跟隨的 lerp 平滑係數(0~1,越小越平滑) */
     followLerp: 0.08,
+    /** 📹 Y軸跟隨係數：比X軸更慢，讓上下跟隨更溫和 - 用戶要求 */
+    followLerpY: 0.04,
+    // 比followLerp(0.08)慢一半
     /** 每關 A 子區波數 */
     wavesA: 2,
     /** 每關 B 子區波數(純波次時;隨機 1~2 波) */
@@ -152341,7 +152345,7 @@ class GameScene extends Phaser.Scene {
     const cam = this.cameras.main;
     const st = GameConfig.stage;
     cam.setBounds(slot.x, slot.y, slot.width, slot.height);
-    cam.startFollow(this.player, true, st.followLerp, st.followLerp);
+    cam.startFollow(this.player, true, st.followLerp, st.followLerpY);
     cam.setDeadzone(st.followDeadzoneW, st.followDeadzoneH);
   }
   /** 停止鏡頭跟隨(切區平移/閃黑轉場前用),並把 bounds 放大到整個世界(讓 pan 能跨 slot)。 */

@@ -729,9 +729,11 @@ export const GameConfig = {
     sceneMargin: 190,
     /** 鏡頭跟隨的 deadzone(緩衝區)寬高——玩家在此框內鏡頭不動,超出才跟。 */
     followDeadzoneW: 360,
-    followDeadzoneH: 240,
+    followDeadzoneH: 400, // 📹 用戶要求：增加Y軸死區 240→400，減少上下跟隨靈敏度
     /** 鏡頭跟隨的 lerp 平滑係數(0~1,越小越平滑) */
     followLerp: 0.08,
+    /** 📹 Y軸跟隨係數：比X軸更慢，讓上下跟隨更溫和 - 用戶要求 */
+    followLerpY: 0.04, // 比followLerp(0.08)慢一半
     /** 每關 A 子區波數 */
     wavesA: 2,
     /** 每關 B 子區波數(純波次時;隨機 1~2 波) */
