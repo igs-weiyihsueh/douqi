@@ -1,9 +1,13 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
 
-// 🔧 Vite重新架構：修正entry point，專注解決4vs24模組問題
+// 🔧 Vite重新架構：修正entry point，專注解決4vs24模組問題 + 目錄分離
 export default defineConfig({
   base: './',
+  
+  // 📁 目錄分離：使用src/index.html作為入口
+  root: 'src',
+  publicDir: resolve(__dirname, 'public'),
   
   server: {
     host: true,
@@ -12,7 +16,7 @@ export default defineConfig({
 
   build: {
     target: 'es2020',
-    outDir: 'dist',
+    outDir: resolve(__dirname, 'dist'), // 📦 輸出到根目錄的dist/
     minify: false,
     sourcemap: false,  // 先關閉sourcemap避免警告
     

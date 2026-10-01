@@ -2,3 +2,7 @@ node_modules
 dist
 *.log
 .DS_Store
+
+# 📦 Build產物分離 - 這些檔案由 npm run build 自動生成到 dist/
+assets/
+index.html
