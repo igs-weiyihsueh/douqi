@@ -19,9 +19,9 @@
 - **角色**：主力開發、H5 遊戲程式開發
 - **責任**：核心功能開發、編輯器移植、技術實現
 
-### **征騎** (副手開發·槽環)
-- **角色**：副手開發、測試調試
-- **責任**：輔助開發、bug 修復、品質測試
+### **征騎** (code review specialist)
+- **角色**：代碼審查專家、品質把關
+- **責任**：CODE REVIEW、代碼品質檢查、最佳實踐指導
 
 ### **零式** (numerical designer)
 - **角色**：數值設計、遊戲平衡
@@ -101,8 +101,17 @@ npm run lint
 ### **任務流程**
 1. **異靈**：分析需求 → 分派任務
 2. **執行者**：開發實現 → 測試驗證  
-3. **征騎**：品質檢查 → bug 修復
+3. **征騎**：CODE REVIEW → 代碼品質檢查
 4. **回報**：完成狀態 → 更新進度
+
+### **開發部署流程**
+1. **開發**：在 deploy-refactor 分支修改 TypeScript 源碼
+2. **測試**：npm run build 本地驗證 (24 modules transformed)
+3. **提交**：git add + commit + push origin deploy-refactor
+4. **自動部署**：GitHub Actions 自動觸發 → build → 部署到 GitHub Pages
+5. **驗證**：檢查 https://igs-weiyihsueh.github.io/douqi/ 更新狀態
+
+**注意**：推送後 2-5 分鐘自動完成部署，無需手動干預。
 
 ### **溝通原則**
 - **直接有效**：避免冗長確認，直接執行
