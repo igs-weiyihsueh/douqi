@@ -797,9 +797,9 @@ export class UIScene extends Phaser.Scene {
     const container = this.add.container(0, 0);
     container.setDepth(this.OVERHEAD_DEPTH);
     
-    // 🎯 玩家編號牌 - 位置：(-66, -2) 相對容器中心
+    // 🎯 玩家編號牌 - 位置：(-66, -25) 最頂層
     const badgeX = -66;
-    const badgeY = -2;
+    const badgeY = -25; // ★調整到最頂層
     
     // 內圓：半徑18px，角色顏色
     const badgeColor = GameConfig.characters.colors[index];
@@ -817,9 +817,9 @@ export class UIScene extends Phaser.Scene {
       fontStyle: 'bold'
     }).setOrigin(0.5, 0.5);
 
-    // ★階段二：Credit點數顯示 - 位置：(-36, -18) 相對容器中心
+    // ★階段二：Credit點數顯示 - 位置：(-36, 5) 編號牌下方
     const creditX = -36;
-    const creditY = -18;
+    const creditY = 5; // ★編號牌下方，適當間距
     
     // Credit背景框：120×34px
     const creditBg = this.add.rectangle(creditX, creditY, 120, 34, 0x000000, 0.7)
@@ -858,9 +858,9 @@ export class UIScene extends Phaser.Scene {
       fontStyle: 'bold'
     }).setOrigin(0.5, 0.5);
 
-    // ★階段二：二段能量量條 - Credit下方
+    // ★階段二：二段能量量條 - Credit下方適當間距
     const energyX = creditX;
-    const energyY = creditY + 25;
+    const energyY = creditY + 30; // ★增加間距，避免重疊
     const energyWidth = 100;
     const energyHeight = 8;
     
