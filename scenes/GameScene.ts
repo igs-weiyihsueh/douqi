@@ -7921,6 +7921,9 @@ export class GameScene extends Phaser.Scene {
       this.createTicketParticle(actor.x, actor.y, burstConfig);
     }
     
+    // ★新增：創建明顯的閃光特效，確保用戶能看到
+    this.createBurstFlashEffect(actor.x, actor.y);
+    
     console.log(`💸 Ticket Burst! ${ticketCount} tickets flying from ${actor.index === 0 ? 'P1' : `BOT${actor.index}`} at (${actor.x}, ${actor.y})`);
     console.log(`🎯 Burst config:`, burstConfig);
   }
@@ -7964,6 +7967,7 @@ export class GameScene extends Phaser.Scene {
       .setDepth(visualConfig.DEPTH);
     
     console.log(`🎫 Creating ticket at (${x}, ${y}) with config:`, { visualConfig, config });
+    console.log(`📐 Ticket will be ${visualConfig.WIDTH}×${visualConfig.HEIGHT}px, depth=${visualConfig.DEPTH}, color=#${visualConfig.COLOR.toString(16)}`);
     
     // 隨機選擇噴發角度（弧度制）：角度範圍從配置讀取
     const angle = Phaser.Math.DegToRad(
@@ -7976,6 +7980,21 @@ export class GameScene extends Phaser.Scene {
     const vy = Math.sin(angle) * velocity;
     
     console.log(`🚀 Ticket physics: angle=${Math.round(Phaser.Math.RadToDeg(angle))}°, velocity=${velocity}, vx=${Math.round(vx)}, vy=${Math.round(vy)}`);
+    console.log(`⏱️ Ticket lifetime: ${Math.round(config.lifetime)}ms`);
+    
+    // ★新增：創建彩票生成閃爍效果，增強可見性
+    this.tweens.add({
+      targets: ticket,
+      scaleX: 1.5,
+      scaleY: 1.5,
+      alpha: 0.7,
+      duration: 100,
+      yoyo: true,
+      onComplete: () => {
+        ticket.setScale(1);
+        ticket.setAlpha(1);
+      }
+    });
     
     // 物理動畫：拋物線運動 + 自轉（改善記憶體管理）
     let currentVx = vx;
@@ -8023,6 +8042,43 @@ export class GameScene extends Phaser.Scene {
     
     // 開始物理更新循環
     updateTicket();
+  }
+  
+  /**
+   * ★階段三：創建彩票噴發閃光特效
+   * 
+   * 在彩票噴發位置創建明顯的視覺提示，確保用戶能察覺到特效觸發
+   * 即使彩票粒子因為參數問題不可見，閃光也能提供明確的視覺反饋
+   * 
+   * 特效設計：
+   * - 大型金色閃光圈：半徑60px，足夠明顯
+   * - 快速擴張動畫：200ms內從小圓擴展到大圓
+   * - 透明度漸變：從完全不透明到完全透明
+   * - 高深度層級：depth=300確保在最上層顯示
+   * 
+   * @param x 閃光中心X座標
+   * @param y 閃光中心Y座標
+   */
+  private createBurstFlashEffect(x: number, y: number): void {
+    // 創建閃光圈：金色，高深度確保可見
+    const flash = this.add.circle(x, y, 5, 0xFFD700, 0.8)
+      .setDepth(300)  // 比彩票更高的深度
+      .setStrokeStyle(3, 0xFFFFFF, 1);  // 白色邊框增加對比度
+    
+    console.log(`✨ Creating flash effect at (${x}, ${y}) with depth 300`);
+    
+    // 閃光擴張動畫：快速且明顯
+    this.tweens.add({
+      targets: flash,
+      radius: 60,      // 擴張到足夠大的半徑
+      alpha: 0,        // 透明度漸變到0
+      duration: 300,   // 300ms動畫，足夠長讓用戶看到
+      ease: 'Power2',  // 自然的擴張曲線
+      onComplete: () => {
+        flash.destroy();
+        console.log(`✨ Flash effect completed and destroyed`);
+      }
+    });
   }
 
   /**
