@@ -7905,6 +7905,8 @@ export class GameScene extends Phaser.Scene {
       )
     );
     
+    // ★場景層級驗證：暫時停用GameScene的特效創建，改用UIScene
+    /*
     // 彩票噴發的物理參數：完全從配置讀取，消除魔法數字
     const burstConfig = {
       minAngle: config.BURST_ANGLE.MIN,
@@ -7915,10 +7917,11 @@ export class GameScene extends Phaser.Scene {
       rotationSpeed: config.PHYSICS.ROTATION_SPEED,
       lifetime: config.TIMING.LIFETIME_BASE_MS + Math.random() * config.TIMING.LIFETIME_RANDOM_MS
     };
+    */
     
-    // ★方案A：極簡測試 - 創建超明顯彩票，固定位置
-    console.log(`💸 [方案A] 極簡測試：${ticketCount} tickets at FIXED CENTER (400, 300)`);
-    
+    console.log(`💸 [場景驗證] 極簡測試：${ticketCount} tickets via UIScene`);
+    /*
+    // ★GameScene特效暫時停用，改用UIScene測試
     for (let i = 0; i < ticketCount; i++) {
       // 極簡彩票：固定螢幕中心，超大尺寸，紅色，最高深度
       const ticket = this.add.rectangle(
@@ -7957,21 +7960,25 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(5, 0xFFFFFF, 1);
     
     console.log(`✨ [方案A] MASSIVE RED flash at (400, 300) depth=1001`);
+    */
     
-    this.tweens.add({
-      targets: flash,
-      radius: 100,   // 擴張到100px
-      alpha: 0,
-      duration: 2000, // 2秒動畫
-      ease: 'Linear',
-      onComplete: () => {
-        flash.destroy();
-        console.log(`✨ [方案A] Flash animation completed`);
-      }
-    });
+    // ★場景層級驗證：改為在UIScene中創建特效
+    console.log(`🔄 [場景驗證] 改為UIScene創建，避免被覆蓋問題`);
     
-    console.log(`💸 Ticket Burst! ${ticketCount} tickets flying from ${actor.index === 0 ? 'P1' : `BOT${actor.index}`} at (${actor.x}, ${actor.y})`);
-    console.log(`🎯 Burst config:`, burstConfig);
+    // 獲取UIScene引用並調用特效創建
+    const uiScene = this.scene.get('UIScene') as any;
+    if (uiScene && uiScene.spawnTicketBurstInUI) {
+      // 轉換為UIScene座標（考慮相機偏移）
+      const screenX = 400;  // 固定螢幕中心X
+      const screenY = 300;  // 固定螢幕中心Y
+      
+      console.log(`🎯 [場景驗證] 調用UIScene.spawnTicketBurstInUI at (${screenX}, ${screenY})`);
+      uiScene.spawnTicketBurstInUI(screenX, screenY, milestone);
+    } else {
+      console.error(`❌ [場景驗證] UIScene或spawnTicketBurstInUI方法不存在`);
+    }
+    
+    console.log(`💸 Ticket Burst! ${ticketCount} tickets via UIScene from ${actor.index === 0 ? 'P1' : `BOT${actor.index}`}`);
   }
   
   /**

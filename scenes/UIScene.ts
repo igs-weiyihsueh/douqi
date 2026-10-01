@@ -1406,4 +1406,74 @@ export class UIScene extends Phaser.Scene {
     container.setPosition(screenX, screenY);
     container.setVisible(true);
   }
+
+  /**
+   * ★場景層級驗證：在UIScene中創建彩票特效
+   * 
+   * 驗證假設：彩票在GameScene創建可能被UIScene覆蓋
+   * 解決方案：將特效創建移到UIScene中，確保在最上層
+   * 
+   * @param x 螢幕座標X
+   * @param y 螢幕座標Y  
+   * @param milestone 里程碑數值
+   */
+  spawnTicketBurstInUI(x: number, y: number, milestone: number): void {
+    console.log(`🎯 [UIScene驗證] 在UIScene中創建彩票特效 at (${x}, ${y}), milestone: ${milestone}`);
+    
+    // 計算彩票數量
+    const ticketCount = Math.max(8, Math.min(20, 8 + milestone * 0.4));
+    
+    console.log(`💸 [UIScene] 極簡測試：${ticketCount} tickets at UIScene layer`);
+    
+    // 在UIScene中創建超明顯彩票
+    for (let i = 0; i < ticketCount; i++) {
+      const ticket = this.add.rectangle(
+        x + i * 12,     // UIScene螢幕座標，稍微錯開
+        y, 
+        60,             // 更大尺寸60px
+        35,             // 更大高度35px
+        0xFF0000        // 紅色
+      )
+        .setStrokeStyle(4, 0xFFFFFF)  // 更粗白邊框
+        .setDepth(2000)               // 更高深度2000
+        .setVisible(true)             // 強制可見
+        .setAlpha(1);                 // 強制不透明
+      
+      console.log(`🎫 [UIScene] Creating ticket ${i}: 60×35px RED at (${x + i*12}, ${y}) depth=2000`);
+      
+      // UIScene中的運動：向上移動
+      this.tweens.add({
+        targets: ticket,
+        x: ticket.x + (i % 2 === 0 ? 30 : -30),  // 左右交替
+        y: ticket.y - 100,                       // 向上移動100px
+        duration: 8000,                          // 8秒超慢
+        ease: 'Linear',
+        onComplete: () => {
+          console.log(`🎫 [UIScene] Ticket ${i} movement completed`);
+          ticket.destroy();
+        }
+      });
+    }
+    
+    // UIScene中的超明顯閃光
+    const flash = this.add.circle(x, y, 15, 0xFF0000, 1)
+      .setDepth(2001)
+      .setStrokeStyle(6, 0xFFFFFF, 1)
+      .setVisible(true)
+      .setAlpha(1);
+    
+    console.log(`✨ [UIScene] Creating MASSIVE flash at (${x}, ${y}) depth=2001`);
+    
+    this.tweens.add({
+      targets: flash,
+      radius: 120,    // 更大半徑
+      alpha: 0,
+      duration: 3000, // 3秒更慢動畫
+      ease: 'Linear',
+      onComplete: () => {
+        flash.destroy();
+        console.log(`✨ [UIScene] Flash animation completed`);
+      }
+    });
+  }
 }
