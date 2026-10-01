@@ -105,22 +105,11 @@ export class UIScene extends Phaser.Scene {
   private rewardIcon!: Phaser.GameObjects.Image;
   /** v25 第8項：P1 普攻命中計數（左上角） */
   private hitText!: Phaser.GameObjects.Text;
-  /** v31/v55 連段(招式)條 + 節點(fast:3/6/9/10、slow:3/6/9) */
-  private comboBar!: Phaser.GameObjects.Rectangle;
-  private comboNodes: Phaser.GameObjects.Text[] = [];
-  private comboLabel!: Phaser.GameObjects.Text;
-  /** v55 能量(強化)條 + 標籤 + 「強化中」標示(slow 專用,fast 隱藏) */
-  private energyBar!: Phaser.GameObjects.Rectangle;
-  private energyBarBg!: Phaser.GameObjects.Rectangle;
-  private energyLabel!: Phaser.GameObjects.Text;
-  private empowerText!: Phaser.GameObjects.Text;
-  private energyUiInit = false;
-  /** ★v58:能量集滿(可按Z)狀態→update() 每幀讓能量條+提示文字閃爍。 */
-  private energyFull = false;
-  private energyEmpowered = false;
-  /** ★v61:上次能量值→偵測增加時給能量條一個放大脈動(打死怪明顯反饋)。 */
-  private lastEnergy = 0;
-  private readonly comboBarWidth = 240;
+  /** ★頭上UI系統 - 替換舊的左上角COMBO系統 */
+  // 移除：comboBar, comboNodes, comboLabel, energyBar等左上角UI元素
+  // 保留：character.spirit數值邏輯（COMBO獎勵系統會用到）
+  private overheadUIs: Map<CharStat, Phaser.GameObjects.Container> = new Map();
+  private readonly OVERHEAD_DEPTH = 900;
   /** v27 波次顯示（上方中央） */
   private waveText!: Phaser.GameObjects.Text;
   /** v28 BOSS 血條 */
@@ -144,7 +133,7 @@ export class UIScene extends Phaser.Scene {
   create(): void {
     // 根因修復：重啟時 rows 殘留上一局已銷毀物件會崩潰，每次 create 先清空
     this.rows = [];
-    this.comboNodes = [];
+    this.overheadUIs.clear(); // 清空頭上UI容器
     const w = GameConfig.width;
     const h = GameConfig.height;
 
@@ -231,57 +220,8 @@ export class UIScene extends Phaser.Scene {
       .setOrigin(1, 0)
       .setVisible(false); // 🚫 關閉波次顯示
 
-    // v31/v55 連段條(左上)。fast=一條「連段」4節點(3/6/9/10)+強化倒數；slow=「COMBO」3節點(3/6/9)+下方能量條。
-    // 兩套元件都建好，首次 stats(controlMode) 再依模式 toggle。
-    const comboX = 12;
-    const comboY = 40;
-    this.comboLabel = this.add
-      .text(comboX, comboY - 2, '連段', {
-        fontFamily: 'monospace', fontSize: '12px', color: '#c8b6ff', stroke: '#000000', strokeThickness: 3
-      })
-      .setOrigin(0, 0);
-    this.add
-      .rectangle(comboX, comboY + 16, this.comboBarWidth, 10, 0x000000, 0.5)
-      .setOrigin(0, 0)
-      .setStrokeStyle(1, 0xc8b6ff, 0.5);
-    this.comboBar = this.add
-      .rectangle(comboX + 1, comboY + 17, 0, 8, 0xc8b6ff)
-      .setOrigin(0, 0);
-    // 建 4 個節點(3/6/9/10)；slow 時第4個(★)會隱藏、前3個位置改用 /9 比例(update 時重算)。
-    const nThresholds = [3, 6, 9, 10];
-    const nLabels = ['◯', '—', '爆', '★'];
-    for (let i = 0; i < nThresholds.length; i++) {
-      const px = comboX + (nThresholds[i] / 10) * this.comboBarWidth;
-      const t = this.add
-        .text(px, comboY + 30, nLabels[i], {
-          fontFamily: 'monospace', fontSize: '13px', color: '#555555', stroke: '#000000', strokeThickness: 2
-        })
-        .setOrigin(0.5, 0);
-      this.comboNodes.push(t);
-    }
-    // 能量條(slow 專用，下方一排金色；fast 隱藏)
-    const energyY = comboY + 48;
-    this.energyLabel = this.add
-      .text(comboX, energyY - 2, '能量', {
-        fontFamily: 'monospace', fontSize: '12px', color: '#ffd700', stroke: '#000000', strokeThickness: 3
-      })
-      .setOrigin(0, 0)
-      .setVisible(false);
-    this.energyBarBg = this.add
-      .rectangle(comboX, energyY + 16, this.comboBarWidth, 10, 0x000000, 0.5)
-      .setOrigin(0, 0)
-      .setStrokeStyle(1, 0xffd700, 0.5)
-      .setVisible(false);
-    this.energyBar = this.add
-      .rectangle(comboX + 1, energyY + 17, 0, 8, 0xffd700)
-      .setOrigin(0, 0)
-      .setVisible(false);
-    this.empowerText = this.add
-      .text(comboX + this.comboBarWidth + 10, comboY + 6, '', {
-        fontFamily: 'monospace', fontSize: '14px', color: '#ffd700', stroke: '#000000', strokeThickness: 3, fontStyle: 'bold'
-      })
-      .setOrigin(0, 0)
-      .setVisible(false);
+    // ★頭上UI系統初始化 - 替換舊的左上角COMBO/能量系統
+    this.createOverheadUISystem();
 
     // 🔄 NEW UI：角色狀態列重大改版 - 圓形標籤 + 雙欄位系統，移除血條系統
     const count = GameConfig.characters.count;
@@ -551,6 +491,24 @@ export class UIScene extends Phaser.Scene {
       this.waveText.setText(`WAVE ${s.wave}  ${s.waveKilled}/${s.waveQuota}`);
     }
 
+    // ★頭上UI系統：檢查並創建角色的頭上UI
+    for (let i = 0; i < s.chars.length; i++) {
+      const character = s.chars[i];
+      if (!this.overheadUIs.has(character)) {
+        const container = this.createOverheadUI(character, i);
+        this.overheadUIs.set(character, container);
+      }
+      
+      // 更新頭上UI位置
+      const container = this.overheadUIs.get(character);
+      if (container && character.alive) {
+        this.updateOverheadUI(character, container);
+        container.setVisible(true);
+      } else if (container) {
+        container.setVisible(false);
+      }
+    }
+
     // ★波次進度 HUD(關卡制:節點序列 ●─●─◆);只在【純波次子區】顯示;事件/BOSS/非 levelMode 隱藏。
     // 這裡只記錄狀態,實際節點繪製在 update() 每幀跑(脈動+線漸填平滑)。
     const nowShow = !!(GameConfig.waveHud.enabled && s.levelMode &&
@@ -585,74 +543,6 @@ export class UIScene extends Phaser.Scene {
       for (const ic of this.nodeIcons) ic.setVisible(false);
       if (this.rewardIcon) this.rewardIcon.setVisible(false);
     }
-
-    // v55：連段/能量 HUD——依 controlMode 切換佈局(首次設定 toggle)。
-    const slow = s.controlMode === 'slow';
-    if (!this.energyUiInit) {
-      this.energyUiInit = true;
-      // 佈局切換(只需一次)：slow 顯示能量條/標籤、combo 標籤改 COMBO、隱藏第4節點★；fast 反之。
-      this.comboLabel.setText(slow ? 'COMBO' : '連段');
-      this.energyLabel.setVisible(slow);
-      this.energyBarBg.setVisible(slow);
-      this.energyBar.setVisible(slow);
-      const comboX = 12;
-      if (slow && this.comboNodes.length >= 4) {
-        this.comboNodes[3].setVisible(false); // 隱藏 ★(強化不在 combo 條)
-        // 前3節點位置改用 /9 比例(slow comboMax=9)
-        const t3 = [s.comboThresholds.circle, s.comboThresholds.line, s.comboThresholds.burst];
-        for (let i = 0; i < 3; i++) this.comboNodes[i].x = comboX + (t3[i] / 9) * this.comboBarWidth;
-      }
-    }
-
-    // COMBO 條 + 節點高亮
-    if (s.comboMax) {
-      const ratio = Phaser.Math.Clamp(s.combo / s.comboMax, 0, 1);
-      this.comboBar.width = (this.comboBarWidth - 2) * ratio;
-      const unlocked = [s.comboUnlocked.circle, s.comboUnlocked.line, s.comboUnlocked.burst, s.comboUnlocked.empower];
-      const thr = [s.comboThresholds.circle, s.comboThresholds.line, s.comboThresholds.burst, s.comboThresholds.empower];
-      const activeColors = ['#00e5ff', '#ff4d6d', '#ff9a3c', '#ffd700'];
-      const n = slow ? 3 : this.comboNodes.length;
-      for (let i = 0; i < n; i++) {
-        if (!unlocked[i]) this.comboNodes[i].setColor('#555555');
-        else this.comboNodes[i].setColor(s.combo >= thr[i] ? activeColors[i] : '#aaaaaa');
-      }
-    }
-
-    if (slow) {
-      // 能量條(強化):能量改【擊殺獲得】,滿 trigger 改【按 Z 手動觸發】、強化期間倒退(條往下退)。
-      const eRatio = Phaser.Math.Clamp(s.energy / (s.energyMax || 100), 0, 1);
-      this.energyBar.width = (this.comboBarWidth - 2) * eRatio;
-      // ★v61:能量【增加】時給能量條一個放大脈動(打死怪明顯反饋)。
-      if (s.energy > this.lastEnergy && !s.empowered) {
-        this.tweens.killTweensOf(this.energyBar);
-        this.energyBar.setScale(1);
-        this.tweens.add({ targets: this.energyBar, scaleY: { from: 2.2, to: 1 }, duration: 220, ease: 'Quad.easeOut' });
-      }
-      this.lastEnergy = s.energy;
-      this.energyEmpowered = !!s.empowered;
-      this.energyFull = !s.empowered && s.energy >= (s.energyTrigger || 100);
-      if (s.empowered) {
-        this.energyBar.setFillStyle(0xffef99).setAlpha(1);
-        this.empowerText.setVisible(true).setColor('#ffef99').setText('強化中');
-      } else if (this.energyFull) {
-        // ★集滿提示(閃爍在 update() 每幀跑):金色能量條 + 「按 Z 強化!」。
-        this.empowerText.setVisible(true).setColor('#ffe23a').setText('按 Z 強化!');
-      } else {
-        this.energyBar.setFillStyle(0xffd700).setAlpha(1);
-        this.empowerText.setVisible(false);
-      }
-    } else {
-      this.energyFull = false;
-      this.energyEmpowered = false;
-      // fast：原強化倒數
-      if (s.empowerRemainMs > 0) {
-        this.empowerText.setVisible(true).setText(`強化 ${(s.empowerRemainMs / 1000).toFixed(1)}s`);
-      } else {
-        this.empowerText.setVisible(false);
-      }
-    }
-
-    // ★拔等級(階段2):等級+經驗條更新已移除(HUD 已拿掉)。
 
     // 加入夥伴提示：滿了改字
     if (s.count >= s.maxCount) {
@@ -708,14 +598,8 @@ export class UIScene extends Phaser.Scene {
 
   /** 每幀:波次節點序列脈動 + 線漸進填滿重繪(只在顯示時)。 */
   update(_time: number, delta: number): void {
-    // ★v58:能量集滿(可按Z)→能量條+提示文字金色閃爍(每幀跑,不受 stats 事件節奏影響)。
-    if (this.energyFull && !this.energyEmpowered) {
-      const blink = 0.5 + 0.5 * Math.abs(Math.sin(this.time.now / 180));
-      this.energyBar.setFillStyle(0xffe23a).setAlpha(blink);
-      this.empowerText.setAlpha(blink);
-    } else {
-      this.empowerText.setAlpha(1);
-    }
+    // ★頭上UI系統：移除舊的COMBO/能量閃爍邏輯
+    // 保留波次節點相關邏輯
     if (!this.waveHudShow) return;
     // ★③逐怪反饋:waveHudFill 每幀 lerp 逼近 waveHudFillTarget(=已完成波+當前波殺敵比例)。
     // 每殺一隻怪目標往前一點→線一點一點平滑推進(非打完整波才填);一整「段線」約 lineFillMs 填滿速率。
@@ -886,4 +770,50 @@ export class UIScene extends Phaser.Scene {
       baseY - Math.sin(perp) * half
     );
   };
+
+  /** ★頭上UI系統：創建跟隨角色的UI容器 */
+  private createOverheadUISystem(): void {
+    // 暫時不創建，等待角色數據傳入後再創建
+    // 在updateStats中檢測角色並創建對應的頭上UI
+  }
+
+  /** ★創建單個角色的頭上UI容器 */
+  private createOverheadUI(_character: CharStat, index: number): Phaser.GameObjects.Container {
+    const container = this.add.container(0, 0);
+    container.setDepth(this.OVERHEAD_DEPTH);
+    
+    // 🎯 玩家編號牌 - 位置：(-66, -2) 相對容器中心
+    const badgeX = -66;
+    const badgeY = -2;
+    
+    // 內圓：半徑18px，角色顏色
+    const badgeColor = GameConfig.characters.colors[index];
+    const badge = this.add.circle(badgeX, badgeY, 18, badgeColor)
+      .setStrokeStyle(2, 0xffffff); // 白色邊框
+    
+    // 文字：角色標籤，20px字體，白色
+    const badgeLabel = GameConfig.characters.labels[index];
+    const badgeText = this.add.text(badgeX, badgeY, badgeLabel, {
+      fontFamily: 'monospace',
+      fontSize: '20px', 
+      color: '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 2,
+      fontStyle: 'bold'
+    }).setOrigin(0.5, 0.5);
+    
+    // 添加到容器
+    container.add([badge, badgeText]);
+    
+    return container;
+  }
+
+  /** ★更新頭上UI位置 */
+  private updateOverheadUI(character: CharStat, container: Phaser.GameObjects.Container): void {
+    // 跟隨角色位置：角色頭上140px (暫時使用固定位置測試)
+    // TODO: 需要從GameScene獲取角色的實際位置
+    const testX = 200 + character.kills * 10;
+    const testY = 200;
+    container.setPosition(testX, testY);
+  }
 }
