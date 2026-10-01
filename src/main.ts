@@ -35,3 +35,4 @@ const game = new Phaser.Game(config);
 
 // 除錯用把 game 實例掛到 window（無害；供自動化測試/主控台檢視）
 (window as unknown as { __game: Phaser.Game }).__game = game;
+

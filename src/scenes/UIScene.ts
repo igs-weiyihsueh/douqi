@@ -65,15 +65,23 @@ export class UIScene extends Phaser.Scene {
   private teamText!: Phaser.GameObjects.Text;
   private timeText!: Phaser.GameObjects.Text;
 
-  /** v20 恢復：畫面下方 4 欄角色狀態列（與角色腳下小條並存） */
+  /** 🔄 NEW UI：角色狀態列重大改版 - 圓形標籤 + 雙欄位系統 */
   private rows: {
+    // 🔵 圓形標籤系統
+    circle: Phaser.GameObjects.Arc;
     labelText: Phaser.GameObjects.Text;
+    
+    // 📊 雙欄位系統  
+    killIconText: Phaser.GameObjects.Text;  // 💀 骷髏圖案
+    killText: Phaser.GameObjects.Text;      // 擊殺數字
+    ticketIconText: Phaser.GameObjects.Text; // 🎫 彩票圖案
+    ticketText: Phaser.GameObjects.Text;    // 彩票數字
+    
+    // ❌ 移除的血條系統 (保留屬性防止破壞現有代碼)
     hpBarBg: Phaser.GameObjects.Rectangle;
     hpBar: Phaser.GameObjects.Rectangle;
     spiritBar: Phaser.GameObjects.Rectangle;
-    killText: Phaser.GameObjects.Text;
   }[] = [];
-  private readonly panelBarW = 150;
 
   private aimGraphics!: Phaser.GameObjects.Graphics;
   private joinHintText!: Phaser.GameObjects.Text;
@@ -268,32 +276,92 @@ export class UIScene extends Phaser.Scene {
       .setOrigin(0, 0)
       .setVisible(false);
 
-    // v20 恢復：畫面下方 4 欄角色狀態列（顏色/標籤/血條/鬥氣/擊殺）
+    // 🔄 NEW UI：角色狀態列重大改版 - 圓形標籤 + 雙欄位系統，移除血條系統
     const count = GameConfig.characters.count;
-    const colW = 236;
-    const colGap = 8;
-    const baseX = 16;
-    const rowTopY = h - 52;
+    const panelW = 200;
+    const panelH = 60;
+    const panelGap = 12;
+    const startX = (w - (count * panelW + (count - 1) * panelGap)) / 2; // 居中排列
+    const rowTopY = h - 80;
+    
     for (let i = 0; i < count; i++) {
-      const x = baseX + i * (colW + colGap);
+      const x = startX + i * (panelW + panelGap);
       const color = GameConfig.characters.colors[i];
       const label = GameConfig.characters.labels[i];
-      this.add.rectangle(x, rowTopY, 12, 12, color).setOrigin(0, 0).setDepth(20);
+      
+      // 🔵 左側圓形標籤 (24px半徑，白邊框，角色識別色填充)
+      const circleX = x + 24;
+      const circleY = rowTopY + panelH / 2;
+      const circleRadius = 24;
+      
+      const circle = this.add.circle(circleX, circleY, circleRadius, color)
+        .setStrokeStyle(2, 0xffffff)
+        .setDepth(20);
+      
       const labelText = this.add
-        .text(x + 18, rowTopY - 3, label, { fontFamily: 'monospace', fontSize: '13px', color: '#ffffff', stroke: '#000000', strokeThickness: 2 })
+        .text(circleX, circleY, label, { 
+          fontFamily: 'monospace', 
+          fontSize: '14px', 
+          color: '#ffffff', 
+          stroke: '#000000', 
+          strokeThickness: 2,
+          fontStyle: 'bold'
+        })
+        .setOrigin(0.5, 0.5)
+        .setDepth(21);
+      
+      // 📊 右側雙欄位系統
+      const statsX = x + 60;
+      
+      // 上方：💀 骷髏 + 擊殺數
+      const killIconText = this.add
+        .text(statsX, rowTopY + 8, '💀', { 
+          fontSize: '16px' 
+        })
         .setDepth(20);
+        
       const killText = this.add
-        .text(x + 60, rowTopY - 3, 'x0', { fontFamily: 'monospace', fontSize: '13px', color: '#ffffff', stroke: '#000000', strokeThickness: 2 })
+        .text(statsX + 25, rowTopY + 8, '0', { 
+          fontFamily: 'monospace', 
+          fontSize: '16px', 
+          color: '#ffffff', 
+          stroke: '#000000', 
+          strokeThickness: 2,
+          fontStyle: 'bold'
+        })
         .setDepth(20);
-      const bY = rowTopY + 16;
-      const hpBarBg = this.add
-        .rectangle(x, bY, this.panelBarW, 12, 0x000000, 0.5)
-        .setOrigin(0, 0)
-        .setStrokeStyle(1, 0xffffff, 0.3)
+      
+      // 下方：🎫 彩票 + 彩票數 (金色)
+      const ticketIconText = this.add
+        .text(statsX, rowTopY + 32, '🎫', { 
+          fontSize: '16px' 
+        })
         .setDepth(20);
-      const hpBar = this.add.rectangle(x + 1, bY + 1, this.panelBarW - 2, 10, 0x4ade80).setOrigin(0, 0).setDepth(20);
-      const spiritBar = this.add.rectangle(x + 1, bY + 13, 0, 5, 0x60a5fa).setOrigin(0, 0).setDepth(20);
-      this.rows.push({ labelText, hpBarBg, hpBar, spiritBar, killText });
+        
+      const ticketText = this.add
+        .text(statsX + 25, rowTopY + 32, '0', { 
+          fontFamily: 'monospace', 
+          fontSize: '16px', 
+          color: '#ffd700', 
+          stroke: '#000000', 
+          strokeThickness: 2,
+          fontStyle: 'bold'
+        })
+        .setDepth(20);
+      
+      // 存儲UI元素 (移除血條相關，新增圓形和彩票相關)
+      this.rows.push({ 
+        circle,
+        labelText, 
+        killIconText,
+        killText,
+        ticketIconText, 
+        ticketText,
+        // 保留空的血條屬性以免破壞現有代碼
+        hpBarBg: this.add.rectangle(0, 0, 0, 0).setVisible(false),
+        hpBar: this.add.rectangle(0, 0, 0, 0).setVisible(false), 
+        spiritBar: this.add.rectangle(0, 0, 0, 0).setVisible(false)
+      });
     }
 
     this.aimGraphics = this.add.graphics().setDepth(30);
@@ -536,44 +604,43 @@ export class UIScene extends Phaser.Scene {
       this.joinHintText.setColor('#7bed9f');
     }
 
-    // v20 下方 4 欄面板更新（血/鬥氣/擊殺；與角色腳下小條並存）
-    const bw = this.panelBarW - 2;
+    // 🔄 NEW UI：角色狀態列更新 - 圓形標籤 + 雙欄位系統，完全移除血條系統
     for (let i = 0; i < this.rows.length; i++) {
       const row = this.rows[i];
+      
       if (i >= s.chars.length) {
-        row.hpBar.width = 0;
-        row.spiritBar.width = 0;
-        row.labelText.setColor('#555555');
-        row.killText.setText('未加入');
-        row.killText.setColor('#555555');
+        // 未加入狀態：透明度0.3，灰色標籤
+        row.circle.setAlpha(0.3);
+        row.labelText.setColor('#555555').setAlpha(0.3);
+        row.killIconText.setAlpha(0.3);
+        row.killText.setText('0').setColor('#555555').setAlpha(0.3);
+        row.ticketIconText.setAlpha(0.3);
+        row.ticketText.setText('0').setColor('#555555').setAlpha(0.3);
         continue;
       }
+      
       const c = s.chars[i];
+      
       if (!c.alive) {
-        row.hpBar.width = 0;
-        row.spiritBar.width = 0;
-        row.labelText.setColor('#777777');
-        row.killText.setText(`x${c.kills} ✖`);
-        row.killText.setColor('#777777');
+        // 死亡狀態：透明度0.5，灰色標籤，擊殺數帶✖
+        row.circle.setAlpha(0.5);
+        row.labelText.setColor('#777777').setAlpha(0.5);
+        row.killIconText.setAlpha(0.5);
+        row.killText.setText(`${c.kills} ✖`).setColor('#777777').setAlpha(0.5);
+        row.ticketIconText.setAlpha(0.5);
+        const tickets = Math.floor(c.kills / 2);
+        row.ticketText.setText(`${tickets} ✖`).setColor('#777777').setAlpha(0.5);
         continue;
       }
-      row.labelText.setColor('#ffffff');
-      // v55(slow-A)：慢速模式 P1 無血量、不會死 → 不顯示血條(隱藏 hp 條+底)，標籤標「無敵」。
-      if (slow && c.isPlayer) {
-        row.hpBarBg.setVisible(false);
-        row.hpBar.setVisible(false);
-      } else {
-        row.hpBarBg.setVisible(true);
-        row.hpBar.setVisible(true);
-      }
-      const hpRatio = Phaser.Math.Clamp(c.hp / c.maxHp, 0, 1);
-      row.hpBar.width = bw * hpRatio;
-      row.hpBar.fillColor = hpRatio > 0.5 ? 0x4ade80 : hpRatio > 0.25 ? 0xfacc15 : 0xef4444;
-      const spRatio = Phaser.Math.Clamp(c.spirit / c.maxSpirit, 0, 1);
-      row.spiritBar.width = bw * spRatio;
-      row.spiritBar.fillColor = spRatio >= 1 ? 0xffd700 : 0x60a5fa;
-      row.killText.setText(`x${c.kills}`);
-      row.killText.setColor('#ffffff');
+      
+      // 活躍狀態：完全不透明，白色標籤
+      row.circle.setAlpha(1);
+      row.labelText.setColor('#ffffff').setAlpha(1);
+      row.killIconText.setAlpha(1);
+      row.killText.setText(`${c.kills}`).setColor('#ffffff').setAlpha(1);
+      row.ticketIconText.setAlpha(1);
+      const tickets = Math.floor(c.kills / 2);
+      row.ticketText.setText(`${tickets}`).setColor('#ffd700').setAlpha(1); // 彩票數金色
     }
   };
 
