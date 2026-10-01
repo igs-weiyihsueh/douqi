@@ -60,11 +60,51 @@ export class BootScene extends Phaser.Scene {
     this.makeParticleTexture();
 
     // ★新增：場景圖資源預載入
-    this.load.image('scene-background', 'assets/Scene.png');
+    console.log('🔄 開始載入Scene.png...');
+    
+    // 添加載入事件監聽
+    this.load.on('filecomplete-image-scene-background', (key: string, type: string, data: any) => {
+      console.log('✅ Scene.png載入成功！', { key, type, data: !!data });
+    });
+    
+    this.load.on('loaderror', (file: any) => {
+      if (file.key === 'scene-background') {
+        console.error('❌ Scene.png載入失敗:', {
+          key: file.key,
+          url: file.url,
+          src: file.src,
+          error: file.error
+        });
+      }
+    });
+    
+    // 嘗試多個可能的路徑
+    const scenePaths = [
+      'assets/Scene.png',
+      './assets/Scene.png', 
+      '/assets/Scene.png',
+      'public/assets/Scene.png'
+    ];
+    
+    // 使用第一個路徑載入
+    this.load.image('scene-background', scenePaths[0]);
+    
+    console.log('🔍 嘗試載入路徑:', scenePaths[0]);
     
     // 監聽外部資源載入完成
     this.load.once('complete', () => {
-      console.log('📸 場景圖資源載入完成：Scene.png');
+      // 檢查Scene.png是否成功載入
+      const sceneTexture = this.textures.get('scene-background');
+      if (sceneTexture && sceneTexture.key !== '__MISSING') {
+        console.log('📸 場景圖資源載入完成：Scene.png');
+      } else {
+        console.error('❌ Scene.png載入失敗，紋理不存在或為__MISSING');
+        
+        // 嘗試備用載入方案
+        this.tryAlternativeSceneLoad();
+        return; // 不要立即啟動TitleScene
+      }
+      
       // v16：貼圖產生完 → 先進標題畫面（按下開始才進 GameScene 生怪）
       this.scene.start('TitleScene');
     });
@@ -421,5 +461,65 @@ export class BootScene extends Phaser.Scene {
     g.fillRect(0, 0, 8, 8);
     g.generateTexture('spark', 8, 8);
     g.destroy();
+  }
+  
+  /**
+   * ★備用Scene.png載入方案
+   * 
+   * 當主要載入失敗時，嘗試不同的路徑和方法
+   */
+  private tryAlternativeSceneLoad(): void {
+    console.log('🔄 嘗試備用Scene.png載入方案...');
+    
+    const alternativePaths = [
+      './assets/Scene.png', 
+      '/assets/Scene.png',
+      'public/assets/Scene.png',
+      window.location.origin + '/assets/Scene.png'
+    ];
+    
+    let pathIndex = 0;
+    
+    const tryNextPath = () => {
+      if (pathIndex >= alternativePaths.length) {
+        console.error('❌ 所有Scene.png載入路徑都失敗');
+        // 繼續啟動遊戲，只是沒有場景背景
+        this.scene.start('TitleScene');
+        return;
+      }
+      
+      const currentPath = alternativePaths[pathIndex];
+      console.log(`🔍 嘗試路徑 ${pathIndex + 1}/${alternativePaths.length}:`, currentPath);
+      
+      // 創建新的loader
+      this.load.image(`scene-background-alt-${pathIndex}`, currentPath);
+      
+      this.load.once('complete', () => {
+        const texture = this.textures.get(`scene-background-alt-${pathIndex}`);
+        if (texture && texture.key !== '__MISSING') {
+          console.log('✅ 備用路徑載入成功！');
+          
+          // 簡單方案：移除失敗的紋理，重新創建
+          if (this.textures.exists('scene-background')) {
+            this.textures.remove('scene-background');
+          }
+          
+          // 重新載入到正確的key
+          this.load.image('scene-background', currentPath);
+          this.load.once('complete', () => {
+            console.log('✅ Scene.png重新載入完成');
+            this.scene.start('TitleScene');
+          });
+          this.load.start();
+        } else {
+          pathIndex++;
+          tryNextPath();
+        }
+      });
+      
+      this.load.start();
+    };
+    
+    tryNextPath();
   }
 }
