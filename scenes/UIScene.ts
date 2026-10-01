@@ -186,14 +186,14 @@ export class UIScene extends Phaser.Scene {
     },
     // ★階段三：COMBO獎勵系統配置
     COMBO: {
-      X_OFFSET: 130,  // Credit右側位置
-      Y: -5,          // 與Credit水平對齊
-      WIDTH: 80,      // COMBO顯示區寬度
-      HEIGHT: 20,     // COMBO顯示區高度
-      FONT_SIZE: '16px',
-      PROGRESS_WIDTH: 60,   // 進度條寬度
-      PROGRESS_HEIGHT: 4,   // 進度條高度
-      PROGRESS_Y_OFFSET: 8, // 進度條相對COMBO文字的Y偏移
+      X_OFFSET: 0,    // ★修復：Credit正上方，不偏移X
+      Y: -30,         // ★修復：Credit上方，增加距離
+      WIDTH: 120,     // 與Credit同寬，保持對齊
+      HEIGHT: 24,     // 增加高度容納大字體
+      FONT_SIZE: '18px', // ★修復：放大字體，提高可見性
+      PROGRESS_WIDTH: 100,   // 進度條寬度
+      PROGRESS_HEIGHT: 3,    // ★修復：縮小進度條高度，減少突兀感
+      PROGRESS_Y_OFFSET: 12, // ★修復：進度條距離文字更近
       WARNING_BLINK_MS: 300, // 警告閃爍週期
       STREAK_TIMEOUT_MS: 2000,   // 2秒無擊殺重置
       WARNING_START_MS: 1500     // 1.5秒開始警告
@@ -1102,20 +1102,21 @@ export class UIScene extends Phaser.Scene {
     comboProgressBg: Phaser.GameObjects.Rectangle;
   } {
     const config = this.OVERHEAD_UI_CONFIG;
+    // ★修復位置：Credit正上方，使用Credit的X座標
     const comboX = config.CREDIT.X + config.COMBO.X_OFFSET;
     const comboY = config.COMBO.Y;
     
-    // COMBO連擊數文字顯示
-    const comboText = this.add.text(comboX, comboY, 'x0', {
+    // ★修復文字：顯示"HIT x0"格式，增大字體
+    const comboText = this.add.text(comboX, comboY, 'HIT x0', {
       fontFamily: 'monospace',
       fontSize: config.COMBO.FONT_SIZE,
       color: config.COLORS.COMBO_TEXT_NORMAL,
       stroke: config.COLORS.BLACK,
-      strokeThickness: 1,
+      strokeThickness: 2,  // ★增加描邊厚度，提高可見性
       fontStyle: 'bold'
     }).setOrigin(0.5, 0.5);
     
-    // 進度條背景：顯示距離下個里程碑的進度
+    // 進度條背景：緊貼文字下方
     const progressX = comboX;
     const progressY = comboY + config.COMBO.PROGRESS_Y_OFFSET;
     
@@ -1125,10 +1126,10 @@ export class UIScene extends Phaser.Scene {
       config.COMBO.PROGRESS_WIDTH,
       config.COMBO.PROGRESS_HEIGHT,
       config.COLORS.BACKGROUND,
-      0.8
+      0.6  // ★降低透明度，減少視覺干擾
     ).setStrokeStyle(1, config.COLORS.BORDER_GOLD);
     
-    // 進度條填充：藍色進度指示
+    // 進度條填充：更細更低調
     const comboProgress = this.add.rectangle(
       progressX - config.COMBO.PROGRESS_WIDTH / 2,
       progressY,
@@ -1370,8 +1371,8 @@ export class UIScene extends Phaser.Scene {
     const combo = character.combo;
     const config = this.OVERHEAD_UI_CONFIG;
     
-    // 更新COMBO數字顯示
-    comboText.setText(`x${combo.currentStreak}`);
+    // ★修復文字格式：使用"HIT x數字"格式
+    comboText.setText(`HIT x${combo.currentStreak}`);
     
     // 根據警告狀態設置文字顏色
     const colors = config.COLORS;
@@ -1381,7 +1382,7 @@ export class UIScene extends Phaser.Scene {
       const isBlinking = blinkTime < (config.COMBO.WARNING_BLINK_MS / 2);
       comboText.setColor(isBlinking ? colors.COMBO_TEXT_CRITICAL : colors.COMBO_TEXT_WARNING);
     } else if (combo.currentStreak === 0) {
-      // 無連擊：隱藏COMBO UI
+      // 無連擊：隱藏COMBO UI，減少視覺混亂
       comboText.setVisible(false);
       comboProgress.setVisible(false);
       comboProgressBg.setVisible(false);
@@ -1398,7 +1399,8 @@ export class UIScene extends Phaser.Scene {
     
     // 計算進度條：距離下個里程碑的進度
     const progressRatio = this.calculateComboProgress(combo.currentStreak, combo.nextMilestone);
-    const maxProgressWidth = config.COMBO.PROGRESS_WIDTH - 2; // 減去邊框
+    // ★修復進度條寬度計算：減去更多邊距，避免溢出
+    const maxProgressWidth = config.COMBO.PROGRESS_WIDTH - 4; // 減去4px邊距
     comboProgress.width = maxProgressWidth * progressRatio;
     
     // 進度條顏色：根據警告狀態變化
