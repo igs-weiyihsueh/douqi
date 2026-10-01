@@ -184,13 +184,13 @@ export class UIScene extends Phaser.Scene {
       PULSE_SCALE: 2.2,
       PULSE_DURATION: 200
     },
-    // ★階段三：COMBO獎勵系統配置
+    // ★階段三：COMBO獎勵系統配置 - 用戶要求調整
     COMBO: {
       X_OFFSET: 0,    // Credit正上方，無水平偏移
-      Y: -30,         // Credit上方，增加垂直間距
+      Y: -45,         // ★用戶要求：往上移動，從-30上移到-45
       WIDTH: 120,     // 與Credit同寬，視覺對齊
-      HEIGHT: 24,     // 容納大字體的高度
-      FONT_SIZE: '18px', // 放大字體，提高可見性
+      HEIGHT: 28,     // ★調整：增加高度容納更大字體
+      FONT_SIZE: '24px', // ★用戶要求：字體放大，從18px增加到24px
       PROGRESS_WIDTH: 100,   // 進度條寬度
       PROGRESS_HEIGHT: 3,    // 精緻進度條高度
       PROGRESS_Y_OFFSET: 12, // 進度條與文字間距
