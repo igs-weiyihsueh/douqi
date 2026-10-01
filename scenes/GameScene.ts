@@ -592,6 +592,9 @@ export class GameScene extends Phaser.Scene {
     const c = new Character(this, x, y, index, isBot);
     // ★v8:slow 模式下 BOT 也【noHpLoss 打不死】(與 P1 無差異;fast 則會死,不設)。P1 的 noHpLoss 在 create() 另設。
     if (this.controlMode === 'slow') c.noHpLoss = true;
+    
+    // ★階段二測試：給角色初始Credit值
+    c.credit = isBot ? 500 + index * 100 : 1000; // P1: 1000, BOT1: 600, BOT2: 700, BOT3: 800
     this.characters.push(c);
     this.physics.add.overlap(
       c,
@@ -7764,7 +7767,9 @@ export class GameScene extends Phaser.Scene {
         isPlayer: c.index === 0,
         // ★頭上UI修復：添加角色世界座標
         x: c.x,
-        y: c.y
+        y: c.y,
+        // ★階段二：Credit點數
+        credit: c.credit
       })),
       teamKills: this.teamKills(),
       survivalMs: this.survivalMs,

@@ -14,6 +14,8 @@ interface CharStat {
   // ★頭上UI：角色世界座標
   x: number;
   y: number;
+  // ★階段二：Credit點數
+  credit: number;
 }
 
 interface StatsPayload {
@@ -511,10 +513,11 @@ export class UIScene extends Phaser.Scene {
         this.overheadUIs.set(charIndex, container);
       }
       
-      // 更新頭上UI位置
+      // 更新頭上UI位置和內容
       const container = this.overheadUIs.get(charIndex);
       if (container && character.alive) {
         this.updateOverheadUI(character, container);
+        this.updateOverheadUIContent(character, container, s); // ★新增：更新Credit和能量條
         container.setVisible(true);
       } else if (container) {
         container.setVisible(false);
@@ -813,11 +816,142 @@ export class UIScene extends Phaser.Scene {
       strokeThickness: 2,
       fontStyle: 'bold'
     }).setOrigin(0.5, 0.5);
+
+    // ★階段二：Credit點數顯示 - 位置：(-36, -18) 相對容器中心
+    const creditX = -36;
+    const creditY = -18;
     
-    // 添加到容器
-    container.add([badge, badgeText]);
+    // Credit背景框：120×34px
+    const creditBg = this.add.rectangle(creditX, creditY, 120, 34, 0x000000, 0.7)
+      .setStrokeStyle(2, 0xffd700); // 金色邊框
+    
+    // 金幣圖標：22×22px圓形，金色
+    const coinIcon = this.add.circle(creditX - 40, creditY, 11, 0xffca28)
+      .setStrokeStyle(2, 0xffa000);
+    
+    // Credit數字：22px字體，白色，默認"00000"
+    const creditText = this.add.text(creditX + 10, creditY, '00000', {
+      fontFamily: 'monospace',
+      fontSize: '22px',
+      color: '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 2,
+      fontStyle: 'bold'
+    }).setOrigin(0.5, 0.5);
+
+    // ★階段二：二段能量量條 - Credit下方
+    const energyX = creditX;
+    const energyY = creditY + 25;
+    const energyWidth = 100;
+    const energyHeight = 8;
+    
+    // 能量條背景：金色邊框，黑色半透明背景
+    const energyBg = this.add.rectangle(energyX, energyY, energyWidth, energyHeight, 0x000000, 0.6)
+      .setStrokeStyle(1, 0xffd700);
+    
+    // 能量進度條：金色填充
+    const energyBar = this.add.rectangle(energyX - energyWidth/2, energyY, 0, energyHeight - 2, 0xffd700)
+      .setOrigin(0, 0.5);
+    
+    // 能量條文字提示（滿能量時顯示）
+    const energyHint = this.add.text(energyX, energyY - 15, 'Press Z', {
+      fontFamily: 'monospace',
+      fontSize: '14px',
+      color: '#ffe23a',
+      stroke: '#000000',
+      strokeThickness: 1,
+      fontStyle: 'bold'
+    }).setOrigin(0.5, 0.5).setVisible(false);
+    
+    // 添加到容器，並設置標記以便後續更新
+    container.add([badge, badgeText, creditBg, coinIcon, creditText, energyBg, energyBar, energyHint]);
+    
+    // ★設置子元件引用，方便updateStats時更新
+    (container as any).creditText = creditText;
+    (container as any).coinIcon = coinIcon;
+    (container as any).energyBar = energyBar;
+    (container as any).energyHint = energyHint;
+    (container as any).energyBg = energyBg;
     
     return container;
+  }
+
+  /** ★更新頭上UI內容：Credit和能量條 */
+  private updateOverheadUIContent(character: CharStat, container: Phaser.GameObjects.Container, stats: StatsPayload): void {
+    const creditText = (container as any).creditText as Phaser.GameObjects.Text;
+    const coinIcon = (container as any).coinIcon as Phaser.GameObjects.Arc;
+    const energyBar = (container as any).energyBar as Phaser.GameObjects.Rectangle;
+    const energyHint = (container as any).energyHint as Phaser.GameObjects.Text;
+    const energyBg = (container as any).energyBg as Phaser.GameObjects.Rectangle;
+    
+    if (!creditText || !coinIcon || !energyBar) return;
+    
+    // ★更新Credit顯示
+    const creditValue = character.credit || 0;
+    const creditStr = creditValue.toString().padStart(5, '0'); // 格式："00000"
+    creditText.setText(creditStr);
+    
+    // Credit耗盡特效：閃紅色
+    if (creditValue === 0) {
+      const flashTime = this.time.now % 600; // 300ms週期
+      const isFlashing = flashTime < 300;
+      coinIcon.setFillStyle(isFlashing ? 0xff3b30 : 0xffca28); // 紅色閃爍
+      creditText.setColor(isFlashing ? '#ff3b30' : '#ffffff');
+    } else {
+      coinIcon.setFillStyle(0xffca28); // 正常金色
+      creditText.setColor('#ffffff'); // 正常白色
+    }
+    
+    // ★更新二段能量條（慢速模式專用）
+    if (stats.controlMode === 'slow' && character.isPlayer) {
+      energyBg.setVisible(true);
+      energyBar.setVisible(true);
+      
+      const energy = stats.energy || 0;
+      const energyMax = stats.energyMax || 10;
+      const energyRatio = Math.max(0, Math.min(1, energy / energyMax));
+      
+      // 更新進度條寬度
+      const maxWidth = 96; // 100px容器 - 2px邊距 = 96px
+      energyBar.width = maxWidth * energyRatio;
+      
+      // 能量狀態顏色
+      let energyColor = 0xffd700; // 普通：金色
+      if (stats.empowered) {
+        energyColor = 0xffef99; // 強化中：淺金色
+      } else if (energy >= energyMax) {
+        // 滿能量：閃爍金色
+        const blinkTime = this.time.now % 400;
+        energyColor = blinkTime < 200 ? 0xffe23a : 0xffd700;
+      }
+      energyBar.setFillStyle(energyColor);
+      
+      // 脈動效果：能量增加時Y軸放大
+      if (energy > (container as any).lastEnergy || 0) {
+        energyBar.setScale(1, 2.2);
+        this.tweens.add({
+          targets: energyBar,
+          scaleY: 1,
+          duration: 200,
+          ease: 'Power2'
+        });
+      }
+      (container as any).lastEnergy = energy;
+      
+      // "Press Z" 提示：滿能量時顯示
+      if (energy >= energyMax && !stats.empowered) {
+        energyHint.setVisible(true);
+        energyHint.setText('Press Z');
+        energyHint.setColor('#ffe23a');
+      } else {
+        energyHint.setVisible(false);
+      }
+    } else {
+      // 非慢速模式或非玩家：隱藏能量條
+      energyBg.setVisible(false);
+      energyBar.setVisible(false);
+      energyHint.setVisible(false);
+    }
   }
 
   /** ★更新頭上UI位置 */
