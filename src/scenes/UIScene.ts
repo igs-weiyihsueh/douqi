@@ -181,7 +181,7 @@ export class UIScene extends Phaser.Scene {
 
     // ★UI調整②:加入夥伴提示移到【畫面下方】(角色狀態列上方,置中)
     this.joinHintText = this.add
-      .text(w / 2, h - 100, '按 B 加入夥伴 (1/4)', {
+      .text(w / 2, h - 100, '按 B 加入BOT (1/4)', {
         fontFamily: 'monospace',
         fontSize: '15px',
         color: '#7bed9f',
@@ -532,7 +532,7 @@ export class UIScene extends Phaser.Scene {
       this.joinHintText.setText(`夥伴已滿 (${s.count}/${s.maxCount})`);
       this.joinHintText.setColor('#94a3b8');
     } else {
-      this.joinHintText.setText(`按 B 加入夥伴 (${s.count}/${s.maxCount})`);
+      this.joinHintText.setText(`按 B 加入BOT (${s.count}/${s.maxCount})`);
       this.joinHintText.setColor('#7bed9f');
     }
 
