@@ -825,9 +825,28 @@ export class UIScene extends Phaser.Scene {
     const creditBg = this.add.rectangle(creditX, creditY, 120, 34, 0x000000, 0.7)
       .setStrokeStyle(2, 0xffd700); // 金色邊框
     
-    // 金幣圖標：22×22px圓形，金色
-    const coinIcon = this.add.circle(creditX - 40, creditY, 11, 0xffca28)
-      .setStrokeStyle(2, 0xffa000);
+    // ★劍形圖標：22×22px，替換金幣圖標
+    const swordIcon = this.add.graphics();
+    swordIcon.x = creditX - 40;
+    swordIcon.y = creditY;
+    
+    // 繪製劍的形狀
+    swordIcon.clear();
+    swordIcon.lineStyle(2, 0xffa000, 1); // 金色邊框
+    swordIcon.fillStyle(0xffca28, 1);     // 金色填充
+    
+    // 劍刃：長方形 + 尖端三角形
+    swordIcon.fillRect(-2, -8, 4, 12);    // 劍身：4px寬，12px長
+    swordIcon.fillTriangle(0, -8, -2, -8, 0, -11); // 劍尖
+    
+    // 護手：水平線
+    swordIcon.fillRect(-6, 4, 12, 2);     // 護手：12px寬，2px厚
+    
+    // 劍柄：
+    swordIcon.fillRect(-1, 6, 2, 4);      // 劍柄：2px寬，4px長
+    
+    // 劍柄底部：小圓
+    swordIcon.fillCircle(0, 10, 2);       // 底部裝飾
     
     // Credit數字：22px字體，白色，默認"00000"
     const creditText = this.add.text(creditX + 10, creditY, '00000', {
@@ -864,11 +883,11 @@ export class UIScene extends Phaser.Scene {
     }).setOrigin(0.5, 0.5).setVisible(false);
     
     // 添加到容器，並設置標記以便後續更新
-    container.add([badge, badgeText, creditBg, coinIcon, creditText, energyBg, energyBar, energyHint]);
+    container.add([badge, badgeText, creditBg, swordIcon, creditText, energyBg, energyBar, energyHint]);
     
     // ★設置子元件引用，方便updateStats時更新
     (container as any).creditText = creditText;
-    (container as any).coinIcon = coinIcon;
+    (container as any).swordIcon = swordIcon;  // 更新引用名稱
     (container as any).energyBar = energyBar;
     (container as any).energyHint = energyHint;
     (container as any).energyBg = energyBg;
@@ -879,26 +898,51 @@ export class UIScene extends Phaser.Scene {
   /** ★更新頭上UI內容：Credit和能量條 */
   private updateOverheadUIContent(character: CharStat, container: Phaser.GameObjects.Container, stats: StatsPayload): void {
     const creditText = (container as any).creditText as Phaser.GameObjects.Text;
-    const coinIcon = (container as any).coinIcon as Phaser.GameObjects.Arc;
+    const swordIcon = (container as any).swordIcon as Phaser.GameObjects.Graphics;  // 更新類型
     const energyBar = (container as any).energyBar as Phaser.GameObjects.Rectangle;
     const energyHint = (container as any).energyHint as Phaser.GameObjects.Text;
     const energyBg = (container as any).energyBg as Phaser.GameObjects.Rectangle;
     
-    if (!creditText || !coinIcon || !energyBar) return;
+    if (!creditText || !swordIcon || !energyBar) return;
     
     // ★更新Credit顯示
     const creditValue = character.credit || 0;
     const creditStr = creditValue.toString().padStart(5, '0'); // 格式："00000"
     creditText.setText(creditStr);
     
-    // Credit耗盡特效：閃紅色
+    // Credit耗盡特效：劍圖標閃紅色
     if (creditValue === 0) {
       const flashTime = this.time.now % 600; // 300ms週期
       const isFlashing = flashTime < 300;
-      coinIcon.setFillStyle(isFlashing ? 0xff3b30 : 0xffca28); // 紅色閃爍
+      // 重繪劍圖標顏色
+      swordIcon.clear();
+      const fillColor = isFlashing ? 0xff3b30 : 0xffca28; // 紅色閃爍或正常金色
+      const strokeColor = isFlashing ? 0xcc0000 : 0xffa000; // 邊框也要變色
+      
+      swordIcon.lineStyle(2, strokeColor, 1);
+      swordIcon.fillStyle(fillColor, 1);
+      
+      // 重繪劍的形狀
+      swordIcon.fillRect(-2, -8, 4, 12);    // 劍身
+      swordIcon.fillTriangle(0, -8, -2, -8, 0, -11); // 劍尖
+      swordIcon.fillRect(-6, 4, 12, 2);     // 護手
+      swordIcon.fillRect(-1, 6, 2, 4);      // 劍柄
+      swordIcon.fillCircle(0, 10, 2);       // 底部裝飾
+      
       creditText.setColor(isFlashing ? '#ff3b30' : '#ffffff');
     } else {
-      coinIcon.setFillStyle(0xffca28); // 正常金色
+      // 正常金色劍圖標
+      swordIcon.clear();
+      swordIcon.lineStyle(2, 0xffa000, 1);
+      swordIcon.fillStyle(0xffca28, 1);
+      
+      // 重繪劍的形狀
+      swordIcon.fillRect(-2, -8, 4, 12);
+      swordIcon.fillTriangle(0, -8, -2, -8, 0, -11);
+      swordIcon.fillRect(-6, 4, 12, 2);
+      swordIcon.fillRect(-1, 6, 2, 4);
+      swordIcon.fillCircle(0, 10, 2);
+      
       creditText.setColor('#ffffff'); // 正常白色
     }
     
