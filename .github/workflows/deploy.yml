@@ -36,6 +36,15 @@ jobs:
       - name: Build
         run: npm run build
         
+      - name: Debug - Check build output
+        run: |
+          echo "=== Checking dist directory ==="
+          ls -la dist/
+          echo "=== dist/index.html content ==="
+          head -20 dist/index.html
+          echo "=== dist/assets/ content ==="
+          ls -la dist/assets/
+        
       - name: Setup Pages
         uses: actions/configure-pages@v4
         
