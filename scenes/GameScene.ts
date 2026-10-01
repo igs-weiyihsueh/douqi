@@ -8279,11 +8279,11 @@ export class GameScene extends Phaser.Scene {
         GameConfig.height / 2, 
         'scene-background'
       )
-        .setDepth(1)        // 最底層深度，確保不遮擋任何遊戲元素
+        .setDepth(-10)      // 設為-10，確保在所有原場景元素之下
         .setVisible(false)  // 預設隱藏，按F1切換顯示
         .setDisplaySize(GameConfig.width, GameConfig.height); // 填滿整個畫面
       
-      console.log('🖼️ 新場景背景已創建：Scene.png (depth=1, hidden)');
+      console.log('🖼️ 新場景背景已創建：Scene.png (depth=-10, hidden)');
     } else {
       console.warn('⚠️ 場景背景圖片不存在：scene-background');
     }
@@ -8304,8 +8304,12 @@ export class GameScene extends Phaser.Scene {
    * - 舊場景：隱藏背景圖，顯示原始程式生成場景
    * 
    * 深度層級保證：
-   * - 新場景背景：depth=1 (最底層)
-   * - 原場景元素：depth=10+
+   * - 新場景背景：depth=-10 (最底層，在所有原場景元素之下)
+   * - 原場景天空：depth=-3
+   * - 原場景遠景：depth=-2  
+   * - 原場景外圍：depth=-1
+   * - 原場景地面：depth=0
+   * - 原場景邊框：depth=1
    * - 遊戲物件：depth=50-100
    * - 頭上UI：depth=200-2000 (完全不被遮擋)
    */
