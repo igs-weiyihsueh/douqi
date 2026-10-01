@@ -4,5 +4,5 @@ dist
 .DS_Store
 
 # 📦 Build產物分離 - 這些檔案由 npm run build 自動生成到 dist/
-assets/
+# assets/ 👈 註釋掉，允許public/assets被追蹤（場景圖等資源檔案需要版控）
 # index.html  👈 移除這行，允許根目錄的index.html被追蹤
