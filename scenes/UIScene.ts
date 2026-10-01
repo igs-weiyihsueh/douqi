@@ -1117,7 +1117,8 @@ export class UIScene extends Phaser.Scene {
       fontStyle: 'bold'
     }).setOrigin(0.5, 0.5);
     
-    // 進度條背景：緊貼文字下方
+    // ★用戶反饋修復：隱藏COMBO數字下方的進度條（用戶稱為"意義不明線條"）
+    // 創建空的不可見進度條元素，保持接口一致性但不顯示
     const progressX = comboX;
     const progressY = comboY + config.COMBO.PROGRESS_Y_OFFSET;
     
@@ -1127,17 +1128,17 @@ export class UIScene extends Phaser.Scene {
       config.COMBO.PROGRESS_WIDTH,
       config.COMBO.PROGRESS_HEIGHT,
       config.COLORS.BACKGROUND,
-      0.6  // ★降低透明度，減少視覺干擾
-    ).setStrokeStyle(1, config.COLORS.BORDER_GOLD);
+      0  // ★完全透明，不顯示背景
+    ).setVisible(false);  // ★設為不可見
     
-    // 進度條填充：更細更低調
     const comboProgress = this.add.rectangle(
       progressX - config.COMBO.PROGRESS_WIDTH / 2,
       progressY,
-      0,  // 初始寬度為0
+      0,
       config.COMBO.PROGRESS_HEIGHT - 1,
-      config.COLORS.COMBO_PROGRESS
-    ).setOrigin(0, 0.5);
+      config.COLORS.COMBO_PROGRESS,
+      0  // ★完全透明
+    ).setOrigin(0, 0.5).setVisible(false);  // ★設為不可見
     
     return { comboText, comboProgress, comboProgressBg };
   }

@@ -1428,6 +1428,8 @@ export class GameScene extends Phaser.Scene {
     // v31：這次攻擊命中(≥1隻) → combo/鬥氣累積（P1 走連段系統、BOT 走舊鬥氣）
     if (hitCount > 0) {
       this.onComboHit(c, time);
+      // ★階段三：觸發COMBO獎勵系統（改為命中觸發而非擊殺觸發）
+      this.triggerComboHit(c);
     }
     this.flashWhite(c);
     this.spawnMeleeArcEffect(c.x, c.y, c.aimAngle);
@@ -6553,8 +6555,8 @@ export class GameScene extends Phaser.Scene {
       enemy.kill();
       if (wasBoss) {
         actor.kills++;
-        // ★階段三：觸發COMBO獎勵系統
-        this.triggerComboHit(actor);
+        // ★移除：COMBO改為命中觸發，不在擊殺時觸發
+        // this.triggerComboHit(actor);  
         this.grantKillExp(etype);
         this.onBossKilled(dx, dy); // v28：BOSS 擊殺 → 大爆炸+掉落+過關
       } else if (etype === 'tower') {
@@ -6566,8 +6568,8 @@ export class GameScene extends Phaser.Scene {
         // NPC/錨點為 anchor-like 位移點，玩家傷不到；此分支僅防呆，不計殺
       } else {
         actor.kills++;
-        // ★階段三：觸發COMBO獎勵系統
-        this.triggerComboHit(actor);
+        // ★移除：COMBO改為命中觸發，不在擊殺時觸發
+        // this.triggerComboHit(actor);
         this.grantKillExp(etype);
         this.onWaveKill();
         this.spawnDeathBurst(dx, dy);
@@ -6668,6 +6670,8 @@ export class GameScene extends Phaser.Scene {
     }
     // v31：衝撞命中(必中 primary) → combo/鬥氣累積
     this.onComboHit(actor, time);
+    // ★階段三：衝刺命中也觸發COMBO獎勵系統
+    this.triggerComboHit(actor);
 
     this.flashWhite(actor);
     // v7：一般攻擊命中不再震動（只保留閃白/傷害數字/擊退）
@@ -7763,12 +7767,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * ★階段三：觸發COMBO獎勵系統
+   * ★階段三：觸發COMBO命中獎勵系統
    * 
-   * 當角色擊殺敵人時觸發，更新連擊數和時間戳
-   * 檢查獎勵里程碑並發放票券
+   * **修改：從擊殺觸發改為命中觸發**
+   * - 每次攻擊命中敵人時COMBO +1
+   * - 更符合動作遊戲的連擊設計
+   * - 玩家獲得更頻繁的正反饋
    * 
-   * @param actor 執行擊殺的角色
+   * @param actor 執行命中的角色
    */
   private triggerComboHit(actor: any): void {
     const currentTime = this.time.now;
@@ -7776,7 +7782,7 @@ export class GameScene extends Phaser.Scene {
     
     // 更新連擊數和時間
     combo.currentStreak++;
-    combo.lastKillTime = currentTime;
+    combo.lastKillTime = currentTime;  // 沿用lastKillTime變數名，但實際記錄lastHitTime
     combo.isWarning = false; // 重置警告狀態
     
     // 檢查是否達到獎勵里程碑
@@ -7820,7 +7826,10 @@ export class GameScene extends Phaser.Scene {
         
         console.log(`🎉 COMBO Reward! ${combo.currentStreak}x = ${ticketReward} tickets (Total: ${combo.ticketsEarned})`);
         
-        // 播放獎勵特效
+        // ★新增：彩票噴發特效
+        this.spawnTicketBurst(actor, ticketReward, config.MILESTONES[i]);
+        
+        // 原有獎勵特效
         this.spawnComboRewardEffect(actor.x, actor.y, ticketReward);
         break;
       }
@@ -7864,6 +7873,108 @@ export class GameScene extends Phaser.Scene {
       ease: 'Power2',          // 自然的緩動曲線
       onComplete: () => rewardText.destroy() // 動畫結束後清理對象
     });
+  }
+  
+  /**
+   * ★階段三：彩票噴發特效系統
+   * 
+   * 當角色達到COMBO里程碑時播放華麗的彩票噴發動畫：
+   * - 8-20張彩票根據獎勵等級動態調整
+   * - 上方扇形噴發（-120°~-60°角度範圍）
+   * - 物理引擎：初速度 + 重力 + 自轉動畫
+   * - 持續3-4秒的動態掉落效果
+   * 
+   * @param actor 觸發角色
+   * @param _tickets 獲得票券數量（預留參數）
+   * @param milestone 達成的里程碑
+   */
+  private spawnTicketBurst(actor: any, _tickets: number, milestone: number): void {
+    // 根據獎勵等級計算彩票數量：8-20張
+    const ticketCount = Math.max(8, Math.min(20, 8 + milestone * 0.4));
+    
+    // 彩票噴發的物理參數
+    const burstConfig = {
+      // 噴發角度：上方扇形（-120° ~ -60°）
+      minAngle: -120,
+      maxAngle: -60,
+      // 初始速度：根據里程碑調整（更高里程碑 = 更強噴發）
+      minVelocity: 200 + milestone * 5,
+      maxVelocity: 350 + milestone * 8,
+      // 重力和自轉
+      gravity: 300,
+      rotationSpeed: 2,  // 每秒2圈
+      // 持續時間
+      lifetime: 3500 + Math.random() * 1000  // 3.5-4.5秒
+    };
+    
+    // 創建彩票粒子
+    for (let i = 0; i < ticketCount; i++) {
+      this.createTicketParticle(actor.x, actor.y, burstConfig);
+    }
+    
+    console.log(`💸 Ticket Burst! ${ticketCount} tickets flying from ${actor.index === 0 ? 'P1' : `BOT${actor.index}`}`);
+  }
+  
+  /**
+   * 創建單個彩票粒子
+   * 
+   * @param x 起始X座標
+   * @param y 起始Y座標  
+   * @param config 物理配置參數
+   */
+  private createTicketParticle(x: number, y: number, config: any): void {
+    // 創建彩票視覺元素（簡單的矩形代表）
+    const ticket = this.add.rectangle(x, y, 12, 8, 0xFFD700)  // 金色票券
+      .setStrokeStyle(1, 0xFFFFFF)  // 白色邊框
+      .setDepth(45);  // 高於其他遊戲元素
+    
+    // 隨機選擇噴發角度（弧度制）
+    const angle = Phaser.Math.DegToRad(
+      Phaser.Math.Between(config.minAngle, config.maxAngle)
+    );
+    
+    // 隨機初始速度
+    const velocity = Phaser.Math.Between(config.minVelocity, config.maxVelocity);
+    const vx = Math.cos(angle) * velocity;
+    const vy = Math.sin(angle) * velocity;
+    
+    // 物理動畫：拋物線運動 + 自轉
+    let currentVx = vx;
+    let currentVy = vy;
+    
+    const startTime = this.time.now;
+    const updateTicket = () => {
+      const elapsed = this.time.now - startTime;
+      
+      // 檢查生命週期
+      if (elapsed >= config.lifetime) {
+        ticket.destroy();
+        return;
+      }
+      
+      // 更新速度（重力影響Y速度）
+      currentVy += config.gravity * 0.016;  // 假設60FPS
+      
+      // 更新位置
+      ticket.x += currentVx * 0.016;
+      ticket.y += currentVy * 0.016;
+      
+      // 自轉動畫
+      ticket.rotation += config.rotationSpeed * 0.016;
+      
+      // 邊界檢查：彩票飛出螢幕外時銷毀
+      if (ticket.x < -50 || ticket.x > GameConfig.width + 50 || 
+          ticket.y > GameConfig.height + 50) {
+        ticket.destroy();
+        return;
+      }
+      
+      // 繼續下一幀更新
+      this.time.delayedCall(16, updateTicket);  // ~60FPS
+    };
+    
+    // 開始物理更新
+    updateTicket();
   }
 
   /**
