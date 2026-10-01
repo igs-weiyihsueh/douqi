@@ -344,8 +344,8 @@ export class UIScene extends Phaser.Scene {
       
       // 🔲 方案B：分離式小框設計 - 為💀和🎫各自添加獨立背景框
       
-      // 上方：💀 骷髏擊殺數小框
-      const killBoxW = 60;
+      // 上方：💀 骷髏擊殺數小框 - 調整為支援4位數顯示
+      const killBoxW = 75;  // 從60px增加到75px，與彩票數框保持一致
       const killBoxH = 20;
       const killBoxX = statsX - 2;
       const killBoxY = rowTopY + 6;
@@ -373,8 +373,8 @@ export class UIScene extends Phaser.Scene {
         })
         .setDepth(21);
       
-      // 下方：🎫 彩票數小框 (分離獨立)
-      const ticketBoxW = 60;
+      // 下方：🎫 彩票數小框 (分離獨立) - 調整為支援4位數顯示
+      const ticketBoxW = 75;  // 從60px增加到75px，支援4位數(1000-9999)顯示
       const ticketBoxH = 20;
       const ticketBoxX = statsX - 2;
       const ticketBoxY = rowTopY + 30;
