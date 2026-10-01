@@ -7814,23 +7814,17 @@ export class GameScene extends Phaser.Scene {
     // 檢查是否達到任何里程碑
     for (let i = 0; i < config.MILESTONES.length; i++) {
       if (combo.currentStreak === config.MILESTONES[i]) {
-        // 觸發獎勵：發放票券
-        const ticketReward = config.REWARDS[i];
-        combo.ticketsEarned += ticketReward;
-        actor.credit += ticketReward; // 同步更新Credit顯示
+        // ★修復觸發邏輯：標記達到里程碑，但暫不觸發獎勵
+        combo.pendingRewardIndex = i;
+        combo.pendingRewardTickets = config.REWARDS[i];
+        combo.pendingRewardMilestone = config.MILESTONES[i];
         
         // 更新下個里程碑目標
         combo.nextMilestone = i + 1 < config.MILESTONES.length ? 
           config.MILESTONES[i + 1] : 
           config.MILESTONES[config.MILESTONES.length - 1];
         
-        console.log(`🎉 COMBO Reward! ${combo.currentStreak}x = ${ticketReward} tickets (Total: ${combo.ticketsEarned})`);
-        
-        // ★新增：彩票噴發特效
-        this.spawnTicketBurst(actor, ticketReward, config.MILESTONES[i]);
-        
-        // 原有獎勵特效
-        this.spawnComboRewardEffect(actor.x, actor.y, ticketReward);
+        console.log(`🎯 COMBO里程碑達成！${combo.currentStreak}x - 等待中斷觸發 ${config.REWARDS[i]} 票券獎勵`);
         break;
       }
     }
@@ -7848,33 +7842,6 @@ export class GameScene extends Phaser.Scene {
    * - 尺寸放大1.5倍，增強視覺衝擊力
    * - 1.5秒動畫時間，給予充分展示時間
    * - 高深度層(1000)確保在最上層顯示
-   * 
-   * @param x 特效顯示的世界座標X
-   * @param y 特效顯示的世界座標Y
-   * @param tickets 獲得的票券數量，用於文字顯示
-   */
-  private spawnComboRewardEffect(x: number, y: number, tickets: number): void {
-    // 創建票券獎勵文字特效：使用醒目的金色和票券emoji
-    const rewardText = this.add.text(x, y - 20, `+${tickets} 🎫`, {
-      fontSize: '24px',
-      color: '#ffd700',        // 金色，與獎勵主題呼應
-      stroke: '#000000',       // 黑色描邊，增強可讀性
-      strokeThickness: 3,      // 較厚描邊，確保各種背景下可見
-      fontStyle: 'bold'        // 粗體，增強視覺重量
-    }).setOrigin(0.5, 0.5).setDepth(1000); // 最高層級，確保不被遮擋
-    
-    // 彈出動畫：Y軸上升 + 透明度漸變 + 尺寸放大
-    this.tweens.add({
-      targets: rewardText,
-      y: y - 80,               // 向上彈出60px
-      alpha: 0,                // 漸變到完全透明
-      scale: 1.5,              // 放大1.5倍，增強視覺衝擊
-      duration: 1500,          // 1.5秒完整動畫
-      ease: 'Power2',          // 自然的緩動曲線
-      onComplete: () => rewardText.destroy() // 動畫結束後清理對象
-    });
-  }
-  
   /**
    * ★階段三：彩票噴發特效系統
    * 
@@ -8135,6 +8102,26 @@ export class GameScene extends Phaser.Scene {
         const timeSinceLastKill = currentTime - combo.lastKillTime;
         
         if (timeSinceLastKill >= config.STREAK_TIMEOUT_MS) {
+          // ★修復邏輯：COMBO中斷前先觸發待處理的獎勵
+          if (combo.pendingRewardTickets !== undefined && combo.pendingRewardTickets > 0) {
+            console.log(`🎉 COMBO中斷觸發獎勵！${combo.pendingRewardMilestone}x = ${combo.pendingRewardTickets} 票券`);
+            
+            // 發放票券獎勵
+            combo.ticketsEarned += combo.pendingRewardTickets;
+            character.credit += combo.pendingRewardTickets; // 同步更新Credit顯示
+            
+            // 觸發華麗彩票特效
+            this.spawnTicketBurst(character, combo.pendingRewardTickets, combo.pendingRewardMilestone!);
+            
+            // 觸發票券獲得提示
+            this.spawnTicketRewardText(character, combo.pendingRewardTickets);
+            
+            // 清除待處理獎勵
+            combo.pendingRewardIndex = undefined;
+            combo.pendingRewardTickets = undefined;
+            combo.pendingRewardMilestone = undefined;
+          }
+          
           // 超時：重置COMBO到初始狀態
           console.log(`COMBO Reset! ${character.index === 0 ? 'P1' : `BOT${character.index}`} streak lost`);
           combo.currentStreak = 0;
@@ -8215,6 +8202,57 @@ export class GameScene extends Phaser.Scene {
       energyMax: GameConfig.energy.max,
       energyTrigger: GameConfig.energy.trigger,
       empowered: this.player.empowered
+    });
+  }
+
+  /**
+   * ★新增：票券獲得文字提示
+   * 
+   * 在角色頭上顯示"獲得X票券！"的金色文字提示
+   * 提供明確的獎勵反饋，讓用戶清楚知道獲得的票券數量
+   * 
+   * @param character 獲得票券的角色
+   * @param ticketAmount 獲得的票券數量
+   */
+  private spawnTicketRewardText(character: any, ticketAmount: number): void {
+    const rewardText = this.add.text(
+      character.x, 
+      character.y - 80, // 角色頭上80px
+      `獲得${ticketAmount}票券！`, 
+      {
+        fontSize: '28px',
+        fontFamily: 'Arial Black',
+        color: '#FFD700',        // 金色文字
+        stroke: '#FFFFFF',       // 白色描邊
+        strokeThickness: 3,      // 描邊厚度
+        shadow: {
+          offsetX: 2,
+          offsetY: 2,
+          color: '#000000',
+          blur: 4,
+          fill: true
+        }
+      }
+    )
+      .setOrigin(0.5, 0.5)       // 居中對齊
+      .setDepth(1500)            // 高深度確保可見
+      .setAlpha(1);              // 完全不透明
+
+    console.log(`💰 票券提示文字："獲得${ticketAmount}票券！" at (${character.x}, ${character.y - 80})`);
+    
+    // 文字動畫：向上飛出 + 放大 + 漸變消失
+    this.tweens.add({
+      targets: rewardText,
+      y: rewardText.y - 60,      // 向上移動60px
+      scaleX: 1.3,               // 放大1.3倍
+      scaleY: 1.3,
+      alpha: 0,                  // 漸變透明
+      duration: 2000,            // 2秒動畫
+      ease: 'Power2',            // 自然曲線
+      onComplete: () => {
+        rewardText.destroy();
+        console.log(`💰 票券提示文字動畫完成`);
+      }
     });
   }
 }
