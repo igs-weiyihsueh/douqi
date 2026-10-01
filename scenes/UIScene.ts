@@ -117,19 +117,19 @@ export class UIScene extends Phaser.Scene {
   
   // ★頭上UI佈局常數：避免魔術數字
   private readonly OVERHEAD_UI_CONFIG = {
-    // 編號牌配置
+    // 編號牌配置 - 左側位置
     BADGE: {
-      X: -66,
-      Y: -25,
+      X: -70,  // ★調整：更左側，為Credit騰出空間
+      Y: -5,   // ★調整：與Credit水平對齊
       RADIUS: 18,
       BORDER_WIDTH: 2,
       FONT_SIZE: '20px',
       STROKE_WIDTH: 2
     },
-    // Credit顯示配置  
+    // Credit顯示配置 - 編號牌右側
     CREDIT: {
-      X: -36,
-      Y: 5,
+      X: 20,   // ★調整：移到編號牌右側
+      Y: -5,   // ★調整：與編號牌水平對齊
       BG_WIDTH: 120,
       BG_HEIGHT: 34,
       BORDER_WIDTH: 2,
@@ -154,9 +154,9 @@ export class UIScene extends Phaser.Scene {
       POMMEL_RADIUS: 2,
       POMMEL_Y: 10
     },
-    // 能量條配置
+    // 能量條配置 - Credit正下方
     ENERGY: {
-      Y_OFFSET: 30,
+      Y_OFFSET: 25,  // ★調整：減少間距，緊貼Credit下方
       WIDTH: 100,
       HEIGHT: 8,
       BORDER_WIDTH: 1,
