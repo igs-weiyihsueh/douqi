@@ -8,6 +8,9 @@ export default defineConfig({
   },
   build: {
     target: 'es2020',
-    outDir: 'dist'
+    outDir: 'dist',
+    rollupOptions: {
+      treeshake: false
+    }
   }
 });
