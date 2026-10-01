@@ -8369,6 +8369,55 @@ export class GameScene extends Phaser.Scene {
       }
       console.log('🌋 切換到新場景：火山地獄風格 (Scene.png + Graphics測試)');
       
+      // ★檢測1.1：Scene.png檔案內容檢測
+      console.log('🔍 ===== 檢測1.1 - Scene.png檔案內容 =====');
+      
+      // 檢測檔案是否存在
+      const texture = this.textures.get('scene-background');
+      console.log('✓ 紋理物件存在:', !!texture);
+      if (texture) {
+        console.log('✓ 紋理key:', texture.key);
+        
+        // 檢測圖片來源
+        if (texture.source && texture.source[0]) {
+          const img = texture.source[0].image as any;
+          console.log('✓ 圖片尺寸:', img.width + '×' + img.height);
+          console.log('✓ 圖片來源:', img.src?.substring(img.src.lastIndexOf('/') + 1) || 'unknown');
+          console.log('✓ 載入狀態:', img.complete || 'unknown');
+          
+          // 檢測圖片的像素資料
+          if (img.naturalWidth !== undefined) {
+            console.log('✓ 圖片naturalWidth:', img.naturalWidth);
+            console.log('✓ 圖片naturalHeight:', img.naturalHeight);
+          }
+          
+          // 檢測瀏覽器快取狀況
+          console.log('🔍 ===== 檢測1.2 - 快取狀況 =====');
+          console.log('✓ 當前時間戳:', Date.now());
+          console.log('✓ 頁面載入時間:', Math.round(performance.now()));
+          
+          // 如果圖片有timestamp，也要輸出
+          if (img.src && img.src.includes('?')) {
+            console.log('✓ 圖片URL參數:', img.src.split('?')[1]);
+          } else {
+            console.log('✓ 圖片URL無參數 (可能被快取)');
+          }
+          
+          console.log('🔍 ===== 檢測1.3 - 紋理資料驗證 =====');
+          console.log('✓ 紋理總數:', Object.keys(this.textures.list).length);
+          console.log('✓ scene-background存在:', this.textures.exists('scene-background'));
+          
+          // 列出所有紋理keys以供參考
+          const textureKeys = Object.keys(this.textures.list).slice(0, 10); // 只列前10個
+          console.log('✓ 前10個紋理keys:', textureKeys.join(', '));
+          
+        } else {
+          console.log('❌ 圖片來源不存在 - texture.source問題');
+        }
+      } else {
+        console.log('❌ scene-background紋理不存在');
+      }
+      
       // ★詳細診斷資訊
       if (this.sceneBackground) {
         console.log('🔍 場景背景物件診斷：');
