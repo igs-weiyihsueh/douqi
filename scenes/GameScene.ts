@@ -29,6 +29,10 @@ export class GameScene extends Phaser.Scene {
   /** 鎖定標記繪圖層（P1 當前鎖定目標） */
   private lockGfx!: Phaser.GameObjects.Graphics;
 
+  // ★場景切換系統
+  private sceneBackground: Phaser.GameObjects.Image | null = null;
+  private isNewSceneActive = false;
+
   private survivalMs = 0;
   private gameOver = false;
 
@@ -237,6 +241,9 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     this.resetState();
+
+    // ★場景圖熱切換系統初始化
+    this.initSceneBackground();
 
     // 固定視角競技場
     const pad = GameConfig.arena.padding;
@@ -8254,5 +8261,74 @@ export class GameScene extends Phaser.Scene {
         console.log(`💰 票券提示文字動畫完成`);
       }
     });
+  }
+
+  /**
+   * ★場景圖熱切換系統初始化
+   * 
+   * 在GameScene啟動時設置：
+   * - 新場景背景圖片（Scene.png）在最底層
+   * - F1熱鍵監聽器
+   * - 深度層級管理確保UI不被遮擋
+   */
+  private initSceneBackground(): void {
+    // 創建新場景背景圖（預設隱藏）
+    if (this.textures.exists('scene-background')) {
+      this.sceneBackground = this.add.image(
+        GameConfig.width / 2, 
+        GameConfig.height / 2, 
+        'scene-background'
+      )
+        .setDepth(1)        // 最底層深度，確保不遮擋任何遊戲元素
+        .setVisible(false)  // 預設隱藏，按F1切換顯示
+        .setDisplaySize(GameConfig.width, GameConfig.height); // 填滿整個畫面
+      
+      console.log('🖼️ 新場景背景已創建：Scene.png (depth=1, hidden)');
+    } else {
+      console.warn('⚠️ 場景背景圖片不存在：scene-background');
+    }
+
+    // F1熱鍵監聽
+    this.input.keyboard?.on('keydown-F1', () => {
+      this.toggleSceneBackground();
+    });
+    
+    console.log('⌨️ F1熱鍵監聽器已設置');
+  }
+
+  /**
+   * ★場景背景熱切換功能
+   * 
+   * F1鍵觸發，在新舊場景背景間切換：
+   * - 新場景：顯示Scene.png背景圖
+   * - 舊場景：隱藏背景圖，顯示原始程式生成場景
+   * 
+   * 深度層級保證：
+   * - 新場景背景：depth=1 (最底層)
+   * - 原場景元素：depth=10+
+   * - 遊戲物件：depth=50-100
+   * - 頭上UI：depth=200-2000 (完全不被遮擋)
+   */
+  private toggleSceneBackground(): void {
+    if (!this.sceneBackground) {
+      console.warn('⚠️ 場景背景圖片不可用，無法切換');
+      return;
+    }
+
+    // 切換狀態
+    this.isNewSceneActive = !this.isNewSceneActive;
+    
+    if (this.isNewSceneActive) {
+      // 顯示新場景背景
+      this.sceneBackground.setVisible(true);
+      console.log('🌋 切換到新場景：火山地獄風格 (Scene.png)');
+    } else {
+      // 隱藏新場景背景，顯示原場景
+      this.sceneBackground.setVisible(false);
+      console.log('🏛️ 切換到舊場景：原始程式生成場景');
+    }
+    
+    // 狀態反饋
+    console.log(`📋 場景狀態：${this.isNewSceneActive ? '新場景' : '舊場景'} (F1切換)`);
   }
 }
