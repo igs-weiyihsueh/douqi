@@ -7916,13 +7916,59 @@ export class GameScene extends Phaser.Scene {
       lifetime: config.TIMING.LIFETIME_BASE_MS + Math.random() * config.TIMING.LIFETIME_RANDOM_MS
     };
     
-    // 創建彩票粒子：使用配置數量和物理參數
+    // ★方案A：極簡測試 - 創建超明顯彩票，固定位置
+    console.log(`💸 [方案A] 極簡測試：${ticketCount} tickets at FIXED CENTER (400, 300)`);
+    
     for (let i = 0; i < ticketCount; i++) {
-      this.createTicketParticle(actor.x, actor.y, burstConfig);
+      // 極簡彩票：固定螢幕中心，超大尺寸，紅色，最高深度
+      const ticket = this.add.rectangle(
+        400 + i * 10,  // 固定X=400，稍微錯開
+        300,           // 固定Y=300螢幕中心
+        50,            // 極大寬度50px
+        30,            // 極大高度30px
+        0xFF0000       // 紅色更明顯
+      )
+        .setStrokeStyle(3, 0xFFFFFF)  // 白色粗邊框
+        .setDepth(1000);              // 最高深度
+      
+      console.log(`🎫 [方案A] TEST ticket ${i}: 50×30px RED at (${400 + i*10}, 300) depth=1000`);
+      
+      // 極簡運動：只向上或向右，超慢20px/s
+      const moveX = (i % 2 === 0) ? 20 : 0;  // 偶數向右
+      const moveY = (i % 2 === 1) ? -20 : 0; // 奇數向上
+      
+      // 使用Tween確保可見的運動
+      this.tweens.add({
+        targets: ticket,
+        x: ticket.x + moveX * 10,  // 10秒後移動200px
+        y: ticket.y + moveY * 10,
+        duration: 10000,           // 10秒超長時間
+        ease: 'Linear',
+        onComplete: () => {
+          console.log(`🎫 [方案A] TEST ticket ${i} movement completed`);
+          ticket.destroy();
+        }
+      });
     }
     
-    // ★新增：創建明顯的閃光特效，確保用戶能看到
-    this.createBurstFlashEffect(actor.x, actor.y);
+    // 超明顯閃光：固定中心位置
+    const flash = this.add.circle(400, 300, 10, 0xFF0000, 1)
+      .setDepth(1001)
+      .setStrokeStyle(5, 0xFFFFFF, 1);
+    
+    console.log(`✨ [方案A] MASSIVE RED flash at (400, 300) depth=1001`);
+    
+    this.tweens.add({
+      targets: flash,
+      radius: 100,   // 擴張到100px
+      alpha: 0,
+      duration: 2000, // 2秒動畫
+      ease: 'Linear',
+      onComplete: () => {
+        flash.destroy();
+        console.log(`✨ [方案A] Flash animation completed`);
+      }
+    });
     
     console.log(`💸 Ticket Burst! ${ticketCount} tickets flying from ${actor.index === 0 ? 'P1' : `BOT${actor.index}`} at (${actor.x}, ${actor.y})`);
     console.log(`🎯 Burst config:`, burstConfig);
@@ -7931,25 +7977,9 @@ export class GameScene extends Phaser.Scene {
   /**
    * ★階段三：創建單個彩票粒子（征騎Code Review修正版）
    * 
-   * 實現彩票的完整物理模擬：拋物線運動、重力影響、自轉動畫
-   * 
-   * **物理算法詳解**：
-   * 1. 角度計算：將度數制角度轉換為弧度制，用於三角函數
-   * 2. 速度分解：初速度按angle分解為x/y分量 (vx=v*cos(θ), vy=v*sin(θ))
-   * 3. 運動更新：每幀更新位置 (x+=vx*dt, y+=vy*dt)
-   * 4. 重力影響：每幀增加Y軸速度 (vy+=gravity*dt)
-   * 5. 自轉效果：每幀增加旋轉角度 (rotation+=rotSpeed*dt)
-   * 6. 邊界檢查：超出螢幕範圍時自動銷毀，防止記憶體洩漏
-   * 
-   * **記憶體管理改善**：
-   * - 使用生命週期限制，避免無限遞歸調用
-   * - 邊界檢查確保粒子及時銷毀
-   * - 參數完全從config讀取，無硬編碼風險
-   * 
-   * @param x 起始X座標（像素）
-   * @param y 起始Y座標（像素）  
-   * @param config 物理配置參數，包含角度、速度、重力等設定
+   * ★方案A測試中暫時停用，避免編譯警告
    */
+  /*
   private createTicketParticle(x: number, y: number, config: any): void {
     const visualConfig = GameConfig.ticketEffect.VISUAL;
     const boundaryConfig = GameConfig.ticketEffect.BOUNDARIES;
@@ -8043,22 +8073,14 @@ export class GameScene extends Phaser.Scene {
     // 開始物理更新循環
     updateTicket();
   }
+  */
   
   /**
    * ★階段三：創建彩票噴發閃光特效
    * 
-   * 在彩票噴發位置創建明顯的視覺提示，確保用戶能察覺到特效觸發
-   * 即使彩票粒子因為參數問題不可見，閃光也能提供明確的視覺反饋
-   * 
-   * 特效設計：
-   * - 大型金色閃光圈：半徑60px，足夠明顯
-   * - 快速擴張動畫：200ms內從小圓擴展到大圓
-   * - 透明度漸變：從完全不透明到完全透明
-   * - 高深度層級：depth=300確保在最上層顯示
-   * 
-   * @param x 閃光中心X座標
-   * @param y 閃光中心Y座標
+   * ★方案A測試中暫時停用，避免編譯警告
    */
+  /*
   private createBurstFlashEffect(x: number, y: number): void {
     // 創建閃光圈：金色，高深度確保可見
     const flash = this.add.circle(x, y, 5, 0xFFD700, 0.8)
@@ -8080,6 +8102,7 @@ export class GameScene extends Phaser.Scene {
       }
     });
   }
+  */
 
   /**
    * ★階段三：更新所有角色的COMBO計時系統
