@@ -7962,20 +7962,17 @@ export class GameScene extends Phaser.Scene {
     console.log(`✨ [方案A] MASSIVE RED flash at (400, 300) depth=1001`);
     */
     
-    // ★場景層級驗證：改為在UIScene中創建特效
-    console.log(`🔄 [場景驗證] 改為UIScene創建，避免被覆蓋問題`);
+    // ★正式版：改為華麗彩票特效，跟隨角色位置
+    console.log(`🔄 [正式版] UIScene創建華麗特效，跟隨角色位置`);
     
-    // 獲取UIScene引用並調用特效創建
+    // 獲取UIScene引用並調用華麗特效創建
     const uiScene = this.scene.get('UIScene') as any;
     if (uiScene && uiScene.spawnTicketBurstInUI) {
-      // 轉換為UIScene座標（考慮相機偏移）
-      const screenX = 400;  // 固定螢幕中心X
-      const screenY = 300;  // 固定螢幕中心Y
-      
-      console.log(`🎯 [場景驗證] 調用UIScene.spawnTicketBurstInUI at (${screenX}, ${screenY})`);
-      uiScene.spawnTicketBurstInUI(screenX, screenY, milestone);
+      // 傳遞角色的世界座標，由UIScene負責轉換為螢幕座標
+      console.log(`🎯 [正式版] 調用UIScene華麗特效 at world(${actor.x}, ${actor.y})`);
+      uiScene.spawnTicketBurstInUI(actor.x, actor.y, milestone);
     } else {
-      console.error(`❌ [場景驗證] UIScene或spawnTicketBurstInUI方法不存在`);
+      console.error(`❌ [正式版] UIScene或spawnTicketBurstInUI方法不存在`);
     }
     
     console.log(`💸 Ticket Burst! ${ticketCount} tickets via UIScene from ${actor.index === 0 ? 'P1' : `BOT${actor.index}`}`);

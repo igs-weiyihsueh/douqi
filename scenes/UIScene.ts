@@ -1408,71 +1408,153 @@ export class UIScene extends Phaser.Scene {
   }
 
   /**
-   * ★場景層級驗證：在UIScene中創建彩票特效
+   * ★場景層級確認：在UIScene中創建華麗彩票特效
    * 
-   * 驗證假設：彩票在GameScene創建可能被UIScene覆蓋
-   * 解決方案：將特效創建移到UIScene中，確保在最上層
+   * 場景層級問題已確認解決，現在實現正式版華麗特效
+   * 基於UIScene創建，但使用原始設計的視覺效果和物理模擬
    * 
-   * @param x 螢幕座標X
-   * @param y 螢幕座標Y  
+   * @param worldX 角色世界座標X（需轉換為螢幕座標）
+   * @param worldY 角色世界座標Y（需轉換為螢幕座標）
    * @param milestone 里程碑數值
    */
-  spawnTicketBurstInUI(x: number, y: number, milestone: number): void {
-    console.log(`🎯 [UIScene驗證] 在UIScene中創建彩票特效 at (${x}, ${y}), milestone: ${milestone}`);
+  spawnTicketBurstInUI(worldX: number, worldY: number, milestone: number): void {
+    console.log(`🎯 [UIScene正式版] 華麗彩票特效 at world(${worldX}, ${worldY}), milestone: ${milestone}`);
+    
+    // 轉換世界座標為螢幕座標（考慮相機偏移）
+    const gameScene = this.scene.get('GameScene') as any;
+    const gcam = gameScene?.cameras?.main;
+    const screenX = worldX - (gcam?.scrollX || 0);
+    const screenY = worldY - (gcam?.scrollY || 0) - 60; // 角色頭上60px
+    
+    // 從配置讀取參數（恢復原始設計）
+    const config = GameConfig.ticketEffect;
     
     // 計算彩票數量
-    const ticketCount = Math.max(8, Math.min(20, 8 + milestone * 0.4));
-    
-    console.log(`💸 [UIScene] 極簡測試：${ticketCount} tickets at UIScene layer`);
-    
-    // 在UIScene中創建超明顯彩票
-    for (let i = 0; i < ticketCount; i++) {
-      const ticket = this.add.rectangle(
-        x + i * 12,     // UIScene螢幕座標，稍微錯開
-        y, 
-        60,             // 更大尺寸60px
-        35,             // 更大高度35px
-        0xFF0000        // 紅色
+    const ticketCount = Math.max(
+      config.TIMING.TICKET_COUNT_BASE, 
+      Math.min(
+        config.TIMING.TICKET_COUNT_MAX, 
+        config.TIMING.TICKET_COUNT_BASE + milestone * config.TIMING.TICKET_COUNT_MULTIPLIER
       )
-        .setStrokeStyle(4, 0xFFFFFF)  // 更粗白邊框
-        .setDepth(2000)               // 更高深度2000
-        .setVisible(true)             // 強制可見
-        .setAlpha(1);                 // 強制不透明
-      
-      console.log(`🎫 [UIScene] Creating ticket ${i}: 60×35px RED at (${x + i*12}, ${y}) depth=2000`);
-      
-      // UIScene中的運動：向上移動
-      this.tweens.add({
-        targets: ticket,
-        x: ticket.x + (i % 2 === 0 ? 30 : -30),  // 左右交替
-        y: ticket.y - 100,                       // 向上移動100px
-        duration: 8000,                          // 8秒超慢
-        ease: 'Linear',
-        onComplete: () => {
-          console.log(`🎫 [UIScene] Ticket ${i} movement completed`);
-          ticket.destroy();
-        }
-      });
+    );
+    
+    console.log(`💸 [UIScene正式版] ${ticketCount} 華麗彩票 at screen(${screenX}, ${screenY})`);
+    
+    // 創建華麗彩票特效
+    for (let i = 0; i < ticketCount; i++) {
+      this.createFinalTicketParticle(screenX, screenY, config, milestone);
     }
     
-    // UIScene中的超明顯閃光
-    const flash = this.add.circle(x, y, 15, 0xFF0000, 1)
-      .setDepth(2001)
-      .setStrokeStyle(6, 0xFFFFFF, 1)
+    // 創建華麗閃光特效
+    this.createFinalFlashEffect(screenX, screenY);
+  }
+
+  /**
+   * 創建正式版華麗彩票粒子
+   * 
+   * 恢復原始設計：金色外觀、物理軌跡、拋物線運動
+   * 但在UIScene中創建確保可見性
+   */
+  private createFinalTicketParticle(x: number, y: number, config: any, milestone: number): void {
+    // 正式版視覺：金色彩票，合適尺寸
+    const ticket = this.add.rectangle(
+      x + (Math.random() - 0.5) * 20, // 隨機散布起始位置
+      y, 
+      config.VISUAL.WIDTH,      // 20px正式尺寸
+      config.VISUAL.HEIGHT,     // 12px正式尺寸
+      config.VISUAL.COLOR       // 0xFFD700金色
+    )
+      .setStrokeStyle(config.VISUAL.BORDER_WIDTH, config.VISUAL.BORDER_COLOR)
+      .setDepth(config.VISUAL.DEPTH)
       .setVisible(true)
       .setAlpha(1);
     
-    console.log(`✨ [UIScene] Creating MASSIVE flash at (${x}, ${y}) depth=2001`);
+    console.log(`🎫 [UIScene正式版] 金色彩票 ${config.VISUAL.WIDTH}×${config.VISUAL.HEIGHT}px at (${x}, ${y}) depth=${config.VISUAL.DEPTH}`);
     
+    // 正式版物理：扇形噴發角度
+    const angleRange = config.BURST_ANGLE.MAX - config.BURST_ANGLE.MIN;
+    const angle = config.BURST_ANGLE.MIN + Math.random() * angleRange;
+    const angleRad = Phaser.Math.DegToRad(angle);
+    
+    // 正式版速度：根據里程碑調整
+    const velocityRange = (config.PHYSICS.MAX_VELOCITY + milestone * config.PHYSICS.VELOCITY_MAX_BONUS) - 
+                         (config.PHYSICS.MIN_VELOCITY + milestone * config.PHYSICS.VELOCITY_MILESTONE_BONUS);
+    const velocity = (config.PHYSICS.MIN_VELOCITY + milestone * config.PHYSICS.VELOCITY_MILESTONE_BONUS) + 
+                    Math.random() * velocityRange;
+    
+    const vx = Math.cos(angleRad) * velocity;
+    const vy = Math.sin(angleRad) * velocity;
+    
+    console.log(`🚀 [UIScene正式版] 物理參數: angle=${Math.round(angle)}°, velocity=${Math.round(velocity)}, vx=${Math.round(vx)}, vy=${Math.round(vy)}`);
+    
+    // 正式版生命週期
+    const lifetime = config.TIMING.LIFETIME_BASE_MS + Math.random() * config.TIMING.LIFETIME_RANDOM_MS;
+    
+    // 實現完整物理模擬：拋物線運動 + 重力 + 自轉
+    let currentVx = vx;
+    let currentVy = vy;
+    const startTime = this.time.now;
+    
+    const updateTicket = () => {
+      const elapsed = this.time.now - startTime;
+      
+      // 生命週期檢查
+      if (elapsed >= lifetime || !ticket.scene) {
+        ticket.destroy();
+        console.log(`🎫 [UIScene正式版] 彩票完成生命週期 ${elapsed}ms`);
+        return;
+      }
+      
+      // 重力影響Y軸速度
+      const deltaTime = config.PHYSICS.FRAME_RATE_MS * 0.001;
+      currentVy += config.PHYSICS.GRAVITY * deltaTime;
+      
+      // 更新位置（拋物線軌跡）
+      ticket.x += currentVx * deltaTime;
+      ticket.y += currentVy * deltaTime;
+      
+      // 自轉動畫
+      ticket.rotation += config.PHYSICS.ROTATION_SPEED * 2 * Math.PI * deltaTime;
+      
+      // 邊界檢查（UIScene螢幕邊界）
+      if (ticket.x < -config.BOUNDARIES.MARGIN_X || 
+          ticket.x > GameConfig.width + config.BOUNDARIES.MARGIN_X || 
+          ticket.y > GameConfig.height + config.BOUNDARIES.MARGIN_Y) {
+        ticket.destroy();
+        console.log(`🎫 [UIScene正式版] 彩票飛出邊界銷毀`);
+        return;
+      }
+      
+      // 繼續物理更新
+      this.time.delayedCall(config.PHYSICS.FRAME_RATE_MS, updateTicket);
+    };
+    
+    updateTicket();
+  }
+
+  /**
+   * 創建正式版華麗閃光特效
+   */
+  private createFinalFlashEffect(x: number, y: number): void {
+    // 正式版閃光：金色，快速擴張
+    const flash = this.add.circle(x, y, 8, 0xFFD700, 0.8)
+      .setDepth(2001)
+      .setStrokeStyle(3, 0xFFFFFF, 1)
+      .setVisible(true)
+      .setAlpha(0.8);
+    
+    console.log(`✨ [UIScene正式版] 金色閃光 at (${x}, ${y}) depth=2001`);
+    
+    // 正式版動畫：快速擴張，華麗效果
     this.tweens.add({
       targets: flash,
-      radius: 120,    // 更大半徑
-      alpha: 0,
-      duration: 3000, // 3秒更慢動畫
-      ease: 'Linear',
+      radius: 60,        // 擴張到60px
+      alpha: 0,          // 漸變透明
+      duration: 400,     // 400ms快速動畫
+      ease: 'Power2',    // 自然曲線
       onComplete: () => {
         flash.destroy();
-        console.log(`✨ [UIScene] Flash animation completed`);
+        console.log(`✨ [UIScene正式版] 閃光動畫完成`);
       }
     });
   }
