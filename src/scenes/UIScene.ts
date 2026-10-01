@@ -302,11 +302,11 @@ export class UIScene extends Phaser.Scene {
       const color = GameConfig.characters.colors[i];
       const label = GameConfig.characters.labels[i];
       
-      // 🎨 個別角色狀態背景
+      // 🎨 個別角色狀態背景 - 配合角色顏色，不透明
       const panelBg = this.add
-        .rectangle(x, rowTopY, panelW, panelH, 0x333333, 0.4)
+        .rectangle(x, rowTopY, panelW, panelH, color, 1.0) // 使用角色顏色，完全不透明
         .setOrigin(0, 0)
-        .setStrokeStyle(1, 0x666666, 0.6)
+        .setStrokeStyle(1, 0xffffff, 0.8) // 白色邊框
         .setDepth(19);
       
       // 🔵 左側圓形標籤 (24px半徑，白邊框，角色識別色填充)
@@ -333,11 +333,17 @@ export class UIScene extends Phaser.Scene {
       // 📊 右側雙欄位系統
       const statsX = x + 60;
       
-      // 🎨 雙欄位背景框
+      // 🎨 雙欄位背景框 - 較暗的角色顏色
+      const colorObj = Phaser.Display.Color.IntegerToColor(color);
+      const darkerColor = Phaser.Display.Color.GetColor(
+        Math.floor(colorObj.red * 0.7),
+        Math.floor(colorObj.green * 0.7), 
+        Math.floor(colorObj.blue * 0.7)
+      );
       const statsBg = this.add
-        .rectangle(statsX - 4, rowTopY + 4, 130, 52, 0x222222, 0.5)
+        .rectangle(statsX - 4, rowTopY + 4, 130, 52, darkerColor, 1.0) // 較暗的角色色，完全不透明
         .setOrigin(0, 0)
-        .setStrokeStyle(1, 0x555555, 0.7)
+        .setStrokeStyle(1, 0xffffff, 0.5) // 白色邊框，較淡
         .setDepth(19);
       
       // 上方：💀 骷髏 + 擊殺數
@@ -648,9 +654,7 @@ export class UIScene extends Phaser.Scene {
         row.killText.setText('0').setColor('#555555').setAlpha(0.3);
         row.ticketIconText.setAlpha(0.3);
         row.ticketText.setText('0').setColor('#555555').setAlpha(0.3);
-        // 🎨 背景也變透明和灰色
-        row.panelBg.setAlpha(0.2).setFillStyle(0x222222);
-        row.statsBg.setAlpha(0.2).setFillStyle(0x111111);
+        // 🎨 背景保持原色不變，用戶要求移除狀態顏色變化
         continue;
       }
       
@@ -665,9 +669,7 @@ export class UIScene extends Phaser.Scene {
         row.ticketIconText.setAlpha(0.5);
         const tickets = Math.floor(c.kills / 2);
         row.ticketText.setText(`${tickets} ✖`).setColor('#777777').setAlpha(0.5);
-        // 🎨 背景變暗紅色表示死亡
-        row.panelBg.setAlpha(0.3).setFillStyle(0x441111);
-        row.statsBg.setAlpha(0.3).setFillStyle(0x220000);
+        // 🎨 背景保持原色不變，用戶要求移除狀態顏色變化
         continue;
       }
       
@@ -679,9 +681,7 @@ export class UIScene extends Phaser.Scene {
       row.ticketIconText.setAlpha(1);
       const tickets = Math.floor(c.kills / 2);
       row.ticketText.setText(`${tickets}`).setColor('#ffd700').setAlpha(1); // 彩票數金色
-      // 🎨 背景恢復正常顏色
-      row.panelBg.setAlpha(0.4).setFillStyle(0x333333);
-      row.statsBg.setAlpha(0.5).setFillStyle(0x222222);
+      // 🎨 背景保持原色不變，用戶要求移除狀態顏色變化
     }
   };
 

@@ -157117,8 +157117,6 @@ class UIScene extends Phaser.Scene {
           row.killText.setText("0").setColor("#555555").setAlpha(0.3);
           row.ticketIconText.setAlpha(0.3);
           row.ticketText.setText("0").setColor("#555555").setAlpha(0.3);
-          row.panelBg.setAlpha(0.2).setFillStyle(2236962);
-          row.statsBg.setAlpha(0.2).setFillStyle(1118481);
           continue;
         }
         const c = s.chars[i];
@@ -157130,8 +157128,6 @@ class UIScene extends Phaser.Scene {
           row.ticketIconText.setAlpha(0.5);
           const tickets2 = Math.floor(c.kills / 2);
           row.ticketText.setText(`${tickets2} ✖`).setColor("#777777").setAlpha(0.5);
-          row.panelBg.setAlpha(0.3).setFillStyle(4460817);
-          row.statsBg.setAlpha(0.3).setFillStyle(2228224);
           continue;
         }
         row.circle.setAlpha(1);
@@ -157141,8 +157137,6 @@ class UIScene extends Phaser.Scene {
         row.ticketIconText.setAlpha(1);
         const tickets = Math.floor(c.kills / 2);
         row.ticketText.setText(`${tickets}`).setColor("#ffd700").setAlpha(1);
-        row.panelBg.setAlpha(0.4).setFillStyle(3355443);
-        row.statsBg.setAlpha(0.5).setFillStyle(2236962);
       }
     };
     this.updateAim = (a) => {
@@ -157288,7 +157282,7 @@ class UIScene extends Phaser.Scene {
       const x = startX + i * (panelW + panelGap);
       const color = GameConfig.characters.colors[i];
       const label = GameConfig.characters.labels[i];
-      const panelBg = this.add.rectangle(x, rowTopY, panelW, panelH, 3355443, 0.4).setOrigin(0, 0).setStrokeStyle(1, 6710886, 0.6).setDepth(19);
+      const panelBg = this.add.rectangle(x, rowTopY, panelW, panelH, color, 1).setOrigin(0, 0).setStrokeStyle(1, 16777215, 0.8).setDepth(19);
       const circleX = x + 24;
       const circleY = rowTopY + panelH / 2;
       const circleRadius = 24;
@@ -157302,7 +157296,13 @@ class UIScene extends Phaser.Scene {
         fontStyle: "bold"
       }).setOrigin(0.5, 0.5).setDepth(21);
       const statsX = x + 60;
-      const statsBg = this.add.rectangle(statsX - 4, rowTopY + 4, 130, 52, 2236962, 0.5).setOrigin(0, 0).setStrokeStyle(1, 5592405, 0.7).setDepth(19);
+      const colorObj = Phaser.Display.Color.IntegerToColor(color);
+      const darkerColor = Phaser.Display.Color.GetColor(
+        Math.floor(colorObj.red * 0.7),
+        Math.floor(colorObj.green * 0.7),
+        Math.floor(colorObj.blue * 0.7)
+      );
+      const statsBg = this.add.rectangle(statsX - 4, rowTopY + 4, 130, 52, darkerColor, 1).setOrigin(0, 0).setStrokeStyle(1, 16777215, 0.5).setDepth(19);
       const killIconText = this.add.text(statsX, rowTopY + 8, "💀", {
         fontSize: "16px"
       }).setDepth(20);
