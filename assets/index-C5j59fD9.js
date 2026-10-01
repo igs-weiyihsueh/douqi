@@ -157302,10 +157302,14 @@ class UIScene extends Phaser.Scene {
         Math.floor(colorObj.green * 0.7),
         Math.floor(colorObj.blue * 0.7)
       );
-      const statsBg = this.add.rectangle(statsX - 4, rowTopY + 4, 130, 52, darkerColor, 1).setOrigin(0, 0).setStrokeStyle(1, 16777215, 0.5).setDepth(19);
+      const killBoxW = 60;
+      const killBoxH = 20;
+      const killBoxX = statsX - 2;
+      const killBoxY = rowTopY + 6;
+      const killBox = this.add.rectangle(killBoxX, killBoxY, killBoxW, killBoxH, darkerColor, 1).setOrigin(0, 0).setStrokeStyle(1, 16777215, 0.6).setDepth(20);
       const killIconText = this.add.text(statsX, rowTopY + 8, "💀", {
         fontSize: "16px"
-      }).setDepth(20);
+      }).setDepth(21);
       const killText = this.add.text(statsX + 25, rowTopY + 8, "0", {
         fontFamily: "monospace",
         fontSize: "16px",
@@ -157313,10 +157317,15 @@ class UIScene extends Phaser.Scene {
         stroke: "#000000",
         strokeThickness: 2,
         fontStyle: "bold"
-      }).setDepth(20);
+      }).setDepth(21);
+      const ticketBoxW = 60;
+      const ticketBoxH = 20;
+      const ticketBoxX = statsX - 2;
+      const ticketBoxY = rowTopY + 30;
+      const ticketBox = this.add.rectangle(ticketBoxX, ticketBoxY, ticketBoxW, ticketBoxH, darkerColor, 1).setOrigin(0, 0).setStrokeStyle(1, 16777215, 0.6).setDepth(20);
       const ticketIconText = this.add.text(statsX, rowTopY + 32, "🎫", {
         fontSize: "16px"
-      }).setDepth(20);
+      }).setDepth(21);
       const ticketText = this.add.text(statsX + 25, rowTopY + 32, "0", {
         fontFamily: "monospace",
         fontSize: "16px",
@@ -157324,7 +157333,7 @@ class UIScene extends Phaser.Scene {
         stroke: "#000000",
         strokeThickness: 2,
         fontStyle: "bold"
-      }).setDepth(20);
+      }).setDepth(21);
       this.rows.push({
         circle,
         labelText,
@@ -157334,9 +157343,11 @@ class UIScene extends Phaser.Scene {
         ticketText,
         panelBg,
         // 🎨 個別面板背景
-        statsBg,
-        // 🎨 數據區背景
-        // 保留空的血條屬性以免破壞現有代碼
+        killBox,
+        // 🔲 擊殺數小框
+        ticketBox,
+        // 🔲 彩票數小框
+        // 保留空的血條屬性以免破壞現有代碼 (移除大框statsBg)
         hpBarBg: this.add.rectangle(0, 0, 0, 0).setVisible(false),
         hpBar: this.add.rectangle(0, 0, 0, 0).setVisible(false),
         spiritBar: this.add.rectangle(0, 0, 0, 0).setVisible(false)
