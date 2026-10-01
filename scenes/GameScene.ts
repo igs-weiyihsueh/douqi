@@ -31,6 +31,7 @@ export class GameScene extends Phaser.Scene {
 
   // ★場景切換系統
   private sceneBackground: Phaser.GameObjects.Image | null = null;
+  private testGraphicsBackground: Phaser.GameObjects.Graphics | null = null;
   private isNewSceneActive = false;
 
   private survivalMs = 0;
@@ -8308,12 +8309,28 @@ export class GameScene extends Phaser.Scene {
       console.warn('⚠️ 場景背景圖片不存在：scene-background');
     }
 
+    // ★新增：創建Graphics測試背景（純色）
+    this.testGraphicsBackground = this.add.graphics()
+      .fillStyle(0xFF00FF, 1)  // 超鮮豔紫紅色
+      .fillRect(0, 0, GameConfig.width, GameConfig.height)
+      .setDepth(-9)            // 比Scene.png稍高一點
+      .setScrollFactor(0)      // 固定不移動
+      .setVisible(false);      // 預設隱藏
+    
+    console.log('🎨 Graphics測試背景已創建：紫紅色 (depth=-9, hidden)');
+
     // F1熱鍵監聽
     this.input.keyboard?.on('keydown-F1', () => {
       this.toggleSceneBackground();
     });
     
+    // ★新增：F2鍵強制重載Scene.png
+    this.input.keyboard?.on('keydown-F2', () => {
+      this.forceReloadSceneBackground();
+    });
+    
     console.log('⌨️ F1熱鍵監聽器已設置');
+    console.log('⌨️ F2強制重載已設置');
   }
 
   /**
@@ -8344,19 +8361,76 @@ export class GameScene extends Phaser.Scene {
     
     if (this.isNewSceneActive) {
       // 顯示新場景背景
-      this.sceneBackground.setVisible(true);
-      console.log('🌋 切換到新場景：火山地獄風格 (Scene.png)');
+      if (this.sceneBackground) {
+        this.sceneBackground.setVisible(true);
+      }
+      if (this.testGraphicsBackground) {
+        this.testGraphicsBackground.setVisible(true);
+      }
+      console.log('🌋 切換到新場景：火山地獄風格 (Scene.png + Graphics測試)');
       
       // ★詳細診斷資訊
-      console.log('🔍 場景背景物件診斷：');
-      console.log(`  visible: ${this.sceneBackground.visible}`);
-      console.log(`  alpha: ${this.sceneBackground.alpha}`);
-      console.log(`  depth: ${this.sceneBackground.depth}`);
-      console.log(`  position: (${this.sceneBackground.x}, ${this.sceneBackground.y})`);
-      console.log(`  displaySize: ${this.sceneBackground.displayWidth} × ${this.sceneBackground.displayHeight}`);
-      console.log(`  texture: ${this.sceneBackground.texture.key}`);
-      console.log(`  scene: ${this.sceneBackground.scene.scene.key}`);
-      console.log(`  active: ${this.sceneBackground.active}`);
+      if (this.sceneBackground) {
+        console.log('🔍 場景背景物件診斷：');
+        console.log(`  visible: ${this.sceneBackground.visible}`);
+        console.log(`  alpha: ${this.sceneBackground.alpha}`);
+        console.log(`  depth: ${this.sceneBackground.depth}`);
+        console.log(`  position: (${this.sceneBackground.x}, ${this.sceneBackground.y})`);
+        console.log(`  displaySize: ${this.sceneBackground.displayWidth} × ${this.sceneBackground.displayHeight}`);
+        console.log(`  texture: ${this.sceneBackground.texture.key}`);
+        console.log(`  scene: ${this.sceneBackground.scene.scene.key}`);
+        console.log(`  active: ${this.sceneBackground.active}`);
+        
+        // ★新增：紋理內容驗證
+        console.log('🖼️ 紋理詳細驗證：');
+        console.log(`  texture.key: ${this.sceneBackground.texture.key}`);
+        console.log(`  texture exists: ${!!this.sceneBackground.texture}`);
+        
+        try {
+          const texture = this.sceneBackground.texture as any;
+          console.log(`  texture.width: ${texture.width || 'unknown'}`);
+          console.log(`  texture.height: ${texture.height || 'unknown'}`);
+          
+          const textureSource = texture.source?.[0];
+          if (textureSource?.image) {
+            const img = textureSource.image as any;
+            console.log(`  image.src: ${img.src || 'unknown'}`);
+            console.log(`  image.complete: ${img.complete || 'unknown'}`);
+            console.log(`  image.naturalWidth: ${img.naturalWidth || 'unknown'}`);
+            console.log(`  image.naturalHeight: ${img.naturalHeight || 'unknown'}`);
+          }
+        } catch (e: any) {
+          console.log(`  紋理源檢查失敗: ${e.message || e}`);
+        }
+        
+        // ★新增：渲染器診斷
+        console.log('🎮 渲染器診斷：');
+        console.log(`  renderer.type: ${this.renderer.type}`);
+        console.log(`  renderer: ${this.renderer.constructor.name}`);
+        console.log(`  canvas.width: ${this.game.canvas.width}`);
+        console.log(`  canvas.height: ${this.game.canvas.height}`);
+        console.log(`  scale.displaySize: ${this.scale.displaySize.width}×${this.scale.displaySize.height}`);
+        
+        // ★新增：物件在渲染樹中的狀態
+        console.log('🌳 渲染樹狀態：');
+        console.log(`  sceneBackground.willRender: ${(this.sceneBackground as any).willRender?.() || 'method not available'}`);
+        console.log(`  sceneBackground.getWorldTransformMatrix: 存在=${!!(this.sceneBackground as any).getWorldTransformMatrix}`);
+        
+        // ★新增：手動強制渲染測試
+        console.log('🔄 強制渲染測試：');
+        this.sceneBackground.setAlpha(0.99).setAlpha(1); // 觸發重繪
+        this.sceneBackground.setVisible(false).setVisible(true); // 觸發重繪
+      }
+      
+      // ★Graphics測試物件診斷
+      if (this.testGraphicsBackground) {
+        console.log('🎨 Graphics測試背景診斷：');
+        console.log(`  visible: ${this.testGraphicsBackground.visible}`);
+        console.log(`  alpha: ${this.testGraphicsBackground.alpha}`);
+        console.log(`  depth: ${this.testGraphicsBackground.depth}`);
+        console.log(`  position: (${this.testGraphicsBackground.x}, ${this.testGraphicsBackground.y})`);
+        console.log(`  willRender: ${(this.testGraphicsBackground as any).willRender?.() || 'method not available'}`);
+      }
       
       // 檢查相機範圍
       const cam = this.cameras.main;
@@ -8381,11 +8455,65 @@ export class GameScene extends Phaser.Scene {
       
     } else {
       // 隱藏新場景背景，顯示原場景
-      this.sceneBackground.setVisible(false);
+      if (this.sceneBackground) {
+        this.sceneBackground.setVisible(false);
+      }
+      if (this.testGraphicsBackground) {
+        this.testGraphicsBackground.setVisible(false);
+      }
       console.log('🏛️ 切換到舊場景：原始程式生成場景');
     }
     
     // 狀態反饋
     console.log(`📋 場景狀態：${this.isNewSceneActive ? '新場景' : '舊場景'} (F1切換)`);
+  }
+
+  /**
+   * ★F2強制重載Scene.png紋理
+   * 
+   * 排除瀏覽器快取或紋理載入問題
+   */
+  private forceReloadSceneBackground(): void {
+    console.log('🔄 F2強制重載Scene.png...');
+    
+    // 移除舊紋理
+    if (this.textures.exists('scene-background')) {
+      this.textures.remove('scene-background');
+      console.log('🗑️ 舊紋理已移除');
+    }
+    
+    // 銷毀舊背景物件
+    if (this.sceneBackground) {
+      this.sceneBackground.destroy();
+      this.sceneBackground = null;
+      console.log('🗑️ 舊背景物件已銷毀');
+    }
+    
+    // 強制重載圖片（添加timestamp防止快取）
+    const timestamp = Date.now();
+    const imageUrl = `assets/Scene.png?t=${timestamp}`;
+    
+    this.load.image('scene-background-new', imageUrl);
+    this.load.once('complete', () => {
+      console.log('✅ 新紋理載入完成，重新創建背景...');
+      
+      // 重新創建背景物件
+      this.sceneBackground = this.add.image(0, 0, 'scene-background-new')
+        .setOrigin(0, 0)
+        .setDepth(-10)
+        .setVisible(this.isNewSceneActive)
+        .setScrollFactor(0)
+        .setDisplaySize(GameConfig.width, GameConfig.height);
+      
+      console.log('🖼️ 新場景背景已重新創建');
+      
+      // 如果當前是新場景狀態，立即顯示
+      if (this.isNewSceneActive) {
+        this.sceneBackground.setVisible(true);
+        console.log('🌋 新背景立即顯示');
+      }
+    });
+    
+    this.load.start();
   }
 }
