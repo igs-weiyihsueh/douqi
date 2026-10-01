@@ -77,6 +77,10 @@ export class UIScene extends Phaser.Scene {
     ticketIconText: Phaser.GameObjects.Text; // 🎫 彩票圖案
     ticketText: Phaser.GameObjects.Text;    // 彩票數字
     
+    // 🎨 背景系統
+    panelBg: Phaser.GameObjects.Rectangle;  // 個別面板背景
+    statsBg: Phaser.GameObjects.Rectangle;  // 雙欄位背景
+    
     // ❌ 移除的血條系統 (保留屬性防止破壞現有代碼)
     hpBarBg: Phaser.GameObjects.Rectangle;
     hpBar: Phaser.GameObjects.Rectangle;
@@ -286,10 +290,24 @@ export class UIScene extends Phaser.Scene {
     const startX = (w - (count * panelW + (count - 1) * panelGap)) / 2; // 居中排列
     const rowTopY = h - 80;
     
+    // 🎨 整個狀態列表統一底圖
+    this.add
+      .rectangle(startX - 8, rowTopY - 8, count * panelW + (count - 1) * panelGap + 16, panelH + 16, 0x000000, 0.6)
+      .setOrigin(0, 0)
+      .setStrokeStyle(2, 0x444444, 0.8)
+      .setDepth(18); // 在所有元素下方
+    
     for (let i = 0; i < count; i++) {
       const x = startX + i * (panelW + panelGap);
       const color = GameConfig.characters.colors[i];
       const label = GameConfig.characters.labels[i];
+      
+      // 🎨 個別角色狀態背景
+      const panelBg = this.add
+        .rectangle(x, rowTopY, panelW, panelH, 0x333333, 0.4)
+        .setOrigin(0, 0)
+        .setStrokeStyle(1, 0x666666, 0.6)
+        .setDepth(19);
       
       // 🔵 左側圓形標籤 (24px半徑，白邊框，角色識別色填充)
       const circleX = x + 24;
@@ -314,6 +332,13 @@ export class UIScene extends Phaser.Scene {
       
       // 📊 右側雙欄位系統
       const statsX = x + 60;
+      
+      // 🎨 雙欄位背景框
+      const statsBg = this.add
+        .rectangle(statsX - 4, rowTopY + 4, 130, 52, 0x222222, 0.5)
+        .setOrigin(0, 0)
+        .setStrokeStyle(1, 0x555555, 0.7)
+        .setDepth(19);
       
       // 上方：💀 骷髏 + 擊殺數
       const killIconText = this.add
@@ -351,7 +376,7 @@ export class UIScene extends Phaser.Scene {
         })
         .setDepth(20);
       
-      // 存儲UI元素 (移除血條相關，新增圓形和彩票相關)
+      // 存儲UI元素 (移除血條相關，新增圓形和彩票相關，包含背景)
       this.rows.push({ 
         circle,
         labelText, 
@@ -359,6 +384,8 @@ export class UIScene extends Phaser.Scene {
         killText,
         ticketIconText, 
         ticketText,
+        panelBg,        // 🎨 個別面板背景
+        statsBg,       // 🎨 數據區背景
         // 保留空的血條屬性以免破壞現有代碼
         hpBarBg: this.add.rectangle(0, 0, 0, 0).setVisible(false),
         hpBar: this.add.rectangle(0, 0, 0, 0).setVisible(false), 
@@ -621,6 +648,9 @@ export class UIScene extends Phaser.Scene {
         row.killText.setText('0').setColor('#555555').setAlpha(0.3);
         row.ticketIconText.setAlpha(0.3);
         row.ticketText.setText('0').setColor('#555555').setAlpha(0.3);
+        // 🎨 背景也變透明和灰色
+        row.panelBg.setAlpha(0.2).setFillStyle(0x222222);
+        row.statsBg.setAlpha(0.2).setFillStyle(0x111111);
         continue;
       }
       
@@ -635,6 +665,9 @@ export class UIScene extends Phaser.Scene {
         row.ticketIconText.setAlpha(0.5);
         const tickets = Math.floor(c.kills / 2);
         row.ticketText.setText(`${tickets} ✖`).setColor('#777777').setAlpha(0.5);
+        // 🎨 背景變暗紅色表示死亡
+        row.panelBg.setAlpha(0.3).setFillStyle(0x441111);
+        row.statsBg.setAlpha(0.3).setFillStyle(0x220000);
         continue;
       }
       
@@ -646,6 +679,9 @@ export class UIScene extends Phaser.Scene {
       row.ticketIconText.setAlpha(1);
       const tickets = Math.floor(c.kills / 2);
       row.ticketText.setText(`${tickets}`).setColor('#ffd700').setAlpha(1); // 彩票數金色
+      // 🎨 背景恢復正常顏色
+      row.panelBg.setAlpha(0.4).setFillStyle(0x333333);
+      row.statsBg.setAlpha(0.5).setFillStyle(0x222222);
     }
   };
 
