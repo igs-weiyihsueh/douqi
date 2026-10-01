@@ -16,6 +16,14 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
   energy = 0;
   /** ★階段二：Credit點數 - 每個角色獨立的貨幣點數 */
   credit = 0;
+  /** ★階段三：COMBO獎勵系統狀態 */
+  comboState = {
+    currentStreak: 0,
+    lastKillTime: 0,
+    ticketsEarned: 0,
+    isWarning: false,
+    nextMilestone: 5  // 第一個里程碑是5連擊
+  };
   kills = 0;
   alive = true;
 

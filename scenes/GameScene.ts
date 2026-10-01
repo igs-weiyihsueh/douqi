@@ -639,6 +639,9 @@ export class GameScene extends Phaser.Scene {
 
     this.survivalMs += delta;
 
+    // ★階段三：更新COMBO計時系統
+    this.updateComboTimers();
+
     // ★事件波開場宣告(階段1):eventIntroActive 期間【鎖操作+凍事件生怪】,只跑開場大字時序 + 標記重繪。
     //   序列跑完(或逾時保底)finishEventIntro→beginEventCombat 才啟動事件計時/生怪。
     if (this.eventIntroActive) {
@@ -6550,6 +6553,8 @@ export class GameScene extends Phaser.Scene {
       enemy.kill();
       if (wasBoss) {
         actor.kills++;
+        // ★階段三：觸發COMBO獎勵系統
+        this.triggerComboHit(actor);
         this.grantKillExp(etype);
         this.onBossKilled(dx, dy); // v28：BOSS 擊殺 → 大爆炸+掉落+過關
       } else if (etype === 'tower') {
@@ -6561,6 +6566,8 @@ export class GameScene extends Phaser.Scene {
         // NPC/錨點為 anchor-like 位移點，玩家傷不到；此分支僅防呆，不計殺
       } else {
         actor.kills++;
+        // ★階段三：觸發COMBO獎勵系統
+        this.triggerComboHit(actor);
         this.grantKillExp(etype);
         this.onWaveKill();
         this.spawnDeathBurst(dx, dy);
@@ -7182,6 +7189,8 @@ export class GameScene extends Phaser.Scene {
         // v35/36：NPC/錨點為 anchor-like 位移點，玩家傷不到（isVulnerable=false）；此分支僅防呆，不處理
       } else {
         actor.kills++;
+        // ★階段三：觸發COMBO獎勵系統
+        this.triggerComboHit(actor);
         this.grantKillExp(etype);
         this.onWaveKill();
         this.spawnDeathBurst(dx, dy);
@@ -7753,6 +7762,116 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  /**
+   * ★階段三：觸發COMBO獎勵系統
+   * 
+   * 當角色擊殺敵人時觸發，更新連擊數和時間戳
+   * 檢查獎勵里程碑並發放票券
+   * 
+   * @param actor 執行擊殺的角色
+   */
+  private triggerComboHit(actor: any): void {
+    const currentTime = this.time.now;
+    const combo = actor.comboState;
+    
+    // 更新連擊數和時間
+    combo.currentStreak++;
+    combo.lastKillTime = currentTime;
+    combo.isWarning = false; // 重置警告狀態
+    
+    // 檢查是否達到獎勵里程碑
+    this.checkAndGrantComboReward(actor);
+    
+    console.log(`COMBO Hit! ${actor.index === 0 ? 'P1' : `BOT${actor.index}`}: ${combo.currentStreak}x streak`);
+  }
+
+  /**
+   * 檢查並發放COMBO獎勵
+   * 
+   * @param actor 角色
+   */
+  private checkAndGrantComboReward(actor: any): void {
+    const combo = actor.comboState;
+    const milestones = [5, 10, 20, 50];
+    const tickets = [1, 3, 10, 50];
+    
+    for (let i = 0; i < milestones.length; i++) {
+      if (combo.currentStreak === milestones[i]) {
+        // 觸發獎勵：發放票券
+        const ticketReward = tickets[i];
+        combo.ticketsEarned += ticketReward;
+        actor.credit += ticketReward; // 也添加到credit中
+        
+        // 更新下個里程碑目標
+        combo.nextMilestone = i + 1 < milestones.length ? milestones[i + 1] : milestones[milestones.length - 1];
+        
+        console.log(`🎉 COMBO Reward! ${combo.currentStreak}x = ${ticketReward} tickets (Total: ${combo.ticketsEarned})`);
+        
+        // TODO: 播放獎勵特效
+        this.spawnComboRewardEffect(actor.x, actor.y, ticketReward);
+        break;
+      }
+    }
+  }
+
+  /**
+   * 播放COMBO獎勵特效
+   * 
+   * @param x 特效位置X
+   * @param y 特效位置Y  
+   * @param tickets 獲得的票券數
+   */
+  private spawnComboRewardEffect(x: number, y: number, tickets: number): void {
+    // 創建票券獎勵文字特效
+    const rewardText = this.add.text(x, y - 20, `+${tickets} 🎫`, {
+      fontSize: '24px',
+      color: '#ffd700',
+      stroke: '#000000',
+      strokeThickness: 3,
+      fontStyle: 'bold'
+    }).setOrigin(0.5, 0.5).setDepth(1000);
+    
+    // 彈出動畫
+    this.tweens.add({
+      targets: rewardText,
+      y: y - 80,
+      alpha: 0,
+      scale: 1.5,
+      duration: 1500,
+      ease: 'Power2',
+      onComplete: () => rewardText.destroy()
+    });
+  }
+
+  /**
+   * 更新所有角色的COMBO計時系統
+   * 在update()中調用，檢查超時重置
+   */
+  private updateComboTimers(): void {
+    const currentTime = this.time.now;
+    const STREAK_TIMEOUT = 2000; // 2秒超時
+    const WARNING_START = 1500;  // 1.5秒開始警告
+    
+    for (const character of this.characters) {
+      const combo = character.comboState;
+      
+      if (combo.currentStreak > 0) {
+        const timeSinceLastKill = currentTime - combo.lastKillTime;
+        
+        if (timeSinceLastKill >= STREAK_TIMEOUT) {
+          // 超時：重置COMBO
+          console.log(`COMBO Reset! ${character.index === 0 ? 'P1' : `BOT${character.index}`} streak lost`);
+          combo.currentStreak = 0;
+          combo.isWarning = false;
+          combo.nextMilestone = 5; // 重置到第一個里程碑
+        } else if (timeSinceLastKill >= WARNING_START) {
+          // 進入警告期
+          combo.isWarning = true;
+        }
+      }
+    }
+  }
+
   private emitStats(): void {
     this.game.events.emit('stats', {
       chars: this.characters.map((c) => ({
@@ -7769,7 +7888,9 @@ export class GameScene extends Phaser.Scene {
         x: c.x,
         y: c.y,
         // ★階段二：Credit點數
-        credit: c.credit
+        credit: c.credit,
+        // ★階段三：COMBO獎勵系統狀態
+        combo: { ...c.comboState }  // 淺拷貝避免引用問題
       })),
       teamKills: this.teamKills(),
       survivalMs: this.survivalMs,

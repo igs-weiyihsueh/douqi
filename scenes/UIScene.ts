@@ -1,6 +1,23 @@
 import Phaser from 'phaser';
 import { GameConfig } from '../config';
 
+/**
+ * COMBO獎勵系統狀態
+ * Hit streak (連擊數) → 票券獎勵轉換機制
+ */
+interface ComboState {
+  /** 當前連擊數 */
+  currentStreak: number;
+  /** 上次擊殺時間戳 */
+  lastKillTime: number;
+  /** 本局獲得票券總數 */
+  ticketsEarned: number;
+  /** 是否在警告狀態(1.5-2秒間) */
+  isWarning: boolean;
+  /** 下個獎勵里程碑 */
+  nextMilestone: number;
+}
+
 interface CharStat {
   label: string;
   color: number;
@@ -16,6 +33,8 @@ interface CharStat {
   y: number;
   // ★階段二：Credit點數
   credit: number;
+  // ★階段三：COMBO獎勵系統狀態
+  combo: ComboState;
 }
 
 interface StatsPayload {
@@ -165,6 +184,25 @@ export class UIScene extends Phaser.Scene {
       PULSE_SCALE: 2.2,
       PULSE_DURATION: 200
     },
+    // ★階段三：COMBO獎勵系統配置
+    COMBO: {
+      X_OFFSET: 130,  // Credit右側位置
+      Y: -5,          // 與Credit水平對齊
+      WIDTH: 80,      // COMBO顯示區寬度
+      HEIGHT: 20,     // COMBO顯示區高度
+      FONT_SIZE: '16px',
+      PROGRESS_WIDTH: 60,   // 進度條寬度
+      PROGRESS_HEIGHT: 4,   // 進度條高度
+      PROGRESS_Y_OFFSET: 8, // 進度條相對COMBO文字的Y偏移
+      WARNING_BLINK_MS: 300, // 警告閃爍週期
+      STREAK_TIMEOUT_MS: 2000,   // 2秒無擊殺重置
+      WARNING_START_MS: 1500     // 1.5秒開始警告
+    },
+    // COMBO獎勵里程碑配置
+    COMBO_REWARDS: {
+      MILESTONES: [5, 10, 20, 50] as const,  // 獎勵里程碑
+      TICKETS: [1, 3, 10, 50] as const       // 對應票券獎勵
+    },
     // 顏色配置
     COLORS: {
       BACKGROUND: 0x000000 as const,
@@ -176,10 +214,20 @@ export class UIScene extends Phaser.Scene {
       ENERGY_NORMAL: 0xffd700 as const,
       ENERGY_EMPOWERED: 0xffef99 as const,
       ENERGY_FULL: 0xffe23a as const,
+      // ★階段三：COMBO系統顏色
+      COMBO_NORMAL: 0x00ff00 as const,        // 正常綠色
+      COMBO_WARNING: 0xff6600 as const,       // 警告橙色
+      COMBO_CRITICAL: 0xff0000 as const,      // 危險紅色
+      COMBO_PROGRESS: 0x00ccff as const,      // 進度條藍色
+      TICKET_REWARD: 0xffd700 as const,       // 票券獎勵金色
       WHITE: '#ffffff',
       BLACK: '#000000',
       TEXT_FLASH: '#ff3b30',
-      HINT_YELLOW: '#ffe23a'
+      HINT_YELLOW: '#ffe23a',
+      // COMBO文字顏色
+      COMBO_TEXT_NORMAL: '#00ff00',
+      COMBO_TEXT_WARNING: '#ff6600',
+      COMBO_TEXT_CRITICAL: '#ff0000'
     }
   } as const;
   /** v27 波次顯示（上方中央） */
@@ -885,8 +933,11 @@ export class UIScene extends Phaser.Scene {
     // 創建能量條UI元素
     const { energyBg, energyBar, energyHint } = this.createEnergyUI();
     
+    // ★階段三：創建COMBO獎勵系統UI元素
+    const { comboText, comboProgress, comboProgressBg } = this.createComboUI();
+    
     // 添加所有元素到容器
-    container.add([badge, badgeText, creditBg, swordIcon, creditText, energyBg, energyBar, energyHint]);
+    container.add([badge, badgeText, creditBg, swordIcon, creditText, energyBg, energyBar, energyHint, comboText, comboProgress, comboProgressBg]);
     
     // 設置子元件引用，便於後續更新
     (container as any).creditText = creditText;
@@ -894,6 +945,10 @@ export class UIScene extends Phaser.Scene {
     (container as any).energyBar = energyBar;
     (container as any).energyHint = energyHint;
     (container as any).energyBg = energyBg;
+    // ★階段三：COMBO元件引用
+    (container as any).comboText = comboText;
+    (container as any).comboProgress = comboProgress;
+    (container as any).comboProgressBg = comboProgressBg;
     
     return container;
   }
@@ -1034,6 +1089,58 @@ export class UIScene extends Phaser.Scene {
   }
 
   /**
+   * 創建COMBO獎勵系統UI元素
+   * 
+   * 包含連擊數文字和進度條，顯示Hit streak和距離下個獎勵的進度
+   * 位於Credit顯示右側，實現水平擴展佈局
+   * 
+   * @returns COMBO系統相關的UI元素
+   */
+  private createComboUI(): {
+    comboText: Phaser.GameObjects.Text;
+    comboProgress: Phaser.GameObjects.Rectangle;
+    comboProgressBg: Phaser.GameObjects.Rectangle;
+  } {
+    const config = this.OVERHEAD_UI_CONFIG;
+    const comboX = config.CREDIT.X + config.COMBO.X_OFFSET;
+    const comboY = config.COMBO.Y;
+    
+    // COMBO連擊數文字顯示
+    const comboText = this.add.text(comboX, comboY, 'x0', {
+      fontFamily: 'monospace',
+      fontSize: config.COMBO.FONT_SIZE,
+      color: config.COLORS.COMBO_TEXT_NORMAL,
+      stroke: config.COLORS.BLACK,
+      strokeThickness: 1,
+      fontStyle: 'bold'
+    }).setOrigin(0.5, 0.5);
+    
+    // 進度條背景：顯示距離下個里程碑的進度
+    const progressX = comboX;
+    const progressY = comboY + config.COMBO.PROGRESS_Y_OFFSET;
+    
+    const comboProgressBg = this.add.rectangle(
+      progressX,
+      progressY,
+      config.COMBO.PROGRESS_WIDTH,
+      config.COMBO.PROGRESS_HEIGHT,
+      config.COLORS.BACKGROUND,
+      0.8
+    ).setStrokeStyle(1, config.COLORS.BORDER_GOLD);
+    
+    // 進度條填充：藍色進度指示
+    const comboProgress = this.add.rectangle(
+      progressX - config.COMBO.PROGRESS_WIDTH / 2,
+      progressY,
+      0,  // 初始寬度為0
+      config.COMBO.PROGRESS_HEIGHT - 1,
+      config.COLORS.COMBO_PROGRESS
+    ).setOrigin(0, 0.5);
+    
+    return { comboText, comboProgress, comboProgressBg };
+  }
+
+  /**
    * 繪製劍形圖標
    * 
    * 使用Graphics API繪製包含劍身、劍尖、護手、劍柄和底部裝飾的完整劍形
@@ -1119,6 +1226,9 @@ export class UIScene extends Phaser.Scene {
     
     // 更新能量條系統（僅慢速模式玩家）
     this.updateEnergyDisplay(character, stats, energyBar, energyBg, energyHint, container);
+    
+    // ★階段三：更新COMBO獎勵系統
+    this.updateComboDisplay(character, container);
   }
 
   /**
@@ -1235,6 +1345,100 @@ export class UIScene extends Phaser.Scene {
       energyBar.setVisible(false);
       energyHint.setVisible(false);
     }
+  }
+
+  /**
+   * 更新COMBO獎勵系統顯示
+   * 
+   * Hit streak (連擊數) → 票券獎勵轉換機制
+   * 包含時機視窗系統、警告狀態和視覺反饋
+   * 
+   * @param character 角色數據，包含COMBO狀態
+   * @param container 容器對象，包含COMBO UI元件引用
+   */
+  private updateComboDisplay(
+    character: CharStat,
+    container: Phaser.GameObjects.Container
+  ): void {
+    const comboText = (container as any).comboText as Phaser.GameObjects.Text;
+    const comboProgress = (container as any).comboProgress as Phaser.GameObjects.Rectangle;
+    const comboProgressBg = (container as any).comboProgressBg as Phaser.GameObjects.Rectangle;
+    
+    // 安全性檢查
+    if (!comboText || !comboProgress || !comboProgressBg) return;
+    
+    const combo = character.combo;
+    const config = this.OVERHEAD_UI_CONFIG;
+    
+    // 更新COMBO數字顯示
+    comboText.setText(`x${combo.currentStreak}`);
+    
+    // 根據警告狀態設置文字顏色
+    const colors = config.COLORS;
+    if (combo.isWarning) {
+      // 警告狀態：閃爍效果
+      const blinkTime = this.time.now % config.COMBO.WARNING_BLINK_MS;
+      const isBlinking = blinkTime < (config.COMBO.WARNING_BLINK_MS / 2);
+      comboText.setColor(isBlinking ? colors.COMBO_TEXT_CRITICAL : colors.COMBO_TEXT_WARNING);
+    } else if (combo.currentStreak === 0) {
+      // 無連擊：隱藏COMBO UI
+      comboText.setVisible(false);
+      comboProgress.setVisible(false);
+      comboProgressBg.setVisible(false);
+      return;
+    } else {
+      // 正常狀態：綠色文字
+      comboText.setColor(colors.COMBO_TEXT_NORMAL);
+    }
+    
+    // 確保UI可見
+    comboText.setVisible(true);
+    comboProgress.setVisible(true);
+    comboProgressBg.setVisible(true);
+    
+    // 計算進度條：距離下個里程碑的進度
+    const progressRatio = this.calculateComboProgress(combo.currentStreak, combo.nextMilestone);
+    const maxProgressWidth = config.COMBO.PROGRESS_WIDTH - 2; // 減去邊框
+    comboProgress.width = maxProgressWidth * progressRatio;
+    
+    // 進度條顏色：根據警告狀態變化
+    if (combo.isWarning) {
+      const blinkTime = this.time.now % config.COMBO.WARNING_BLINK_MS;
+      const isBlinking = blinkTime < (config.COMBO.WARNING_BLINK_MS / 2);
+      const progressColor = isBlinking ? colors.COMBO_CRITICAL : colors.COMBO_WARNING;
+      comboProgress.setFillStyle(progressColor);
+    } else {
+      comboProgress.setFillStyle(colors.COMBO_PROGRESS);
+    }
+  }
+
+  /**
+   * 計算COMBO進度比例
+   * 
+   * 根據當前連擊數和下個里程碑計算進度條填充比例
+   * 
+   * @param currentStreak 當前連擊數
+   * @param nextMilestone 下個獎勵里程碑
+   * @returns 進度比例 (0-1)
+   */
+  private calculateComboProgress(currentStreak: number, _nextMilestone: number): number {
+    if (currentStreak === 0) return 0;
+    
+    const milestones = this.OVERHEAD_UI_CONFIG.COMBO_REWARDS.MILESTONES;
+    
+    // 找到當前處於哪個區間
+    let prevMilestone = 0;
+    for (const milestone of milestones) {
+      if (currentStreak < milestone) {
+        // 當前連擊數小於這個里程碑，計算在此區間的進度
+        const progress = (currentStreak - prevMilestone) / (milestone - prevMilestone);
+        return Math.max(0, Math.min(1, progress));
+      }
+      prevMilestone = milestone;
+    }
+    
+    // 超過最高里程碑，顯示滿進度
+    return 1;
   }
 
   /**
