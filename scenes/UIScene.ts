@@ -11,6 +11,9 @@ interface CharStat {
   kills: number;
   alive: boolean;
   isPlayer: boolean;
+  // ★頭上UI：角色世界座標
+  x: number;
+  y: number;
 }
 
 interface StatsPayload {
@@ -810,10 +813,22 @@ export class UIScene extends Phaser.Scene {
 
   /** ★更新頭上UI位置 */
   private updateOverheadUI(character: CharStat, container: Phaser.GameObjects.Container): void {
-    // 跟隨角色位置：角色頭上140px (暫時使用固定位置測試)
-    // TODO: 需要從GameScene獲取角色的實際位置
-    const testX = 200 + character.kills * 10;
-    const testY = 200;
-    container.setPosition(testX, testY);
+    if (!character.alive) {
+      container.setVisible(false);
+      return;
+    }
+    
+    // 🎯 使用角色實際位置：頭上140px
+    const worldX = character.x;
+    const worldY = character.y - 140;
+    
+    // ★修復座標系統：UIScene是固定相機，需要考慮GameScene的相機偏移
+    const gameScene = this.scene.get('GameScene') as any;
+    const gcam = gameScene?.cameras?.main;
+    const screenX = worldX - (gcam?.scrollX || 0);
+    const screenY = worldY - (gcam?.scrollY || 0);
+    
+    container.setPosition(screenX, screenY);
+    container.setVisible(true);
   }
 }

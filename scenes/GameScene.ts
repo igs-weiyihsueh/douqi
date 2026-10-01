@@ -7761,7 +7761,10 @@ export class GameScene extends Phaser.Scene {
         maxSpirit: GameConfig.spirit.hitsToBurst,
         kills: c.kills,
         alive: c.alive,
-        isPlayer: c.index === 0
+        isPlayer: c.index === 0,
+        // ★頭上UI修復：添加角色世界座標
+        x: c.x,
+        y: c.y
       })),
       teamKills: this.teamKills(),
       survivalMs: this.survivalMs,
