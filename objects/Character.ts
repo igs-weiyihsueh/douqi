@@ -22,7 +22,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
     lastKillTime: 0,
     ticketsEarned: 0,
     isWarning: false,
-    nextMilestone: 5  // 第一個里程碑是5連擊
+    nextMilestone: GameConfig.comboReward.MILESTONES[0]  // 使用配置中的第一個里程碑
   };
   kills = 0;
   alive = true;

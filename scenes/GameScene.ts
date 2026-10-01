@@ -7786,28 +7786,41 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * 檢查並發放COMBO獎勵
+   * ★階段三：檢查並發放COMBO獎勵
    * 
-   * @param actor 角色
+   * 當角色連擊數達到配置的里程碑時自動發放票券獎勵
+   * 
+   * 獎勵計算邏輯：
+   * - 遍歷所有里程碑(5, 10, 20, 50連擊)
+   * - 如果當前連擊數 === 里程碑值 → 觸發獎勵
+   * - 發放對應票券數量(1, 3, 10, 50張)
+   * - 更新下個目標里程碑
+   * - 播放獎勵特效和音效
+   * 
+   * 防重複機制：只在連擊數剛好等於里程碑時觸發一次
+   * 
+   * @param actor 觸發獎勵的角色對象
    */
   private checkAndGrantComboReward(actor: any): void {
     const combo = actor.comboState;
-    const milestones = [5, 10, 20, 50];
-    const tickets = [1, 3, 10, 50];
+    const config = GameConfig.comboReward;
     
-    for (let i = 0; i < milestones.length; i++) {
-      if (combo.currentStreak === milestones[i]) {
+    // 檢查是否達到任何里程碑
+    for (let i = 0; i < config.MILESTONES.length; i++) {
+      if (combo.currentStreak === config.MILESTONES[i]) {
         // 觸發獎勵：發放票券
-        const ticketReward = tickets[i];
+        const ticketReward = config.REWARDS[i];
         combo.ticketsEarned += ticketReward;
-        actor.credit += ticketReward; // 也添加到credit中
+        actor.credit += ticketReward; // 同步更新Credit顯示
         
         // 更新下個里程碑目標
-        combo.nextMilestone = i + 1 < milestones.length ? milestones[i + 1] : milestones[milestones.length - 1];
+        combo.nextMilestone = i + 1 < config.MILESTONES.length ? 
+          config.MILESTONES[i + 1] : 
+          config.MILESTONES[config.MILESTONES.length - 1];
         
         console.log(`🎉 COMBO Reward! ${combo.currentStreak}x = ${ticketReward} tickets (Total: ${combo.ticketsEarned})`);
         
-        // TODO: 播放獎勵特效
+        // 播放獎勵特效
         this.spawnComboRewardEffect(actor.x, actor.y, ticketReward);
         break;
       }
@@ -7815,42 +7828,63 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * 播放COMBO獎勵特效
+   * ★階段三：播放COMBO獎勵視覺特效
    * 
-   * @param x 特效位置X
-   * @param y 特效位置Y  
-   * @param tickets 獲得的票券數
+   * 在角色位置創建票券獎勵彈出動畫，提供即時的視覺反饋
+   * 
+   * 特效設計：
+   * - 金色文字 "+票券數 🎫" 從角色位置彈出
+   * - Y軸向上移動80px，模擬票券飛出效果
+   * - 透明度漸變到0，營造消散效果  
+   * - 尺寸放大1.5倍，增強視覺衝擊力
+   * - 1.5秒動畫時間，給予充分展示時間
+   * - 高深度層(1000)確保在最上層顯示
+   * 
+   * @param x 特效顯示的世界座標X
+   * @param y 特效顯示的世界座標Y
+   * @param tickets 獲得的票券數量，用於文字顯示
    */
   private spawnComboRewardEffect(x: number, y: number, tickets: number): void {
-    // 創建票券獎勵文字特效
+    // 創建票券獎勵文字特效：使用醒目的金色和票券emoji
     const rewardText = this.add.text(x, y - 20, `+${tickets} 🎫`, {
       fontSize: '24px',
-      color: '#ffd700',
-      stroke: '#000000',
-      strokeThickness: 3,
-      fontStyle: 'bold'
-    }).setOrigin(0.5, 0.5).setDepth(1000);
+      color: '#ffd700',        // 金色，與獎勵主題呼應
+      stroke: '#000000',       // 黑色描邊，增強可讀性
+      strokeThickness: 3,      // 較厚描邊，確保各種背景下可見
+      fontStyle: 'bold'        // 粗體，增強視覺重量
+    }).setOrigin(0.5, 0.5).setDepth(1000); // 最高層級，確保不被遮擋
     
-    // 彈出動畫
+    // 彈出動畫：Y軸上升 + 透明度漸變 + 尺寸放大
     this.tweens.add({
       targets: rewardText,
-      y: y - 80,
-      alpha: 0,
-      scale: 1.5,
-      duration: 1500,
-      ease: 'Power2',
-      onComplete: () => rewardText.destroy()
+      y: y - 80,               // 向上彈出60px
+      alpha: 0,                // 漸變到完全透明
+      scale: 1.5,              // 放大1.5倍，增強視覺衝擊
+      duration: 1500,          // 1.5秒完整動畫
+      ease: 'Power2',          // 自然的緩動曲線
+      onComplete: () => rewardText.destroy() // 動畫結束後清理對象
     });
   }
 
   /**
-   * 更新所有角色的COMBO計時系統
-   * 在update()中調用，檢查超時重置
+   * ★階段三：更新所有角色的COMBO計時系統
+   * 
+   * 實現基於時機視窗的連擊重置機制：
+   * - 正常期：連擊持續累積，UI顯示綠色
+   * - 警告期(1.5-2秒)：UI閃爍橙色/紅色，提醒玩家時間緊迫  
+   * - 超時重置(>2秒)：連擊歸零，重回起始狀態
+   * 
+   * 算法說明：
+   * 1. 計算每個角色的 timeSinceLastKill = currentTime - lastKillTime
+   * 2. 如果 timeSinceLastKill >= STREAK_TIMEOUT_MS → 重置連擊
+   * 3. 如果 timeSinceLastKill >= WARNING_START_MS → 進入警告狀態
+   * 4. 警告狀態觸發UI閃爍動畫，增強緊迫感
+   * 
+   * 在Phaser.update()中每幀調用，確保即時響應玩家操作
    */
   private updateComboTimers(): void {
     const currentTime = this.time.now;
-    const STREAK_TIMEOUT = 2000; // 2秒超時
-    const WARNING_START = 1500;  // 1.5秒開始警告
+    const config = GameConfig.comboReward;
     
     for (const character of this.characters) {
       const combo = character.comboState;
@@ -7858,15 +7892,18 @@ export class GameScene extends Phaser.Scene {
       if (combo.currentStreak > 0) {
         const timeSinceLastKill = currentTime - combo.lastKillTime;
         
-        if (timeSinceLastKill >= STREAK_TIMEOUT) {
-          // 超時：重置COMBO
+        if (timeSinceLastKill >= config.STREAK_TIMEOUT_MS) {
+          // 超時：重置COMBO到初始狀態
           console.log(`COMBO Reset! ${character.index === 0 ? 'P1' : `BOT${character.index}`} streak lost`);
           combo.currentStreak = 0;
           combo.isWarning = false;
-          combo.nextMilestone = 5; // 重置到第一個里程碑
-        } else if (timeSinceLastKill >= WARNING_START) {
-          // 進入警告期
+          combo.nextMilestone = config.MILESTONES[0]; // 重置到第一個里程碑
+        } else if (timeSinceLastKill >= config.WARNING_START_MS) {
+          // 進入警告期：觸發UI閃爍提醒
           combo.isWarning = true;
+        } else {
+          // 正常狀態：保持UI穩定顯示
+          combo.isWarning = false;
         }
       }
     }

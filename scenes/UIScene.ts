@@ -186,22 +186,23 @@ export class UIScene extends Phaser.Scene {
     },
     // ★階段三：COMBO獎勵系統配置
     COMBO: {
-      X_OFFSET: 0,    // ★修復：Credit正上方，不偏移X
-      Y: -30,         // ★修復：Credit上方，增加距離
-      WIDTH: 120,     // 與Credit同寬，保持對齊
-      HEIGHT: 24,     // 增加高度容納大字體
-      FONT_SIZE: '18px', // ★修復：放大字體，提高可見性
+      X_OFFSET: 0,    // Credit正上方，無水平偏移
+      Y: -30,         // Credit上方，增加垂直間距
+      WIDTH: 120,     // 與Credit同寬，視覺對齊
+      HEIGHT: 24,     // 容納大字體的高度
+      FONT_SIZE: '18px', // 放大字體，提高可見性
       PROGRESS_WIDTH: 100,   // 進度條寬度
-      PROGRESS_HEIGHT: 3,    // ★修復：縮小進度條高度，減少突兀感
-      PROGRESS_Y_OFFSET: 12, // ★修復：進度條距離文字更近
-      WARNING_BLINK_MS: 300, // 警告閃爍週期
-      STREAK_TIMEOUT_MS: 2000,   // 2秒無擊殺重置
-      WARNING_START_MS: 1500     // 1.5秒開始警告
+      PROGRESS_HEIGHT: 3,    // 精緻進度條高度
+      PROGRESS_Y_OFFSET: 12, // 進度條與文字間距
+      // ★使用配置常數，消除硬編碼
+      WARNING_BLINK_MS: GameConfig.comboReward.WARNING_BLINK_MS,
+      STREAK_TIMEOUT_MS: GameConfig.comboReward.STREAK_TIMEOUT_MS,
+      WARNING_START_MS: GameConfig.comboReward.WARNING_START_MS
     },
-    // COMBO獎勵里程碑配置
+    // ★COMBO獎勵里程碑配置：使用GameConfig統一配置
     COMBO_REWARDS: {
-      MILESTONES: [5, 10, 20, 50] as const,  // 獎勵里程碑
-      TICKETS: [1, 3, 10, 50] as const       // 對應票券獎勵
+      MILESTONES: GameConfig.comboReward.MILESTONES,
+      TICKETS: GameConfig.comboReward.REWARDS
     },
     // 顏色配置
     COLORS: {
@@ -1415,26 +1416,40 @@ export class UIScene extends Phaser.Scene {
   }
 
   /**
-   * 計算COMBO進度比例
+   * ★階段三：計算COMBO進度比例
    * 
-   * 根據當前連擊數和下個里程碑計算進度條填充比例
+   * 根據當前連擊數和里程碑配置計算進度條的填充比例
+   * 用於視覺化顯示玩家距離下個獎勵的距離
    * 
-   * @param currentStreak 當前連擊數
-   * @param nextMilestone 下個獎勵里程碑
-   * @returns 進度比例 (0-1)
+   * 算法邏輯：
+   * 1. 遍歷所有里程碑 [5, 10, 20, 50]
+   * 2. 找到當前連擊數所在的區間
+   * 3. 計算在該區間內的進度百分比
+   * 4. 例如：連擊數8，在區間[5,10]內，進度 = (8-5)/(10-5) = 0.6
+   * 
+   * 邊界情況處理：
+   * - currentStreak = 0：返回0（無進度）
+   * - currentStreak >= 最高里程碑：返回1（滿進度）
+   * - 介於里程碑間：線性插值計算
+   * 
+   * @param currentStreak 當前連擊數（非負整數）
+   * @param _nextMilestone 下個里程碑（暫未使用，預留擴展）
+   * @returns 進度比例，範圍[0, 1]，0表示無進度，1表示滿進度
    */
   private calculateComboProgress(currentStreak: number, _nextMilestone: number): number {
+    // 無連擊時不顯示進度
     if (currentStreak === 0) return 0;
     
     const milestones = this.OVERHEAD_UI_CONFIG.COMBO_REWARDS.MILESTONES;
     
-    // 找到當前處於哪個區間
+    // 遍歷里程碑，找到當前連擊所在區間
     let prevMilestone = 0;
     for (const milestone of milestones) {
       if (currentStreak < milestone) {
-        // 當前連擊數小於這個里程碑，計算在此區間的進度
+        // 當前連擊數小於此里程碑，計算在此區間的進度
+        // 使用線性插值：progress = (current - prev) / (next - prev)
         const progress = (currentStreak - prevMilestone) / (milestone - prevMilestone);
-        return Math.max(0, Math.min(1, progress));
+        return Math.max(0, Math.min(1, progress)); // 確保在[0,1]範圍內
       }
       prevMilestone = milestone;
     }
