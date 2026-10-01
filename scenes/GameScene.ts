@@ -8356,6 +8356,99 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
+    // ★版本確認標誌
+    console.log('🚀 檢測版本確認: v2.3 - 像素級檢測已載入');
+    console.log('📅 部署時間:', new Date().toISOString());
+    console.log('🔄 toggleSceneBackground被觸發');
+    
+    // ★立即執行檢測1.1-1.3（不依賴條件分支）
+    console.log('🔍 ===== 檢測1.1 - Scene.png檔案內容 =====');
+    
+    // 檢測檔案是否存在
+    const texture = this.textures.get('scene-background');
+    console.log('✓ 紋理物件存在:', !!texture);
+    if (texture) {
+      console.log('✓ 紋理key:', texture.key);
+      
+      // 檢測圖片來源
+      if (texture.source && texture.source[0]) {
+        const img = texture.source[0].image as any;
+        console.log('✓ 圖片尺寸:', img.width + '×' + img.height);
+        console.log('✓ 圖片來源:', img.src?.substring(img.src.lastIndexOf('/') + 1) || 'unknown');
+        console.log('✓ 載入狀態:', img.complete || 'unknown');
+        
+        // 檢測圖片的像素資料
+        if (img.naturalWidth !== undefined) {
+          console.log('✓ 圖片naturalWidth:', img.naturalWidth);
+          console.log('✓ 圖片naturalHeight:', img.naturalHeight);
+        }
+        
+        // ★檢測1.3 - Scene.png實際內容驗證（關鍵檢測）
+        console.log('🔍 ===== 檢測1.3 - Scene.png實際內容驗證 =====');
+        
+        // 基本尺寸資訊
+        const actualW = img.naturalWidth || img.width;
+        const actualH = img.naturalHeight || img.height;
+        console.log('✓ 實際寬度:', actualW);
+        console.log('✓ 實際高度:', actualH);
+        
+        // 檢查是否是預期的1920×1080
+        const expectedW = 1920, expectedH = 1080;
+        const sizeMatch = (actualW === expectedW && actualH === expectedH);
+        console.log('✓ 尺寸符合預期:', 
+            sizeMatch ? 'YES' : 
+            `NO - 預期${expectedW}×${expectedH}, 實際${actualW}×${actualH}`);
+        
+        // ★關鍵：像素內容檢測
+        console.log('🔍 ===== 檢測1.3 - 像素資料檢測 =====');
+        
+        try {
+          // 創建canvas來檢測圖片內容
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          if (ctx && img.complete && actualW > 0) {
+            canvas.width = 100;
+            canvas.height = 100;
+            
+            ctx.drawImage(img, 0, 0, 100, 100, 0, 0, 100, 100);
+            
+            // 檢測中心點顏色
+            const imageData = ctx.getImageData(50, 50, 1, 1);
+            const pixel = imageData.data;
+            console.log('✓ 中心像素RGB:', `(${pixel[0]}, ${pixel[1]}, ${pixel[2]})`);
+            
+            // 判斷場景類型
+            const isVolcano = pixel[0] > 150 && pixel[1] < 100 && pixel[2] < 50; // 橙紅色
+            const isTestScene = pixel[2] > 150 && pixel[0] < 100; // 藍紫色
+            const isOriginalBrown = pixel[0] > 100 && pixel[1] > 80 && pixel[2] < 100; // 棕色
+            
+            let colorType = '未知場景';
+            if (isVolcano) colorType = '火山場景(橙紅)';
+            else if (isTestScene) colorType = '測試場景(藍紫)';
+            else if (isOriginalBrown) colorType = '⚠️ 原始場景(棕色) - 可能載入錯誤!';
+            
+            console.log('✓ 顏色判斷:', colorType);
+            
+          } else {
+            console.log('❌ 無法執行像素檢測 - Canvas/圖片問題');
+          }
+          
+        } catch (error: any) {
+          console.log('❌ 像素檢測失敗:', error.message || error);
+        }
+        
+        // ★檢測URL與快取
+        console.log('🔍 ===== 檢測1.3 - URL與快取 =====');
+        console.log('✓ 完整圖片URL:', img.src || 'N/A');
+        console.log('✓ URL包含時間戳:', (img.src && img.src.includes('?')) ? 'YES' : 'NO');
+        
+      } else {
+        console.log('❌ 圖片來源不存在 - texture.source問題');
+      }
+    } else {
+      console.log('❌ scene-background紋理不存在');
+    }
+
     // 切換狀態
     this.isNewSceneActive = !this.isNewSceneActive;
     
