@@ -114,6 +114,74 @@ export class UIScene extends Phaser.Scene {
   // ★頭上UI系統：使用角色索引作為Map鍵，避免對象引用問題
   private overheadUIs: Map<number, Phaser.GameObjects.Container> = new Map();
   private readonly OVERHEAD_DEPTH = 900;
+  
+  // ★頭上UI佈局常數：避免魔術數字
+  private readonly OVERHEAD_UI_CONFIG = {
+    // 編號牌配置
+    BADGE: {
+      X: -66,
+      Y: -25,
+      RADIUS: 18,
+      BORDER_WIDTH: 2,
+      FONT_SIZE: '20px',
+      STROKE_WIDTH: 2
+    },
+    // Credit顯示配置  
+    CREDIT: {
+      X: -36,
+      Y: 5,
+      BG_WIDTH: 120,
+      BG_HEIGHT: 34,
+      BORDER_WIDTH: 2,
+      ICON_OFFSET_X: -40,
+      TEXT_OFFSET_X: 10,
+      FONT_SIZE: '22px',
+      STROKE_WIDTH: 2,
+      FLASH_CYCLE_MS: 600
+    },
+    // 劍形圖標尺寸
+    SWORD: {
+      BLADE_WIDTH: 4,
+      BLADE_HEIGHT: 12,
+      BLADE_Y: -8,
+      TIP_Y: -11,
+      GUARD_WIDTH: 12,
+      GUARD_HEIGHT: 2,
+      GUARD_Y: 4,
+      HANDLE_WIDTH: 2,
+      HANDLE_HEIGHT: 4,
+      HANDLE_Y: 6,
+      POMMEL_RADIUS: 2,
+      POMMEL_Y: 10
+    },
+    // 能量條配置
+    ENERGY: {
+      Y_OFFSET: 30,
+      WIDTH: 100,
+      HEIGHT: 8,
+      BORDER_WIDTH: 1,
+      HINT_OFFSET_Y: -15,
+      HINT_FONT_SIZE: '14px',
+      PULSE_SCALE: 2.2,
+      PULSE_DURATION: 200
+    },
+    // 顏色配置
+    COLORS: {
+      BACKGROUND: 0x000000 as const,
+      BORDER_GOLD: 0xffd700 as const,
+      SWORD_FILL: 0xffca28 as const,
+      SWORD_BORDER: 0xffa000 as const,
+      FLASH_RED: 0xff3b30 as const,
+      FLASH_RED_BORDER: 0xcc0000 as const,
+      ENERGY_NORMAL: 0xffd700 as const,
+      ENERGY_EMPOWERED: 0xffef99 as const,
+      ENERGY_FULL: 0xffe23a as const,
+      WHITE: '#ffffff',
+      BLACK: '#000000',
+      TEXT_FLASH: '#ff3b30',
+      HINT_YELLOW: '#ffe23a'
+    }
+  } as const;
   /** v27 波次顯示（上方中央） */
   private waveText!: Phaser.GameObjects.Text;
   /** v28 BOSS 血條 */
@@ -792,102 +860,37 @@ export class UIScene extends Phaser.Scene {
     // 在updateStats中檢測角色並創建對應的頭上UI
   }
 
-  /** ★創建單個角色的頭上UI容器 */
+  /**
+   * 創建單個角色的頭上UI容器
+   * 
+   * 包含三層UI元素（從上到下）：
+   * 1. 編號牌：彩色圓形 + 角色標籤（P1/BOT1/BOT2/BOT3）
+   * 2. Credit顯示：劍形圖標 + 五位數Credit數字
+   * 3. 能量條：金色進度條（僅慢速模式玩家顯示）
+   * 
+   * @param _character 角色統計數據（暫未直接使用，預留擴展）
+   * @param index 角色索引（0=P1玩家, 1+=BOT）
+   * @returns 包含所有UI元素的Phaser容器
+   */
   private createOverheadUI(_character: CharStat, index: number): Phaser.GameObjects.Container {
     const container = this.add.container(0, 0);
     container.setDepth(this.OVERHEAD_DEPTH);
     
-    // 🎯 玩家編號牌 - 位置：(-66, -25) 最頂層
-    const badgeX = -66;
-    const badgeY = -25; // ★調整到最頂層
+    // 創建編號牌UI元素
+    const { badge, badgeText } = this.createBadgeUI(index);
     
-    // 內圓：半徑18px，角色顏色
-    const badgeColor = GameConfig.characters.colors[index];
-    const badge = this.add.circle(badgeX, badgeY, 18, badgeColor)
-      .setStrokeStyle(2, 0xffffff); // 白色邊框
+    // 創建Credit顯示UI元素  
+    const { creditBg, swordIcon, creditText } = this.createCreditUI();
     
-    // 文字：角色標籤，20px字體，白色
-    const badgeLabel = GameConfig.characters.labels[index];
-    const badgeText = this.add.text(badgeX, badgeY, badgeLabel, {
-      fontFamily: 'monospace',
-      fontSize: '20px', 
-      color: '#ffffff',
-      stroke: '#000000',
-      strokeThickness: 2,
-      fontStyle: 'bold'
-    }).setOrigin(0.5, 0.5);
-
-    // ★階段二：Credit點數顯示 - 位置：(-36, 5) 編號牌下方
-    const creditX = -36;
-    const creditY = 5; // ★編號牌下方，適當間距
+    // 創建能量條UI元素
+    const { energyBg, energyBar, energyHint } = this.createEnergyUI();
     
-    // Credit背景框：120×34px
-    const creditBg = this.add.rectangle(creditX, creditY, 120, 34, 0x000000, 0.7)
-      .setStrokeStyle(2, 0xffd700); // 金色邊框
-    
-    // ★劍形圖標：22×22px，替換金幣圖標
-    const swordIcon = this.add.graphics();
-    swordIcon.x = creditX - 40;
-    swordIcon.y = creditY;
-    
-    // 繪製劍的形狀
-    swordIcon.clear();
-    swordIcon.lineStyle(2, 0xffa000, 1); // 金色邊框
-    swordIcon.fillStyle(0xffca28, 1);     // 金色填充
-    
-    // 劍刃：長方形 + 尖端三角形
-    swordIcon.fillRect(-2, -8, 4, 12);    // 劍身：4px寬，12px長
-    swordIcon.fillTriangle(0, -8, -2, -8, 0, -11); // 劍尖
-    
-    // 護手：水平線
-    swordIcon.fillRect(-6, 4, 12, 2);     // 護手：12px寬，2px厚
-    
-    // 劍柄：
-    swordIcon.fillRect(-1, 6, 2, 4);      // 劍柄：2px寬，4px長
-    
-    // 劍柄底部：小圓
-    swordIcon.fillCircle(0, 10, 2);       // 底部裝飾
-    
-    // Credit數字：22px字體，白色，默認"00000"
-    const creditText = this.add.text(creditX + 10, creditY, '00000', {
-      fontFamily: 'monospace',
-      fontSize: '22px',
-      color: '#ffffff',
-      stroke: '#000000',
-      strokeThickness: 2,
-      fontStyle: 'bold'
-    }).setOrigin(0.5, 0.5);
-
-    // ★階段二：二段能量量條 - Credit下方適當間距
-    const energyX = creditX;
-    const energyY = creditY + 30; // ★增加間距，避免重疊
-    const energyWidth = 100;
-    const energyHeight = 8;
-    
-    // 能量條背景：金色邊框，黑色半透明背景
-    const energyBg = this.add.rectangle(energyX, energyY, energyWidth, energyHeight, 0x000000, 0.6)
-      .setStrokeStyle(1, 0xffd700);
-    
-    // 能量進度條：金色填充
-    const energyBar = this.add.rectangle(energyX - energyWidth/2, energyY, 0, energyHeight - 2, 0xffd700)
-      .setOrigin(0, 0.5);
-    
-    // 能量條文字提示（滿能量時顯示）
-    const energyHint = this.add.text(energyX, energyY - 15, 'Press Z', {
-      fontFamily: 'monospace',
-      fontSize: '14px',
-      color: '#ffe23a',
-      stroke: '#000000',
-      strokeThickness: 1,
-      fontStyle: 'bold'
-    }).setOrigin(0.5, 0.5).setVisible(false);
-    
-    // 添加到容器，並設置標記以便後續更新
+    // 添加所有元素到容器
     container.add([badge, badgeText, creditBg, swordIcon, creditText, energyBg, energyBar, energyHint]);
     
-    // ★設置子元件引用，方便updateStats時更新
+    // 設置子元件引用，便於後續更新
     (container as any).creditText = creditText;
-    (container as any).swordIcon = swordIcon;  // 更新引用名稱
+    (container as any).swordIcon = swordIcon;
     (container as any).energyBar = energyBar;
     (container as any).energyHint = energyHint;
     (container as any).energyBg = energyBg;
@@ -895,58 +898,292 @@ export class UIScene extends Phaser.Scene {
     return container;
   }
 
-  /** ★更新頭上UI內容：Credit和能量條 */
+  /**
+   * 創建角色編號牌UI元素
+   * 
+   * 顯示彩色圓形背景和角色標籤，位於頭上UI最頂層
+   * 
+   * @param index 角色索引，用於選擇顏色和標籤
+   * @returns 包含圓形背景和文字的UI元素
+   */
+  private createBadgeUI(index: number): { badge: Phaser.GameObjects.Arc; badgeText: Phaser.GameObjects.Text } {
+    const config = this.OVERHEAD_UI_CONFIG;
+    const badgeColor = GameConfig.characters.colors[index];
+    const badgeLabel = GameConfig.characters.labels[index];
+    
+    // 角色標識圓形背景
+    const badge = this.add.circle(
+      config.BADGE.X, 
+      config.BADGE.Y, 
+      config.BADGE.RADIUS, 
+      badgeColor
+    ).setStrokeStyle(config.BADGE.BORDER_WIDTH, 0xffffff);
+    
+    // 角色標籤文字
+    const badgeText = this.add.text(config.BADGE.X, config.BADGE.Y, badgeLabel, {
+      fontFamily: 'monospace',
+      fontSize: config.BADGE.FONT_SIZE,
+      color: config.COLORS.WHITE,
+      stroke: config.COLORS.BLACK,
+      strokeThickness: config.BADGE.STROKE_WIDTH,
+      fontStyle: 'bold'
+    }).setOrigin(0.5, 0.5);
+    
+    return { badge, badgeText };
+  }
+
+  /**
+   * 創建Credit點數顯示UI元素
+   * 
+   * 包含背景框、劍形圖標和數字文字，位於編號牌下方
+   * 
+   * @returns Credit顯示相關的UI元素
+   */
+  private createCreditUI(): { 
+    creditBg: Phaser.GameObjects.Rectangle; 
+    swordIcon: Phaser.GameObjects.Graphics; 
+    creditText: Phaser.GameObjects.Text 
+  } {
+    const config = this.OVERHEAD_UI_CONFIG;
+    
+    // Credit背景框
+    const creditBg = this.add.rectangle(
+      config.CREDIT.X, 
+      config.CREDIT.Y, 
+      config.CREDIT.BG_WIDTH, 
+      config.CREDIT.BG_HEIGHT, 
+      config.COLORS.BACKGROUND, 
+      0.7
+    ).setStrokeStyle(config.CREDIT.BORDER_WIDTH, config.COLORS.BORDER_GOLD);
+    
+    // 劍形圖標
+    const swordIcon = this.add.graphics();
+    swordIcon.x = config.CREDIT.X + config.CREDIT.ICON_OFFSET_X;
+    swordIcon.y = config.CREDIT.Y;
+    this.drawSwordIcon(swordIcon, false); // 初始為正常狀態
+    
+    // Credit數字文字
+    const creditText = this.add.text(
+      config.CREDIT.X + config.CREDIT.TEXT_OFFSET_X, 
+      config.CREDIT.Y, 
+      '00000', 
+      {
+        fontFamily: 'monospace',
+        fontSize: config.CREDIT.FONT_SIZE,
+        color: config.COLORS.WHITE,
+        stroke: config.COLORS.BLACK,
+        strokeThickness: config.CREDIT.STROKE_WIDTH,
+        fontStyle: 'bold'
+      }
+    ).setOrigin(0.5, 0.5);
+    
+    return { creditBg, swordIcon, creditText };
+  }
+
+  /**
+   * 創建能量條UI元素
+   * 
+   * 包含背景條、進度條和提示文字，僅在慢速模式對玩家顯示
+   * 
+   * @returns 能量條相關的UI元素
+   */
+  private createEnergyUI(): { 
+    energyBg: Phaser.GameObjects.Rectangle; 
+    energyBar: Phaser.GameObjects.Rectangle; 
+    energyHint: Phaser.GameObjects.Text 
+  } {
+    const config = this.OVERHEAD_UI_CONFIG;
+    const energyX = config.CREDIT.X;
+    const energyY = config.CREDIT.Y + config.ENERGY.Y_OFFSET;
+    
+    // 能量條背景框
+    const energyBg = this.add.rectangle(
+      energyX, 
+      energyY, 
+      config.ENERGY.WIDTH, 
+      config.ENERGY.HEIGHT, 
+      config.COLORS.BACKGROUND, 
+      0.6
+    ).setStrokeStyle(config.ENERGY.BORDER_WIDTH, config.COLORS.BORDER_GOLD);
+    
+    // 能量進度條（從左邊開始填充）
+    const energyBar = this.add.rectangle(
+      energyX - config.ENERGY.WIDTH / 2, 
+      energyY, 
+      0, 
+      config.ENERGY.HEIGHT - 2, 
+      config.COLORS.ENERGY_NORMAL
+    ).setOrigin(0, 0.5);
+    
+    // 滿能量時的操作提示
+    const energyHint = this.add.text(
+      energyX, 
+      energyY + config.ENERGY.HINT_OFFSET_Y, 
+      'Press Z', 
+      {
+        fontFamily: 'monospace',
+        fontSize: config.ENERGY.HINT_FONT_SIZE,
+        color: config.COLORS.HINT_YELLOW,
+        stroke: config.COLORS.BLACK,
+        strokeThickness: 1,
+        fontStyle: 'bold'
+      }
+    ).setOrigin(0.5, 0.5).setVisible(false);
+    
+    return { energyBg, energyBar, energyHint };
+  }
+
+  /**
+   * 繪製劍形圖標
+   * 
+   * 使用Graphics API繪製包含劍身、劍尖、護手、劍柄和底部裝飾的完整劍形
+   * 支持正常和閃爍兩種視覺狀態
+   * 
+   * @param graphics 用於繪製的Graphics對象
+   * @param isFlashing 是否為閃爍狀態（Credit耗盡時顯示紅色）
+   */
+  private drawSwordIcon(graphics: Phaser.GameObjects.Graphics, isFlashing: boolean): void {
+    const config = this.OVERHEAD_UI_CONFIG;
+    const swordConfig = config.SWORD;
+    const colors = config.COLORS;
+    
+    // 選擇顏色：正常金色或閃爍紅色
+    const fillColor = isFlashing ? colors.FLASH_RED : colors.SWORD_FILL;
+    const strokeColor = isFlashing ? colors.FLASH_RED_BORDER : colors.SWORD_BORDER;
+    
+    graphics.clear();
+    graphics.lineStyle(2, strokeColor, 1);
+    graphics.fillStyle(fillColor, 1);
+    
+    // 劍身：中央垂直長方形
+    graphics.fillRect(
+      -swordConfig.BLADE_WIDTH / 2, 
+      swordConfig.BLADE_Y, 
+      swordConfig.BLADE_WIDTH, 
+      swordConfig.BLADE_HEIGHT
+    );
+    
+    // 劍尖：上方三角形
+    graphics.fillTriangle(
+      0, swordConfig.TIP_Y,                    // 頂點
+      -swordConfig.BLADE_WIDTH / 2, swordConfig.BLADE_Y,  // 左下角
+      swordConfig.BLADE_WIDTH / 2, swordConfig.BLADE_Y    // 右下角
+    );
+    
+    // 護手：水平長方形
+    graphics.fillRect(
+      -swordConfig.GUARD_WIDTH / 2, 
+      swordConfig.GUARD_Y, 
+      swordConfig.GUARD_WIDTH, 
+      swordConfig.GUARD_HEIGHT
+    );
+    
+    // 劍柄：細長方形
+    graphics.fillRect(
+      -swordConfig.HANDLE_WIDTH / 2, 
+      swordConfig.HANDLE_Y, 
+      swordConfig.HANDLE_WIDTH, 
+      swordConfig.HANDLE_HEIGHT
+    );
+    
+    // 劍柄底部：裝飾圓形
+    graphics.fillCircle(0, swordConfig.POMMEL_Y, swordConfig.POMMEL_RADIUS);
+  }
+
+  /**
+   * 更新頭上UI內容：Credit顯示和能量條狀態
+   * 
+   * 根據角色數據和遊戲狀態實時更新UI顯示：
+   * - Credit數字格式化和閃爍特效
+   * - 劍形圖標顏色狀態  
+   * - 能量條進度和視覺效果
+   * - 操作提示的顯示/隱藏
+   * 
+   * @param character 角色統計數據
+   * @param container UI容器，包含所有子元件的引用
+   * @param stats 全局遊戲狀態數據
+   */
   private updateOverheadUIContent(character: CharStat, container: Phaser.GameObjects.Container, stats: StatsPayload): void {
+    // 獲取容器中的UI元件引用
     const creditText = (container as any).creditText as Phaser.GameObjects.Text;
-    const swordIcon = (container as any).swordIcon as Phaser.GameObjects.Graphics;  // 更新類型
+    const swordIcon = (container as any).swordIcon as Phaser.GameObjects.Graphics;
     const energyBar = (container as any).energyBar as Phaser.GameObjects.Rectangle;
     const energyHint = (container as any).energyHint as Phaser.GameObjects.Text;
     const energyBg = (container as any).energyBg as Phaser.GameObjects.Rectangle;
     
+    // 安全性檢查：確保所有必要的UI元件存在
     if (!creditText || !swordIcon || !energyBar) return;
     
-    // ★更新Credit顯示
+    // 更新Credit顯示系統
+    this.updateCreditDisplay(character, creditText, swordIcon);
+    
+    // 更新能量條系統（僅慢速模式玩家）
+    this.updateEnergyDisplay(character, stats, energyBar, energyBg, energyHint, container);
+  }
+
+  /**
+   * 更新Credit點數顯示
+   * 
+   * 包含數字格式化和耗盡時的閃爍特效
+   * 
+   * @param character 角色數據
+   * @param creditText Credit數字文字對象
+   * @param swordIcon 劍形圖標Graphics對象
+   */
+  private updateCreditDisplay(
+    character: CharStat, 
+    creditText: Phaser.GameObjects.Text, 
+    swordIcon: Phaser.GameObjects.Graphics
+  ): void {
+    const config = this.OVERHEAD_UI_CONFIG;
     const creditValue = character.credit || 0;
-    const creditStr = creditValue.toString().padStart(5, '0'); // 格式："00000"
+    
+    // 格式化為五位數字字串（前置補零）
+    const creditStr = creditValue.toString().padStart(5, '0');
     creditText.setText(creditStr);
     
-    // Credit耗盡特效：劍圖標閃紅色
+    // Credit耗盡閃爍特效
     if (creditValue === 0) {
-      const flashTime = this.time.now % 600; // 300ms週期
-      const isFlashing = flashTime < 300;
-      // 重繪劍圖標顏色
-      swordIcon.clear();
-      const fillColor = isFlashing ? 0xff3b30 : 0xffca28; // 紅色閃爍或正常金色
-      const strokeColor = isFlashing ? 0xcc0000 : 0xffa000; // 邊框也要變色
+      const flashTime = this.time.now % config.CREDIT.FLASH_CYCLE_MS;
+      const isFlashing = flashTime < (config.CREDIT.FLASH_CYCLE_MS / 2);
       
-      swordIcon.lineStyle(2, strokeColor, 1);
-      swordIcon.fillStyle(fillColor, 1);
+      // 重繪劍圖標（閃爍狀態）
+      this.drawSwordIcon(swordIcon, isFlashing);
       
-      // 重繪劍的形狀
-      swordIcon.fillRect(-2, -8, 4, 12);    // 劍身
-      swordIcon.fillTriangle(0, -8, -2, -8, 0, -11); // 劍尖
-      swordIcon.fillRect(-6, 4, 12, 2);     // 護手
-      swordIcon.fillRect(-1, 6, 2, 4);      // 劍柄
-      swordIcon.fillCircle(0, 10, 2);       // 底部裝飾
-      
-      creditText.setColor(isFlashing ? '#ff3b30' : '#ffffff');
+      // 文字顏色同步閃爍
+      creditText.setColor(isFlashing ? config.COLORS.TEXT_FLASH : config.COLORS.WHITE);
     } else {
-      // 正常金色劍圖標
-      swordIcon.clear();
-      swordIcon.lineStyle(2, 0xffa000, 1);
-      swordIcon.fillStyle(0xffca28, 1);
-      
-      // 重繪劍的形狀
-      swordIcon.fillRect(-2, -8, 4, 12);
-      swordIcon.fillTriangle(0, -8, -2, -8, 0, -11);
-      swordIcon.fillRect(-6, 4, 12, 2);
-      swordIcon.fillRect(-1, 6, 2, 4);
-      swordIcon.fillCircle(0, 10, 2);
-      
-      creditText.setColor('#ffffff'); // 正常白色
+      // 正常狀態：金色劍圖標和白色文字
+      this.drawSwordIcon(swordIcon, false);
+      creditText.setColor(config.COLORS.WHITE);
     }
+  }
+
+  /**
+   * 更新二段能量條顯示
+   * 
+   * 包含進度條寬度、狀態顏色、脈動動畫和操作提示
+   * 僅在慢速模式對玩家角色顯示
+   * 
+   * @param character 角色數據
+   * @param stats 遊戲狀態數據  
+   * @param energyBar 能量進度條對象
+   * @param energyBg 能量條背景對象
+   * @param energyHint 操作提示文字對象
+   * @param container 容器對象（用於存儲上次能量值）
+   */
+  private updateEnergyDisplay(
+    character: CharStat,
+    stats: StatsPayload,
+    energyBar: Phaser.GameObjects.Rectangle,
+    energyBg: Phaser.GameObjects.Rectangle,
+    energyHint: Phaser.GameObjects.Text,
+    container: Phaser.GameObjects.Container
+  ): void {
+    const config = this.OVERHEAD_UI_CONFIG;
+    const colors = config.COLORS;
     
-    // ★更新二段能量條（慢速模式專用）
+    // 僅對慢速模式的玩家顯示能量條
     if (stats.controlMode === 'slow' && character.isPlayer) {
       energyBg.setVisible(true);
       energyBar.setVisible(true);
@@ -955,38 +1192,40 @@ export class UIScene extends Phaser.Scene {
       const energyMax = stats.energyMax || 10;
       const energyRatio = Math.max(0, Math.min(1, energy / energyMax));
       
-      // 更新進度條寬度
-      const maxWidth = 96; // 100px容器 - 2px邊距 = 96px
-      energyBar.width = maxWidth * energyRatio;
+      // 更新進度條寬度（96px = 100px容器 - 4px內邊距）
+      const maxBarWidth = config.ENERGY.WIDTH - 4;
+      energyBar.width = maxBarWidth * energyRatio;
       
-      // 能量狀態顏色
-      let energyColor = 0xffd700; // 普通：金色
+      // 根據能量狀態選擇顏色
+      let energyColor: number = colors.ENERGY_NORMAL;
       if (stats.empowered) {
-        energyColor = 0xffef99; // 強化中：淺金色
+        // 強化中：淺金色
+        energyColor = colors.ENERGY_EMPOWERED;
       } else if (energy >= energyMax) {
-        // 滿能量：閃爍金色
+        // 滿能量：閃爍效果
         const blinkTime = this.time.now % 400;
-        energyColor = blinkTime < 200 ? 0xffe23a : 0xffd700;
+        energyColor = blinkTime < 200 ? colors.ENERGY_FULL : colors.ENERGY_NORMAL;
       }
       energyBar.setFillStyle(energyColor);
       
-      // 脈動效果：能量增加時Y軸放大
-      if (energy > (container as any).lastEnergy || 0) {
-        energyBar.setScale(1, 2.2);
+      // 能量增加時的脈動動畫效果
+      const lastEnergy = (container as any).lastEnergy || 0;
+      if (energy > lastEnergy) {
+        energyBar.setScale(1, config.ENERGY.PULSE_SCALE);
         this.tweens.add({
           targets: energyBar,
           scaleY: 1,
-          duration: 200,
+          duration: config.ENERGY.PULSE_DURATION,
           ease: 'Power2'
         });
       }
       (container as any).lastEnergy = energy;
       
-      // "Press Z" 提示：滿能量時顯示
+      // 滿能量且未強化時顯示操作提示
       if (energy >= energyMax && !stats.empowered) {
         energyHint.setVisible(true);
         energyHint.setText('Press Z');
-        energyHint.setColor('#ffe23a');
+        energyHint.setColor(colors.HINT_YELLOW);
       } else {
         energyHint.setVisible(false);
       }
@@ -998,23 +1237,34 @@ export class UIScene extends Phaser.Scene {
     }
   }
 
-  /** ★更新頭上UI位置 */
+  /**
+   * 更新頭上UI的螢幕位置
+   * 
+   * 根據角色的世界座標計算螢幕位置，考慮相機捲動偏移
+   * 確保UI容器始終跟隨角色移動並顯示在正確位置
+   * 
+   * @param character 角色統計數據，包含世界座標
+   * @param container UI容器對象
+   */
   private updateOverheadUI(character: CharStat, container: Phaser.GameObjects.Container): void {
+    // 角色死亡時隱藏UI
     if (!character.alive) {
       container.setVisible(false);
       return;
     }
     
-    // 🎯 使用角色實際位置：頭上60px（調整為更接近的距離）
+    // 計算UI顯示位置：角色頭上60px
     const worldX = character.x;
-    const worldY = character.y - 60;  // ★修復：140px太遠，改為60px
+    const worldY = character.y - 60;
     
-    // ★修復座標系統：UIScene是固定相機，需要考慮GameScene的相機偏移
+    // 座標系統轉換：世界座標 → 螢幕座標
+    // UIScene使用固定相機，需要減去GameScene相機的捲動偏移
     const gameScene = this.scene.get('GameScene') as any;
     const gcam = gameScene?.cameras?.main;
     const screenX = worldX - (gcam?.scrollX || 0);
     const screenY = worldY - (gcam?.scrollY || 0);
     
+    // 更新容器位置並確保可見
     container.setPosition(screenX, screenY);
     container.setVisible(true);
   }
