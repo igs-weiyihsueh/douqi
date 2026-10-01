@@ -157208,7 +157208,7 @@ class UIScene extends Phaser.Scene {
       color: "#7bed9f",
       stroke: "#000000",
       strokeThickness: 3
-    }).setOrigin(0.5, 0).setDepth(21);
+    }).setOrigin(0.5, 0).setDepth(21).setVisible(false);
     this.hitText = this.add.text(12, 12, "命中 0", {
       fontFamily: "monospace",
       fontSize: "16px",
@@ -157223,7 +157223,7 @@ class UIScene extends Phaser.Scene {
       stroke: "#000000",
       strokeThickness: 4,
       align: "right"
-    }).setOrigin(1, 0);
+    }).setOrigin(1, 0).setVisible(false);
     const comboX = 12;
     const comboY = 40;
     this.comboLabel = this.add.text(comboX, comboY - 2, "連段", {
@@ -157349,7 +157349,7 @@ class UIScene extends Phaser.Scene {
     const btnCx = w - btnPad - btnW / 2;
     const btnCy = btnPad + btnH / 2;
     const initOn = GameConfig.items.spawnEnabled;
-    this.itemToggleBtnBg = this.add.rectangle(btnCx, btnCy, btnW, btnH, initOn ? 1736503 : 10166822, 0.85).setStrokeStyle(2, 16777215, 0.7).setDepth(50).setScrollFactor(0).setInteractive({ useHandCursor: true });
+    this.itemToggleBtnBg = this.add.rectangle(btnCx, btnCy, btnW, btnH, initOn ? 1736503 : 10166822, 0.85).setStrokeStyle(2, 16777215, 0.7).setDepth(50).setScrollFactor(0).setInteractive({ useHandCursor: true }).setVisible(false);
     this.itemToggleBtnText = this.add.text(btnCx, btnCy, initOn ? "道具\nON" : "道具\nOFF", {
       fontFamily: "monospace",
       fontSize: "12px",
@@ -157357,7 +157357,7 @@ class UIScene extends Phaser.Scene {
       stroke: "#000000",
       strokeThickness: 2,
       align: "center"
-    }).setOrigin(0.5, 0.5).setDepth(51).setScrollFactor(0);
+    }).setOrigin(0.5, 0.5).setDepth(51).setScrollFactor(0).setVisible(false);
     this.itemToggleBtnBg.on("pointerdown", (_p, _x, _y, ev) => {
       ev.stopPropagation();
       this.game.events.emit("ui-toggle-items");

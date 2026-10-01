@@ -187,7 +187,7 @@ export class UIScene extends Phaser.Scene {
       .setScrollFactor(0).setDepth(26).setVisible(false)
       .setDisplaySize(rewardIconSize, rewardIconSize);
 
-    // ★UI調整②:加入夥伴提示移到【畫面下方】(角色狀態列上方,置中)
+    // ★UI調整②:加入夥伴提示移到【畫面下方】(角色狀態列上方,置中) - 🚫 用戶要求關閉
     this.joinHintText = this.add
       .text(w / 2, h - 100, '按 B 加入ROBOT (1/4)', {
         fontFamily: 'monospace',
@@ -197,7 +197,8 @@ export class UIScene extends Phaser.Scene {
         strokeThickness: 3
       })
       .setOrigin(0.5, 0)
-      .setDepth(21);
+      .setDepth(21)
+      .setVisible(false); // 🚫 關閉加入夥伴提示
 
     // ★拔等級(階段2):等級數字 + 經驗條 HUD 已移除(等級系統已拔,數值固定滿等)。畫面下方留白,不再顯示 Lv/經驗。
 
@@ -212,7 +213,7 @@ export class UIScene extends Phaser.Scene {
       })
       .setOrigin(0, 0);
 
-    // v27 波次顯示（右上角）
+    // v27 波次顯示（右上角）- 🚫 用戶要求關閉
     this.waveText = this.add
       .text(w - 12, 12, 'WAVE 1  0/12', {
         fontFamily: 'monospace',
@@ -222,7 +223,8 @@ export class UIScene extends Phaser.Scene {
         strokeThickness: 4,
         align: 'right'
       })
-      .setOrigin(1, 0);
+      .setOrigin(1, 0)
+      .setVisible(false); // 🚫 關閉波次顯示
 
     // v31/v55 連段條(左上)。fast=一條「連段」4節點(3/6/9/10)+強化倒數；slow=「COMBO」3節點(3/6/9)+下方能量條。
     // 兩套元件都建好，首次 stats(controlMode) 再依模式 toggle。
@@ -411,19 +413,22 @@ export class UIScene extends Phaser.Scene {
     const btnCx = w - btnPad - btnW / 2;
     const btnCy = btnPad + btnH / 2;
     const initOn = GameConfig.items.spawnEnabled;
+    // 🚫 用戶要求關閉：右上角道具按鈕 (原本顯示"結束(1)"等內容)
     this.itemToggleBtnBg = this.add
       .rectangle(btnCx, btnCy, btnW, btnH, initOn ? 0x1a7f37 : 0x9b2226, 0.85)
       .setStrokeStyle(2, 0xffffff, 0.7)
       .setDepth(50)
       .setScrollFactor(0)
-      .setInteractive({ useHandCursor: true });
+      .setInteractive({ useHandCursor: true })
+      .setVisible(false); // 🚫 關閉右上角按鈕
     this.itemToggleBtnText = this.add
       .text(btnCx, btnCy, initOn ? '道具\nON' : '道具\nOFF', {
         fontFamily: 'monospace', fontSize: '12px', color: '#ffffff', stroke: '#000000', strokeThickness: 2, align: 'center'
       })
       .setOrigin(0.5, 0.5)
       .setDepth(51)
-      .setScrollFactor(0);
+      .setScrollFactor(0)
+      .setVisible(false); // 🚫 關閉按鈕文字
     this.itemToggleBtnBg.on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
       ev.stopPropagation(); // ★攔截:不讓此點擊冒泡到全畫面攻擊熱區
       this.game.events.emit('ui-toggle-items');
