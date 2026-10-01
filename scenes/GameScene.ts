@@ -7921,7 +7921,8 @@ export class GameScene extends Phaser.Scene {
       this.createTicketParticle(actor.x, actor.y, burstConfig);
     }
     
-    console.log(`💸 Ticket Burst! ${ticketCount} tickets flying from ${actor.index === 0 ? 'P1' : `BOT${actor.index}`}`);
+    console.log(`💸 Ticket Burst! ${ticketCount} tickets flying from ${actor.index === 0 ? 'P1' : `BOT${actor.index}`} at (${actor.x}, ${actor.y})`);
+    console.log(`🎯 Burst config:`, burstConfig);
   }
   
   /**
@@ -7962,6 +7963,8 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(visualConfig.BORDER_WIDTH, visualConfig.BORDER_COLOR)
       .setDepth(visualConfig.DEPTH);
     
+    console.log(`🎫 Creating ticket at (${x}, ${y}) with config:`, { visualConfig, config });
+    
     // 隨機選擇噴發角度（弧度制）：角度範圍從配置讀取
     const angle = Phaser.Math.DegToRad(
       Phaser.Math.Between(config.minAngle, config.maxAngle)
@@ -7971,6 +7974,8 @@ export class GameScene extends Phaser.Scene {
     const velocity = Phaser.Math.Between(config.minVelocity, config.maxVelocity);
     const vx = Math.cos(angle) * velocity;
     const vy = Math.sin(angle) * velocity;
+    
+    console.log(`🚀 Ticket physics: angle=${Math.round(Phaser.Math.RadToDeg(angle))}°, velocity=${velocity}, vx=${Math.round(vx)}, vy=${Math.round(vy)}`);
     
     // 物理動畫：拋物線運動 + 自轉（改善記憶體管理）
     let currentVx = vx;

@@ -935,10 +935,10 @@ export class UIScene extends Phaser.Scene {
     const { energyBg, energyBar, energyHint } = this.createEnergyUI();
     
     // ★階段三：創建COMBO獎勵系統UI元素
-    const { comboText, comboProgress, comboProgressBg } = this.createComboUI();
+    const { comboText } = this.createComboUI();
     
-    // 添加所有元素到容器
-    container.add([badge, badgeText, creditBg, swordIcon, creditText, energyBg, energyBar, energyHint, comboText, comboProgress, comboProgressBg]);
+    // 添加所有元素到容器（移除進度條元素）
+    container.add([badge, badgeText, creditBg, swordIcon, creditText, energyBg, energyBar, energyHint, comboText]);
     
     // 設置子元件引用，便於後續更新
     (container as any).creditText = creditText;
@@ -946,10 +946,8 @@ export class UIScene extends Phaser.Scene {
     (container as any).energyBar = energyBar;
     (container as any).energyHint = energyHint;
     (container as any).energyBg = energyBg;
-    // ★階段三：COMBO元件引用
+    // ★階段三：COMBO元件引用（移除進度條引用）
     (container as any).comboText = comboText;
-    (container as any).comboProgress = comboProgress;
-    (container as any).comboProgressBg = comboProgressBg;
     
     return container;
   }
@@ -1099,8 +1097,6 @@ export class UIScene extends Phaser.Scene {
    */
   private createComboUI(): {
     comboText: Phaser.GameObjects.Text;
-    comboProgress: Phaser.GameObjects.Rectangle;
-    comboProgressBg: Phaser.GameObjects.Rectangle;
   } {
     const config = this.OVERHEAD_UI_CONFIG;
     // ★修復位置：Credit正上方，使用Credit的X座標
@@ -1117,30 +1113,10 @@ export class UIScene extends Phaser.Scene {
       fontStyle: 'bold'
     }).setOrigin(0.5, 0.5);
     
-    // ★用戶反饋修復：隱藏COMBO數字下方的進度條（用戶稱為"意義不明線條"）
-    // 創建空的不可見進度條元素，保持接口一致性但不顯示
-    const progressX = comboX;
-    const progressY = comboY + config.COMBO.PROGRESS_Y_OFFSET;
+    // ★用戶反饋修復：完全移除COMBO進度條創建
+    // 不再創建任何進度條元素，避免視覺干擾
     
-    const comboProgressBg = this.add.rectangle(
-      progressX,
-      progressY,
-      config.COMBO.PROGRESS_WIDTH,
-      config.COMBO.PROGRESS_HEIGHT,
-      config.COLORS.BACKGROUND,
-      0  // ★完全透明，不顯示背景
-    ).setVisible(false);  // ★設為不可見
-    
-    const comboProgress = this.add.rectangle(
-      progressX - config.COMBO.PROGRESS_WIDTH / 2,
-      progressY,
-      0,
-      config.COMBO.PROGRESS_HEIGHT - 1,
-      config.COLORS.COMBO_PROGRESS,
-      0  // ★完全透明
-    ).setOrigin(0, 0.5).setVisible(false);  // ★設為不可見
-    
-    return { comboText, comboProgress, comboProgressBg };
+    return { comboText };
   }
 
   /**
@@ -1351,10 +1327,14 @@ export class UIScene extends Phaser.Scene {
   }
 
   /**
-   * 更新COMBO獎勵系統顯示
+   * ★階段三：更新角色頭頂的COMBO顯示（用戶反饋修復版）
    * 
-   * Hit streak (連擊數) → 票券獎勵轉換機制
-   * 包含時機視窗系統、警告狀態和視覺反饋
+   * **用戶反饋修復**：完全移除進度條邏輯，只保留COMBO數字顯示
+   * 
+   * 功能簡化：
+   * - 顯示當前連擊數（HIT x數字格式）
+   * - 警告狀態時文字顏色變化（橙色/紅色閃爍）
+   * - 移除所有進度條相關邏輯，避免視覺干擾
    * 
    * @param character 角色數據，包含COMBO狀態
    * @param container 容器對象，包含COMBO UI元件引用
@@ -1364,99 +1344,35 @@ export class UIScene extends Phaser.Scene {
     container: Phaser.GameObjects.Container
   ): void {
     const comboText = (container as any).comboText as Phaser.GameObjects.Text;
-    const comboProgress = (container as any).comboProgress as Phaser.GameObjects.Rectangle;
-    const comboProgressBg = (container as any).comboProgressBg as Phaser.GameObjects.Rectangle;
     
-    // 安全性檢查
-    if (!comboText || !comboProgress || !comboProgressBg) return;
+    // 安全性檢查：只需檢查文字元件
+    if (!comboText) return;
     
     const combo = character.combo;
     const config = this.OVERHEAD_UI_CONFIG;
+    const colors = config.COLORS;
     
     // ★修復文字格式：使用"HIT x數字"格式
     comboText.setText(`HIT x${combo.currentStreak}`);
     
     // 根據警告狀態設置文字顏色
-    const colors = config.COLORS;
     if (combo.isWarning) {
-      // 警告狀態：閃爍效果
+      // 警告狀態：橙色和紅色交替閃爍
       const blinkTime = this.time.now % config.COMBO.WARNING_BLINK_MS;
       const isBlinking = blinkTime < (config.COMBO.WARNING_BLINK_MS / 2);
-      comboText.setColor(isBlinking ? colors.COMBO_TEXT_CRITICAL : colors.COMBO_TEXT_WARNING);
+      const warningColor = isBlinking ? colors.COMBO_TEXT_CRITICAL : colors.COMBO_TEXT_WARNING;
+      comboText.setColor(warningColor);
     } else if (combo.currentStreak === 0) {
-      // 無連擊：隱藏COMBO UI，減少視覺混亂
+      // 無連擊：隱藏COMBO文字，減少視覺混亂
       comboText.setVisible(false);
-      comboProgress.setVisible(false);
-      comboProgressBg.setVisible(false);
       return;
     } else {
       // 正常狀態：綠色文字
       comboText.setColor(colors.COMBO_TEXT_NORMAL);
     }
     
-    // 確保UI可見
+    // 確保文字可見
     comboText.setVisible(true);
-    comboProgress.setVisible(true);
-    comboProgressBg.setVisible(true);
-    
-    // 計算進度條：距離下個里程碑的進度
-    const progressRatio = this.calculateComboProgress(combo.currentStreak, combo.nextMilestone);
-    // ★修復進度條寬度計算：減去更多邊距，避免溢出
-    const maxProgressWidth = config.COMBO.PROGRESS_WIDTH - 4; // 減去4px邊距
-    comboProgress.width = maxProgressWidth * progressRatio;
-    
-    // 進度條顏色：根據警告狀態變化
-    if (combo.isWarning) {
-      const blinkTime = this.time.now % config.COMBO.WARNING_BLINK_MS;
-      const isBlinking = blinkTime < (config.COMBO.WARNING_BLINK_MS / 2);
-      const progressColor = isBlinking ? colors.COMBO_CRITICAL : colors.COMBO_WARNING;
-      comboProgress.setFillStyle(progressColor);
-    } else {
-      comboProgress.setFillStyle(colors.COMBO_PROGRESS);
-    }
-  }
-
-  /**
-   * ★階段三：計算COMBO進度比例
-   * 
-   * 根據當前連擊數和里程碑配置計算進度條的填充比例
-   * 用於視覺化顯示玩家距離下個獎勵的距離
-   * 
-   * 算法邏輯：
-   * 1. 遍歷所有里程碑 [5, 10, 20, 50]
-   * 2. 找到當前連擊數所在的區間
-   * 3. 計算在該區間內的進度百分比
-   * 4. 例如：連擊數8，在區間[5,10]內，進度 = (8-5)/(10-5) = 0.6
-   * 
-   * 邊界情況處理：
-   * - currentStreak = 0：返回0（無進度）
-   * - currentStreak >= 最高里程碑：返回1（滿進度）
-   * - 介於里程碑間：線性插值計算
-   * 
-   * @param currentStreak 當前連擊數（非負整數）
-   * @param _nextMilestone 下個里程碑（暫未使用，預留擴展）
-   * @returns 進度比例，範圍[0, 1]，0表示無進度，1表示滿進度
-   */
-  private calculateComboProgress(currentStreak: number, _nextMilestone: number): number {
-    // 無連擊時不顯示進度
-    if (currentStreak === 0) return 0;
-    
-    const milestones = this.OVERHEAD_UI_CONFIG.COMBO_REWARDS.MILESTONES;
-    
-    // 遍歷里程碑，找到當前連擊所在區間
-    let prevMilestone = 0;
-    for (const milestone of milestones) {
-      if (currentStreak < milestone) {
-        // 當前連擊數小於此里程碑，計算在此區間的進度
-        // 使用線性插值：progress = (current - prev) / (next - prev)
-        const progress = (currentStreak - prevMilestone) / (milestone - prevMilestone);
-        return Math.max(0, Math.min(1, progress)); // 確保在[0,1]範圍內
-      }
-      prevMilestone = milestone;
-    }
-    
-    // 超過最高里程碑，顯示滿進度
-    return 1;
   }
 
   /**
