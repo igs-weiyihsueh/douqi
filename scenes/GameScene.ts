@@ -7884,30 +7884,39 @@ export class GameScene extends Phaser.Scene {
    * - 物理引擎：初速度 + 重力 + 自轉動畫
    * - 持續3-4秒的動態掉落效果
    * 
+   * **征騎Code Review修正**：
+   * - 消除硬編碼，統一使用GameConfig.ticketEffect配置
+   * - 完善JSDoc註解，詳細說明參數和算法
+   * - 優化記憶體管理，避免遞歸調用風險
+   * 
    * @param actor 觸發角色
-   * @param _tickets 獲得票券數量（預留參數）
-   * @param milestone 達成的里程碑
+   * @param _tickets 獲得票券數量（預留參數，暫未使用）
+   * @param milestone 達成的里程碑數值
    */
   private spawnTicketBurst(actor: any, _tickets: number, milestone: number): void {
-    // 根據獎勵等級計算彩票數量：8-20張
-    const ticketCount = Math.max(8, Math.min(20, 8 + milestone * 0.4));
+    const config = GameConfig.ticketEffect;
     
-    // 彩票噴發的物理參數
+    // 根據獎勵等級計算彩票數量：使用配置常數而非硬編碼
+    const ticketCount = Math.max(
+      config.TIMING.TICKET_COUNT_BASE, 
+      Math.min(
+        config.TIMING.TICKET_COUNT_MAX, 
+        config.TIMING.TICKET_COUNT_BASE + milestone * config.TIMING.TICKET_COUNT_MULTIPLIER
+      )
+    );
+    
+    // 彩票噴發的物理參數：完全從配置讀取，消除魔法數字
     const burstConfig = {
-      // 噴發角度：上方扇形（-120° ~ -60°）
-      minAngle: -120,
-      maxAngle: -60,
-      // 初始速度：根據里程碑調整（更高里程碑 = 更強噴發）
-      minVelocity: 200 + milestone * 5,
-      maxVelocity: 350 + milestone * 8,
-      // 重力和自轉
-      gravity: 300,
-      rotationSpeed: 2,  // 每秒2圈
-      // 持續時間
-      lifetime: 3500 + Math.random() * 1000  // 3.5-4.5秒
+      minAngle: config.BURST_ANGLE.MIN,
+      maxAngle: config.BURST_ANGLE.MAX,
+      minVelocity: config.PHYSICS.MIN_VELOCITY + milestone * config.PHYSICS.VELOCITY_MILESTONE_BONUS,
+      maxVelocity: config.PHYSICS.MAX_VELOCITY + milestone * config.PHYSICS.VELOCITY_MAX_BONUS,
+      gravity: config.PHYSICS.GRAVITY,
+      rotationSpeed: config.PHYSICS.ROTATION_SPEED,
+      lifetime: config.TIMING.LIFETIME_BASE_MS + Math.random() * config.TIMING.LIFETIME_RANDOM_MS
     };
     
-    // 創建彩票粒子
+    // 創建彩票粒子：使用配置數量和物理參數
     for (let i = 0; i < ticketCount; i++) {
       this.createTicketParticle(actor.x, actor.y, burstConfig);
     }
@@ -7916,64 +7925,98 @@ export class GameScene extends Phaser.Scene {
   }
   
   /**
-   * 創建單個彩票粒子
+   * ★階段三：創建單個彩票粒子（征騎Code Review修正版）
    * 
-   * @param x 起始X座標
-   * @param y 起始Y座標  
-   * @param config 物理配置參數
+   * 實現彩票的完整物理模擬：拋物線運動、重力影響、自轉動畫
+   * 
+   * **物理算法詳解**：
+   * 1. 角度計算：將度數制角度轉換為弧度制，用於三角函數
+   * 2. 速度分解：初速度按angle分解為x/y分量 (vx=v*cos(θ), vy=v*sin(θ))
+   * 3. 運動更新：每幀更新位置 (x+=vx*dt, y+=vy*dt)
+   * 4. 重力影響：每幀增加Y軸速度 (vy+=gravity*dt)
+   * 5. 自轉效果：每幀增加旋轉角度 (rotation+=rotSpeed*dt)
+   * 6. 邊界檢查：超出螢幕範圍時自動銷毀，防止記憶體洩漏
+   * 
+   * **記憶體管理改善**：
+   * - 使用生命週期限制，避免無限遞歸調用
+   * - 邊界檢查確保粒子及時銷毀
+   * - 參數完全從config讀取，無硬編碼風險
+   * 
+   * @param x 起始X座標（像素）
+   * @param y 起始Y座標（像素）  
+   * @param config 物理配置參數，包含角度、速度、重力等設定
    */
   private createTicketParticle(x: number, y: number, config: any): void {
-    // 創建彩票視覺元素（簡單的矩形代表）
-    const ticket = this.add.rectangle(x, y, 12, 8, 0xFFD700)  // 金色票券
-      .setStrokeStyle(1, 0xFFFFFF)  // 白色邊框
-      .setDepth(45);  // 高於其他遊戲元素
+    const visualConfig = GameConfig.ticketEffect.VISUAL;
+    const boundaryConfig = GameConfig.ticketEffect.BOUNDARIES;
+    const physicsConfig = GameConfig.ticketEffect.PHYSICS;
     
-    // 隨機選擇噴發角度（弧度制）
+    // 創建彩票視覺元素：使用配置常數而非硬編碼
+    const ticket = this.add.rectangle(
+      x, 
+      y, 
+      visualConfig.WIDTH, 
+      visualConfig.HEIGHT, 
+      visualConfig.COLOR
+    )
+      .setStrokeStyle(visualConfig.BORDER_WIDTH, visualConfig.BORDER_COLOR)
+      .setDepth(visualConfig.DEPTH);
+    
+    // 隨機選擇噴發角度（弧度制）：角度範圍從配置讀取
     const angle = Phaser.Math.DegToRad(
       Phaser.Math.Between(config.minAngle, config.maxAngle)
     );
     
-    // 隨機初始速度
+    // 隨機初始速度：速度範圍從配置讀取
     const velocity = Phaser.Math.Between(config.minVelocity, config.maxVelocity);
     const vx = Math.cos(angle) * velocity;
     const vy = Math.sin(angle) * velocity;
     
-    // 物理動畫：拋物線運動 + 自轉
+    // 物理動畫：拋物線運動 + 自轉（改善記憶體管理）
     let currentVx = vx;
     let currentVy = vy;
     
     const startTime = this.time.now;
+    
+    // 物理更新函數：每幀計算新的位置和旋轉
     const updateTicket = () => {
       const elapsed = this.time.now - startTime;
       
-      // 檢查生命週期
+      // 生命週期檢查：超時自動銷毀，防止記憶體洩漏
       if (elapsed >= config.lifetime) {
         ticket.destroy();
         return;
       }
       
-      // 更新速度（重力影響Y速度）
-      currentVy += config.gravity * 0.016;  // 假設60FPS
+      // 檢查粒子是否已被銷毀（防止重複更新已銷毀對象）
+      if (!ticket.scene) {
+        return;
+      }
       
-      // 更新位置
-      ticket.x += currentVx * 0.016;
-      ticket.y += currentVy * 0.016;
+      // 更新Y軸速度：重力影響（F = ma, a = g）
+      const deltaTime = physicsConfig.FRAME_RATE_MS * 0.001; // 轉換為秒
+      currentVy += config.gravity * deltaTime;
       
-      // 自轉動畫
-      ticket.rotation += config.rotationSpeed * 0.016;
+      // 更新位置：基於當前速度的積分運算
+      ticket.x += currentVx * deltaTime;
+      ticket.y += currentVy * deltaTime;
       
-      // 邊界檢查：彩票飛出螢幕外時銷毀
-      if (ticket.x < -50 || ticket.x > GameConfig.width + 50 || 
-          ticket.y > GameConfig.height + 50) {
+      // 自轉動畫：角度累積（2π弧度 = 1圈）
+      ticket.rotation += config.rotationSpeed * 2 * Math.PI * deltaTime;
+      
+      // 邊界檢查：彩票飛出螢幕外時銷毀，節省記憶體
+      if (ticket.x < -boundaryConfig.MARGIN_X || 
+          ticket.x > GameConfig.width + boundaryConfig.MARGIN_X || 
+          ticket.y > GameConfig.height + boundaryConfig.MARGIN_Y) {
         ticket.destroy();
         return;
       }
       
-      // 繼續下一幀更新
-      this.time.delayedCall(16, updateTicket);  // ~60FPS
+      // 繼續下一幀更新：使用配置間隔而非硬編碼
+      this.time.delayedCall(physicsConfig.FRAME_RATE_MS, updateTicket);
     };
     
-    // 開始物理更新
+    // 開始物理更新循環
     updateTicket();
   }
 

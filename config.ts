@@ -295,6 +295,78 @@ export const GameConfig = {
     }
   },
 
+  /**
+   * ★階段三：彩票噴發特效系統配置
+   * 
+   * 統一管理所有彩票特效相關的常數，避免硬編碼
+   * 按功能分類：角度、物理、視覺、時間、邊界參數
+   */
+  ticketEffect: {
+    /** 噴發角度參數（度數制） */
+    BURST_ANGLE: {
+      /** 上方扇形左邊界角度 */
+      MIN: -120,
+      /** 上方扇形右邊界角度 */
+      MAX: -60
+    },
+    
+    /** 物理引擎參數 */
+    PHYSICS: {
+      /** 最小初始速度 (px/s) */
+      MIN_VELOCITY: 200,
+      /** 最大初始速度 (px/s) */
+      MAX_VELOCITY: 350,
+      /** 每個里程碑的最小速度加成 */
+      VELOCITY_MILESTONE_BONUS: 5,
+      /** 每個里程碑的最大速度加成 */
+      VELOCITY_MAX_BONUS: 8,
+      /** 重力加速度 (px/s²) */
+      GRAVITY: 300,
+      /** 自轉速度 (圈/秒) */
+      ROTATION_SPEED: 2,
+      /** 物理更新間隔毫秒 (~60FPS) */
+      FRAME_RATE_MS: 16
+    },
+    
+    /** 視覺外觀參數 */
+    VISUAL: {
+      /** 彩票寬度 (px) */
+      WIDTH: 12,
+      /** 彩票高度 (px) */
+      HEIGHT: 8,
+      /** 金色填充色值 */
+      COLOR: 0xFFD700,
+      /** 白色邊框色值 */
+      BORDER_COLOR: 0xFFFFFF,
+      /** 邊框寬度 (px) */
+      BORDER_WIDTH: 1,
+      /** 顯示深度層級 */
+      DEPTH: 45
+    },
+    
+    /** 時間和數量參數 */
+    TIMING: {
+      /** 基礎生命週期毫秒 */
+      LIFETIME_BASE_MS: 3500,
+      /** 隨機延長時間毫秒 */
+      LIFETIME_RANDOM_MS: 1000,
+      /** 基礎彩票數量 */
+      TICKET_COUNT_BASE: 8,
+      /** 最大彩票數量 */
+      TICKET_COUNT_MAX: 20,
+      /** 里程碑數量係數 */
+      TICKET_COUNT_MULTIPLIER: 0.4
+    },
+    
+    /** 邊界檢查參數 */
+    BOUNDARIES: {
+      /** X軸邊界餘量 (px) */
+      MARGIN_X: 50,
+      /** Y軸邊界餘量 (px) */
+      MARGIN_Y: 50
+    }
+  } as const,
+
   /** 爆發連招（v6：削弱為「清空間/擊退解圍」用途，擊退力不變） */
   burst: {
     /** 連打段數（v6：30→16，持續時間約 -47%） */
