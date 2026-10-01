@@ -1,13 +1,12 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
 
-// 🔧 Vite重新架構：修正entry point，專注解決4vs24模組問題 + 目錄分離
+// 🔧 Vite配置：回歸單一目錄架構，解決CI部署問題
 export default defineConfig({
   base: './',
   
-  // 📁 目錄分離：使用src/index.html作為入口
-  root: 'src',
-  publicDir: resolve(__dirname, 'public'),
+  // 📁 傳統架構：從根目錄開始，無需特殊root設定
+  publicDir: 'public',
   
   server: {
     host: true,
@@ -16,8 +15,8 @@ export default defineConfig({
 
   build: {
     target: 'es2020',
-    outDir: resolve(__dirname, 'dist'), // 📦 輸出到根目錄的dist/
-    emptyOutDir: true,  // 🧹 解決outDir warning，清空輸出目錄
+    outDir: 'dist', // 📦 輸出到dist/目錄
+    emptyOutDir: true,  // 🧹 清空輸出目錄
     minify: false,
     sourcemap: false,  // 先關閉sourcemap避免警告
     
@@ -35,7 +34,7 @@ export default defineConfig({
 
   resolve: {
     alias: {
-      '@': resolve(__dirname, './src')
+      '@': resolve(__dirname, '.') // 📂 根目錄別名
     }
   }
 });
