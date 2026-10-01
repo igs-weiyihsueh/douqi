@@ -8411,6 +8411,93 @@ export class GameScene extends Phaser.Scene {
           const textureKeys = Object.keys(this.textures.list).slice(0, 10); // 只列前10個
           console.log('✓ 前10個紋理keys:', textureKeys.join(', '));
           
+          // ★檢測1.3 - Scene.png實際內容與尺寸檢測
+          console.log('🔍 ===== 檢測1.3 - Scene.png實際內容驗證 =====');
+          
+          // 基本尺寸資訊
+          const actualW = img.naturalWidth || img.width;
+          const actualH = img.naturalHeight || img.height;
+          console.log('✓ 實際寬度:', actualW);
+          console.log('✓ 實際高度:', actualH);
+          console.log('✓ 顯示寬度:', img.width);
+          console.log('✓ 顯示高度:', img.height);
+          
+          // 檢查是否是預期的1920×1080
+          const expectedW = 1920, expectedH = 1080;
+          const sizeMatch = (actualW === expectedW && actualH === expectedH);
+          console.log('✓ 尺寸符合預期:', 
+              sizeMatch ? 'YES' : 
+              `NO - 預期${expectedW}×${expectedH}, 實際${actualW}×${actualH}`);
+          
+          // 像素資料檢測
+          console.log('🔍 ===== 檢測1.3 - 像素資料檢測 =====');
+          
+          try {
+            // 創建canvas來檢測圖片內容
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              canvas.width = 100;
+              canvas.height = 100;
+              
+              // 繪製圖片的一小部分來檢測顏色
+              if (img.complete && actualW > 0) {
+                ctx.drawImage(img, 0, 0, 100, 100, 0, 0, 100, 100);
+                
+                // 檢測中心點顏色
+                const imageData = ctx.getImageData(50, 50, 1, 1);
+                const pixel = imageData.data;
+                console.log('✓ 中心像素RGB:', `(${pixel[0]}, ${pixel[1]}, ${pixel[2]})`);
+                
+                // 檢測四角顏色
+                const cornerPositions = [[10, 10], [90, 10], [10, 90], [90, 90]];
+                cornerPositions.forEach((pos, i) => {
+                  const cornerData = ctx.getImageData(pos[0], pos[1], 1, 1).data;
+                  console.log(`✓ 角落${i+1}像素RGB:`, `(${cornerData[0]}, ${cornerData[1]}, ${cornerData[2]})`);
+                });
+                
+                // 判斷是否為預期的場景顏色
+                const isVolcano = pixel[0] > 150 && pixel[1] < 100 && pixel[2] < 50; // 橙紅色
+                const isTestScene = pixel[2] > 150 && pixel[0] < 100; // 藍紫色
+                const isOriginalBrown = pixel[0] > 100 && pixel[1] > 80 && pixel[2] < 100; // 棕色
+                
+                let colorType = '未知場景';
+                if (isVolcano) colorType = '火山場景(橙紅)';
+                else if (isTestScene) colorType = '測試場景(藍紫)';
+                else if (isOriginalBrown) colorType = '原始場景(棕色) - 可能載入錯誤!';
+                
+                console.log('✓ 顏色判斷:', colorType);
+                
+                // 檢測是否為單色或有變化
+                const corners = cornerPositions.map(pos => {
+                  const data = ctx.getImageData(pos[0], pos[1], 1, 1).data;
+                  return {r: data[0], g: data[1], b: data[2]};
+                });
+                
+                const colorVariance = corners.reduce((sum, corner) => {
+                  return sum + Math.abs(corner.r - pixel[0]) + Math.abs(corner.g - pixel[1]) + Math.abs(corner.b - pixel[2]);
+                }, 0);
+                
+                console.log('✓ 顏色變化度:', colorVariance > 50 ? '有變化(正常)' : '接近單色(可能有問題)');
+                
+              } else {
+                console.log('❌ 圖片未完全載入或尺寸為0');
+              }
+            } else {
+              console.log('❌ Canvas context創建失敗');
+            }
+            
+          } catch (error: any) {
+            console.log('❌ 像素檢測失敗:', error.message || error);
+          }
+          
+          // URL與快取檢測
+          console.log('🔍 ===== 檢測1.3 - URL與快取 =====');
+          console.log('✓ 完整圖片URL:', img.src || 'N/A');
+          console.log('✓ URL包含時間戳:', (img.src && img.src.includes('?')) ? 'YES' : 'NO');
+          console.log('✓ 圖片載入完成:', img.complete || 'unknown');
+          console.log('✓ 圖片載入狀態:', (img as any).readyState || 'N/A');
+          
         } else {
           console.log('❌ 圖片來源不存在 - texture.source問題');
         }
