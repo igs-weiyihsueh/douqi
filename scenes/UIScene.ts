@@ -109,9 +109,8 @@ export class UIScene extends Phaser.Scene {
   /** v25 第8項：P1 普攻命中計數（左上角） */
   private hitText!: Phaser.GameObjects.Text;
   /** ★頭上UI系統 - 替換舊的左上角COMBO系統 */
-  // 移除：comboBar, comboNodes, comboLabel, energyBar等左上角UI元素
-  // 保留：character.spirit數值邏輯（COMBO獎勵系統會用到）
-  private overheadUIs: Map<CharStat, Phaser.GameObjects.Container> = new Map();
+  // ★頭上UI系統：使用角色索引作為Map鍵，避免對象引用問題
+  private overheadUIs: Map<number, Phaser.GameObjects.Container> = new Map();
   private readonly OVERHEAD_DEPTH = 900;
   /** v27 波次顯示（上方中央） */
   private waveText!: Phaser.GameObjects.Text;
@@ -136,7 +135,14 @@ export class UIScene extends Phaser.Scene {
   create(): void {
     // 根因修復：重啟時 rows 殘留上一局已銷毀物件會崩潰，每次 create 先清空
     this.rows = [];
-    this.overheadUIs.clear(); // 清空頭上UI容器
+    
+    // ★清空並銷毀所有頭上UI容器，防止記憶體洩漏
+    this.overheadUIs.forEach((container) => {
+      if (container && container.active) {
+        container.destroy();
+      }
+    });
+    this.overheadUIs.clear();
     const w = GameConfig.width;
     const h = GameConfig.height;
 
@@ -494,16 +500,19 @@ export class UIScene extends Phaser.Scene {
       this.waveText.setText(`WAVE ${s.wave}  ${s.waveKilled}/${s.waveQuota}`);
     }
 
-    // ★頭上UI系統：檢查並創建角色的頭上UI
+    // ★頭上UI系統：使用角色索引避免重複創建
     for (let i = 0; i < s.chars.length; i++) {
       const character = s.chars[i];
-      if (!this.overheadUIs.has(character)) {
-        const container = this.createOverheadUI(character, i);
-        this.overheadUIs.set(character, container);
+      const charIndex = i; // 使用數組索引作為唯一鍵
+      
+      // 檢查並創建角色的頭上UI（只創建一次）
+      if (!this.overheadUIs.has(charIndex)) {
+        const container = this.createOverheadUI(character, charIndex);
+        this.overheadUIs.set(charIndex, container);
       }
       
       // 更新頭上UI位置
-      const container = this.overheadUIs.get(character);
+      const container = this.overheadUIs.get(charIndex);
       if (container && character.alive) {
         this.updateOverheadUI(character, container);
         container.setVisible(true);
@@ -818,9 +827,9 @@ export class UIScene extends Phaser.Scene {
       return;
     }
     
-    // 🎯 使用角色實際位置：頭上140px
+    // 🎯 使用角色實際位置：頭上60px（調整為更接近的距離）
     const worldX = character.x;
-    const worldY = character.y - 140;
+    const worldY = character.y - 60;  // ★修復：140px太遠，改為60px
     
     // ★修復座標系統：UIScene是固定相機，需要考慮GameScene的相機偏移
     const gameScene = this.scene.get('GameScene') as any;
