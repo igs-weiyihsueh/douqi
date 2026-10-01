@@ -32,32 +32,50 @@ npm run preview # 預覽正式版
 ## 專案結構
 
 ```
-實驗H5/
+douqi/
 ├── index.html              # HTML 進入點
+├── main.ts                 # Phaser 遊戲初始化、註冊場景
+├── config.ts               # ★ 所有可調數值集中於此
 ├── package.json            # 依賴與指令
 ├── tsconfig.json           # TypeScript 設定
 ├── vite.config.ts          # Vite 建置設定
-└── src/
-    ├── main.ts             # Phaser 遊戲初始化、註冊場景
-    ├── config.ts           # ★ 所有可調數值集中於此
-    ├── objects/
-    │   ├── Player.ts       # 玩家角色
-    │   └── Enemy.ts        # 敵人
-    └── scenes/
-        ├── BootScene.ts    # 程序化產生占位像素貼圖
-        ├── GameScene.ts    # 核心玩法循環
-        ├── UIScene.ts      # HUD + 攻擊按鈕
-        └── GameOverScene.ts# 結算 / 重新開始
+├── CLAUDE.md               # AI 團隊配置文檔
+├── PROGRESS.md             # 專案進度狀態
+├── 規格書/                 # 完整遊戲規格書目錄
+│   ├── 基礎操作.md
+│   ├── 戰鬥說明.md
+│   ├── 攻擊說明.md
+│   ├── 變身說明.md
+│   ├── 遊戲規格書統合.csv
+│   └── 關卡說明.md
+├── scenes/                 # Phaser 場景目錄
+│   ├── BootScene.ts        # 程序化產生占位像素貼圖
+│   ├── GameScene.ts        # 核心玩法循環
+│   ├── UIScene.ts          # HUD + 攻擊按鈕
+│   └── GameOverScene.ts    # 結算 / 重新開始
+└── objects/                # 遊戲物件目錄
+    ├── Character.ts        # 玩家角色
+    └── Enemy.ts            # 敵人
 ```
 
 ## 調校數值
 
-所有可調參數集中在 `src/config.ts`，包含：鬥氣量、傷害、血量、衝刺速度、
+所有可調參數集中在 `config.ts`，包含：鬥氣量、傷害、血量、衝刺速度、
 爆發段數 / 傷害 / 範圍、敵人速度 / 血量 / 接觸傷害、生成速率與難度曲線、
 打擊感（震動 / 閃白 / 傷害數字）等。改完存檔即熱更新。
 
 ## 美術
 
-目前所有貼圖皆由 `BootScene` 以程式產生（色塊 / 帶描邊圓形），無外部素材檔，
+目前所有貼圖皆由 `scenes/BootScene.ts` 以程式產生（色塊 / 帶描邊圓形），無外部素材檔，
 之後可直接替換成正式像素素材。
+
+## 部署
+
+專案使用 GitHub Actions 自動部署到 GitHub Pages：
+- **主分支**：deploy-refactor  
+- **觸發條件**：push 到 deploy-refactor 分支
+- **部署 URL**：https://igs-weiyihsueh.github.io/douqi/
+- **Workflow 配置**：`.github/workflows/deploy.yml`
+
+push 代碼後會自動進行建置和部署，無需手動操作。
 # Force deploy update Thu Oct  1 13:41:22 CST 2026

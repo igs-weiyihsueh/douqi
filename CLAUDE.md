@@ -4,7 +4,10 @@
 - **專案名稱**：鬥氣割草 (Douqi)
 - **類型**：H5 網頁遊戲 (TypeScript + Phaser + Vite)
 - **工作目錄**：`/mnt/d/3C/douqi`
-- **版本控制**：Git + GitHub Pages 部署 (stable-deploy-0929-1603)
+- **版本控制**：Git + GitHub Actions 自動部署 (deploy-refactor)
+- **部署分支**：deploy-refactor (主要開發分支)
+- **CI/CD**：GitHub Actions (.github/workflows/deploy.yml)
+- **架構**：根目錄扁平架構 (已修復CI路徑問題)
 
 ## 👥 **團隊成員**
 
@@ -75,19 +78,21 @@ npm run lint
 ## 🎯 **專案重點**
 
 ### **當前目標**
-1. **SpinningTop 編輯器套件移植** - 6個編輯器逐步移植
-2. **完善遊戲核心功能** - 基於 Phaser 引擎
-3. **建立 CI/CD 流程** - GitHub Pages 自動部署
+1. **架構重組完成** - 方案A：回歸單一目錄架構解決CI問題 ✅
+2. **CI/CD部署流程** - GitHub Actions自動部署完成 ✅ 
+3. **規格書資料整合** - 從deploy_test分支整合完成 ✅
 
 ### **技術棧**
 - **前端**：TypeScript 5.4+ + Phaser + Vite 5.2+
-- **編輯器**：React 19 + Three.js 0.182 (移植套件)
-- **部署**：GitHub Pages (stable-deploy-0929-1603 分支)
+- **架構**：根目錄扁平架構 (解決CI路徑解析問題)
+- **部署**：GitHub Actions 自動化部署 (deploy-refactor 分支)
 
 ### **已完成**
-- ✅ 專案架構建立
+- ✅ 專案架構重組 (2026-10-01)
+- ✅ CI部署修復完成 (GitHub Actions + index.html修復)
 - ✅ 遊戲系統移植 (完整功能)
-- ✅ Git 部署流程測試 (https://igs-weiyihsueh.github.io/douqi/)
+- ✅ 檔案整合完成 (規格書、進度文檔統一到deploy-refactor)
+- ✅ 部署流程驗證 (https://igs-weiyihsueh.github.io/douqi/)
 - ✅ 進度追蹤機制 (CLAUDE.md + PROGRESS.md)
 - ✅ 12個 AI 技能部署
 
@@ -120,5 +125,5 @@ npm run lint
 
 **⚡ 此檔案為地球宿舍專案的核心配置，所有 AI 成員必須嚴格遵守！**
 
-*最後更新：2026-09-24*
-*版本：v1.0.0*
+*最後更新：2026-10-01*
+*版本：v1.1.0* (架構重組版本)
