@@ -8274,16 +8274,36 @@ export class GameScene extends Phaser.Scene {
   private initSceneBackground(): void {
     // 創建新場景背景圖（預設隱藏）
     if (this.textures.exists('scene-background')) {
-      this.sceneBackground = this.add.image(
-        GameConfig.width / 2, 
-        GameConfig.height / 2, 
-        'scene-background'
-      )
-        .setDepth(-10)      // 設為-10，確保在所有原場景元素之下
-        .setVisible(false)  // 預設隱藏，按F1切換顯示
-        .setDisplaySize(GameConfig.width, GameConfig.height); // 填滿整個畫面
+      // 先獲取遊戲世界尺寸資訊
+      const worldBounds = this.physics.world.bounds;
+      const cameraBounds = this.cameras.main.getBounds();
       
-      console.log('🖼️ 新場景背景已創建：Scene.png (depth=-10, hidden)');
+      console.log('🌍 世界和相機資訊：');
+      console.log(`  世界範圍：(${worldBounds.x}, ${worldBounds.y}) ${worldBounds.width}×${worldBounds.height}`);
+      console.log(`  相機範圍：(${cameraBounds.x}, ${cameraBounds.y}) ${cameraBounds.width}×${cameraBounds.height}`);
+      console.log(`  遊戲配置尺寸：${GameConfig.width} × ${GameConfig.height}`);
+      
+      // 創建場景背景，確保覆蓋整個相機視野
+      this.sceneBackground = this.add.image(0, 0, 'scene-background')
+        .setOrigin(0, 0)        // 左上角對齊
+        .setDepth(-10)          // 最底層深度
+        .setVisible(false)      // 預設隱藏
+        .setScrollFactor(0)     // ★關鍵：固定不隨相機移動，像UI一樣
+        .setDisplaySize(
+          Math.max(GameConfig.width, cameraBounds.width), 
+          Math.max(GameConfig.height, cameraBounds.height)
+        ); // 確保填滿整個視野
+      
+      // 詳細創建資訊
+      console.log('🖼️ 新場景背景已創建：');
+      console.log(`  紋理：${this.sceneBackground.texture.key}`);
+      console.log(`  位置：(${this.sceneBackground.x}, ${this.sceneBackground.y})`);
+      console.log(`  原始尺寸：${this.sceneBackground.width} × ${this.sceneBackground.height}`);
+      console.log(`  顯示尺寸：${this.sceneBackground.displayWidth} × ${this.sceneBackground.displayHeight}`);
+      console.log(`  深度：${this.sceneBackground.depth}`);
+      console.log(`  可見：${this.sceneBackground.visible}`);
+      console.log(`  alpha：${this.sceneBackground.alpha}`);
+      
     } else {
       console.warn('⚠️ 場景背景圖片不存在：scene-background');
     }
@@ -8326,6 +8346,39 @@ export class GameScene extends Phaser.Scene {
       // 顯示新場景背景
       this.sceneBackground.setVisible(true);
       console.log('🌋 切換到新場景：火山地獄風格 (Scene.png)');
+      
+      // ★詳細診斷資訊
+      console.log('🔍 場景背景物件診斷：');
+      console.log(`  visible: ${this.sceneBackground.visible}`);
+      console.log(`  alpha: ${this.sceneBackground.alpha}`);
+      console.log(`  depth: ${this.sceneBackground.depth}`);
+      console.log(`  position: (${this.sceneBackground.x}, ${this.sceneBackground.y})`);
+      console.log(`  displaySize: ${this.sceneBackground.displayWidth} × ${this.sceneBackground.displayHeight}`);
+      console.log(`  texture: ${this.sceneBackground.texture.key}`);
+      console.log(`  scene: ${this.sceneBackground.scene.scene.key}`);
+      console.log(`  active: ${this.sceneBackground.active}`);
+      
+      // 檢查相機範圍
+      const cam = this.cameras.main;
+      console.log(`📹 主相機狀態：`);
+      console.log(`  position: (${cam.x}, ${cam.y})`);
+      console.log(`  size: ${cam.width} × ${cam.height}`);
+      console.log(`  zoom: ${cam.zoom}`);
+      console.log(`  bounds: (${cam.getBounds().x}, ${cam.getBounds().y}) ${cam.getBounds().width}×${cam.getBounds().height}`);
+      
+      // 檢查場景中所有物件的深度層級
+      const allObjects = this.children.list;
+      const depthInfo = allObjects.map(obj => ({
+        type: obj.constructor.name,
+        depth: (obj as any).depth || 0,
+        visible: (obj as any).visible !== false
+      })).sort((a, b) => a.depth - b.depth);
+      
+      console.log('📊 場景物件深度層級分析 (前10個):');
+      depthInfo.slice(0, 10).forEach((info, i) => {
+        console.log(`  ${i+1}. ${info.type} depth=${info.depth} visible=${info.visible}`);
+      });
+      
     } else {
       // 隱藏新場景背景，顯示原場景
       this.sceneBackground.setVisible(false);
