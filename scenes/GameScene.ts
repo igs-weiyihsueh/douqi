@@ -8288,7 +8288,7 @@ export class GameScene extends Phaser.Scene {
       // 創建場景背景，確保覆蓋整個相機視野
       this.sceneBackground = this.add.image(0, 0, 'scene-background')
         .setOrigin(0, 0)        // 左上角對齊
-        .setDepth(-10)          // 最底層深度
+        .setDepth(-2)          // 調整到-2，確保覆蓋原背景系統
         .setVisible(false)      // 預設隱藏
         .setScrollFactor(0)     // ★關鍵：固定不隨相機移動，像UI一樣
         .setDisplaySize(
@@ -8314,7 +8314,7 @@ export class GameScene extends Phaser.Scene {
     this.testGraphicsBackground = this.add.graphics()
       .fillStyle(0xFF00FF, 1)  // 超鮮豔紫紅色
       .fillRect(0, 0, GameConfig.width, GameConfig.height)
-      .setDepth(-9)            // 比Scene.png稍高一點
+      .setDepth(-4)            // 調整到-4，覆蓋原背景系統(-3,-2,-1)
       .setScrollFactor(0)      // 固定不移動
       .setVisible(false);      // 預設隱藏
     
@@ -8499,7 +8499,7 @@ export class GameScene extends Phaser.Scene {
       // 調查3: 替代繪製方案測試
       console.log('🎨 替代方案測試:');
       const coloredRect = this.add.rectangle(640, 360, 1280, 720, 0xFF0000); // 紅色矩形
-      coloredRect.setDepth(-8);
+      coloredRect.setDepth(-3);  // 調整到-3，確保覆蓋原背景系統
       coloredRect.setVisible(false); // 預設隱藏
       const rectBounds = (coloredRect as any).getBounds();
       console.log('✓ Rectangle方案bounds:', rectBounds?.width || 'failed', 'x', rectBounds?.height || 'failed');
@@ -8524,7 +8524,15 @@ export class GameScene extends Phaser.Scene {
     
     // ★關鍵診斷3：最終狀態確認
     const finalState = this.isNewSceneActive ? '新場景' : '舊場景';
-    console.log(`📋 場景狀態：${finalState} (F4切換)`);
+    console.log(`📋 場景狀態：${finalState} (F4切換) - 深度已調整覆蓋原背景系統`);
+    
+    // 顯示深度調整信息
+    console.log('🔧 背景深度層級調整:');
+    console.log('  ✓ 原背景系統: sky(-3), far(-2), outer(-1)');  
+    console.log('  ✓ Scene.png: depth=-2 (覆蓋far層)');
+    console.log('  ✓ Graphics: depth=-4 (最深，確保覆蓋)');
+    console.log('  ✓ Rectangle: depth=-3 (覆蓋sky層)');
+    console.log('  → 新背景應該能覆蓋原背景系統');
     
     // ★研究當前背景系統 - 重新定義問題
     console.log('🔍 ===== 當前背景系統深度調查 =====');
@@ -8637,7 +8645,7 @@ export class GameScene extends Phaser.Scene {
       // 重新創建背景物件
       this.sceneBackground = this.add.image(0, 0, 'scene-background-new')
         .setOrigin(0, 0)
-        .setDepth(-10)
+        .setDepth(-2)
         .setVisible(this.isNewSceneActive)
         .setScrollFactor(0)
         .setDisplaySize(GameConfig.width, GameConfig.height);
