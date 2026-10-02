@@ -416,6 +416,11 @@ export class GameScene extends Phaser.Scene {
       this.maxLevelCheat();
     });
 
+    // ★ESC 鍵：回主菜單 — 讓玩家可以隨時退出遊戲回到 TitleScene
+    this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.ESC).on('down', () => {
+      this.quitToTitle();
+    });
+
     // ★除錯熱鍵 [ / ] :切換預覽關卡場景(1-4),即時重繪當前子區地貌+遠景(給看 4 關對比用)。
     if (this.levelMode) {
       this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.OPEN_BRACKET).on('down', () => {
@@ -5403,6 +5408,16 @@ export class GameScene extends Phaser.Scene {
     this.scene.stop('UIScene');
     this.scene.start('GameScene', { controlMode: this.controlMode }); // v46：重開保留當前操作模式
     this.scene.launch('UIScene');
+  }
+
+  /** ESC 熱鍵——返回主菜單（清理場景狀態，停止 UIScene，回到 TitleScene） */
+  private quitToTitle(): void {
+    // 清理 tween/timer 避免洩漏
+    this.tweens.killAll();
+    this.time.removeAllEvents();
+    // 停止 UIScene 並回到主菜單
+    this.scene.stop('UIScene');
+    this.scene.start('TitleScene');
   }
 
   private aliveCount(): number {
