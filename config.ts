@@ -11,8 +11,8 @@ export const GameConfig = {
   debug: {
     /** 顯示慢速模式即時調參面板(藍圈/衝刺距離/速度)——用戶要求預設關 */
     showSlowTuningPanel: false,
-    /** 顯示相機zoom編輯器——用戶可調整鏡頭縮放級別 */
-    showZoomEditor: true
+    /** zoom編輯器現在移到主菜單中 */
+    showZoomEditor: false
   },
 
   /** ★相機zoom編輯器配置 */
@@ -28,9 +28,9 @@ export const GameConfig = {
     coarseStep: 0.1,
     /** 鍵盤快調步進 */
     keyboardStep: 0.2,
-    /** 編輯器UI位置 */
-    panelX: 50,
-    panelY: 200,
+    /** 編輯器UI位置 - 移到右上角避免與遊戲元素重疊 */
+    panelX: 1580,
+    panelY: 50,
     /** 編輯器面板寬高 */
     panelWidth: 320,
     panelHeight: 180,

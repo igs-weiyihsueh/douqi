@@ -25,6 +25,16 @@ export class TitleScene extends Phaser.Scene {
   }> = [];
   private selectedBorderSlider = 0;
 
+  // zoom編輯器狀態
+  private zoomEditorActive = false;
+  private zoomEditorPanel?: Phaser.GameObjects.Container;
+  private zoomSliders: Array<{
+    name: string; value: number; min: number; max: number; step: number;
+    slider: Phaser.GameObjects.Rectangle; handle: Phaser.GameObjects.Rectangle;
+    label: Phaser.GameObjects.Text; valueText: Phaser.GameObjects.Text;
+  }> = [];
+  private selectedZoomSlider = 0;
+
   constructor() {
     super('TitleScene');
   }
@@ -222,6 +232,26 @@ export class TitleScene extends Phaser.Scene {
     borderBtn.on('pointerdown', () => this.openBorderEditor());
     this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.B).on('down', () => this.openBorderEditor());
 
+    // ── 相機zoom調整編輯器：🔍 Zoom設定 (Z) → 開啟相機縮放級別調整編輯器 ──
+    const zoomBtnW = 200, zoomBtnH = 44;
+    const zoomX = w - zoomBtnW / 2 - 20, zoomY = h - zoomBtnH / 2 - 130; // 邊界編輯器按鈕上方
+    const zoomBg = this.add
+      .rectangle(zoomX, zoomY, zoomBtnW, zoomBtnH, 0x064e3b, 0.9)
+      .setStrokeStyle(2, 0x10b981, 0.9)
+      .setDepth(5);
+    this.add
+      .text(zoomX, zoomY, '🔍 Zoom設定 (Z)', { fontFamily: 'monospace', fontSize: '16px', color: '#d1fae5', fontStyle: 'bold' })
+      .setOrigin(0.5).setDepth(6);
+    const zoomBtn = this.add.container(0, 0, [zoomBg]).setSize(zoomBtnW, zoomBtnH).setDepth(5);
+    zoomBtn.setInteractive(
+      new Phaser.Geom.Rectangle(zoomX - zoomBtnW / 2, zoomY - zoomBtnH / 2, zoomBtnW, zoomBtnH),
+      Phaser.Geom.Rectangle.Contains
+    );
+    zoomBtn.on('pointerover', () => zoomBg.setFillStyle(0x047857, 0.95));
+    zoomBtn.on('pointerout', () => zoomBg.setFillStyle(0x064e3b, 0.9));
+    zoomBtn.on('pointerdown', () => this.openZoomEditor());
+    this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.Z).on('down', () => this.openZoomEditor());
+
     // ── 小遊戲入口：🎮 小遊戲 (G) → MinigameMenuScene（與 fast/slow 開始戰鬥並列，互不干擾）──
     const mgBtnW = 200, mgBtnH = 44;
     const mgX = mgBtnW / 2 + 20, mgY = h - mgBtnH / 2 - 20; // 左下角
@@ -298,6 +328,10 @@ export class TitleScene extends Phaser.Scene {
   private startGame(mode: 'fast' | 'slow' = 'fast'): void {
     if (this.started) return; // 防重入（同時點擊+按鍵）
     this.started = true;
+    
+    // 恢復預設zoom（主菜單預覽不影響遊戲）
+    this.cameras.main.setZoom(1.0);
+    
     this.scene.start('GameScene', { controlMode: mode });
     this.scene.launch('UIScene');
   }
@@ -769,7 +803,299 @@ GameConfig.arena.padding = ${Math.max(x, y)};
     // 其他快捷鍵
     kb.addKey(KC.E).on('down', () => this.openSceneEditor());
     kb.addKey(KC.B).on('down', () => this.openBorderEditor());
+    kb.addKey(KC.Z).on('down', () => this.openZoomEditor());
     kb.addKey(KC.G).on('down', () => this.scene.start('MinigameMenuScene'));
+  }
+
+  /** 
+   * 開啟相機zoom調整編輯器：專門調整遊戲中的相機縮放級別
+   * 實時預覽zoom變化，支援鍵盤和滑鼠操作
+   */
+  private openZoomEditor(): void {
+    if (this.zoomEditorActive || this.started) return;
+    
+    console.log('🔍 開啟相機zoom調整編輯器');
+    this.zoomEditorActive = true;
+    this.selectedZoomSlider = 0;
+    
+    this.createZoomEditorPanel();
+    this.createZoomSliders();
+    this.setupZoomEditorControls();
+  }
+
+  /** 創建zoom編輯器面板 */
+  private createZoomEditorPanel(): void {
+    const width = 600;
+    const height = 350;
+    const x = GameConfig.width / 2;
+    const y = GameConfig.height / 2;
+    
+    // 主容器
+    this.zoomEditorPanel = this.add.container(x, y).setDepth(100);
+    
+    // 背景
+    const background = this.add.rectangle(0, 0, width, height, 0x0d2818, 0.95)
+      .setStrokeStyle(3, 0x10b981, 0.8);
+    this.zoomEditorPanel.add(background);
+    
+    // 標題
+    const title = this.add.text(0, -height/2 + 30, '🔍 相機Zoom級別調整', {
+      fontFamily: 'monospace',
+      fontSize: '24px',
+      color: '#10b981',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+    this.zoomEditorPanel.add(title);
+    
+    // 說明文字
+    const description = this.add.text(0, -height/2 + 70, '調整相機縮放級別，實時預覽效果', {
+      fontFamily: 'monospace',
+      fontSize: '14px',
+      color: '#a7f3d0'
+    }).setOrigin(0.5);
+    this.zoomEditorPanel.add(description);
+    
+    // 操作說明
+    const instructions = this.add.text(0, height/2 - 60, 
+      '操作：↑↓選擇 ←→調整 數字鍵快速設定 Enter確認 Esc取消', {
+      fontFamily: 'monospace',
+      fontSize: '12px',
+      color: '#6ee7b7'
+    }).setOrigin(0.5);
+    this.zoomEditorPanel.add(instructions);
+    
+    // 快捷值說明
+    const shortcuts = this.add.text(0, height/2 - 35, 
+      '快速設定：1鍵=0.5x 2鍵=0.75x 3鍵=1.0x 4鍵=1.5x 5鍵=2.0x 0鍵=3.0x', {
+      fontFamily: 'monospace',
+      fontSize: '11px',
+      color: '#86efac'
+    }).setOrigin(0.5);
+    this.zoomEditorPanel.add(shortcuts);
+  }
+
+  /** 創建zoom滑桿控制項 */
+  private createZoomSliders(): void {
+    const config = GameConfig.zoomEditor;
+    const parameters = [
+      { name: '相機縮放級別', value: config.defaultZoom, min: config.minZoom, max: config.maxZoom, step: 0.05 }
+    ];
+    
+    this.zoomSliders = [];
+    const startY = -50;
+    
+    parameters.forEach((param, index) => {
+      const y = startY + index * 80;
+      
+      // 參數標籤
+      const label = this.add.text(-280, y, param.name, {
+        fontFamily: 'monospace',
+        fontSize: '18px',
+        color: '#ffffff',
+        fontStyle: 'bold'
+      }).setOrigin(0, 0.5);
+      
+      // 滑條背景
+      const sliderBg = this.add.rectangle(-50, y, 280, 24, 0x374151, 0.8)
+        .setStrokeStyle(2, 0x059669);
+      
+      // 滑條手柄
+      const progress = (param.value - param.min) / (param.max - param.min);
+      const handleX = -50 + (progress - 0.5) * 280;
+      const handle = this.add.rectangle(handleX, y, 20, 28, 0x10b981, 1)
+        .setStrokeStyle(2, 0x047857);
+      
+      // 數值顯示
+      const valueText = this.add.text(180, y, `${param.value.toFixed(2)}x`, {
+        fontFamily: 'monospace',
+        fontSize: '18px',
+        color: '#34d399',
+        fontStyle: 'bold'
+      }).setOrigin(0, 0.5);
+      
+      // 預設置快速按鈕
+      const presetY = y + 35;
+      const presets = [
+        { label: '0.5x', value: 0.5 },
+        { label: '0.75x', value: 0.75 },
+        { label: '1.0x', value: 1.0 },
+        { label: '1.5x', value: 1.5 },
+        { label: '2.0x', value: 2.0 },
+        { label: '3.0x', value: 3.0 }
+      ];
+      
+      presets.forEach((preset, i) => {
+        const presetX = -250 + i * 85;
+        const presetBtn = this.add.rectangle(presetX, presetY, 70, 24, 0x065f46, 0.8)
+          .setStrokeStyle(1, 0x10b981)
+          .setInteractive({ useHandCursor: true });
+        
+        const presetText = this.add.text(presetX, presetY, preset.label, {
+          fontFamily: 'monospace',
+          fontSize: '12px',
+          color: '#d1fae5'
+        }).setOrigin(0.5);
+        
+        this.zoomEditorPanel?.add(presetBtn);
+        this.zoomEditorPanel?.add(presetText);
+        
+        presetBtn.on('pointerover', () => presetBtn.setFillStyle(0x047857, 1));
+        presetBtn.on('pointerout', () => presetBtn.setFillStyle(0x065f46, 0.8));
+        presetBtn.on('pointerdown', () => {
+          this.updateZoomSliderValue(0, preset.value);
+          this.applyZoomPreview();
+        });
+      });
+      
+      this.zoomEditorPanel?.add(label);
+      this.zoomEditorPanel?.add(sliderBg);
+      this.zoomEditorPanel?.add(handle);
+      this.zoomEditorPanel?.add(valueText);
+      
+      this.zoomSliders.push({
+        name: param.name,
+        value: param.value,
+        min: param.min,
+        max: param.max,
+        step: param.step,
+        slider: sliderBg,
+        handle,
+        label,
+        valueText
+      });
+    });
+    
+    // 初始預覽
+    this.applyZoomPreview();
+  }
+
+  /** 設置zoom編輯器鍵盤控制 */
+  private setupZoomEditorControls(): void {
+    const kb = this.input.keyboard!;
+    const KC = Phaser.Input.Keyboard.KeyCodes;
+    
+    // 清除原有控制
+    kb.removeAllKeys(true);
+    
+    // 上下選擇滑桿
+    kb.addKey(KC.UP).on('down', () => {
+      this.selectedZoomSlider = Math.max(0, this.selectedZoomSlider - 1);
+      this.updateZoomSliderHighlight();
+    });
+    
+    kb.addKey(KC.DOWN).on('down', () => {
+      this.selectedZoomSlider = Math.min(this.zoomSliders.length - 1, this.selectedZoomSlider + 1);
+      this.updateZoomSliderHighlight();
+    });
+    
+    // 左右調整數值
+    kb.addKey(KC.LEFT).on('down', () => {
+      const slider = this.zoomSliders[this.selectedZoomSlider];
+      if (slider) {
+        const newValue = Math.max(slider.min, slider.value - slider.step);
+        this.updateZoomSliderValue(this.selectedZoomSlider, newValue);
+        this.applyZoomPreview();
+      }
+    });
+    
+    kb.addKey(KC.RIGHT).on('down', () => {
+      const slider = this.zoomSliders[this.selectedZoomSlider];
+      if (slider) {
+        const newValue = Math.min(slider.max, slider.value + slider.step);
+        this.updateZoomSliderValue(this.selectedZoomSlider, newValue);
+        this.applyZoomPreview();
+      }
+    });
+    
+    // 數字鍵快速設定
+    const presets: Record<string, number> = { '1': 0.5, '2': 0.75, '3': 1.0, '4': 1.5, '5': 2.0, '0': 3.0 };
+    Object.entries(presets).forEach(([key, value]) => {
+      const keyCode = key === '0' ? KC.ZERO : key === '1' ? KC.ONE : key === '2' ? KC.TWO : 
+                      key === '3' ? KC.THREE : key === '4' ? KC.FOUR : KC.FIVE;
+      kb.addKey(keyCode).on('down', () => {
+        this.updateZoomSliderValue(0, value);
+        this.applyZoomPreview();
+      });
+    });
+    
+    // 確認和取消
+    kb.addKey(KC.ENTER).on('down', () => this.saveZoomSettings());
+    kb.addKey(KC.ESC).on('down', () => this.closeZoomEditor());
+    
+    // 初始高亮
+    this.updateZoomSliderHighlight();
+  }
+
+  /** 更新zoom滑桿數值 */
+  private updateZoomSliderValue(index: number, newValue: number): void {
+    const slider = this.zoomSliders[index];
+    if (!slider) return;
+    
+    slider.value = Math.max(slider.min, Math.min(slider.max, newValue));
+    slider.valueText.setText(`${slider.value.toFixed(2)}x`);
+    
+    // 更新手柄位置
+    const progress = (slider.value - slider.min) / (slider.max - slider.min);
+    const handleX = slider.slider.x + (progress - 0.5) * 280;
+    slider.handle.x = handleX;
+  }
+
+  /** 更新zoom滑桿高亮 */
+  private updateZoomSliderHighlight(): void {
+    this.zoomSliders.forEach((slider, index) => {
+      const isSelected = index === this.selectedZoomSlider;
+      slider.label.setColor(isSelected ? '#34d399' : '#ffffff');
+      slider.handle.setStrokeStyle(2, isSelected ? 0xfbbf24 : 0x047857);
+    });
+  }
+
+  /** 應用zoom預覽效果 */
+  private applyZoomPreview(): void {
+    const zoomValue = this.zoomSliders[0]?.value || 1.0;
+    
+    // 在主菜單中應用zoom預覽
+    this.cameras.main.setZoom(zoomValue);
+    
+    console.log(`🔍 預覽zoom: ${zoomValue.toFixed(2)}x`);
+  }
+
+  /** 保存zoom設定 */
+  private saveZoomSettings(): void {
+    const zoomValue = this.zoomSliders[0]?.value || 1.0;
+    
+    // 更新配置
+    (GameConfig.zoomEditor as any).defaultZoom = zoomValue;
+    
+    console.log(`✅ 已保存zoom設定: ${zoomValue.toFixed(2)}x`);
+    
+    // 關閉編輯器
+    this.closeZoomEditor();
+  }
+
+  /** 關閉zoom編輯器 */
+  private closeZoomEditor(): void {
+    if (!this.zoomEditorActive) return;
+    
+    console.log('🔍 關閉zoom編輯器');
+    this.zoomEditorActive = false;
+    
+    // 恢復預設zoom
+    this.cameras.main.setZoom(1.0);
+    
+    // 清理UI元素
+    if (this.zoomEditorPanel) {
+      this.zoomEditorPanel.destroy();
+      this.zoomEditorPanel = undefined;
+    }
+    
+    // 清空滑桿陣列
+    this.zoomSliders = [];
+    
+    // 清理鍵盤監聽
+    this.input.keyboard?.removeAllKeys(true);
+    
+    // 重新設置原始控制
+    this.setupOriginalControls();
   }
 
   private get levelMode(): boolean {
