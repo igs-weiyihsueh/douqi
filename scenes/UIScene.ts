@@ -636,14 +636,15 @@ export class UIScene extends Phaser.Scene {
       // 更新頭上UI位置和內容
       const container = this.overheadUIs.get(charIndex);
       if (container && character.alive) {
-        this.updateOverheadUI(character, container);
-        this.updateOverheadUIContent(character, container, s); // ★新增：更新Credit和能量條
-        
-        // ★重要修復：在覆蓋模式下，跳過P1頭頂UI的強制顯示
+        // ★關鍵修復：在覆蓋模式下，P1頭頂UI跳過更新和顯示
         if (charIndex === 0 && this.isP1HeadUIHidden) {
-          // P1頭頂UI處於覆蓋模式，保持隱藏狀態
-          console.log('🎯 [覆蓋模式] P1頭頂UI保持隱藏狀態');
+          // P1頭頂UI處於覆蓋模式，跳過更新但保持位置同步
+          this.updateOverheadUI(character, container, false); // 只更新位置，不強制顯示
+          console.log('🎯 [覆蓋模式] P1頭頂UI跳過顯示，僅更新位置');
         } else {
+          // 正常模式：更新位置、內容並顯示
+          this.updateOverheadUI(character, container);
+          this.updateOverheadUIContent(character, container, s);
           container.setVisible(true);
         }
       } else if (container) {
@@ -1393,8 +1394,9 @@ export class UIScene extends Phaser.Scene {
    * 
    * @param character 角色統計數據，包含世界座標
    * @param container UI容器對象
+   * @param forceVisible 是否強制設置可見性，默認為true
    */
-  private updateOverheadUI(character: CharStat, container: Phaser.GameObjects.Container): void {
+  private updateOverheadUI(character: CharStat, container: Phaser.GameObjects.Container, forceVisible = true): void {
     // 角色死亡時隱藏UI
     if (!character.alive) {
       container.setVisible(false);
@@ -1412,9 +1414,13 @@ export class UIScene extends Phaser.Scene {
     const screenX = worldX - (gcam?.scrollX || 0);
     const screenY = worldY - (gcam?.scrollY || 0);
     
-    // 更新容器位置並確保可見
+    // 更新容器位置
     container.setPosition(screenX, screenY);
-    container.setVisible(true);
+    
+    // ★關鍵修復：只有在forceVisible為true時才設置可見性
+    if (forceVisible) {
+      container.setVisible(true);
+    }
   }
 
   /**
@@ -1580,7 +1586,7 @@ export class UIScene extends Phaser.Scene {
   setP1HeadUIVisible(visible: boolean): void {
     console.log(`🎯 [頭頂UI控制] setP1HeadUIVisible被調用，visible=${visible}`);
     
-    // 設置覆蓋模式標誌，防止updateStats()干擾
+    // 設置覆蓋模式標誌，防止updateStats()和updateOverheadUI()干擾
     this.isP1HeadUIHidden = !visible;
     console.log(`🎯 [頭頂UI控制] 覆蓋模式設為: ${this.isP1HeadUIHidden}`);
     
@@ -1588,8 +1594,19 @@ export class UIScene extends Phaser.Scene {
     const p1Container = this.overheadUIs.get(0);
     
     if (p1Container) {
+      // ★強制設置可見性，覆蓋任何先前的狀態
       p1Container.setVisible(visible);
-      console.log(`✅ [頭頂UI控制] P1頭頂UI已設置為: ${visible ? '顯示' : '隱藏'}`);
+      console.log(`✅ [頭頂UI控制] P1頭頂UI已強制設置為: ${visible ? '顯示' : '隱藏'}`);
+      console.log(`🎯 [頭頂UI控制] 實際可見性確認: ${p1Container.visible}`);
+      
+      // ★額外保護：如果要隱藏，設置透明度為0作為雙重保險
+      if (!visible) {
+        p1Container.setAlpha(0);
+        console.log('🔒 [雙重保護] P1頭頂UI透明度設為0');
+      } else {
+        p1Container.setAlpha(1);
+        console.log('🔓 [雙重保護] P1頭頂UI透明度恢復為1');
+      }
     } else {
       console.warn('⚠️ [頭頂UI控制] P1頭頂UI容器不存在，可能尚未創建');
       console.log(`🎯 [頭頂UI控制] 當前overheadUIs大小: ${this.overheadUIs.size}`);
