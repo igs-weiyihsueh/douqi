@@ -9021,8 +9021,10 @@ export class GameScene extends Phaser.Scene {
       }).setOrigin(0.5);
       this.editorButton.add(buttonText);
       
-      // 設置按鈕交互
-      buttonBg.setInteractive({ useHandCursor: true })
+      // 直接在Container上設置交互（更可靠）
+      this.editorButton
+        .setSize(buttonWidth, buttonHeight)
+        .setInteractive({ useHandCursor: true })
         .on('pointerover', () => {
           // 懸停效果
           buttonBg.setFillStyle(0x6bb6ff, 0.95);
@@ -9038,21 +9040,31 @@ export class GameScene extends Phaser.Scene {
           // 點擊效果
           buttonBg.setFillStyle(0x2e7bd4, 1.0);
           buttonText.setScale(0.95);
-          console.log('🎯 參數編輯按鈕被點擊');
+          console.log('🎯 參數編輯按鈕被點擊，準備開啟編輯器...');
           
-          // 執行編輯器切換
-          setTimeout(() => {
+          // 立即執行編輯器切換
+          try {
             this.toggleParameterEditor();
-            // 恢復按鈕樣式
+            console.log('✅ toggleParameterEditor 執行完成');
+          } catch (error) {
+            console.error('❌ toggleParameterEditor 執行失敗:', error);
+          }
+          
+          // 恢復按鈕樣式
+          setTimeout(() => {
             buttonBg.setFillStyle(0x4a9eff, 0.9);
             buttonText.setScale(1.0);
-          }, 100);
+          }, 150);
+        })
+        .on('pointerup', () => {
+          console.log('🔄 參數編輯按鈕釋放');
         });
       
       console.log('✅ 參數編輯器UI按鈕創建成功');
       console.log(`📍 按鈕位置: (${x}, ${y}), 尺寸: ${buttonWidth}×${buttonHeight}`);
       console.log('🔒 按鈕已設置固定位置 (scrollFactor=0)');
       console.log('👁️ 按鈕初始狀態: 可見');
+      console.log('🖱️ 按鈕交互設置在Container上，包含pointerdown/up事件');
       
     } catch (error) {
       console.error('❌ 創建參數編輯器按鈕失敗:', error);
@@ -9076,6 +9088,7 @@ export class GameScene extends Phaser.Scene {
     console.log(`  - Add factory available: ${!!this.add}`);
     console.log(`  - Input available: ${!!this.input}`);
     console.log(`  - Physics available: ${!!this.physics}`);
+    console.log(`  - editorPanel exists: ${!!this.editorPanel}`);
     
     try {
       if (this.editorActive) {
@@ -9083,10 +9096,21 @@ export class GameScene extends Phaser.Scene {
         this.closeParameterEditor();
       } else {
         console.log('🚀 開啟新的編輯器');
+        console.log('⏳ 準備創建編輯器面板...');
         this.openParameterEditor();
       }
+      console.log('✅ toggleParameterEditor執行完成');
     } catch (error) {
       console.error('❌ toggleParameterEditor執行錯誤:', error);
+      if (error instanceof Error) {
+        console.error('❌ 錯誤堆棧:', error.stack);
+      }
+      
+      // 重置狀態
+      this.editorActive = false;
+      if (this.editorButton) {
+        this.editorButton.setVisible(true);
+      }
     }
   }
 
