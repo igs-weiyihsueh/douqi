@@ -89,7 +89,11 @@ export class BootScene extends Phaser.Scene {
     // 使用第一個路徑載入
     this.load.image('scene-background', scenePaths[0]);
     
+    // 載入角色皮膚：Goku_1.png
+    this.load.image('character-goku-skin', 'assets/Goku_1.png');
+    
     console.log('🔍 嘗試載入路徑:', scenePaths[0]);
+    console.log('🔍 嘗試載入Goku皮膚: assets/Goku_1.png');
     
     // 監聽外部資源載入完成
     this.load.once('complete', () => {

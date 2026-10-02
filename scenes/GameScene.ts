@@ -35,6 +35,9 @@ export class GameScene extends Phaser.Scene {
   private testRectangleBackground: Phaser.GameObjects.Rectangle | null = null;
   private isNewSceneActive = false;
 
+  // ★角色皮膚覆蓋系統
+  private characterSkin: Phaser.GameObjects.Image | null = null;
+
   private survivalMs = 0;
   private gameOver = false;
 
@@ -246,6 +249,9 @@ export class GameScene extends Phaser.Scene {
 
     // ★場景圖熱切換系統初始化
     this.initSceneBackground();
+
+    // ★角色皮膚覆蓋系統初始化
+    this.initCharacterSkin();
 
     // 固定視角競技場
     // 應用持久化的邊界設定
@@ -487,6 +493,9 @@ export class GameScene extends Phaser.Scene {
     this.sceneBackground = null;
     this.isNewSceneActive = false;
     
+    // ★角色皮膚狀態重置
+    this.characterSkin = null;
+    
     this.characters = [];
     this.survivalMs = 0;
     this.gameOver = false;
@@ -677,6 +686,9 @@ export class GameScene extends Phaser.Scene {
     if (this.gameOver) return;
 
     this.survivalMs += delta;
+
+    // ★更新角色皮膚覆蓋位置，跟隨P1角色
+    this.updateCharacterSkin();
 
     // ★階段三：更新COMBO計時系統
     this.updateComboTimers();
@@ -8368,6 +8380,33 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
+   * ★角色皮膚覆蓋系統初始化
+   */
+  private initCharacterSkin(): void {
+    if (this.textures.exists('character-goku-skin')) {
+      // 創建角色皮膚覆蓋，初始隱藏，跟隨P1角色
+      this.characterSkin = this.add.image(0, 0, 'character-goku-skin')
+        .setOrigin(0.5, 0.5)
+        .setDepth(15)  // 設置比角色(depth=10)更高，確保覆蓋在角色上
+        .setVisible(false)
+        .setScrollFactor(1);  // 跟隨世界移動，不像背景固定
+      
+      console.log('🦍 角色皮膚覆蓋已創建：Goku皮膚 (depth=15, hidden)');
+    } else {
+      console.warn('⚠️ Goku皮膚資源不存在：character-goku-skin');
+    }
+  }
+
+  /**
+   * ★更新角色皮膚覆蓋位置，跟隨P1角色
+   */
+  private updateCharacterSkin(): void {
+    if (this.characterSkin && this.player.alive) {
+      this.characterSkin.setPosition(this.player.x, this.player.y);
+    }
+  }
+
+  /**
    * ★場景背景熱切換功能
    * 
    * F1鍵觸發，在新舊場景背景間切換：
@@ -8431,66 +8470,44 @@ export class GameScene extends Phaser.Scene {
     
     if (this.isNewSceneActive) {
       // 顯示新場景背景 - 以Scene.png為主
-      console.log('🔍 Scene.png顯示邏輯檢查:');
-      
-      if (this.sceneBackground && sceneTextureLoaded) {
-        // 設置Scene.png深度為1，覆蓋地面圖片但不遮擋遊戲元素
-        console.log('✅ Scene.png載入成功，設置顯示屬性:');
+      if (this.sceneBackground) {
         this.sceneBackground.setVisible(true);
         this.sceneBackground.setAlpha(1);
-        this.sceneBackground.setDepth(1);  // 設置為1，覆蓋地面(depth=0)但低於遊戲元素
+        this.sceneBackground.setDepth(1);
         this.sceneBackground.setActive(true);
-        
-        // 檢查設置後的狀態
-        console.log(`  ✓ 設置後visible: ${this.sceneBackground.visible}`);
-        console.log(`  ✓ 設置後alpha: ${this.sceneBackground.alpha}`);
-        console.log(`  ✓ 設置後depth: ${this.sceneBackground.depth} (覆蓋地面圖片，不遮擋遊戲元素)`);
-        console.log(`  ✓ 設置後active: ${this.sceneBackground.active}`);
-        console.log(`  ✓ 位置: (${this.sceneBackground.x}, ${this.sceneBackground.y})`);
-        console.log(`  ✓ 顯示尺寸: ${this.sceneBackground.displayWidth} × ${this.sceneBackground.displayHeight}`);
-        console.log(`  ✓ 在children索引: ${this.children.list.indexOf(this.sceneBackground as Phaser.GameObjects.GameObject)}`);
-        
-        // 檢查是否在相機視野內
-        const cameraBounds = this.cameras.main.getBounds();
-        const sceneBounds = this.sceneBackground.getBounds();
-        console.log(`  ✓ 相機範圍: (${cameraBounds.x}, ${cameraBounds.y}) ${cameraBounds.width}×${cameraBounds.height}`);
-        console.log(`  ✓ 背景範圍: (${sceneBounds.x}, ${sceneBounds.y}) ${sceneBounds.width}×${sceneBounds.height}`);
-        
-        // 強制刷新渲染
-        this.sceneBackground.setTexture('scene-background');
-        console.log('🔄 已強制刷新Scene.png紋理');
-        
-        console.log('🌋 真正的火山背景 Scene.png 已顯示，完全覆蓋遊戲區域');
-        
-        // 隱藏測試背景
-        if (this.testGraphicsBackground) {
-          this.testGraphicsBackground.setVisible(false);
-        }
-        if (this.testRectangleBackground) {
-          this.testRectangleBackground.setVisible(false);
-        }
-        
-      } else {
-        console.warn('⚠️ Scene.png無法顯示，啟用測試背景');
-        if (this.testGraphicsBackground) {
-          this.testGraphicsBackground.setVisible(true);
-          console.log('🎨 Graphics測試背景已啟用作為備用');
-        }
       }
       
-      console.log('🌋 切換到新場景：火山地獄背景 (真正的火焰山 Scene.png)');
-    } else {
-      // 隱藏新場景背景，顯示原場景
-      if (this.sceneBackground) {
-        this.sceneBackground.setVisible(false);
+      // 同時顯示角色皮膚覆蓋
+      if (this.characterSkin) {
+        this.characterSkin.setVisible(true);
+        console.log('🦍 Goku皮膚已顯示');
       }
+      
+      // 隱藏測試背景
       if (this.testGraphicsBackground) {
         this.testGraphicsBackground.setVisible(false);
       }
       if (this.testRectangleBackground) {
         this.testRectangleBackground.setVisible(false);
       }
-      console.log('🏛️ 切換到舊場景：原始程式生成場景');
+    } else {
+      // 隱藏新場景背景，顯示原場景
+      if (this.sceneBackground) {
+        this.sceneBackground.setVisible(false);
+      }
+      
+      // 同時隱藏角色皮膚覆蓋
+      if (this.characterSkin) {
+        this.characterSkin.setVisible(false);
+        console.log('🦍 Goku皮膚已隱藏');
+      }
+      
+      if (this.testGraphicsBackground) {
+        this.testGraphicsBackground.setVisible(false);
+      }
+      if (this.testRectangleBackground) {
+        this.testRectangleBackground.setVisible(false);
+      }
     }
     
     // ★狀態確認：當前顯示的背景
