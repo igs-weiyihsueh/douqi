@@ -4,8 +4,8 @@
  */
 export const GameConfig = {
   /** 邏輯解析度（16:9 橫向；Phaser Scale FIT + CENTER_BOTH 等比縮放滿版） */
-  width: 1280,
-  height: 720,
+  width: 1920,
+  height: 1080,
 
   /** 除錯開關 */
   debug: {
@@ -17,8 +17,8 @@ export const GameConfig = {
   waveHud: {
     enabled: true,
     /** 節點序列置中的畫面座標(setScrollFactor0 固定);上方 */
-    x: 640,
-    y: 30,
+    x: 960,  // 調整為1920/2 = 960 (置中)
+    y: 45,   // 調整為適合1080高度的位置
     /** 節點半徑 */
     nodeRadius: 15,
     /** 節點間距(圓心到圓心) */
@@ -47,7 +47,7 @@ export const GameConfig = {
    */
   arena: {
     /** 場地距畫面邊緣的內縮（像素）；場地大小 = 畫面 - 2*padding */
-    padding: 48,
+    padding: 72,  // 按比例調整: 48 * (1920/1280) = 72
     /** 圍欄線框粗細 */
     borderThickness: 6,
     borderColor: 0x3a4668,
@@ -829,13 +829,13 @@ export const GameConfig = {
     /** 總關卡數 ★第二輪:1-4 荒城→火山(第一輪),5-8 森林→洞窟(第二輪);關4=中場BOSS、關8=壓軸BOSS(真通關) */
     totalLevels: 8,
     /** ★方案e:移動區(arena)尺寸【小於畫面】,四周留遠景空間;鏡頭跟隨玩家、走邊緣露出更多遠景。 */
-    arenaW: 1040,
-    arenaH: 600,
+    arenaW: 1560,  // 按比例調整: 1040 * (1920/1280) = 1560
+    arenaH: 900,   // 按比例調整: 600 * (1080/720) = 900
     /** 移動區四周的遠景邊距(世界像素);縮小(減少空蕩)。slot = arena + 2×margin,仍略大於畫面才有跟隨露景空間。 */
-    sceneMargin: 190,
+    sceneMargin: 285,  // 按比例調整: 190 * (1920/1280) = 285
     /** 鏡頭跟隨的 deadzone(緩衝區)寬高——玩家在此框內鏡頭不動,超出才跟。 */
-    followDeadzoneW: 360,
-    followDeadzoneH: 400, // 📹 用戶要求：增加Y軸死區 240→400，減少上下跟隨靈敏度
+    followDeadzoneW: 540, // 按比例調整: 360 * (1920/1280) = 540
+    followDeadzoneH: 600, // 按比例調整: 400 * (1080/720) = 600
     /** 鏡頭跟隨的 lerp 平滑係數(0~1,越小越平滑) */
     followLerp: 0.08,
     /** 📹 Y軸跟隨係數：比X軸更慢，讓上下跟隨更溫和 - 用戶要求 */
