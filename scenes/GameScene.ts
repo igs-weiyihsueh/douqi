@@ -8424,9 +8424,15 @@ export class GameScene extends Phaser.Scene {
    * - 定位在P1角色上方適當位置
    */
   private initCharacterUIOverlay(): void {
+    console.log('🔧 [調試] 開始初始化角色UI覆蓋系統');
+    console.log('🔧 [調試] character-ui-overlay紋理存在:', this.textures.exists('character-ui-overlay'));
+    
     if (this.textures.exists('character-ui-overlay')) {
       // 在P1角色上方創建UI覆蓋
       const playerPos = this.player ? { x: this.player.x, y: this.player.y - 40 } : { x: 0, y: -40 };
+      console.log('🔧 [調試] P1角色位置:', { x: this.player?.x, y: this.player?.y });
+      console.log('🔧 [調試] UI覆蓋目標位置:', playerPos);
+      
       this.characterUIOverlay = this.add.image(playerPos.x, playerPos.y, 'character-ui-overlay')
         .setOrigin(0.5, 0.5)
         .setDepth(20)  // UI層：比角色皮膚(depth=15)和角色本體(depth=10)更高
@@ -8485,7 +8491,14 @@ export class GameScene extends Phaser.Scene {
   private updateCharacterUIOverlay(): void {
     if (this.characterUIOverlay && this.player.alive) {
       // 同步位置到P1角色上方
-      this.characterUIOverlay.setPosition(this.player.x, this.player.y - 40);
+      const newX = this.player.x;
+      const newY = this.player.y - 40;
+      this.characterUIOverlay.setPosition(newX, newY);
+      
+      // 調試：每100幀輸出一次位置信息
+      if (this.time.now % 1000 < 16) { // 約每秒一次
+        console.log(`🔧 [調試] UI覆蓋位置更新: (${newX}, ${newY}), 可見: ${this.characterUIOverlay.visible}`);
+      }
     }
   }
 
@@ -8572,6 +8585,7 @@ export class GameScene extends Phaser.Scene {
       }
       
       // ★新增：隱藏原始P1頭頂UI
+      console.log('🔧 [調試] F4激活 - 準備隱藏P1頭頂UI');
       this.controlP1HeadUI(false);
       
       // 隱藏測試背景
@@ -8599,6 +8613,7 @@ export class GameScene extends Phaser.Scene {
       }
       
       // ★新增：恢復原始P1頭頂UI
+      console.log('🔧 [調試] F4關閉 - 準備恢復P1頭頂UI');
       this.controlP1HeadUI(true);
       
       if (this.testGraphicsBackground) {
