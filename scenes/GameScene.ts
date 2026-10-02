@@ -39,6 +39,7 @@ export class GameScene extends Phaser.Scene {
   private editorActive = false;
   private editorPanel: Phaser.GameObjects.Container | null = null;
   private editorBackground: Phaser.GameObjects.Rectangle | null = null;
+  private editorButton: Phaser.GameObjects.Container | null = null; // 開啟編輯器的UI按鈕
   private editorSliders: Array<{
     name: string;
     value: number;
@@ -8360,35 +8361,12 @@ export class GameScene extends Phaser.Scene {
       this.forceReloadSceneBackground();
     });
     
-    // ★新增：F5鍵開啟實時參數編輯器 (確保可靠執行)
-    this.input.keyboard?.on('keydown-F5', (event: KeyboardEvent) => {
-      console.log('🎯 Phaser收到F5鍵事件');
-      
-      // 標記F5已被Phaser處理
-      if ((window as any).__f5HandledByPhaser) {
-        (window as any).__f5HandledByPhaser();
-      }
-      
-      // 立即阻止默認行為
-      event.preventDefault();
-      event.stopPropagation();
-      
-      console.log('🔧 開始執行toggleParameterEditor...');
-      
-      // 確保在下一個事件循環中執行，避免事件處理衝突
-      setTimeout(() => {
-        try {
-          this.toggleParameterEditor();
-          console.log('✅ toggleParameterEditor執行完成');
-        } catch (error) {
-          console.error('❌ toggleParameterEditor執行失敗:', error);
-        }
-      }, 10);
-    });
+    // ★創建參數編輯器開啟按鈕 (取代F5熱鍵)
+    this.createParameterEditorButton();
     
     console.log('⌨️ F1熱鍵監聽器已設置');
     console.log('⌨️ F2強制重載已設置');
-    console.log('⌨️ F5實時參數編輯器已設置');
+    console.log('🎮 參數編輯器UI按鈕已創建');
   }
 
   /**
@@ -9012,6 +8990,72 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
+   * 創建參數編輯器開啟按鈕
+   * 替代F5熱鍵，提供更直觀的UI交互方式
+   */
+  private createParameterEditorButton(): void {
+    console.log('🎮 創建參數編輯器UI按鈕...');
+    
+    const buttonWidth = 120;
+    const buttonHeight = 40;
+    const x = GameConfig.width - buttonWidth - 10;
+    const y = 10;
+    
+    try {
+      // 主按鈕容器
+      this.editorButton = this.add.container(x, y);
+      this.editorButton.setDepth(999); // 高深度確保在UI最上層
+      
+      // 按鈕背景
+      const buttonBg = this.add.rectangle(0, 0, buttonWidth, buttonHeight, 0x4a9eff, 0.9);
+      buttonBg.setStrokeStyle(2, 0xffffff, 0.8);
+      this.editorButton.add(buttonBg);
+      
+      // 按鈕文字
+      const buttonText = this.add.text(0, 0, '🔧 參數編輯', {
+        fontSize: '14px',
+        color: '#ffffff',
+        fontFamily: 'Arial'
+      }).setOrigin(0.5);
+      this.editorButton.add(buttonText);
+      
+      // 設置按鈕交互
+      buttonBg.setInteractive({ useHandCursor: true })
+        .on('pointerover', () => {
+          // 懸停效果
+          buttonBg.setFillStyle(0x6bb6ff, 0.95);
+          buttonText.setScale(1.05);
+          console.log('🖱️ 參數編輯按鈕懸停');
+        })
+        .on('pointerout', () => {
+          // 離開效果
+          buttonBg.setFillStyle(0x4a9eff, 0.9);
+          buttonText.setScale(1.0);
+        })
+        .on('pointerdown', () => {
+          // 點擊效果
+          buttonBg.setFillStyle(0x2e7bd4, 1.0);
+          buttonText.setScale(0.95);
+          console.log('🎯 參數編輯按鈕被點擊');
+          
+          // 執行編輯器切換
+          setTimeout(() => {
+            this.toggleParameterEditor();
+            // 恢復按鈕樣式
+            buttonBg.setFillStyle(0x4a9eff, 0.9);
+            buttonText.setScale(1.0);
+          }, 100);
+        });
+      
+      console.log('✅ 參數編輯器UI按鈕創建成功');
+      console.log(`📍 按鈕位置: (${x}, ${y}), 尺寸: ${buttonWidth}×${buttonHeight}`);
+      
+    } catch (error) {
+      console.error('❌ 創建參數編輯器按鈕失敗:', error);
+    }
+  }
+
+  /**
    * ★實時參數編輯器
    * F5鍵觸發，讓用戶實時調整相機和邊界參數
    * 支持的參數：
@@ -9062,6 +9106,11 @@ export class GameScene extends Phaser.Scene {
       this.editorPanel = null;
     }
     
+    // 隱藏開啟按鈕，避免視覺衝突
+    if (this.editorButton) {
+      this.editorButton.setVisible(false);
+    }
+    
     try {
       this.editorActive = true;
 
@@ -9080,6 +9129,11 @@ export class GameScene extends Phaser.Scene {
     } catch (error) {
       console.error('❌ 創建參數編輯器失敗:', error);
       this.editorActive = false;
+      
+      // 恢復按鈕可見性
+      if (this.editorButton) {
+        this.editorButton.setVisible(true);
+      }
       
       // 嘗試強制修復
       setTimeout(() => {
@@ -9441,7 +9495,7 @@ export class GameScene extends Phaser.Scene {
     this.editorSliders = [];
     this.selectedSlider = 0;
     
-    // 清除編輯器相關的鍵盤監聽（F5保留，其他臨時的清除）
+    // 清除編輯器相關的鍵盤監聽
     this.input.keyboard?.off('keydown-UP');
     this.input.keyboard?.off('keydown-DOWN');
     this.input.keyboard?.off('keydown-LEFT');
@@ -9449,7 +9503,12 @@ export class GameScene extends Phaser.Scene {
     this.input.keyboard?.off('keydown-ENTER');
     this.input.keyboard?.off('keydown-ESC');
     
-    console.log('🔒 編輯器鍵盤監聽已清理，F5功能保持可用');
+    // 確保按鈕可見（如果編輯器關閉，按鈕應該可用）
+    if (this.editorButton) {
+      this.editorButton.setVisible(true);
+    }
+    
+    console.log('🔒 編輯器已關閉，按鈕恢復可用');
   }
 
   /**
