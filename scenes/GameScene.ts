@@ -8351,103 +8351,19 @@ export class GameScene extends Phaser.Scene {
    * - 頭上UI：depth=200-2000 (完全不被遮擋)
    */
   private toggleSceneBackground(): void {
+    // ★簡化LOG：只保留3個關鍵診斷訊息
+    console.log('🎯 F1按鍵觸發 - 場景切換開始');
+    
     if (!this.sceneBackground) {
       console.warn('⚠️ 場景背景圖片不可用，無法切換');
       return;
     }
 
-    // ★版本確認標誌
-    console.log('🚀 檢測版本確認: v2.3 - 像素級檢測已載入');
-    console.log('📅 部署時間:', new Date().toISOString());
-    console.log('🔄 toggleSceneBackground被觸發');
+    // ★關鍵診斷1：Scene.png載入狀態
+    console.log('🖼️ Scene.png狀態:', this.textures.exists('scene-background') ? '載入成功' : '載入失敗');
     
-    // ★立即執行檢測1.1-1.3（不依賴條件分支）
-    console.log('🔍 ===== 檢測1.1 - Scene.png檔案內容 =====');
-    
-    // 檢測檔案是否存在
-    const texture = this.textures.get('scene-background');
-    console.log('✓ 紋理物件存在:', !!texture);
-    if (texture) {
-      console.log('✓ 紋理key:', texture.key);
-      
-      // 檢測圖片來源
-      if (texture.source && texture.source[0]) {
-        const img = texture.source[0].image as any;
-        console.log('✓ 圖片尺寸:', img.width + '×' + img.height);
-        console.log('✓ 圖片來源:', img.src?.substring(img.src.lastIndexOf('/') + 1) || 'unknown');
-        console.log('✓ 載入狀態:', img.complete || 'unknown');
-        
-        // 檢測圖片的像素資料
-        if (img.naturalWidth !== undefined) {
-          console.log('✓ 圖片naturalWidth:', img.naturalWidth);
-          console.log('✓ 圖片naturalHeight:', img.naturalHeight);
-        }
-        
-        // ★檢測1.3 - Scene.png實際內容驗證（關鍵檢測）
-        console.log('🔍 ===== 檢測1.3 - Scene.png實際內容驗證 =====');
-        
-        // 基本尺寸資訊
-        const actualW = img.naturalWidth || img.width;
-        const actualH = img.naturalHeight || img.height;
-        console.log('✓ 實際寬度:', actualW);
-        console.log('✓ 實際高度:', actualH);
-        
-        // 檢查是否是預期的1920×1080
-        const expectedW = 1920, expectedH = 1080;
-        const sizeMatch = (actualW === expectedW && actualH === expectedH);
-        console.log('✓ 尺寸符合預期:', 
-            sizeMatch ? 'YES' : 
-            `NO - 預期${expectedW}×${expectedH}, 實際${actualW}×${actualH}`);
-        
-        // ★關鍵：像素內容檢測
-        console.log('🔍 ===== 檢測1.3 - 像素資料檢測 =====');
-        
-        try {
-          // 創建canvas來檢測圖片內容
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          if (ctx && img.complete && actualW > 0) {
-            canvas.width = 100;
-            canvas.height = 100;
-            
-            ctx.drawImage(img, 0, 0, 100, 100, 0, 0, 100, 100);
-            
-            // 檢測中心點顏色
-            const imageData = ctx.getImageData(50, 50, 1, 1);
-            const pixel = imageData.data;
-            console.log('✓ 中心像素RGB:', `(${pixel[0]}, ${pixel[1]}, ${pixel[2]})`);
-            
-            // 判斷場景類型
-            const isVolcano = pixel[0] > 150 && pixel[1] < 100 && pixel[2] < 50; // 橙紅色
-            const isTestScene = pixel[2] > 150 && pixel[0] < 100; // 藍紫色
-            const isOriginalBrown = pixel[0] > 100 && pixel[1] > 80 && pixel[2] < 100; // 棕色
-            
-            let colorType = '未知場景';
-            if (isVolcano) colorType = '火山場景(橙紅)';
-            else if (isTestScene) colorType = '測試場景(藍紫)';
-            else if (isOriginalBrown) colorType = '⚠️ 原始場景(棕色) - 可能載入錯誤!';
-            
-            console.log('✓ 顏色判斷:', colorType);
-            
-          } else {
-            console.log('❌ 無法執行像素檢測 - Canvas/圖片問題');
-          }
-          
-        } catch (error: any) {
-          console.log('❌ 像素檢測失敗:', error.message || error);
-        }
-        
-        // ★檢測URL與快取
-        console.log('🔍 ===== 檢測1.3 - URL與快取 =====');
-        console.log('✓ 完整圖片URL:', img.src || 'N/A');
-        console.log('✓ URL包含時間戳:', (img.src && img.src.includes('?')) ? 'YES' : 'NO');
-        
-      } else {
-        console.log('❌ 圖片來源不存在 - texture.source問題');
-      }
-    } else {
-      console.log('❌ scene-background紋理不存在');
-    }
+    // ★關鍵診斷2：Graphics測試結果  
+    console.log('🎨 Graphics紫紅色背景:', this.testGraphicsBackground?.visible ? '已顯示' : '未顯示');
 
     // 切換狀態
     this.isNewSceneActive = !this.isNewSceneActive;
@@ -8461,227 +8377,6 @@ export class GameScene extends Phaser.Scene {
         this.testGraphicsBackground.setVisible(true);
       }
       console.log('🌋 切換到新場景：火山地獄風格 (Scene.png + Graphics測試)');
-      
-      // ★檢測1.1：Scene.png檔案內容檢測
-      console.log('🔍 ===== 檢測1.1 - Scene.png檔案內容 =====');
-      
-      // 檢測檔案是否存在
-      const texture = this.textures.get('scene-background');
-      console.log('✓ 紋理物件存在:', !!texture);
-      if (texture) {
-        console.log('✓ 紋理key:', texture.key);
-        
-        // 檢測圖片來源
-        if (texture.source && texture.source[0]) {
-          const img = texture.source[0].image as any;
-          console.log('✓ 圖片尺寸:', img.width + '×' + img.height);
-          console.log('✓ 圖片來源:', img.src?.substring(img.src.lastIndexOf('/') + 1) || 'unknown');
-          console.log('✓ 載入狀態:', img.complete || 'unknown');
-          
-          // 檢測圖片的像素資料
-          if (img.naturalWidth !== undefined) {
-            console.log('✓ 圖片naturalWidth:', img.naturalWidth);
-            console.log('✓ 圖片naturalHeight:', img.naturalHeight);
-          }
-          
-          // 檢測瀏覽器快取狀況
-          console.log('🔍 ===== 檢測1.2 - 快取狀況 =====');
-          console.log('✓ 當前時間戳:', Date.now());
-          console.log('✓ 頁面載入時間:', Math.round(performance.now()));
-          
-          // 如果圖片有timestamp，也要輸出
-          if (img.src && img.src.includes('?')) {
-            console.log('✓ 圖片URL參數:', img.src.split('?')[1]);
-          } else {
-            console.log('✓ 圖片URL無參數 (可能被快取)');
-          }
-          
-          console.log('🔍 ===== 檢測1.3 - 紋理資料驗證 =====');
-          console.log('✓ 紋理總數:', Object.keys(this.textures.list).length);
-          console.log('✓ scene-background存在:', this.textures.exists('scene-background'));
-          
-          // 列出所有紋理keys以供參考
-          const textureKeys = Object.keys(this.textures.list).slice(0, 10); // 只列前10個
-          console.log('✓ 前10個紋理keys:', textureKeys.join(', '));
-          
-          // ★檢測1.3 - Scene.png實際內容與尺寸檢測
-          console.log('🔍 ===== 檢測1.3 - Scene.png實際內容驗證 =====');
-          
-          // 基本尺寸資訊
-          const actualW = img.naturalWidth || img.width;
-          const actualH = img.naturalHeight || img.height;
-          console.log('✓ 實際寬度:', actualW);
-          console.log('✓ 實際高度:', actualH);
-          console.log('✓ 顯示寬度:', img.width);
-          console.log('✓ 顯示高度:', img.height);
-          
-          // 檢查是否是預期的1920×1080
-          const expectedW = 1920, expectedH = 1080;
-          const sizeMatch = (actualW === expectedW && actualH === expectedH);
-          console.log('✓ 尺寸符合預期:', 
-              sizeMatch ? 'YES' : 
-              `NO - 預期${expectedW}×${expectedH}, 實際${actualW}×${actualH}`);
-          
-          // 像素資料檢測
-          console.log('🔍 ===== 檢測1.3 - 像素資料檢測 =====');
-          
-          try {
-            // 創建canvas來檢測圖片內容
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-              canvas.width = 100;
-              canvas.height = 100;
-              
-              // 繪製圖片的一小部分來檢測顏色
-              if (img.complete && actualW > 0) {
-                ctx.drawImage(img, 0, 0, 100, 100, 0, 0, 100, 100);
-                
-                // 檢測中心點顏色
-                const imageData = ctx.getImageData(50, 50, 1, 1);
-                const pixel = imageData.data;
-                console.log('✓ 中心像素RGB:', `(${pixel[0]}, ${pixel[1]}, ${pixel[2]})`);
-                
-                // 檢測四角顏色
-                const cornerPositions = [[10, 10], [90, 10], [10, 90], [90, 90]];
-                cornerPositions.forEach((pos, i) => {
-                  const cornerData = ctx.getImageData(pos[0], pos[1], 1, 1).data;
-                  console.log(`✓ 角落${i+1}像素RGB:`, `(${cornerData[0]}, ${cornerData[1]}, ${cornerData[2]})`);
-                });
-                
-                // 判斷是否為預期的場景顏色
-                const isVolcano = pixel[0] > 150 && pixel[1] < 100 && pixel[2] < 50; // 橙紅色
-                const isTestScene = pixel[2] > 150 && pixel[0] < 100; // 藍紫色
-                const isOriginalBrown = pixel[0] > 100 && pixel[1] > 80 && pixel[2] < 100; // 棕色
-                
-                let colorType = '未知場景';
-                if (isVolcano) colorType = '火山場景(橙紅)';
-                else if (isTestScene) colorType = '測試場景(藍紫)';
-                else if (isOriginalBrown) colorType = '原始場景(棕色) - 可能載入錯誤!';
-                
-                console.log('✓ 顏色判斷:', colorType);
-                
-                // 檢測是否為單色或有變化
-                const corners = cornerPositions.map(pos => {
-                  const data = ctx.getImageData(pos[0], pos[1], 1, 1).data;
-                  return {r: data[0], g: data[1], b: data[2]};
-                });
-                
-                const colorVariance = corners.reduce((sum, corner) => {
-                  return sum + Math.abs(corner.r - pixel[0]) + Math.abs(corner.g - pixel[1]) + Math.abs(corner.b - pixel[2]);
-                }, 0);
-                
-                console.log('✓ 顏色變化度:', colorVariance > 50 ? '有變化(正常)' : '接近單色(可能有問題)');
-                
-              } else {
-                console.log('❌ 圖片未完全載入或尺寸為0');
-              }
-            } else {
-              console.log('❌ Canvas context創建失敗');
-            }
-            
-          } catch (error: any) {
-            console.log('❌ 像素檢測失敗:', error.message || error);
-          }
-          
-          // URL與快取檢測
-          console.log('🔍 ===== 檢測1.3 - URL與快取 =====');
-          console.log('✓ 完整圖片URL:', img.src || 'N/A');
-          console.log('✓ URL包含時間戳:', (img.src && img.src.includes('?')) ? 'YES' : 'NO');
-          console.log('✓ 圖片載入完成:', img.complete || 'unknown');
-          console.log('✓ 圖片載入狀態:', (img as any).readyState || 'N/A');
-          
-        } else {
-          console.log('❌ 圖片來源不存在 - texture.source問題');
-        }
-      } else {
-        console.log('❌ scene-background紋理不存在');
-      }
-      
-      // ★詳細診斷資訊
-      if (this.sceneBackground) {
-        console.log('🔍 場景背景物件診斷：');
-        console.log(`  visible: ${this.sceneBackground.visible}`);
-        console.log(`  alpha: ${this.sceneBackground.alpha}`);
-        console.log(`  depth: ${this.sceneBackground.depth}`);
-        console.log(`  position: (${this.sceneBackground.x}, ${this.sceneBackground.y})`);
-        console.log(`  displaySize: ${this.sceneBackground.displayWidth} × ${this.sceneBackground.displayHeight}`);
-        console.log(`  texture: ${this.sceneBackground.texture.key}`);
-        console.log(`  scene: ${this.sceneBackground.scene.scene.key}`);
-        console.log(`  active: ${this.sceneBackground.active}`);
-        
-        // ★新增：紋理內容驗證
-        console.log('🖼️ 紋理詳細驗證：');
-        console.log(`  texture.key: ${this.sceneBackground.texture.key}`);
-        console.log(`  texture exists: ${!!this.sceneBackground.texture}`);
-        
-        try {
-          const texture = this.sceneBackground.texture as any;
-          console.log(`  texture.width: ${texture.width || 'unknown'}`);
-          console.log(`  texture.height: ${texture.height || 'unknown'}`);
-          
-          const textureSource = texture.source?.[0];
-          if (textureSource?.image) {
-            const img = textureSource.image as any;
-            console.log(`  image.src: ${img.src || 'unknown'}`);
-            console.log(`  image.complete: ${img.complete || 'unknown'}`);
-            console.log(`  image.naturalWidth: ${img.naturalWidth || 'unknown'}`);
-            console.log(`  image.naturalHeight: ${img.naturalHeight || 'unknown'}`);
-          }
-        } catch (e: any) {
-          console.log(`  紋理源檢查失敗: ${e.message || e}`);
-        }
-        
-        // ★新增：渲染器診斷
-        console.log('🎮 渲染器診斷：');
-        console.log(`  renderer.type: ${this.renderer.type}`);
-        console.log(`  renderer: ${this.renderer.constructor.name}`);
-        console.log(`  canvas.width: ${this.game.canvas.width}`);
-        console.log(`  canvas.height: ${this.game.canvas.height}`);
-        console.log(`  scale.displaySize: ${this.scale.displaySize.width}×${this.scale.displaySize.height}`);
-        
-        // ★新增：物件在渲染樹中的狀態
-        console.log('🌳 渲染樹狀態：');
-        console.log(`  sceneBackground.willRender: ${(this.sceneBackground as any).willRender?.() || 'method not available'}`);
-        console.log(`  sceneBackground.getWorldTransformMatrix: 存在=${!!(this.sceneBackground as any).getWorldTransformMatrix}`);
-        
-        // ★新增：手動強制渲染測試
-        console.log('🔄 強制渲染測試：');
-        this.sceneBackground.setAlpha(0.99).setAlpha(1); // 觸發重繪
-        this.sceneBackground.setVisible(false).setVisible(true); // 觸發重繪
-      }
-      
-      // ★Graphics測試物件診斷
-      if (this.testGraphicsBackground) {
-        console.log('🎨 Graphics測試背景診斷：');
-        console.log(`  visible: ${this.testGraphicsBackground.visible}`);
-        console.log(`  alpha: ${this.testGraphicsBackground.alpha}`);
-        console.log(`  depth: ${this.testGraphicsBackground.depth}`);
-        console.log(`  position: (${this.testGraphicsBackground.x}, ${this.testGraphicsBackground.y})`);
-        console.log(`  willRender: ${(this.testGraphicsBackground as any).willRender?.() || 'method not available'}`);
-      }
-      
-      // 檢查相機範圍
-      const cam = this.cameras.main;
-      console.log(`📹 主相機狀態：`);
-      console.log(`  position: (${cam.x}, ${cam.y})`);
-      console.log(`  size: ${cam.width} × ${cam.height}`);
-      console.log(`  zoom: ${cam.zoom}`);
-      console.log(`  bounds: (${cam.getBounds().x}, ${cam.getBounds().y}) ${cam.getBounds().width}×${cam.getBounds().height}`);
-      
-      // 檢查場景中所有物件的深度層級
-      const allObjects = this.children.list;
-      const depthInfo = allObjects.map(obj => ({
-        type: obj.constructor.name,
-        depth: (obj as any).depth || 0,
-        visible: (obj as any).visible !== false
-      })).sort((a, b) => a.depth - b.depth);
-      
-      console.log('📊 場景物件深度層級分析 (前10個):');
-      depthInfo.slice(0, 10).forEach((info, i) => {
-        console.log(`  ${i+1}. ${info.type} depth=${info.depth} visible=${info.visible}`);
-      });
-      
     } else {
       // 隱藏新場景背景，顯示原場景
       if (this.sceneBackground) {
@@ -8693,8 +8388,9 @@ export class GameScene extends Phaser.Scene {
       console.log('🏛️ 切換到舊場景：原始程式生成場景');
     }
     
-    // 狀態反饋
-    console.log(`📋 場景狀態：${this.isNewSceneActive ? '新場景' : '舊場景'} (F1切換)`);
+    // ★關鍵診斷3：最終狀態確認
+    const finalState = this.isNewSceneActive ? '新場景' : '舊場景';
+    console.log(`📋 場景狀態：${finalState} (F1切換)`);
   }
 
   /**
