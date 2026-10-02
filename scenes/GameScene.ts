@@ -8575,15 +8575,42 @@ export class GameScene extends Phaser.Scene {
     
     // ★關鍵診斷3：最終狀態確認
     const finalState = this.isNewSceneActive ? '新場景' : '舊場景';
-    console.log(`📋 場景狀態：${finalState} (F4切換) - 深度已調整覆蓋原背景系統`);
+    console.log(`📋 場景狀態：${finalState} (F4切換)`);
     
-    // 顯示深度調整信息
-    console.log('🔧 背景深度層級調整:');
-    console.log('  ✓ 原背景系統: sky(-3), far(-2), outer(-1)');  
-    console.log('  ✓ Scene.png: depth=-2 (覆蓋far層)');
-    console.log('  ✓ Graphics: depth=-4 (最深，確保覆蓋)');
-    console.log('  ✓ Rectangle: depth=-3 (覆蓋sky層)');
-    console.log('  → 新背景應該能覆蓋原背景系統');
+    // ★簡化核心診斷
+    console.log('🔍 ===== 核心診斷開始 =====');
+    
+    // 診斷1: 關鍵背景物件狀態
+    console.log('📊 關鍵背景物件:');
+    console.log(`✓ Graphics背景: ${this.testGraphicsBackground?.visible ? '可見' : '不可見'} (depth=${this.testGraphicsBackground?.depth || 'N/A'})`);
+    console.log(`✓ Rectangle背景: ${this.testRectangleBackground?.visible ? '可見' : '不可見'} (depth=${this.testRectangleBackground?.depth || 'N/A'})`);
+    console.log(`✓ Scene.png背景: ${this.sceneBackground?.visible ? '可見' : '不可見'} (depth=${this.sceneBackground?.depth || 'N/A'})`);
+    
+    // 診斷2: 隱藏原背景測試
+    console.log('🧪 隱藏原背景測試:');
+    const originalBgs = this.children.list.filter(obj => {
+      const gameObj = obj as any;
+      return gameObj.depth < 0 && gameObj.visible && 
+             gameObj !== this.testGraphicsBackground &&
+             gameObj !== this.testRectangleBackground &&
+             gameObj !== this.sceneBackground;
+    });
+    
+    console.log(`✓ 找到 ${originalBgs.length} 個原背景，準備隱藏`);
+    originalBgs.forEach(obj => (obj as any).setVisible(false));
+    console.log('🔥 原背景已隱藏！觀察畫面是否變化？');
+    
+    // 診斷結論
+    console.log('📋 結論:');
+    console.log('- 如果現在看到新背景 → 層級問題');
+    console.log('- 如果仍是舊背景 → 新背景創建問題');
+    console.log('🔍 ===== 核心診斷結束 =====');
+    
+    // 5秒後恢復
+    setTimeout(() => {
+      originalBgs.forEach(obj => (obj as any).setVisible(true));
+      console.log('🔄 原背景已恢復');
+    }, 5000);
     
     // ★完整背景系統診斷 - 找出根本原因
     console.log('🔍 ===== 完整背景系統診斷開始 =====');
