@@ -1594,19 +1594,10 @@ export class UIScene extends Phaser.Scene {
     const p1Container = this.overheadUIs.get(0);
     
     if (p1Container) {
-      // ★強制設置可見性，覆蓋任何先前的狀態
+      // 直接設置可見性
       p1Container.setVisible(visible);
-      console.log(`✅ [頭頂UI控制] P1頭頂UI已強制設置為: ${visible ? '顯示' : '隱藏'}`);
+      console.log(`✅ [頭頂UI控制] P1頭頂UI已設置為: ${visible ? '顯示' : '隱藏'}`);
       console.log(`🎯 [頭頂UI控制] 實際可見性確認: ${p1Container.visible}`);
-      
-      // ★額外保護：如果要隱藏，設置透明度為0作為雙重保險
-      if (!visible) {
-        p1Container.setAlpha(0);
-        console.log('🔒 [雙重保護] P1頭頂UI透明度設為0');
-      } else {
-        p1Container.setAlpha(1);
-        console.log('🔓 [雙重保護] P1頭頂UI透明度恢復為1');
-      }
     } else {
       console.warn('⚠️ [頭頂UI控制] P1頭頂UI容器不存在，可能尚未創建');
       console.log(`🎯 [頭頂UI控制] 當前overheadUIs大小: ${this.overheadUIs.size}`);
