@@ -8360,14 +8360,30 @@ export class GameScene extends Phaser.Scene {
       this.forceReloadSceneBackground();
     });
     
-    // ★新增：F5鍵開啟實時參數編輯器 (阻止瀏覽器默認刷新行為)
+    // ★新增：F5鍵開啟實時參數編輯器 (確保可靠執行)
     this.input.keyboard?.on('keydown-F5', (event: KeyboardEvent) => {
       console.log('🎯 Phaser收到F5鍵事件');
-      event.preventDefault(); // 阻止瀏覽器默認的F5刷新行為
-      event.stopPropagation(); // 阻止事件冒泡
+      
+      // 標記F5已被Phaser處理
+      if ((window as any).__f5HandledByPhaser) {
+        (window as any).__f5HandledByPhaser();
+      }
+      
+      // 立即阻止默認行為
+      event.preventDefault();
+      event.stopPropagation();
+      
       console.log('🔧 開始執行toggleParameterEditor...');
-      this.toggleParameterEditor();
-      console.log('✅ toggleParameterEditor執行完成');
+      
+      // 確保在下一個事件循環中執行，避免事件處理衝突
+      setTimeout(() => {
+        try {
+          this.toggleParameterEditor();
+          console.log('✅ toggleParameterEditor執行完成');
+        } catch (error) {
+          console.error('❌ toggleParameterEditor執行失敗:', error);
+        }
+      }, 10);
     });
     
     console.log('⌨️ F1熱鍵監聽器已設置');
@@ -9029,6 +9045,23 @@ export class GameScene extends Phaser.Scene {
   private openParameterEditor(): void {
     console.log('🔧 開始創建實時參數編輯器...');
     
+    // 檢查Scene是否準備就緒
+    if (!this.scene.isActive() || !this.add || !this.input) {
+      console.error('❌ Scene未準備就緒，無法創建編輯器');
+      setTimeout(() => {
+        console.log('⏳ 延遲重試創建編輯器...');
+        this.openParameterEditor();
+      }, 100);
+      return;
+    }
+    
+    // 清理可能存在的舊編輯器
+    if (this.editorPanel) {
+      console.log('🧹 清理舊編輯器...');
+      this.editorPanel.destroy();
+      this.editorPanel = null;
+    }
+    
     try {
       this.editorActive = true;
 
@@ -9039,9 +9072,20 @@ export class GameScene extends Phaser.Scene {
       this.setupEditorControls();
       
       console.log('✅ 參數編輯器創建完成');
+      console.log('📊 編輯器狀態確認:');
+      console.log(`  - editorActive: ${this.editorActive}`);
+      console.log(`  - editorPanel存在: ${!!this.editorPanel}`);
+      console.log(`  - 滑條數量: ${this.editorSliders.length}`);
+      
     } catch (error) {
       console.error('❌ 創建參數編輯器失敗:', error);
       this.editorActive = false;
+      
+      // 嘗試強制修復
+      setTimeout(() => {
+        console.log('🔄 嘗試強制修復創建編輯器...');
+        this.forceCreateEditor();
+      }, 200);
     }
   }
 
@@ -9406,5 +9450,67 @@ export class GameScene extends Phaser.Scene {
     this.input.keyboard?.off('keydown-ESC');
     
     console.log('🔒 編輯器鍵盤監聽已清理，F5功能保持可用');
+  }
+
+  /**
+   * 強制創建編輯器 - 最後的修復手段
+   */
+  private forceCreateEditor(): void {
+    console.log('💪 強制創建編輯器模式');
+    
+    try {
+      // 確保場景可用
+      if (!this.scene.isActive()) {
+        console.error('❌ Scene不活躍，無法強制創建');
+        return;
+      }
+      
+      this.editorActive = true;
+      
+      // 最簡化的編輯器創建
+      const width = 400;
+      const height = 300;
+      const x = GameConfig.width - width - 20;
+      const y = 20;
+      
+      // 創建最基本的面板
+      this.editorPanel = this.add.container(x, y);
+      this.editorPanel.setDepth(1000);
+      
+      // 簡單背景
+      const bg = this.add.rectangle(0, 0, width, height, 0x1a1a1a, 0.95);
+      bg.setStrokeStyle(3, 0xff6600);
+      this.editorPanel.add(bg);
+      
+      // 標題
+      const title = this.add.text(0, -height/2 + 30, '🔧 參數編輯器 (強制模式)', {
+        fontSize: '18px',
+        color: '#ffffff'
+      }).setOrigin(0.5);
+      this.editorPanel.add(title);
+      
+      // 說明
+      const info = this.add.text(0, -height/2 + 70, 
+        '編輯器已強制創建\n按Esc關閉\n完整功能請重新按F5', {
+        fontSize: '14px',
+        color: '#cccccc',
+        align: 'center'
+      }).setOrigin(0.5);
+      this.editorPanel.add(info);
+      
+      // 簡單的關閉監聽
+      const closeHandler = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+          this.closeParameterEditor();
+          this.input.keyboard?.off('keydown-ESC', closeHandler);
+        }
+      };
+      this.input.keyboard?.on('keydown-ESC', closeHandler);
+      
+      console.log('✅ 強制編輯器創建成功');
+      
+    } catch (error) {
+      console.error('❌ 強制創建編輯器也失敗了:', error);
+    }
   }
 }
