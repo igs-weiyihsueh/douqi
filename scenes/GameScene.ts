@@ -8571,6 +8571,9 @@ export class GameScene extends Phaser.Scene {
         console.log('🎮 1P UI覆蓋已顯示');
       }
       
+      // ★新增：隱藏原始P1頭頂UI
+      this.controlP1HeadUI(false);
+      
       // 隱藏測試背景
       if (this.testGraphicsBackground) {
         this.testGraphicsBackground.setVisible(false);
@@ -8594,6 +8597,9 @@ export class GameScene extends Phaser.Scene {
         this.characterUIOverlay.setVisible(false);
         console.log('🎮 1P UI覆蓋已隱藏');
       }
+      
+      // ★新增：恢復原始P1頭頂UI
+      this.controlP1HeadUI(true);
       
       if (this.testGraphicsBackground) {
         this.testGraphicsBackground.setVisible(false);
@@ -9090,5 +9096,52 @@ export class GameScene extends Phaser.Scene {
     });
     
     this.load.start();
+  }
+
+  /**
+   * ★P1頭頂UI控制方法
+   * 
+   * 控制UIScene中P1角色頭頂的overheadUI系統
+   * 包含時序安全檢查，確保UIScene和頭頂UI已準備就緒
+   * 
+   * @param visible - 目標可見性狀態
+   * @param retryCount - 重試計數，避免無限重試
+   */
+  private controlP1HeadUI(visible: boolean, retryCount = 0): void {
+    const maxRetries = 5;
+    
+    console.log(`🎯 [頭頂UI控制] 嘗試控制P1頭頂UI，visible=${visible}，重試=${retryCount}`);
+    
+    const uiScene = this.scene.get('UIScene') as any;
+    console.log('🎯 [頭頂UI控制] UIScene獲取結果:', !!uiScene);
+    
+    if (!uiScene) {
+      console.error('❌ [頭頂UI控制] 無法獲取UIScene引用');
+      return;
+    }
+    
+    console.log('🎯 [頭頂UI控制] setP1HeadUIVisible存在:', typeof uiScene.setP1HeadUIVisible);
+    
+    if (typeof uiScene.setP1HeadUIVisible === 'function') {
+      // 檢查P1的頭頂UI是否已經創建
+      const hasP1HeadUI = uiScene.overheadUIs && uiScene.overheadUIs.has(0);
+      console.log('🎯 [頭頂UI控制] P1頭頂UI已創建:', hasP1HeadUI);
+      
+      if (hasP1HeadUI) {
+        // P1頭頂UI已創建，可以安全調用
+        console.log('✅ [頭頂UI控制] P1頭頂UI已準備就緒，執行控制操作');
+        uiScene.setP1HeadUIVisible(visible);
+      } else if (retryCount < maxRetries) {
+        // P1頭頂UI尚未創建，延遲重試
+        console.log(`⏳ [頭頂UI控制] P1頭頂UI尚未創建，100ms後重試 (${retryCount + 1}/${maxRetries})`);
+        this.time.delayedCall(100, () => {
+          this.controlP1HeadUI(visible, retryCount + 1);
+        });
+      } else {
+        console.error('❌ [頭頂UI控制] 重試次數已達上限，P1頭頂UI控制失敗');
+      }
+    } else {
+      console.error('❌ [頭頂UI控制] setP1HeadUIVisible方法不存在');
+    }
   }
 }

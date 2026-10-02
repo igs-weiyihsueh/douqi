@@ -134,6 +134,9 @@ export class UIScene extends Phaser.Scene {
   private overheadUIs: Map<number, Phaser.GameObjects.Container> = new Map();
   private readonly OVERHEAD_DEPTH = 900;
   
+  // ★覆蓋模式控制標誌 - 防止updateStats()強制顯示P1頭頂UI
+  private isP1HeadUIHidden = false;
+  
   // ★頭上UI佈局常數：避免魔術數字
   private readonly OVERHEAD_UI_CONFIG = {
     // 編號牌配置 - 左側位置
@@ -635,7 +638,14 @@ export class UIScene extends Phaser.Scene {
       if (container && character.alive) {
         this.updateOverheadUI(character, container);
         this.updateOverheadUIContent(character, container, s); // ★新增：更新Credit和能量條
-        container.setVisible(true);
+        
+        // ★重要修復：在覆蓋模式下，跳過P1頭頂UI的強制顯示
+        if (charIndex === 0 && this.isP1HeadUIHidden) {
+          // P1頭頂UI處於覆蓋模式，保持隱藏狀態
+          console.log('🎯 [覆蓋模式] P1頭頂UI保持隱藏狀態');
+        } else {
+          container.setVisible(true);
+        }
       } else if (container) {
         container.setVisible(false);
       }
@@ -1557,5 +1567,32 @@ export class UIScene extends Phaser.Scene {
         console.log(`✨ [UIScene正式版] 閃光動畫完成`);
       }
     });
+  }
+
+  /**
+   * ★正確的P1頭頂UI控制方法
+   * 
+   * 控制角色頭頂的overheadUI系統（Credit顯示和能量條）
+   * 這是用戶看到的黃色"P1 61000"頭頂UI的正確控制方法
+   * 
+   * @param visible - true顯示P1頭頂UI，false隱藏P1頭頂UI
+   */
+  setP1HeadUIVisible(visible: boolean): void {
+    console.log(`🎯 [頭頂UI控制] setP1HeadUIVisible被調用，visible=${visible}`);
+    
+    // 設置覆蓋模式標誌，防止updateStats()干擾
+    this.isP1HeadUIHidden = !visible;
+    console.log(`🎯 [頭頂UI控制] 覆蓋模式設為: ${this.isP1HeadUIHidden}`);
+    
+    // 獲取P1的頭頂UI容器 (P1索引為0)
+    const p1Container = this.overheadUIs.get(0);
+    
+    if (p1Container) {
+      p1Container.setVisible(visible);
+      console.log(`✅ [頭頂UI控制] P1頭頂UI已設置為: ${visible ? '顯示' : '隱藏'}`);
+    } else {
+      console.warn('⚠️ [頭頂UI控制] P1頭頂UI容器不存在，可能尚未創建');
+      console.log(`🎯 [頭頂UI控制] 當前overheadUIs大小: ${this.overheadUIs.size}`);
+    }
   }
 }
