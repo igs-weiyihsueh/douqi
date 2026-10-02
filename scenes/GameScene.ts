@@ -421,9 +421,8 @@ export class GameScene extends Phaser.Scene {
       this.quitToTitle();
     });
 
-    // ★F4 鍵：切換背景圖 (Scene.png 開關) - 添加除錯信息
+    // ★F4 鍵：切換背景圖 (Scene.png 開關)
     this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.F4).on('down', () => {
-      console.log('🔥 F4鍵被按下！開始執行toggleSceneBackground');
       this.toggleSceneBackground();
     });
 
@@ -8407,50 +8406,22 @@ export class GameScene extends Phaser.Scene {
    * - 頭上UI：depth=200-2000 (完全不被遮擋)
    */
   private toggleSceneBackground(): void {
-    // ★診斷信息：場景重載後的狀態
-    console.log('🔥 toggleSceneBackground開始執行');
-    console.log(`  ✓ sceneBackground對象: ${this.sceneBackground ? '存在' : 'null'}`);
-    console.log(`  ✓ isNewSceneActive狀態: ${this.isNewSceneActive}`);
-    console.log(`  ✓ scene-background紋理: ${this.textures.exists('scene-background') ? '存在' : '不存在'}`);
-    
-    // ★簡化LOG：只保留3個關鍵診斷訊息
-    console.log('🎯 F4按鍵觸發 - 場景切換開始 (熱鍵已改為F4)');
-    
     if (!this.sceneBackground) {
       console.warn('⚠️ 場景背景圖片不可用，無法切換');
       
       // 嘗試立即創建Scene.png背景作為修復
       if (this.textures.exists('scene-background')) {
-        console.log('🔧 嘗試立即創建Scene.png背景...');
         const gameArea = this.calculateGameArea();
         this.sceneBackground = this.add.image(gameArea.centerX, gameArea.centerY, 'scene-background')
           .setOrigin(0.5, 0.5)  // 中心對齊
           .setDepth(1)          // 深度1：覆蓋地面圖片但不遮擋遊戲元素
           .setVisible(false)
           .setScrollFactor(0);  // ★保持原始尺寸，不縮放
-        console.log('✅ Scene.png背景已重新創建');
       } else {
         console.error('❌ scene-background紋理不存在，無法創建背景');
       }
       
       return;
-    }
-
-    // ★關鍵診斷1：Scene.png載入狀態詳細檢查
-    const sceneTextureExists = this.textures.exists('scene-background');
-    let sceneTextureLoaded = false;
-    if (sceneTextureExists) {
-      const texture = this.textures.get('scene-background');
-      sceneTextureLoaded = texture && texture.key !== '__MISSING';
-    }
-    console.log('🖼️ Scene.png詳細狀態:');
-    console.log(`  ✓ 紋理存在: ${sceneTextureExists}`);
-    console.log(`  ✓ 圖片載入完成: ${sceneTextureLoaded}`);
-    console.log(`  ✓ 背景物件存在: ${!!this.sceneBackground}`);
-    if (this.sceneBackground) {
-      console.log(`  ✓ 背景物件visible: ${this.sceneBackground.visible}`);
-      console.log(`  ✓ 背景物件depth: ${this.sceneBackground.depth}`);
-      console.log(`  ✓ 背景物件alpha: ${this.sceneBackground.alpha}`);
     }
 
     // 切換狀態
@@ -8460,7 +8431,7 @@ export class GameScene extends Phaser.Scene {
       // 顯示新場景背景 - 以Scene.png為主
       console.log('🔍 Scene.png顯示邏輯檢查:');
       
-      if (this.sceneBackground && sceneTextureLoaded) {
+      if (this.sceneBackground) {
         // 設置Scene.png深度為1，覆蓋地面圖片但不遮擋遊戲元素
         console.log('✅ Scene.png載入成功，設置顯示屬性:');
         this.sceneBackground.setVisible(true);
