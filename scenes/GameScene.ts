@@ -9331,8 +9331,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateSliderHighlight(): void {
+    console.log(`🔆 更新滑條高亮，選中索引: ${this.selectedSlider}, 總數: ${this.editorSliders.length}`);
+    
     this.editorSliders.forEach((slider, index) => {
-      if (index === this.selectedSlider) {
+      const isSelected = index === this.selectedSlider;
+      console.log(`  滑條 ${index} (${slider.name}): ${isSelected ? '選中' : '未選中'}`);
+      
+      if (isSelected) {
         slider.label.setColor('#ffff00'); // 黃色高亮
         slider.slider.setFillStyle(0xffaa00); // 橙色滑條
       } else {
@@ -9340,62 +9345,129 @@ export class GameScene extends Phaser.Scene {
         slider.slider.setFillStyle(0x4a9eff); // 藍色滑條
       }
     });
+    
+    console.log('✅ 滑條高亮更新完成');
   }
 
   private setupEditorControls(): void {
+    console.log('⌨️ 開始設置編輯器鍵盤控制...');
+    
+    // 先清除可能存在的舊監聽器
+    this.clearEditorControls();
+    
     // 方向鍵控制
     this.input.keyboard?.on('keydown-UP', (event: KeyboardEvent) => {
-      if (!this.editorActive) return;
+      if (!this.editorActive || !this.editorPanel) {
+        console.log('🚫 UP鍵被忽略：編輯器未激活');
+        return;
+      }
       event.preventDefault();
+      event.stopPropagation();
+      console.log('⬆️ UP鍵被按下，當前選中:', this.selectedSlider);
       this.selectedSlider = Math.max(0, this.selectedSlider - 1);
+      console.log('⬆️ 新選中:', this.selectedSlider);
       this.updateSliderHighlight();
     });
 
     this.input.keyboard?.on('keydown-DOWN', (event: KeyboardEvent) => {
-      if (!this.editorActive) return;
+      if (!this.editorActive || !this.editorPanel) {
+        console.log('🚫 DOWN鍵被忽略：編輯器未激活');
+        return;
+      }
       event.preventDefault();
+      event.stopPropagation();
+      console.log('⬇️ DOWN鍵被按下，當前選中:', this.selectedSlider);
       this.selectedSlider = Math.min(this.editorSliders.length - 1, this.selectedSlider + 1);
+      console.log('⬇️ 新選中:', this.selectedSlider);
       this.updateSliderHighlight();
     });
 
     // 左右鍵調整數值
     this.input.keyboard?.on('keydown-LEFT', (event: KeyboardEvent) => {
-      if (!this.editorActive) return;
+      if (!this.editorActive || !this.editorPanel) {
+        console.log('🚫 LEFT鍵被忽略：編輯器未激活');
+        return;
+      }
       event.preventDefault();
+      event.stopPropagation();
+      console.log('⬅️ LEFT鍵被按下，準備減少數值');
       this.adjustSelectedParameter(-1);
     });
 
     this.input.keyboard?.on('keydown-RIGHT', (event: KeyboardEvent) => {
-      if (!this.editorActive) return;
+      if (!this.editorActive || !this.editorPanel) {
+        console.log('🚫 RIGHT鍵被忽略：編輯器未激活');
+        return;
+      }
       event.preventDefault();
+      event.stopPropagation();
+      console.log('➡️ RIGHT鍵被按下，準備增加數值');
       this.adjustSelectedParameter(1);
     });
 
     // Enter保存，Esc取消
     this.input.keyboard?.on('keydown-ENTER', (event: KeyboardEvent) => {
-      if (!this.editorActive) return;
+      if (!this.editorActive || !this.editorPanel) {
+        console.log('🚫 ENTER鍵被忽略：編輯器未激活');
+        return;
+      }
       event.preventDefault();
+      event.stopPropagation();
+      console.log('✅ ENTER鍵被按下，準備保存參數');
       this.saveParameters();
     });
 
     this.input.keyboard?.on('keydown-ESC', (event: KeyboardEvent) => {
-      if (!this.editorActive) return;
+      if (!this.editorActive || !this.editorPanel) {
+        console.log('🚫 ESC鍵被忽略：編輯器未激活');
+        return;
+      }
       event.preventDefault();
+      event.stopPropagation();
+      console.log('❌ ESC鍵被按下，準備取消編輯');
       this.cancelParameters();
     });
 
-    console.log('⌨️ 編輯器鍵盤控制已啟用，包含preventDefault防護');
+    console.log('⌨️ 編輯器鍵盤控制已啟用，包含詳細日誌和事件保護');
+    console.log(`📊 當前滑條數量: ${this.editorSliders.length}`);
+    console.log(`🎯 當前選中滑條: ${this.selectedSlider}`);
+  }
+
+  private clearEditorControls(): void {
+    // 清除編輯器相關的鍵盤監聽
+    this.input.keyboard?.off('keydown-UP');
+    this.input.keyboard?.off('keydown-DOWN');
+    this.input.keyboard?.off('keydown-LEFT');
+    this.input.keyboard?.off('keydown-RIGHT');
+    this.input.keyboard?.off('keydown-ENTER');
+    this.input.keyboard?.off('keydown-ESC');
+    console.log('🧹 舊的鍵盤監聽器已清除');
   }
 
   private adjustSelectedParameter(direction: number): void {
+    console.log(`🔧 adjustSelectedParameter被調用，方向: ${direction}, 當前選中: ${this.selectedSlider}`);
+    
     const slider = this.editorSliders[this.selectedSlider];
-    if (!slider) return;
+    if (!slider) {
+      console.error('❌ 無法找到當前選中的滑條');
+      return;
+    }
 
+    console.log(`📊 當前滑條信息: ${slider.name}, 值: ${slider.value}, 範圍: ${slider.min}-${slider.max}, 步進: ${slider.step}`);
+
+    const oldValue = slider.value;
     const newValue = Phaser.Math.Clamp(
       slider.value + (direction * slider.step),
       slider.min,
       slider.max
     );
+
+    console.log(`🔄 值變更: ${oldValue} → ${newValue}`);
+
+    if (oldValue === newValue) {
+      console.log('⚠️ 值未變更（已達到邊界值）');
+      return;
+    }
 
     slider.value = newValue;
     slider.valueText.setText(newValue.toString());
@@ -9405,8 +9477,15 @@ export class GameScene extends Phaser.Scene {
     const handleX = -200 + progress * 200;
     (slider.handle as any).x = -100 + handleX;
 
+    console.log(`📈 滑條UI更新：進度 ${(progress * 100).toFixed(1)}%, 手柄位置 ${handleX.toFixed(1)}`);
+
     // 即時應用參數
-    this.applyParameterChanges(this.selectedSlider, newValue);
+    try {
+      this.applyParameterChanges(this.selectedSlider, newValue);
+      console.log('✅ 參數變更已應用');
+    } catch (error) {
+      console.error('❌ 應用參數變更失敗:', error);
+    }
   }
 
   private applyParameterChanges(index: number, value: number): void {
@@ -9524,13 +9603,8 @@ export class GameScene extends Phaser.Scene {
     this.editorSliders = [];
     this.selectedSlider = 0;
     
-    // 清除編輯器相關的鍵盤監聽
-    this.input.keyboard?.off('keydown-UP');
-    this.input.keyboard?.off('keydown-DOWN');
-    this.input.keyboard?.off('keydown-LEFT');
-    this.input.keyboard?.off('keydown-RIGHT');
-    this.input.keyboard?.off('keydown-ENTER');
-    this.input.keyboard?.off('keydown-ESC');
+    // 使用新的清理方法
+    this.clearEditorControls();
     
     // 確保按鈕可見（如果編輯器關閉，按鈕應該可用）
     if (this.editorButton) {
