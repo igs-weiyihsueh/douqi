@@ -421,16 +421,6 @@ export class GameScene extends Phaser.Scene {
       this.quitToTitle();
     });
 
-    // ★F4 鍵：切換背景圖 (Scene.png 開關)
-    this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.F4).on('down', () => {
-      this.toggleSceneBackground();
-    });
-
-    // ★F2 鍵：強制重載 Scene.png
-    this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.F2).on('down', () => {
-      this.forceReloadSceneBackground();
-    });
-
     // ★除錯熱鍵 [ / ] :切換預覽關卡場景(1-4),即時重繪當前子區地貌+遠景(給看 4 關對比用)。
     if (this.levelMode) {
       this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.OPEN_BRACKET).on('down', () => {
@@ -493,7 +483,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private resetState(): void {
-    // ★背景切換狀態重置
+    // ★背景切換狀態重置 - 修復ESC回主菜單後F4失效問題
     this.sceneBackground = null;
     this.isNewSceneActive = false;
     
@@ -8326,18 +8316,8 @@ export class GameScene extends Phaser.Scene {
   private initSceneBackground(): void {
     // 創建新場景背景圖（預設隱藏）
     if (this.textures.exists('scene-background')) {
-      // 先獲取遊戲世界尺寸資訊
-      const worldBounds = this.physics.world.bounds;
-      const cameraBounds = this.cameras.main.getBounds();
-      
-      console.log('🌍 世界和相機資訊：');
-      console.log(`  世界範圍：(${worldBounds.x}, ${worldBounds.y}) ${worldBounds.width}×${worldBounds.height}`);
-      console.log(`  相機範圍：(${cameraBounds.x}, ${cameraBounds.y}) ${cameraBounds.width}×${cameraBounds.height}`);
-      console.log(`  遊戲配置尺寸：${GameConfig.width} × ${GameConfig.height}`);
-      
       // 動態計算Scene.png的覆蓋區域
       const gameArea = this.calculateGameArea();
-      console.log('🖼️ Scene.png覆蓋區域:', gameArea);
       
       // 創建場景背景，保持原始尺寸不縮放
       this.sceneBackground = this.add.image(gameArea.centerX, gameArea.centerY, 'scene-background')
@@ -8347,15 +8327,7 @@ export class GameScene extends Phaser.Scene {
         .setScrollFactor(0);    // ★關鍵：固定不隨相機移動，像UI一樣
         // ★移除setDisplaySize以保持原始尺寸，不因邊界調整而縮放
       
-      // 詳細創建資訊
-      console.log('🖼️ 新場景背景已創建：');
-      console.log(`  紋理：${this.sceneBackground.texture.key}`);
-      console.log(`  位置：(${this.sceneBackground.x}, ${this.sceneBackground.y})`);
-      console.log(`  原始尺寸：${this.sceneBackground.width} × ${this.sceneBackground.height}`);
-      console.log(`  顯示尺寸：${this.sceneBackground.displayWidth} × ${this.sceneBackground.displayHeight}`);
-      console.log(`  深度：${this.sceneBackground.depth}`);
-      console.log(`  可見：${this.sceneBackground.visible}`);
-      console.log(`  alpha：${this.sceneBackground.alpha}`);
+      // 場景背景已創建
       
     } else {
       console.warn('⚠️ 場景背景圖片不存在：scene-background');
@@ -8382,7 +8354,15 @@ export class GameScene extends Phaser.Scene {
     
     console.log('🎨 Graphics測試背景已創建：紫紅色 (depth=-9, hidden)');
 
-    // Graphics測試背景現在由F4/F2鍵控制，已移至create()方法的鍵盤綁定區
+    // F4熱鍵監聽 (改為F4避免與瀏覽器F1快捷鍵衝突)
+    this.input.keyboard?.on('keydown-F4', () => {
+      this.toggleSceneBackground();
+    });
+    
+    // ★新增：F2鍵強制重載Scene.png
+    this.input.keyboard?.on('keydown-F2', () => {
+      this.forceReloadSceneBackground();
+    });
     
     console.log('⌨️ F1熱鍵監聽器已設置');
     console.log('⌨️ F2強制重載已設置');
@@ -8406,22 +8386,44 @@ export class GameScene extends Phaser.Scene {
    * - 頭上UI：depth=200-2000 (完全不被遮擋)
    */
   private toggleSceneBackground(): void {
+    // ★簡化LOG：只保留3個關鍵診斷訊息
+    console.log('🎯 F4按鍵觸發 - 場景切換開始 (熱鍵已改為F4)');
+    
     if (!this.sceneBackground) {
       console.warn('⚠️ 場景背景圖片不可用，無法切換');
       
       // 嘗試立即創建Scene.png背景作為修復
       if (this.textures.exists('scene-background')) {
+        console.log('🔧 嘗試立即創建Scene.png背景...');
         const gameArea = this.calculateGameArea();
         this.sceneBackground = this.add.image(gameArea.centerX, gameArea.centerY, 'scene-background')
           .setOrigin(0.5, 0.5)  // 中心對齊
           .setDepth(1)          // 深度1：覆蓋地面圖片但不遮擋遊戲元素
           .setVisible(false)
           .setScrollFactor(0);  // ★保持原始尺寸，不縮放
+        console.log('✅ Scene.png背景已重新創建');
       } else {
         console.error('❌ scene-background紋理不存在，無法創建背景');
       }
       
       return;
+    }
+
+    // ★關鍵診斷1：Scene.png載入狀態詳細檢查
+    const sceneTextureExists = this.textures.exists('scene-background');
+    let sceneTextureLoaded = false;
+    if (sceneTextureExists) {
+      const texture = this.textures.get('scene-background');
+      sceneTextureLoaded = texture && texture.key !== '__MISSING';
+    }
+    console.log('🖼️ Scene.png詳細狀態:');
+    console.log(`  ✓ 紋理存在: ${sceneTextureExists}`);
+    console.log(`  ✓ 圖片載入完成: ${sceneTextureLoaded}`);
+    console.log(`  ✓ 背景物件存在: ${!!this.sceneBackground}`);
+    if (this.sceneBackground) {
+      console.log(`  ✓ 背景物件visible: ${this.sceneBackground.visible}`);
+      console.log(`  ✓ 背景物件depth: ${this.sceneBackground.depth}`);
+      console.log(`  ✓ 背景物件alpha: ${this.sceneBackground.alpha}`);
     }
 
     // 切換狀態
@@ -8431,7 +8433,7 @@ export class GameScene extends Phaser.Scene {
       // 顯示新場景背景 - 以Scene.png為主
       console.log('🔍 Scene.png顯示邏輯檢查:');
       
-      if (this.sceneBackground) {
+      if (this.sceneBackground && sceneTextureLoaded) {
         // 設置Scene.png深度為1，覆蓋地面圖片但不遮擋遊戲元素
         console.log('✅ Scene.png載入成功，設置顯示屬性:');
         this.sceneBackground.setVisible(true);
