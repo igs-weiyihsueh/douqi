@@ -9005,6 +9005,8 @@ export class GameScene extends Phaser.Scene {
       // 主按鈕容器
       this.editorButton = this.add.container(x, y);
       this.editorButton.setDepth(999); // 高深度確保在UI最上層
+      this.editorButton.setScrollFactor(0); // 固定在畫面上，不隨相機移動
+      this.editorButton.setVisible(true); // 確保按鈕初始可見
       
       // 按鈕背景
       const buttonBg = this.add.rectangle(0, 0, buttonWidth, buttonHeight, 0x4a9eff, 0.9);
@@ -9049,6 +9051,8 @@ export class GameScene extends Phaser.Scene {
       
       console.log('✅ 參數編輯器UI按鈕創建成功');
       console.log(`📍 按鈕位置: (${x}, ${y}), 尺寸: ${buttonWidth}×${buttonHeight}`);
+      console.log('🔒 按鈕已設置固定位置 (scrollFactor=0)');
+      console.log('👁️ 按鈕初始狀態: 可見');
       
     } catch (error) {
       console.error('❌ 創建參數編輯器按鈕失敗:', error);
@@ -9157,6 +9161,7 @@ export class GameScene extends Phaser.Scene {
       // 主容器
       this.editorPanel = this.add.container(x, y);
       this.editorPanel.setDepth(1000); // 最高深度確保在最上層
+      this.editorPanel.setScrollFactor(0); // 固定在畫面上，不隨相機移動
       console.log('✅ 主容器創建成功');
 
       // 背景面板
