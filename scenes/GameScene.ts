@@ -8293,7 +8293,7 @@ export class GameScene extends Phaser.Scene {
       this.sceneBackground = this.add.image(gameArea.x, gameArea.y, 'scene-background')
         .setOrigin(0, 0)        // 左上角對齊
         .setDisplaySize(gameArea.width, gameArea.height)  // 縮放到覆蓋完整遊戲區域
-        .setDepth(-2)          // 調整到-2，確保覆蓋原背景系統
+        .setDepth(3)            // 調整到3，確保覆蓋地面圖片depth=0
         .setVisible(false)      // 預設隱藏
         .setScrollFactor(0);    // ★關鍵：固定不隨相機移動，像UI一樣
       
@@ -8314,7 +8314,7 @@ export class GameScene extends Phaser.Scene {
     // ★新增：創建Graphics測試背景（純色）
     this.testGraphicsBackground = this.add.graphics()
       .fillStyle(0xFF00FF, 1)  // 超鮮豔紫紅色
-      .setDepth(-4)            // 調整到-4，覆蓋原背景系統(-3,-2,-1)
+      .setDepth(1)             // 調整到1，覆蓋地面圖片depth=0
       .setScrollFactor(0)      // 固定不移動
       .setVisible(false);      // 預設隐藏
     
@@ -8506,7 +8506,7 @@ export class GameScene extends Phaser.Scene {
       console.log('🎨 替代方案測試:');
       const gameArea = this.calculateGameArea();
       const coloredRect = this.add.rectangle(gameArea.centerX, gameArea.centerY, gameArea.width, gameArea.height, 0xFF0000); // 紅色矩形
-      coloredRect.setDepth(-3);  // 調整到-3，確保覆蓋原背景系統
+      coloredRect.setDepth(2);  // 調整到2，確保覆蓋地面圖片depth=0
       coloredRect.setVisible(false); // 預設隱藏
       const rectBounds = (coloredRect as any).getBounds();
       console.log('✓ Rectangle方案bounds:', rectBounds?.width || 'failed', 'x', rectBounds?.height || 'failed');
@@ -8848,7 +8848,7 @@ export class GameScene extends Phaser.Scene {
       // 重新創建背景物件
       this.sceneBackground = this.add.image(0, 0, 'scene-background-new')
         .setOrigin(0, 0)
-        .setDepth(-2)
+        .setDepth(3)  // 調整到3，確保覆蓋地面圖片depth=0
         .setVisible(this.isNewSceneActive)
         .setScrollFactor(0)
         .setDisplaySize(GameConfig.width, GameConfig.height);
