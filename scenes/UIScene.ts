@@ -1626,16 +1626,25 @@ export class UIScene extends Phaser.Scene {
       const w = GameConfig.width;
       const h = GameConfig.height;
       
-      // 創建底部面板覆蓋，定位在畫面底部中央
-      this.bottomPanelOverlay = this.add.image(w / 2, h - 50, 'bottom-panel-overlay')
-        .setOrigin(0.5, 0.5)
-        .setDepth(1000)  // 高深度確保在原始面板之上
-        .setVisible(false)
-        .setScrollFactor(0);  // 固定位置，不隨相機移動
-      
-      console.log(`🎮 底部面板覆蓋已創建：1P.png在位置(${w / 2}, ${h - 50}) (depth=1000, hidden)`);
+      // 檢查紋理是否成功載入
+      const texture = this.textures.get('bottom-panel-overlay');
+      if (texture && texture.key !== '__MISSING') {
+        // 創建底部面板覆蓋，定位在畫面底部中央
+        this.bottomPanelOverlay = this.add.image(w / 2, h - 50, 'bottom-panel-overlay')
+          .setOrigin(0.5, 0.5)
+          .setDepth(1000)  // 高深度確保在原始面板之上
+          .setVisible(false)
+          .setScrollFactor(0);  // 固定位置，不隨相機移動
+        
+        console.log(`✅ [底部面板] 底部面板覆蓋已創建：1P.png在位置(${w / 2}, ${h - 50}) (depth=1000, hidden)`);
+      } else {
+        console.error('❌ [底部面板] 1P.png紋理載入失敗或損壞');
+        this.bottomPanelOverlay = null;
+      }
     } else {
-      console.warn('⚠️ 底部面板覆蓋資源不存在：bottom-panel-overlay (1P.png)');
+      console.warn('⚠️ [底部面板] 底部面板覆蓋資源不存在：1P.png');
+      console.log('💡 [底部面板] 請將1P.png文件放入public/assets/目錄');
+      this.bottomPanelOverlay = null;
     }
   }
 
@@ -1654,19 +1663,26 @@ export class UIScene extends Phaser.Scene {
     console.log(`🔧 [底部面板] 覆蓋模式設為: ${this.isBottomPanelOverlayMode}`);
     
     if (useOverlay) {
-      // 顯示1P.png覆蓋
+      // 檢查1P.png覆蓋是否可用
       if (this.bottomPanelOverlay) {
         this.bottomPanelOverlay.setVisible(true);
         console.log('✅ [底部面板] 1P.png覆蓋已顯示');
+        
+        // 只有當覆蓋圖片可用時才隱藏原始面板
+        if (this.rows && this.rows.length > 0) {
+          const p1Panel = this.rows[0];
+          this.setRowPanelVisible(p1Panel, false);
+          console.log('🔒 [底部面板] 原始P1底部面板已隱藏');
+        }
       } else {
-        console.warn('⚠️ [底部面板] 1P.png覆蓋不存在');
-      }
-      
-      // 隱藏原始底部面板 (rows[0] = P1面板)
-      if (this.rows && this.rows.length > 0) {
-        const p1Panel = this.rows[0];
-        this.setRowPanelVisible(p1Panel, false);
-        console.log('🔒 [底部面板] 原始P1底部面板已隱藏');
+        console.warn('⚠️ [底部面板] 1P.png覆蓋不存在，保持原始面板顯示');
+        
+        // 如果沒有覆蓋圖片，保持原始面板顯示
+        if (this.rows && this.rows.length > 0) {
+          const p1Panel = this.rows[0];
+          this.setRowPanelVisible(p1Panel, true);
+          console.log('✅ [底部面板] 保持原始P1底部面板顯示（覆蓋圖片不存在）');
+        }
       }
     } else {
       // 隱藏1P.png覆蓋
