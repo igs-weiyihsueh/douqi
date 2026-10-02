@@ -9205,16 +9205,20 @@ export class GameScene extends Phaser.Scene {
 
       // 說明文字
       const instructions = this.add.text(0, -height/2 + 60, 
-        '↑↓ 選擇參數  ←→ 調整數值  Enter 保存  Esc 取消', {
-        fontSize: '14px',
+        '🖱️ 滑鼠: 點擊選擇、拖拽調整、點擊+/-微調\n⌨️ 鍵盤: ↑↓選擇 ←→調整 Enter保存 Esc取消', {
+        fontSize: '13px',
         color: '#cccccc',
-        fontFamily: 'Arial'
+        fontFamily: 'Arial',
+        align: 'center'
       }).setOrigin(0.5);
       this.editorPanel.add(instructions);
       console.log('✅ 說明文字創建成功');
 
       // 創建參數滑條
       this.createParameterSliders();
+      
+      // 添加保存和取消按鈕
+      this.createEditorButtons();
       
       console.log('🎉 編輯器面板創建完成');
     } catch (error) {
@@ -9282,26 +9286,72 @@ export class GameScene extends Phaser.Scene {
     parameters.forEach((param, index) => {
       const y = startY + index * spacing;
       
-      // 參數標籤
+      // 參數標籤（可點擊選擇）
       const label = this.add.text(-250, y - 15, param.name, {
         fontSize: '16px',
         color: '#ffffff',
         fontFamily: 'Arial'
       });
+      label.setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => {
+          console.log(`🖱️ 點擊選擇參數: ${param.name} (索引 ${index})`);
+          this.selectedSlider = index;
+          this.updateSliderHighlight();
+        })
+        .on('pointerover', () => {
+          if (this.selectedSlider !== index) {
+            label.setColor('#cccccc'); // 懸停提示
+          }
+        })
+        .on('pointerout', () => {
+          if (this.selectedSlider !== index) {
+            label.setColor('#ffffff'); // 恢復顏色
+          }
+        });
       this.editorPanel!.add(label);
       
-      // 滑條背景
-      const sliderBg = this.add.rectangle(-100, y, 200, 8, 0x333333);
+      // 滑條背景（可點擊快速設定值）
+      const sliderBg = this.add.rectangle(-100, y, 200, 12, 0x333333);
+      sliderBg.setInteractive({ useHandCursor: true })
+        .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+          this.handleSliderClick(index, pointer, y);
+        });
       this.editorPanel!.add(sliderBg);
       
       // 滑條前景
-      const slider = this.add.rectangle(-100, y, 200, 8, 0x4a9eff);
+      const slider = this.add.rectangle(-100, y, 200, 12, 0x4a9eff);
       this.editorPanel!.add(slider);
       
-      // 滑條手柄
+      // 滑條手柄（可拖拽）
       const progress = (param.current - param.min) / (param.max - param.min);
       const handleX = -200 + progress * 200;
-      const handle = this.add.circle(-100 + handleX, y, 8, 0xffffff);
+      const handle = this.add.circle(-100 + handleX, y, 10, 0xffffff);
+      handle.setStrokeStyle(2, 0x4a9eff);
+      handle.setInteractive({ 
+        useHandCursor: true,
+        draggable: true 
+      })
+        .on('dragstart', () => {
+          console.log(`🖱️ 開始拖拽參數: ${param.name}`);
+          this.selectedSlider = index;
+          this.updateSliderHighlight();
+          handle.setScale(1.2); // 拖拽時放大
+        })
+        .on('drag', (pointer: Phaser.Input.Pointer) => {
+          this.handleSliderDrag(index, pointer, handle);
+        })
+        .on('dragend', () => {
+          console.log(`🖱️ 結束拖拽參數: ${param.name}`);
+          handle.setScale(1.0); // 恢復大小
+        })
+        .on('pointerover', () => {
+          handle.setScale(1.1); // 懸停放大
+        })
+        .on('pointerout', () => {
+          if (!this.input.activePointer.isDown) {
+            handle.setScale(1.0); // 恢復大小
+          }
+        });
       this.editorPanel!.add(handle);
       
       // 數值顯示
@@ -9311,6 +9361,46 @@ export class GameScene extends Phaser.Scene {
         fontFamily: 'Arial'
       });
       this.editorPanel!.add(valueText);
+      
+      // 減少按鈕（-）
+      const decreaseBtn = this.add.text(100, y, '−', {
+        fontSize: '20px',
+        color: '#ffffff',
+        fontFamily: 'Arial'
+      }).setOrigin(0.5);
+      decreaseBtn.setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => {
+          console.log(`🖱️ 點擊減少按鈕: ${param.name}`);
+          this.selectedSlider = index;
+          this.adjustSelectedParameter(-1);
+        })
+        .on('pointerover', () => {
+          decreaseBtn.setColor('#ff6666'); // 懸停變紅
+        })
+        .on('pointerout', () => {
+          decreaseBtn.setColor('#ffffff'); // 恢復白色
+        });
+      this.editorPanel!.add(decreaseBtn);
+      
+      // 增加按鈕（+）
+      const increaseBtn = this.add.text(130, y, '＋', {
+        fontSize: '20px',
+        color: '#ffffff',
+        fontFamily: 'Arial'
+      }).setOrigin(0.5);
+      increaseBtn.setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => {
+          console.log(`🖱️ 點擊增加按鈕: ${param.name}`);
+          this.selectedSlider = index;
+          this.adjustSelectedParameter(1);
+        })
+        .on('pointerover', () => {
+          increaseBtn.setColor('#66ff66'); // 懸停變綠
+        })
+        .on('pointerout', () => {
+          increaseBtn.setColor('#ffffff'); // 恢復白色
+        });
+      this.editorPanel!.add(increaseBtn);
 
       this.editorSliders.push({
         name: param.name,
@@ -9328,6 +9418,83 @@ export class GameScene extends Phaser.Scene {
 
     // 高亮第一個滑條
     this.updateSliderHighlight();
+    
+    console.log('🎚️ 參數滑條創建完成，包含滑鼠交互功能');
+    console.log('🖱️ 滑鼠操作說明:');
+    console.log('  - 點擊標籤選擇參數');
+    console.log('  - 拖拽手柄調整數值');
+    console.log('  - 點擊滑條背景快速設定');
+    console.log('  - 點擊+/-按鈕微調數值');
+  }
+
+  private createEditorButtons(): void {
+    const buttonY = 200;
+    const buttonWidth = 120;
+    const buttonHeight = 35;
+    
+    // 保存按鈕
+    const saveBtn = this.add.container(-80, buttonY);
+    const saveBg = this.add.rectangle(0, 0, buttonWidth, buttonHeight, 0x4ade80, 0.9);
+    saveBg.setStrokeStyle(2, 0xffffff, 0.8);
+    const saveText = this.add.text(0, 0, '💾 保存', {
+      fontSize: '16px',
+      color: '#ffffff',
+      fontFamily: 'Arial'
+    }).setOrigin(0.5);
+    
+    saveBtn.add([saveBg, saveText]);
+    saveBtn.setSize(buttonWidth, buttonHeight)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerover', () => {
+        saveBg.setFillStyle(0x5af296, 0.95);
+        saveText.setScale(1.05);
+      })
+      .on('pointerout', () => {
+        saveBg.setFillStyle(0x4ade80, 0.9);
+        saveText.setScale(1.0);
+      })
+      .on('pointerdown', () => {
+        saveBg.setFillStyle(0x38c26a, 1.0);
+        saveText.setScale(0.95);
+        console.log('🖱️ 點擊保存按鈕');
+        setTimeout(() => {
+          this.saveParameters();
+        }, 100);
+      });
+    this.editorPanel!.add(saveBtn);
+    
+    // 取消按鈕
+    const cancelBtn = this.add.container(80, buttonY);
+    const cancelBg = this.add.rectangle(0, 0, buttonWidth, buttonHeight, 0xff6b81, 0.9);
+    cancelBg.setStrokeStyle(2, 0xffffff, 0.8);
+    const cancelText = this.add.text(0, 0, '❌ 取消', {
+      fontSize: '16px',
+      color: '#ffffff',
+      fontFamily: 'Arial'
+    }).setOrigin(0.5);
+    
+    cancelBtn.add([cancelBg, cancelText]);
+    cancelBtn.setSize(buttonWidth, buttonHeight)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerover', () => {
+        cancelBg.setFillStyle(0xff8aa0, 0.95);
+        cancelText.setScale(1.05);
+      })
+      .on('pointerout', () => {
+        cancelBg.setFillStyle(0xff6b81, 0.9);
+        cancelText.setScale(1.0);
+      })
+      .on('pointerdown', () => {
+        cancelBg.setFillStyle(0xe54c62, 1.0);
+        cancelText.setScale(0.95);
+        console.log('🖱️ 點擊取消按鈕');
+        setTimeout(() => {
+          this.cancelParameters();
+        }, 100);
+      });
+    this.editorPanel!.add(cancelBtn);
+    
+    console.log('🔘 編輯器操作按鈕創建完成');
   }
 
   private updateSliderHighlight(): void {
@@ -9444,6 +9611,89 @@ export class GameScene extends Phaser.Scene {
     console.log('🧹 舊的鍵盤監聽器已清除');
   }
 
+  private handleSliderClick(index: number, pointer: Phaser.Input.Pointer, _sliderY: number): void {
+    console.log(`🖱️ 滑條點擊處理: 參數索引 ${index}`);
+    
+    // 選中該滑條
+    this.selectedSlider = index;
+    this.updateSliderHighlight();
+    
+    const slider = this.editorSliders[index];
+    if (!slider) return;
+    
+    // 計算點擊位置對應的值
+    const sliderStartX = -200; // 滑條起始X座標
+    const sliderWidth = 200;   // 滑條寬度
+    
+    // 獲取相對於滑條的點擊位置
+    const relativeX = pointer.worldX - (this.editorPanel!.x + sliderStartX);
+    const progress = Phaser.Math.Clamp(relativeX / sliderWidth, 0, 1);
+    
+    // 計算新數值
+    const rawValue = slider.min + (slider.max - slider.min) * progress;
+    const steppedValue = Math.round(rawValue / slider.step) * slider.step;
+    const clampedValue = Phaser.Math.Clamp(steppedValue, slider.min, slider.max);
+    
+    console.log(`🎯 滑條點擊位置: ${relativeX.toFixed(1)}px, 進度: ${(progress * 100).toFixed(1)}%`);
+    console.log(`🔢 計算數值: ${rawValue.toFixed(1)} → ${steppedValue} → ${clampedValue}`);
+    
+    // 更新數值
+    this.updateSliderValue(index, clampedValue);
+  }
+
+  private handleSliderDrag(index: number, pointer: Phaser.Input.Pointer, handle: Phaser.GameObjects.GameObject): void {
+    const slider = this.editorSliders[index];
+    if (!slider) return;
+    
+    // 計算拖拽位置對應的值
+    const sliderStartX = -200;
+    const sliderWidth = 200;
+    
+    // 限制手柄在滑條範圍內
+    const relativeX = pointer.worldX - (this.editorPanel!.x + sliderStartX);
+    const clampedX = Phaser.Math.Clamp(relativeX, 0, sliderWidth);
+    const progress = clampedX / sliderWidth;
+    
+    // 計算新數值
+    const rawValue = slider.min + (slider.max - slider.min) * progress;
+    const steppedValue = Math.round(rawValue / slider.step) * slider.step;
+    const clampedValue = Phaser.Math.Clamp(steppedValue, slider.min, slider.max);
+    
+    // 更新手柄位置（基於實際數值，確保對齊步進）
+    const actualProgress = (clampedValue - slider.min) / (slider.max - slider.min);
+    const actualX = sliderStartX + actualProgress * sliderWidth;
+    (handle as any).x = actualX;
+    
+    // 更新數值（只在值實際改變時）
+    if (slider.value !== clampedValue) {
+      this.updateSliderValue(index, clampedValue);
+    }
+  }
+
+  private updateSliderValue(index: number, newValue: number): void {
+    const slider = this.editorSliders[index];
+    if (!slider) return;
+    
+    const oldValue = slider.value;
+    slider.value = newValue;
+    slider.valueText.setText(newValue.toString());
+    
+    console.log(`🔄 參數 "${slider.name}" 數值更新: ${oldValue} → ${newValue}`);
+    
+    // 更新滑條手柄位置
+    const progress = (newValue - slider.min) / (slider.max - slider.min);
+    const handleX = -200 + progress * 200;
+    (slider.handle as any).x = handleX;
+    
+    // 即時應用參數變更
+    try {
+      this.applyParameterChanges(index, newValue);
+      console.log('✅ 滑鼠操作參數變更已應用');
+    } catch (error) {
+      console.error('❌ 應用滑鼠操作參數變更失敗:', error);
+    }
+  }
+
   private adjustSelectedParameter(direction: number): void {
     console.log(`🔧 adjustSelectedParameter被調用，方向: ${direction}, 當前選中: ${this.selectedSlider}`);
     
@@ -9469,23 +9719,8 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    slider.value = newValue;
-    slider.valueText.setText(newValue.toString());
-
-    // 更新滑條位置
-    const progress = (newValue - slider.min) / (slider.max - slider.min);
-    const handleX = -200 + progress * 200;
-    (slider.handle as any).x = -100 + handleX;
-
-    console.log(`📈 滑條UI更新：進度 ${(progress * 100).toFixed(1)}%, 手柄位置 ${handleX.toFixed(1)}`);
-
-    // 即時應用參數
-    try {
-      this.applyParameterChanges(this.selectedSlider, newValue);
-      console.log('✅ 參數變更已應用');
-    } catch (error) {
-      console.error('❌ 應用參數變更失敗:', error);
-    }
+    // 使用統一的數值更新方法
+    this.updateSliderValue(this.selectedSlider, newValue);
   }
 
   private applyParameterChanges(index: number, value: number): void {
