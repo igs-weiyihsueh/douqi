@@ -421,8 +421,9 @@ export class GameScene extends Phaser.Scene {
       this.quitToTitle();
     });
 
-    // ★F4 鍵：切換背景圖 (Scene.png 開關)
+    // ★F4 鍵：切換背景圖 (Scene.png 開關) - 添加除錯信息
     this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.F4).on('down', () => {
+      console.log('🔥 F4鍵被按下！開始執行toggleSceneBackground');
       this.toggleSceneBackground();
     });
 
@@ -493,6 +494,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   private resetState(): void {
+    // ★背景切換狀態重置
+    this.sceneBackground = null;
+    this.isNewSceneActive = false;
+    
     this.characters = [];
     this.survivalMs = 0;
     this.gameOver = false;
@@ -8402,6 +8407,12 @@ export class GameScene extends Phaser.Scene {
    * - 頭上UI：depth=200-2000 (完全不被遮擋)
    */
   private toggleSceneBackground(): void {
+    // ★診斷信息：場景重載後的狀態
+    console.log('🔥 toggleSceneBackground開始執行');
+    console.log(`  ✓ sceneBackground對象: ${this.sceneBackground ? '存在' : 'null'}`);
+    console.log(`  ✓ isNewSceneActive狀態: ${this.isNewSceneActive}`);
+    console.log(`  ✓ scene-background紋理: ${this.textures.exists('scene-background') ? '存在' : '不存在'}`);
+    
     // ★簡化LOG：只保留3個關鍵診斷訊息
     console.log('🎯 F4按鍵觸發 - 場景切換開始 (熱鍵已改為F4)');
     
