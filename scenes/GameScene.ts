@@ -8410,9 +8410,50 @@ export class GameScene extends Phaser.Scene {
     
     if (this.isNewSceneActive) {
       // 顯示新場景背景 - 以Scene.png為主
+      console.log('🔍 Scene.png顯示邏輯檢查:');
+      
       if (this.sceneBackground && sceneTextureLoaded) {
+        // Scene.png載入成功，強制設置顯示屬性
+        console.log('✅ Scene.png載入成功，設置顯示屬性:');
         this.sceneBackground.setVisible(true);
+        this.sceneBackground.setAlpha(1);
+        this.sceneBackground.setDepth(3);
+        this.sceneBackground.setActive(true);
+        
+        // 檢查設置後的狀態
+        console.log(`  ✓ 設置後visible: ${this.sceneBackground.visible}`);
+        console.log(`  ✓ 設置後alpha: ${this.sceneBackground.alpha}`);
+        console.log(`  ✓ 設置後depth: ${this.sceneBackground.depth}`);
+        console.log(`  ✓ 設置後active: ${this.sceneBackground.active}`);
+        console.log(`  ✓ 位置: (${this.sceneBackground.x}, ${this.sceneBackground.y})`);
+        console.log(`  ✓ 顯示尺寸: ${this.sceneBackground.displayWidth} × ${this.sceneBackground.displayHeight}`);
+        console.log(`  ✓ 在children索引: ${this.children.list.indexOf(this.sceneBackground as Phaser.GameObjects.GameObject)}`);
+        
+        // 檢查是否在相機視野內
+        const cameraBounds = this.cameras.main.getBounds();
+        const sceneBounds = this.sceneBackground.getBounds();
+        console.log(`  ✓ 相機範圍: (${cameraBounds.x}, ${cameraBounds.y}) ${cameraBounds.width}×${cameraBounds.height}`);
+        console.log(`  ✓ 背景範圍: (${sceneBounds.x}, ${sceneBounds.y}) ${sceneBounds.width}×${sceneBounds.height}`);
+        
+        // 強制刷新渲染
+        this.sceneBackground.setTexture('scene-background');
+        console.log('🔄 已強制刷新Scene.png紋理');
+        
+        // 嘗試提高深度到最高，避免被遮擋
+        const maxDepth = Math.max(...this.children.list.map(obj => (obj as any).depth || 0)) + 1;
+        this.sceneBackground.setDepth(maxDepth);
+        console.log(`🔝 Scene.png深度已提升到最高: ${maxDepth}`);
+        
         console.log('🖼️ Scene.png火山背景已顯示');
+        
+        // 隱藏測試背景
+        if (this.testGraphicsBackground) {
+          this.testGraphicsBackground.setVisible(false);
+        }
+        if (this.testRectangleBackground) {
+          this.testRectangleBackground.setVisible(false);
+        }
+        
       } else {
         console.warn('⚠️ Scene.png無法顯示，啟用測試背景');
         if (this.testGraphicsBackground) {
@@ -8420,15 +8461,7 @@ export class GameScene extends Phaser.Scene {
           console.log('🎨 Graphics測試背景已啟用作為備用');
         }
       }
-      // 測試背景預設隱藏，除非Scene.png失敗
-      if (this.sceneBackground && sceneTextureLoaded) {
-        if (this.testGraphicsBackground) {
-          this.testGraphicsBackground.setVisible(false);
-        }
-        if (this.testRectangleBackground) {
-          this.testRectangleBackground.setVisible(false);
-        }
-      }
+      
       console.log('🌋 切換到新場景：火山地獄背景 (Scene.png)');
     } else {
       // 隱藏新場景背景，顯示原場景
@@ -8626,9 +8659,26 @@ export class GameScene extends Phaser.Scene {
     if (this.sceneBackground) {
       const bg = this.sceneBackground!;  // 非空斷言，因為已經檢查過了
       if (bg.visible) {
-        console.log(`✓ Scene.png背景: 可見 - 🔥火山背景顯示中 (depth=${bg.depth})`);
+        console.log(`✅ Scene.png背景: 可見 - 🔥火山背景顯示中 (depth=${bg.depth})`);
+        
+        // 額外檢查可能影響顯示的屬性
+        const willRender = bg.willRender?.(this.cameras.main) ?? 'unknown';
+        console.log(`  ⚙️ willRender: ${willRender}`);
+        console.log(`  ⚙️ 在displayList中: ${this.children.exists(bg)}`);
+        console.log(`  ⚙️ parent容器: ${bg.parentContainer?.constructor.name || 'none'}`);
+        console.log(`  ⚙️ 遮罩: ${bg.mask ? 'has mask' : 'no mask'}`);
+        console.log(`  ⚙️ 混合模式: ${bg.blendMode}`);
+        
       } else {
         console.log(`⚠️ Scene.png背景: 不可見 - 存在但未顯示 (depth=${bg.depth})`);
+        
+        // 嘗試強制顯示
+        console.log('🔧 嘗試強制顯示Scene.png...');
+        bg.setVisible(true);
+        bg.setAlpha(1);
+        bg.setActive(true);
+        console.log(`  ✓ 強制設置後visible: ${bg.visible}`);
+        
       }
     } else {
       console.log(`❌ Scene.png背景: 不存在 - 背景物件未創建`);
@@ -8654,6 +8704,29 @@ export class GameScene extends Phaser.Scene {
     console.log(`✓ 找到 ${originalBgs.length} 個原背景，準備隱藏`);
     originalBgs.forEach(obj => (obj as any).setVisible(false));
     console.log('🔥 原背景已隱藏！觀察畫面是否變化？');
+    
+    // 額外診斷：檢查可能遮擋Scene.png的物件
+    if (this.isNewSceneActive && this.sceneBackground?.visible) {
+      console.log('🔍 檢查可能遮擋Scene.png的物件:');
+      const sceneDepth = this.sceneBackground!.depth;
+      const higherDepthObjects = this.children.list.filter(obj => {
+        const gameObj = obj as any;
+        return gameObj.depth > sceneDepth && gameObj.visible && gameObj.alpha > 0;
+      });
+      
+      console.log(`✓ 發現 ${higherDepthObjects.length} 個深度高於Scene.png(${sceneDepth})的可見物件:`);
+      higherDepthObjects.slice(0, 5).forEach((obj, i) => {
+        const gameObj = obj as any;
+        const bounds = gameObj.getBounds?.();
+        const sizeInfo = bounds ? `${Math.round(bounds.width)}×${Math.round(bounds.height)}` : 'no-bounds';
+        console.log(`  ${i + 1}. ${gameObj.constructor.name}(depth=${gameObj.depth}, alpha=${gameObj.alpha}, ${sizeInfo})`);
+      });
+      
+      if (higherDepthObjects.length > 0) {
+        console.log('⚠️ 可能原因：有更高深度的物件遮擋了Scene.png');
+        console.log('💡 建議：將Scene.png depth調整到更高值 (如 50)');
+      }
+    }
     
     // 診斷結論
     console.log('📋 結論:');
