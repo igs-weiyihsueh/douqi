@@ -37,6 +37,8 @@ export class GameScene extends Phaser.Scene {
 
   // ★角色皮膚覆蓋系統
   private characterSkin: Phaser.GameObjects.Image | null = null;
+  // ★角色上方UI覆蓋系統  
+  private characterUIOverlay: Phaser.GameObjects.Image | null = null;
 
   private survivalMs = 0;
   private gameOver = false;
@@ -353,6 +355,9 @@ export class GameScene extends Phaser.Scene {
     // ★角色皮膚覆蓋系統初始化 - 在P1角色創建後執行
     this.initCharacterSkin();
 
+    // ★角色上方UI覆蓋系統初始化 - 在P1角色創建後執行
+    this.initCharacterUIOverlay();
+
     // ★方案e:玩家建立後啟用鏡頭跟隨(限制在 A slot 內、deadzone 緩衝)。
     if (this.levelMode) this.enableFollow(this.slotA);
 
@@ -495,6 +500,9 @@ export class GameScene extends Phaser.Scene {
     
     // ★角色皮膚狀態重置
     this.characterSkin = null;
+    
+    // ★角色UI覆蓋狀態重置
+    this.characterUIOverlay = null;
     
     this.characters = [];
     this.survivalMs = 0;
@@ -689,6 +697,7 @@ export class GameScene extends Phaser.Scene {
 
     // ★更新角色皮膚覆蓋位置，跟隨P1角色
     this.updateCharacterSkin();
+    this.updateCharacterUIOverlay();
 
     // ★階段三：更新COMBO計時系統
     this.updateComboTimers();
@@ -8406,6 +8415,31 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
+   * ★初始化角色上方UI覆蓋系統
+   * 
+   * 功能：
+   * - 創建UI覆蓋圖片（MG_1P_Player_all.png），顯示"1P"和積分信息
+   * - 設置在UI層深度（depth=20），高於角色皮膚(depth=15)和角色本體(depth=10)
+   * - 初始隱藏，由F4切換控制顯示
+   * - 定位在P1角色上方適當位置
+   */
+  private initCharacterUIOverlay(): void {
+    if (this.textures.exists('character-ui-overlay')) {
+      // 在P1角色上方創建UI覆蓋
+      const playerPos = this.player ? { x: this.player.x, y: this.player.y - 40 } : { x: 0, y: -40 };
+      this.characterUIOverlay = this.add.image(playerPos.x, playerPos.y, 'character-ui-overlay')
+        .setOrigin(0.5, 0.5)
+        .setDepth(20)  // UI層：比角色皮膚(depth=15)和角色本體(depth=10)更高
+        .setVisible(false)
+        .setScrollFactor(1);  // 跟隨世界移動
+      
+      console.log(`🎮 角色UI覆蓋已創建：1P UI在位置(${playerPos.x}, ${playerPos.y}) (depth=20, hidden)`);
+    } else {
+      console.warn('⚠️ 角色UI覆蓋資源不存在：character-ui-overlay');
+    }
+  }
+
+  /**
    * ★更新角色皮膚覆蓋位置，跟隨P1角色
    */
   /**
@@ -8438,6 +8472,20 @@ export class GameScene extends Phaser.Scene {
           console.warn(`⚠️ 皮膚材質不存在：${targetTexture}`);
         }
       }
+    }
+  }
+
+  /**
+   * ★更新角色上方UI覆蓋位置
+   * 
+   * 功能：
+   * - 同步UI覆蓋位置到P1角色上方（Y偏移-40像素）
+   * - 保持UI元素始終顯示在角色頭頂附近
+   */
+  private updateCharacterUIOverlay(): void {
+    if (this.characterUIOverlay && this.player.alive) {
+      // 同步位置到P1角色上方
+      this.characterUIOverlay.setPosition(this.player.x, this.player.y - 40);
     }
   }
 
@@ -8512,10 +8560,15 @@ export class GameScene extends Phaser.Scene {
         this.sceneBackground.setActive(true);
       }
       
-      // 同時顯示角色皮膚覆蓋
+      // 同時顯示角色皮膚覆蓋和UI覆蓋
       if (this.characterSkin) {
         this.characterSkin.setVisible(true);
         console.log('🦍 Goku皮膚已顯示');
+      }
+      
+      if (this.characterUIOverlay) {
+        this.characterUIOverlay.setVisible(true);
+        console.log('🎮 1P UI覆蓋已顯示');
       }
       
       // 隱藏測試背景
@@ -8531,10 +8584,15 @@ export class GameScene extends Phaser.Scene {
         this.sceneBackground.setVisible(false);
       }
       
-      // 同時隱藏角色皮膚覆蓋
+      // 同時隱藏角色皮膚覆蓋和UI覆蓋
       if (this.characterSkin) {
         this.characterSkin.setVisible(false);
         console.log('🦍 Goku皮膚已隱藏');
+      }
+      
+      if (this.characterUIOverlay) {
+        this.characterUIOverlay.setVisible(false);
+        console.log('🎮 1P UI覆蓋已隱藏');
       }
       
       if (this.testGraphicsBackground) {

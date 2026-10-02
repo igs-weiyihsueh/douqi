@@ -95,9 +95,13 @@ export class BootScene extends Phaser.Scene {
     // 載入二段變身皮膚：Goku_2.png (金色光環版本)
     this.load.image('character-goku-skin-2', 'assets/Goku_2.png');
     
+    // 載入角色上方UI覆蓋：MG_1P_Player_all.png (1P玩家UI元素)
+    this.load.image('character-ui-overlay', 'assets/MG_1P_Player_all.png');
+    
     console.log('🔍 嘗試載入路徑:', scenePaths[0]);
     console.log('🔍 嘗試載入Goku皮膚: assets/Goku_1.png');
     console.log('🔍 嘗試載入Goku二段皮膚: assets/Goku_2.png');
+    console.log('🔍 嘗試載入角色UI覆蓋: assets/MG_1P_Player_all.png');
     
     // 監聽外部資源載入完成
     this.load.once('complete', () => {
