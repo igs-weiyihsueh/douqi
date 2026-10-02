@@ -9134,6 +9134,9 @@ export class GameScene extends Phaser.Scene {
       this.editorPanel = null;
     }
     
+    // 暫停遊戲 - 停止角色和敵人
+    this.pauseGameForEditor();
+    
     // 隱藏開啟按鈕，避免視覺衝突
     if (this.editorButton) {
       this.editorButton.setVisible(false);
@@ -9174,8 +9177,8 @@ export class GameScene extends Phaser.Scene {
   private createEditorPanel(): void {
     console.log('📋 開始創建編輯器面板...');
     
-    const width = 600;
-    const height = 500;
+    const width = 650; // 加寬以容納新佈局
+    const height = 600; // 加高以容納6個滑條
     const x = GameConfig.width / 2; // 居中顯示
     const y = GameConfig.height / 2; // 居中顯示
     
@@ -9229,8 +9232,8 @@ export class GameScene extends Phaser.Scene {
 
   private createParameterSliders(): void {
     this.editorSliders = [];
-    const startY = -180;
-    const spacing = 70;
+    const startY = -200;
+    const spacing = 80; // 增大間距避免重疊
     
     const parameters = [
       { 
@@ -9286,9 +9289,9 @@ export class GameScene extends Phaser.Scene {
     parameters.forEach((param, index) => {
       const y = startY + index * spacing;
       
-      // 參數標籤（可點擊選擇）
-      const label = this.add.text(-250, y - 15, param.name, {
-        fontSize: '16px',
+      // 參數標籤（左側對齊，避免重疊）
+      const label = this.add.text(-280, y - 20, param.name, {
+        fontSize: '15px',
         color: '#ffffff',
         fontFamily: 'Arial'
       });
@@ -9310,8 +9313,8 @@ export class GameScene extends Phaser.Scene {
         });
       this.editorPanel!.add(label);
       
-      // 滑條背景（可點擊快速設定值）
-      const sliderBg = this.add.rectangle(-100, y, 200, 12, 0x333333);
+      // 滑條背景（中間位置，避開文字）
+      const sliderBg = this.add.rectangle(-50, y, 180, 16, 0x333333);
       sliderBg.setInteractive({ useHandCursor: true })
         .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
           this.handleSliderClick(index, pointer, y);
@@ -9319,13 +9322,13 @@ export class GameScene extends Phaser.Scene {
       this.editorPanel!.add(sliderBg);
       
       // 滑條前景
-      const slider = this.add.rectangle(-100, y, 200, 12, 0x4a9eff);
+      const slider = this.add.rectangle(-50, y, 180, 16, 0x4a9eff);
       this.editorPanel!.add(slider);
       
       // 滑條手柄（可拖拽）
       const progress = (param.current - param.min) / (param.max - param.min);
-      const handleX = -200 + progress * 200;
-      const handle = this.add.circle(-100 + handleX, y, 10, 0xffffff);
+      const handleX = -140 + progress * 180;
+      const handle = this.add.circle(-50 + handleX, y, 12, 0xffffff);
       handle.setStrokeStyle(2, 0x4a9eff);
       handle.setInteractive({ 
         useHandCursor: true,
@@ -9335,7 +9338,7 @@ export class GameScene extends Phaser.Scene {
           console.log(`🖱️ 開始拖拽參數: ${param.name}`);
           this.selectedSlider = index;
           this.updateSliderHighlight();
-          handle.setScale(1.2); // 拖拽時放大
+          handle.setScale(1.3); // 拖拽時放大
         })
         .on('drag', (pointer: Phaser.Input.Pointer) => {
           this.handleSliderDrag(index, pointer, handle);
@@ -9345,7 +9348,7 @@ export class GameScene extends Phaser.Scene {
           handle.setScale(1.0); // 恢復大小
         })
         .on('pointerover', () => {
-          handle.setScale(1.1); // 懸停放大
+          handle.setScale(1.15); // 懸停放大
         })
         .on('pointerout', () => {
           if (!this.input.activePointer.isDown) {
@@ -9354,17 +9357,17 @@ export class GameScene extends Phaser.Scene {
         });
       this.editorPanel!.add(handle);
       
-      // 數值顯示
-      const valueText = this.add.text(150, y, param.current.toString(), {
-        fontSize: '16px',
+      // 數值顯示（右側，避免重疊）
+      const valueText = this.add.text(120, y, param.current.toString(), {
+        fontSize: '15px',
         color: '#4a9eff',
         fontFamily: 'Arial'
       });
       this.editorPanel!.add(valueText);
       
-      // 減少按鈕（-）
-      const decreaseBtn = this.add.text(100, y, '−', {
-        fontSize: '20px',
+      // 減少按鈕（-）放在數值右側
+      const decreaseBtn = this.add.text(170, y, '−', {
+        fontSize: '18px',
         color: '#ffffff',
         fontFamily: 'Arial'
       }).setOrigin(0.5);
@@ -9383,8 +9386,8 @@ export class GameScene extends Phaser.Scene {
       this.editorPanel!.add(decreaseBtn);
       
       // 增加按鈕（+）
-      const increaseBtn = this.add.text(130, y, '＋', {
-        fontSize: '20px',
+      const increaseBtn = this.add.text(200, y, '＋', {
+        fontSize: '18px',
         color: '#ffffff',
         fontFamily: 'Arial'
       }).setOrigin(0.5);
@@ -9419,12 +9422,8 @@ export class GameScene extends Phaser.Scene {
     // 高亮第一個滑條
     this.updateSliderHighlight();
     
-    console.log('🎚️ 參數滑條創建完成，包含滑鼠交互功能');
-    console.log('🖱️ 滑鼠操作說明:');
-    console.log('  - 點擊標籤選擇參數');
-    console.log('  - 拖拽手柄調整數值');
-    console.log('  - 點擊滑條背景快速設定');
-    console.log('  - 點擊+/-按鈕微調數值');
+    console.log('🎚️ 參數滑條創建完成，UI佈局優化避免重疊');
+    console.log('📐 新佈局：標籤(-280) 滑條(-50) 數值(120) 按鈕(170,200)');
   }
 
   private createEditorButtons(): void {
@@ -9663,12 +9662,12 @@ export class GameScene extends Phaser.Scene {
     const panel = this.editorPanel!;
     const worldX = panel.x;
     
-    // 滑條相對於面板的位置
-    const sliderRelativeX = -100; // 滑條在面板中的X位置
+    // 滑條相對於面板的位置（新佈局）
+    const sliderRelativeX = -50; // 滑條在面板中的X位置
     const sliderWorldX = worldX + sliderRelativeX;
     
-    // 計算點擊位置對應的值
-    const sliderWidth = 200;
+    // 滑條尺寸（新佈局）
+    const sliderWidth = 180;
     
     // 獲取相對於滑條的點擊位置
     const relativeX = pointer.worldX - (sliderWorldX - sliderWidth / 2);
@@ -9697,12 +9696,12 @@ export class GameScene extends Phaser.Scene {
     const panel = this.editorPanel!;
     const worldX = panel.x;
     
-    // 滑條相對於面板的位置
-    const sliderRelativeX = -100; // 滑條在面板中的X位置
+    // 滑條相對於面板的位置（新佈局）
+    const sliderRelativeX = -50; // 滑條在面板中的X位置
     const sliderWorldX = worldX + sliderRelativeX;
     
-    // 計算拖拽位置對應的值
-    const sliderWidth = 200;
+    // 滑條尺寸（新佈局）
+    const sliderWidth = 180;
     
     // 滑鼠相對於滑條起點的位置
     const relativeX = pointer.worldX - (sliderWorldX - sliderWidth / 2);
@@ -9842,18 +9841,65 @@ export class GameScene extends Phaser.Scene {
   private saveParameters(): void {
     console.log('💾 保存參數到配置文件');
     
+    // 強制應用所有當前參數值
+    this.editorSliders.forEach((slider, index) => {
+      try {
+        this.applyParameterChanges(index, slider.value);
+        console.log(`✅ 參數 "${slider.name}" 已保存: ${slider.value}`);
+      } catch (error) {
+        console.error(`❌ 保存參數 "${slider.name}" 失敗:`, error);
+      }
+    });
+    
+    // 強制重新計算遊戲元素
+    this.refreshGameElements();
+    
     // 生成新的配置文件內容
     const configUpdates = this.generateConfigUpdates();
     
     // 顯示更新內容
     console.log('📝 配置更新內容:');
     console.log(configUpdates);
+    console.log('✅ 所有參數已保存並生效');
     
     // 關閉編輯器
     this.closeParameterEditor();
+  }
+
+  private refreshGameElements(): void {
+    console.log('🔄 強制刷新遊戲元素...');
     
-    console.log('✅ 參數已保存！請手動更新config.ts文件中的對應數值');
-    console.log('🔧 或者重新載入遊戲以使用新參數');
+    // 強制更新競技場
+    this.updateArenaSize();
+    
+    // 強制更新關卡arena（如果啟用）
+    if (this.levelMode) {
+      this.updateLevelArenas();
+    }
+    
+    // 重新設置相機邊界和跟隨參數
+    if (this.levelMode) {
+      const st = GameConfig.stage;
+      const worldW = (st.arenaW + st.sceneMargin * 2) * 3 + st.subGap * 2;
+      const worldH = st.arenaH + st.sceneMargin * 2;
+      this.cameras.main.setBounds(0, 0, worldW, worldH);
+      
+      // 更新相機跟隨設定
+      this.cameras.main.setDeadzone(st.followDeadzoneW, st.followDeadzoneH);
+      this.cameras.main.setLerp(st.followLerp, st.followLerpY);
+    } else {
+      this.cameras.main.setBounds(0, 0, GameConfig.width, GameConfig.height);
+    }
+    
+    // 重新設置物理世界邊界
+    if (this.levelMode && this.arena) {
+      this.physics.world.setBounds(this.arena.x, this.arena.y, this.arena.width, this.arena.height);
+    } else {
+      const pad = GameConfig.arena.padding;
+      this.physics.world.setBounds(pad, pad, GameConfig.width - pad * 2, GameConfig.height - pad * 2);
+    }
+    
+    console.log('✅ 遊戲元素刷新完成，參數已實際生效');
   }
 
   private generateConfigUpdates(): string {
@@ -9901,12 +9947,41 @@ export class GameScene extends Phaser.Scene {
     // 使用新的清理方法
     this.clearEditorControls();
     
+    // 恢復遊戲
+    this.resumeGameFromEditor();
+    
     // 確保按鈕可見（如果編輯器關閉，按鈕應該可用）
     if (this.editorButton) {
       this.editorButton.setVisible(true);
     }
     
-    console.log('🔒 編輯器已關閉，按鈕恢復可用');
+    console.log('🔒 編輯器已關閉，遊戲已恢復，按鈕恢復可用');
+  }
+
+  private pauseGameForEditor(): void {
+    // 暫停遊戲物理
+    this.physics.world.pause();
+    
+    // 暫停敵人AI和更新
+    this.enemies.children.entries.forEach((enemy: any) => {
+      if (enemy.body && enemy.body.setVelocity) {
+        enemy.body.setVelocity(0, 0);
+      }
+    });
+    
+    // 暫停角色移動
+    if (this.player && this.player.body && (this.player.body as any).setVelocity) {
+      (this.player.body as any).setVelocity(0, 0);
+    }
+    
+    console.log('⏸️ 遊戲已暫停：物理引擎、敵人AI、角色移動全部停止');
+  }
+
+  private resumeGameFromEditor(): void {
+    // 恢復遊戲物理
+    this.physics.world.resume();
+    
+    console.log('▶️ 遊戲已恢復：物理引擎、敵人AI、角色移動全部恢復');
   }
 
   /**
