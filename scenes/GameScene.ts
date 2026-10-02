@@ -8369,27 +8369,65 @@ export class GameScene extends Phaser.Scene {
     
     if (!this.sceneBackground) {
       console.warn('⚠️ 場景背景圖片不可用，無法切換');
+      
+      // 嘗試立即創建Scene.png背景作為修復
+      if (this.textures.exists('scene-background')) {
+        console.log('🔧 嘗試立即創建Scene.png背景...');
+        const gameArea = this.calculateGameArea();
+        this.sceneBackground = this.add.image(gameArea.x, gameArea.y, 'scene-background')
+          .setOrigin(0, 0)
+          .setDisplaySize(gameArea.width, gameArea.height)
+          .setDepth(3)
+          .setVisible(false)
+          .setScrollFactor(0);
+        console.log('✅ Scene.png背景已重新創建');
+      } else {
+        console.error('❌ scene-background紋理不存在，無法創建背景');
+      }
+      
       return;
     }
 
-    // ★關鍵診斷1：Scene.png載入狀態
-    console.log('🖼️ Scene.png火山背景:', this.textures.exists('scene-background') ? '載入成功，準備顯示' : '載入失敗，請檢查assets/Scene.png');
+    // ★關鍵診斷1：Scene.png載入狀態詳細檢查
+    const sceneTextureExists = this.textures.exists('scene-background');
+    let sceneTextureLoaded = false;
+    if (sceneTextureExists) {
+      const texture = this.textures.get('scene-background');
+      sceneTextureLoaded = texture && texture.key !== '__MISSING';
+    }
+    console.log('🖼️ Scene.png詳細狀態:');
+    console.log(`  ✓ 紋理存在: ${sceneTextureExists}`);
+    console.log(`  ✓ 圖片載入完成: ${sceneTextureLoaded}`);
+    console.log(`  ✓ 背景物件存在: ${!!this.sceneBackground}`);
+    if (this.sceneBackground) {
+      console.log(`  ✓ 背景物件visible: ${this.sceneBackground.visible}`);
+      console.log(`  ✓ 背景物件depth: ${this.sceneBackground.depth}`);
+      console.log(`  ✓ 背景物件alpha: ${this.sceneBackground.alpha}`);
+    }
 
     // 切換狀態
     this.isNewSceneActive = !this.isNewSceneActive;
     
     if (this.isNewSceneActive) {
       // 顯示新場景背景 - 以Scene.png為主
-      if (this.sceneBackground) {
+      if (this.sceneBackground && sceneTextureLoaded) {
         this.sceneBackground.setVisible(true);
         console.log('🖼️ Scene.png火山背景已顯示');
+      } else {
+        console.warn('⚠️ Scene.png無法顯示，啟用測試背景');
+        if (this.testGraphicsBackground) {
+          this.testGraphicsBackground.setVisible(true);
+          console.log('🎨 Graphics測試背景已啟用作為備用');
+        }
       }
-      // 測試背景設為不顯示，讓Scene.png作為主背景
-      if (this.testGraphicsBackground) {
-        this.testGraphicsBackground.setVisible(false);
-      }
-      if (this.testRectangleBackground) {
-        this.testRectangleBackground.setVisible(false);
+      // 測試背景預設隱藏，除非Scene.png失敗
+      if (this.sceneBackground && sceneTextureLoaded) {
+        if (this.testGraphicsBackground) {
+          this.testGraphicsBackground.setVisible(false);
+        }
+        if (this.testRectangleBackground) {
+          this.testRectangleBackground.setVisible(false);
+        }
       }
       console.log('🌋 切換到新場景：火山地獄背景 (Scene.png)');
     } else {
@@ -8407,7 +8445,17 @@ export class GameScene extends Phaser.Scene {
     }
     
     // ★狀態確認：當前顯示的背景
-    console.log('🎨 當前背景狀態:', this.sceneBackground?.visible ? 'Scene.png火山背景' : '原始背景');
+    if (this.isNewSceneActive) {
+      if (this.sceneBackground?.visible) {
+        console.log('🎨 當前背景狀態: Scene.png火山背景正在顯示');
+      } else if (this.testGraphicsBackground?.visible) {
+        console.log('🎨 當前背景狀態: Graphics測試背景 (Scene.png備用)');
+      } else {
+        console.log('🎨 當前背景狀態: 未知 - 可能存在顯示問題');
+      }
+    } else {
+      console.log('🎨 當前背景狀態: 原始背景');
+    }
     
     // ★檢測A - Graphics縮放值檢測
     if (this.testGraphicsBackground) {
@@ -8573,9 +8621,25 @@ export class GameScene extends Phaser.Scene {
     
     // 診斷1: 關鍵背景物件狀態
     console.log('📊 當前背景狀態:');
-    console.log(`✓ Scene.png背景: ${this.sceneBackground?.visible ? '可見 - 🔥火山背景顯示中' : '不可見'} (depth=${this.sceneBackground?.depth || 'N/A'})`);
-    console.log(`✓ Graphics測試背景: ${this.testGraphicsBackground?.visible ? '可見 - 測試用紫色' : '不可見 - 已隱藏供Scene.png顯示'} (depth=${this.testGraphicsBackground?.depth || 'N/A'})`);
-    console.log(`✓ Rectangle測試背景: ${this.testRectangleBackground?.visible ? '可見 - 測試用紅色' : '不可見 - 已隱藏供Scene.png顯示'} (depth=${this.testRectangleBackground?.depth || 'N/A'})`);
+    
+    // 檢查Scene.png狀態
+    if (this.sceneBackground) {
+      const bg = this.sceneBackground!;  // 非空斷言，因為已經檢查過了
+      if (bg.visible) {
+        console.log(`✓ Scene.png背景: 可見 - 🔥火山背景顯示中 (depth=${bg.depth})`);
+      } else {
+        console.log(`⚠️ Scene.png背景: 不可見 - 存在但未顯示 (depth=${bg.depth})`);
+      }
+    } else {
+      console.log(`❌ Scene.png背景: 不存在 - 背景物件未創建`);
+    }
+    
+    // 檢查測試背景狀態
+    const graphicsStatus = this.testGraphicsBackground?.visible ? '可見 - 🔴當前正在顯示' : '不可見 - 已隱藏';
+    const rectangleStatus = this.testRectangleBackground?.visible ? '可見 - 🔴當前正在顯示' : '不可見 - 已隱藏';
+    
+    console.log(`✓ Graphics測試背景: ${graphicsStatus} (depth=${this.testGraphicsBackground?.depth || 'N/A'})`);
+    console.log(`✓ Rectangle測試背景: ${rectangleStatus} (depth=${this.testRectangleBackground?.depth || 'N/A'})`);
     
     // 診斷2: 隱藏原背景測試
     console.log('🧪 隱藏原背景測試:');
