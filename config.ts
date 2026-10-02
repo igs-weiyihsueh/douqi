@@ -54,6 +54,19 @@ export const GameConfig = {
     }
   },
 
+  /** ★邊界編輯器配置和持久化設定 */
+  borderEditor: {
+    /** 是否啟用自定義邊界設定 */
+    useCustomSettings: false,
+    /** 自定義邊界設定 */
+    customSettings: {
+      arenaW: 1560,
+      arenaH: 900,
+      sceneMargin: 285,
+      padding: 72
+    }
+  },
+
   /** ★波次進度 HUD(關卡制:節點序列 ●─●─◆);只純波次顯示,事件/BOSS 隱藏 */
   waveHud: {
     enabled: true,

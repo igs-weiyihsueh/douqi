@@ -391,38 +391,52 @@ export class TitleScene extends Phaser.Scene {
     const buttonY = height/2 - 60;
     
     // 保存按鈕
-    const saveBtn = this.add.rectangle(-80, buttonY, 120, 35, 0x10b981, 0.9)
+    const saveBtn = this.add.rectangle(-100, buttonY, 100, 35, 0x10b981, 0.9)
       .setStrokeStyle(2, 0x34d399);
-    const saveText = this.add.text(-80, buttonY, '保存設定', {
+    const saveText = this.add.text(-100, buttonY, '保存', {
       fontFamily: 'monospace',
-      fontSize: '16px',
+      fontSize: '14px',
+      color: '#ffffff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+    
+    // 重置按鈕
+    const resetBtn = this.add.rectangle(0, buttonY, 100, 35, 0xf59e0b, 0.9)
+      .setStrokeStyle(2, 0xfbbf24);
+    const resetText = this.add.text(0, buttonY, '重置', {
+      fontFamily: 'monospace',
+      fontSize: '14px',
       color: '#ffffff',
       fontStyle: 'bold'
     }).setOrigin(0.5);
     
     // 取消按鈕
-    const cancelBtn = this.add.rectangle(80, buttonY, 120, 35, 0xdc2626, 0.9)
+    const cancelBtn = this.add.rectangle(100, buttonY, 100, 35, 0xdc2626, 0.9)
       .setStrokeStyle(2, 0xef4444);
-    const cancelText = this.add.text(80, buttonY, '取消', {
+    const cancelText = this.add.text(100, buttonY, '取消', {
       fontFamily: 'monospace',
-      fontSize: '16px',
+      fontSize: '14px',
       color: '#ffffff',
       fontStyle: 'bold'
     }).setOrigin(0.5);
     
-    this.borderEditorPanel.add([saveBtn, saveText, cancelBtn, cancelText]);
+    this.borderEditorPanel.add([saveBtn, saveText, resetBtn, resetText, cancelBtn, cancelText]);
     
     // 按鈕交互
-    const saveBtnContainer = this.add.container(0, 0, [saveBtn]).setSize(120, 35);
-    saveBtnContainer.setInteractive(new Phaser.Geom.Rectangle(-60, -17.5, 120, 35), Phaser.Geom.Rectangle.Contains);
+    const saveBtnContainer = this.add.container(0, 0, [saveBtn]).setSize(100, 35);
+    saveBtnContainer.setInteractive(new Phaser.Geom.Rectangle(-50, -17.5, 100, 35), Phaser.Geom.Rectangle.Contains);
     saveBtnContainer.on('pointerdown', () => this.saveBorderSettings());
     
-    const cancelBtnContainer = this.add.container(0, 0, [cancelBtn]).setSize(120, 35);
-    cancelBtnContainer.setInteractive(new Phaser.Geom.Rectangle(-60, -17.5, 120, 35), Phaser.Geom.Rectangle.Contains);
+    const resetBtnContainer = this.add.container(0, 0, [resetBtn]).setSize(100, 35);
+    resetBtnContainer.setInteractive(new Phaser.Geom.Rectangle(-50, -17.5, 100, 35), Phaser.Geom.Rectangle.Contains);
+    resetBtnContainer.on('pointerdown', () => this.resetBorderSettings());
+    
+    const cancelBtnContainer = this.add.container(0, 0, [cancelBtn]).setSize(100, 35);
+    cancelBtnContainer.setInteractive(new Phaser.Geom.Rectangle(-50, -17.5, 100, 35), Phaser.Geom.Rectangle.Contains);
     cancelBtnContainer.on('pointerdown', () => this.closeBorderEditor());
     
     // 操作提示
-    const instructions = this.add.text(0, height/2 - 20, '↑↓ 選擇參數  ←→ 調整數值  Enter 保存  Esc 取消', {
+    const instructions = this.add.text(0, height/2 - 20, '↑↓ 選擇參數  ←→ 調整數值  Enter 保存  R 重置  Esc 取消', {
       fontFamily: 'monospace',
       fontSize: '12px',
       color: '#64748b'
@@ -432,10 +446,32 @@ export class TitleScene extends Phaser.Scene {
 
   /** 創建邊界參數滑條 */
   private createBorderSliders(): void {
-    const currentArenaW = this.levelMode ? GameConfig.stage.arenaW : (GameConfig.width - GameConfig.arena.padding * 2);
-    const currentArenaH = this.levelMode ? GameConfig.stage.arenaH : (GameConfig.height - GameConfig.arena.padding * 2);
-    const currentX = this.levelMode ? GameConfig.stage.sceneMargin : GameConfig.arena.padding;
-    const currentY = this.levelMode ? GameConfig.stage.sceneMargin : GameConfig.arena.padding;
+    let currentArenaW, currentArenaH, currentX, currentY;
+    
+    // 檢查是否有自定義設定
+    if (GameConfig.borderEditor.useCustomSettings) {
+      // 使用持久化的自定義設定
+      const custom = GameConfig.borderEditor.customSettings;
+      if (this.levelMode) {
+        currentArenaW = custom.arenaW;
+        currentArenaH = custom.arenaH;
+        currentX = custom.sceneMargin;
+        currentY = custom.sceneMargin;
+      } else {
+        currentArenaW = GameConfig.width - custom.padding * 2;
+        currentArenaH = GameConfig.height - custom.padding * 2;
+        currentX = custom.padding;
+        currentY = custom.padding;
+      }
+      console.log('🔄 載入自定義邊界設定:', custom);
+    } else {
+      // 使用默認設定
+      currentArenaW = this.levelMode ? GameConfig.stage.arenaW : (GameConfig.width - GameConfig.arena.padding * 2);
+      currentArenaH = this.levelMode ? GameConfig.stage.arenaH : (GameConfig.height - GameConfig.arena.padding * 2);
+      currentX = this.levelMode ? GameConfig.stage.sceneMargin : GameConfig.arena.padding;
+      currentY = this.levelMode ? GameConfig.stage.sceneMargin : GameConfig.arena.padding;
+      console.log('🔄 載入預設邊界設定');
+    }
     
     const parameters = [
       { name: '邊界寬度', value: currentArenaW, min: 800, max: 1800, step: 20 },
@@ -652,7 +688,7 @@ export class TitleScene extends Phaser.Scene {
       this.adjustBorderSlider(this.selectedBorderSlider, 1);
     });
     
-    // Enter保存，Esc取消
+    // Enter保存，Esc取消，R重置
     keyboard.addKey('ENTER').on('down', () => {
       if (!this.borderEditorActive) return;
       this.saveBorderSettings();
@@ -661,6 +697,11 @@ export class TitleScene extends Phaser.Scene {
     keyboard.addKey('ESC').on('down', () => {
       if (!this.borderEditorActive) return;
       this.closeBorderEditor();
+    });
+    
+    keyboard.addKey('R').on('down', () => {
+      if (!this.borderEditorActive) return;
+      this.resetBorderSettings();
     });
   }
 
@@ -700,30 +741,68 @@ export class TitleScene extends Phaser.Scene {
 
   /** 保存邊界設定 */
   private saveBorderSettings(): void {
-    console.log('💾 保存邊界設定');
+    console.log('💾 保存邊界設定到持久化配置');
     
     const width = this.borderSliders[0].value;
     const height = this.borderSliders[1].value;
     const x = this.borderSliders[2].value;
     const y = this.borderSliders[3].value;
     
-    // 更新GameConfig（使用類型斷言繞過只讀限制）
-    if (GameConfig.stage.enabled) {
+    // 啟用自定義設定並保存到持久化配置
+    (GameConfig.borderEditor as any).useCustomSettings = true;
+    const customSettings = (GameConfig.borderEditor as any).customSettings;
+    
+    if (this.levelMode) {
       // 關卡模式
+      customSettings.arenaW = width;
+      customSettings.arenaH = height;
+      customSettings.sceneMargin = Math.max(x, y);
+      
+      // 同時更新運行時配置以立即生效
       (GameConfig.stage as any).arenaW = width;
       (GameConfig.stage as any).arenaH = height;
       (GameConfig.stage as any).sceneMargin = Math.max(x, y);
     } else {
       // 固定模式
-      (GameConfig.arena as any).padding = Math.max(x, y);
+      const padding = Math.max(x, y);
+      customSettings.padding = padding;
+      customSettings.arenaW = GameConfig.width - padding * 2;
+      customSettings.arenaH = GameConfig.height - padding * 2;
+      
+      // 同時更新運行時配置以立即生效
+      (GameConfig.arena as any).padding = padding;
     }
     
-    console.log(`✅ 邊界設定已保存: ${width}×${height} 位置(${x},${y})`);
+    console.log(`✅ 邊界設定已持久化: ${width}×${height} 位置(${x},${y})`);
+    console.log('📦 自定義設定:', GameConfig.borderEditor.customSettings);
     
     // 生成配置代碼
     this.generateBorderConfigCode(width, height, x, y);
     
     this.closeBorderEditor();
+  }
+
+  /** 重置邊界設定為預設值 */
+  private resetBorderSettings(): void {
+    console.log('🔄 重置邊界設定為預設值');
+    
+    // 禁用自定義設定
+    (GameConfig.borderEditor as any).useCustomSettings = false;
+    
+    // 重新創建滑桿以載入預設值
+    this.borderSliders.forEach(slider => {
+      if (slider.slider.parentContainer) {
+        slider.slider.parentContainer.removeAll(true);
+      }
+    });
+    this.borderSliders = [];
+    
+    // 重新創建滑桿和預覽
+    this.createBorderSliders();
+    this.createBorderPreview();
+    this.updateBorderSliderHighlight();
+    
+    console.log('✅ 邊界設定已重置為預設值');
   }
 
   /** 生成配置代碼 */

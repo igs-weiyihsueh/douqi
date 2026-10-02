@@ -248,7 +248,23 @@ export class GameScene extends Phaser.Scene {
     this.initSceneBackground();
 
     // 固定視角競技場
-    const pad = GameConfig.arena.padding;
+    // 應用持久化的邊界設定
+    let pad, aW, aH, m;
+    if (GameConfig.borderEditor.useCustomSettings) {
+      const custom = GameConfig.borderEditor.customSettings;
+      pad = custom.padding;
+      aW = custom.arenaW;
+      aH = custom.arenaH;
+      m = custom.sceneMargin;
+      console.log('🎮 應用自定義邊界設定到遊戲場景:', custom);
+    } else {
+      pad = GameConfig.arena.padding;
+      aW = GameConfig.stage.arenaW;
+      aH = GameConfig.stage.arenaH;
+      m = GameConfig.stage.sceneMargin;
+      console.log('🎮 應用預設邊界設定到遊戲場景');
+    }
+    
     const arenaX = pad;
     const arenaY = pad;
     const arenaW = GameConfig.width - pad * 2;
@@ -260,8 +276,6 @@ export class GameScene extends Phaser.Scene {
     this.levelMode = GameConfig.stage.enabled;
     if (this.levelMode) {
       const gap = GameConfig.stage.subGap;
-      const st = GameConfig.stage;
-      const aW = st.arenaW, aH = st.arenaH, m = st.sceneMargin;
       const slotW = aW + m * 2, slotH = aH + m * 2;
       const worldW = slotW * 3 + gap * 2;
       const worldH = slotH;
