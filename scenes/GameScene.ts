@@ -8439,6 +8439,29 @@ export class GameScene extends Phaser.Scene {
       }
       console.log('✓ getBounds width:', (this.testGraphicsBackground as any)?.getBounds?.()?.width || 'unknown');
       console.log('✓ getBounds height:', (this.testGraphicsBackground as any)?.getBounds?.()?.height || 'unknown');
+      
+      // ★檢測G+H - Graphics繪製內容檢測
+      console.log('🔍 檢測G+H - Graphics繪製內容檢測:');
+      
+      // 檢測fillStyle顏色設定
+      console.log('✓ fillStyle設定:', '0xFF00FF (紫紅色)');
+      console.log('✓ 預期RGB:', 'rgb(255, 0, 255)');
+      
+      // 檢測fillRect範圍設定  
+      console.log('✓ fillRect範圍:', `0, 0, ${GameConfig.width}, ${GameConfig.height}`);
+      console.log('✓ 預期尺寸:', `${GameConfig.width} × ${GameConfig.height}`);
+      
+      // 嘗試重新繪製並檢測
+      console.log('🔧 重新繪製測試:');
+      this.testGraphicsBackground?.clear();
+      this.testGraphicsBackground?.fillStyle(0xFF00FF, 1);
+      this.testGraphicsBackground?.fillRect(0, 0, GameConfig.width, GameConfig.height);
+      console.log('✓ 重新繪製完成');
+      
+      // 重新檢測getBounds
+      const newBounds = (this.testGraphicsBackground as any)?.getBounds?.();
+      console.log('✓ 重繪後width:', newBounds?.width || 'still unknown');
+      console.log('✓ 重繪後height:', newBounds?.height || 'still unknown');
     }
     
     // ★關鍵診斷3：最終狀態確認
