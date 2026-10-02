@@ -8388,6 +8388,14 @@ export class GameScene extends Phaser.Scene {
     // ★關鍵診斷2：Graphics測試結果 (切換後檢查)  
     console.log('🎨 Graphics紫紅色背景:', this.testGraphicsBackground?.visible ? '已顯示' : '未顯示');
     
+    // ★檢測A - Graphics縮放值檢測
+    if (this.testGraphicsBackground) {
+      console.log('🔍 檢測A - Graphics縮放值檢測:');
+      console.log('✓ scaleX:', this.testGraphicsBackground.scaleX);
+      console.log('✓ scaleY:', this.testGraphicsBackground.scaleY); 
+      console.log('✓ scale:', this.testGraphicsBackground.scale);
+    }
+    
     // ★關鍵診斷3：最終狀態確認
     const finalState = this.isNewSceneActive ? '新場景' : '舊場景';
     console.log(`📋 場景狀態：${finalState} (F1切換)`);
