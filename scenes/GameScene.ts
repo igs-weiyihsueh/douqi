@@ -250,9 +250,6 @@ export class GameScene extends Phaser.Scene {
     // ★場景圖熱切換系統初始化
     this.initSceneBackground();
 
-    // ★角色皮膚覆蓋系統初始化
-    this.initCharacterSkin();
-
     // 固定視角競技場
     // 應用持久化的邊界設定
     let pad, aW, aH, m;
@@ -352,6 +349,9 @@ export class GameScene extends Phaser.Scene {
 
     // v8 追加：開場只有 P1 一人。BOT 由按 B 逐一加入（見 tryAddBot）。
     this.createCharacter(0, false);
+
+    // ★角色皮膚覆蓋系統初始化 - 在P1角色創建後執行
+    this.initCharacterSkin();
 
     // ★方案e:玩家建立後啟用鏡頭跟隨(限制在 A slot 內、deadzone 緩衝)。
     if (this.levelMode) this.enableFollow(this.slotA);
@@ -8384,14 +8384,15 @@ export class GameScene extends Phaser.Scene {
    */
   private initCharacterSkin(): void {
     if (this.textures.exists('character-goku-skin')) {
-      // 創建角色皮膚覆蓋，初始隱藏，跟隨P1角色
-      this.characterSkin = this.add.image(0, 0, 'character-goku-skin')
+      // 在P1角色位置創建皮膚覆蓋
+      const playerPos = this.player ? { x: this.player.x, y: this.player.y } : { x: 0, y: 0 };
+      this.characterSkin = this.add.image(playerPos.x, playerPos.y, 'character-goku-skin')
         .setOrigin(0.5, 0.5)
         .setDepth(15)  // 設置比角色(depth=10)更高，確保覆蓋在角色上
         .setVisible(false)
         .setScrollFactor(1);  // 跟隨世界移動，不像背景固定
       
-      console.log('🦍 角色皮膚覆蓋已創建：Goku皮膚 (depth=15, hidden)');
+      console.log(`🦍 角色皮膚覆蓋已創建：Goku皮膚在位置(${playerPos.x}, ${playerPos.y}) (depth=15, hidden)`);
     } else {
       console.warn('⚠️ Goku皮膚資源不存在：character-goku-skin');
     }
