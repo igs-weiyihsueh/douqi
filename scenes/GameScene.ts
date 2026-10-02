@@ -8526,25 +8526,82 @@ export class GameScene extends Phaser.Scene {
     const finalState = this.isNewSceneActive ? '新場景' : '舊場景';
     console.log(`📋 場景狀態：${finalState} (F4切換)`);
     
-    // ★緊急全局渲染狀態檢測
-    if (this.isNewSceneActive) {
-      console.log('🚨 緊急診斷：全局渲染狀態檢測');
-      console.log('✓ 場景子物件總數:', this.children.length);
-      console.log('✓ 相機位置:', `(${this.cameras.main.x}, ${this.cameras.main.y})`);
-      console.log('✓ 相機zoom:', this.cameras.main.zoom);
-      console.log('✓ 相機可見:', this.cameras.main.visible);
-      console.log('✓ 渲染器類型:', this.renderer.type === Phaser.WEBGL ? 'WebGL' : 'Canvas');
-      console.log('✓ Canvas尺寸:', `${this.game.canvas.width} × ${this.game.canvas.height}`);
-      
-      // 檢查所有深度-10到0的物件
-      const backgroundObjects = this.children.list.filter(obj => 
-        (obj as any).depth <= 0 && (obj as any).depth >= -10
-      );
-      console.log('✓ 背景層物件數:', backgroundObjects.length);
-      backgroundObjects.forEach((obj, i) => {
-        const gameObj = obj as any;
-        console.log(`  ${i+1}. ${gameObj.constructor.name} depth=${gameObj.depth} visible=${gameObj.visible}`);
-      });
+    // ★研究當前背景系統 - 重新定義問題
+    console.log('🔍 ===== 當前背景系統深度調查 =====');
+    
+    // 1. 背景生成代碼調查
+    console.log('🔍 當前背景系統調查:');
+    console.log('✓ drawZoneScene存在:', typeof (this as any).drawZoneScene);
+    if (typeof (this as any).drawZoneScene === 'function') {
+        console.log('✓ drawZoneScene: 關卡場景背景生成方法確認');
+    }
+    
+    // 檢查TileSprite相關
+    const existingTileSprites = this.children.list.filter(obj => 
+        obj.constructor.name === 'TileSprite'
+    );
+    console.log('✓ 現有TileSprite數量:', existingTileSprites.length);
+    existingTileSprites.slice(0, 3).forEach((obj, i) => {
+        const tile = obj as any;
+        console.log(`  TileSprite${i+1}: depth=${tile.depth} visible=${tile.visible} size=${tile.width}×${tile.height}`);
+    });
+    
+    // 檢查Graphics相關 (原背景可能也用Graphics)
+    const existingGraphics = this.children.list.filter(obj => 
+        obj.constructor.name === 'Graphics'
+    );
+    console.log('✓ 現有Graphics數量:', existingGraphics.length);
+    existingGraphics.forEach((obj, i) => {
+        const gfx = obj as any;
+        console.log(`  Graphics${i+1}: depth=${gfx.depth} visible=${gfx.visible} bounds=${gfx.getBounds?.()?.width || 'unknown'}×${gfx.getBounds?.()?.height || 'unknown'}`);
+    });
+    
+    // 2. 背景深度層級分析
+    console.log('🔍 背景層物件分析 (負深度):');
+    const backgroundObjects = this.children.list
+        .filter(obj => (obj as any).depth < 0)
+        .sort((a, b) => (a as any).depth - (b as any).depth);
+    
+    console.log('✓ 背景層物件總數:', backgroundObjects.length);
+    backgroundObjects.forEach((obj, index) => {
+        const depth = (obj as any).depth;
+        const type = obj.constructor.name;
+        const visible = (obj as any).visible;
+        const bounds = (obj as any).getBounds?.();
+        const size = bounds ? `${bounds.width}×${bounds.height}` : 'no-bounds';
+        console.log(`✓ 背景${index+1}: ${type} depth=${depth} visible=${visible} size=${size}`);
+    });
+    
+    // 3. 遮擋關係檢測
+    console.log('🔍 遮擋關係檢測 (depth -10 到 50):');
+    const potentialBlockers = this.children.list.filter(obj => {
+        const depth = (obj as any).depth;
+        return depth > -10 && depth < 50;
+    }).sort((a, b) => (a as any).depth - (b as any).depth);
+    
+    console.log('✓ 可能遮擋物數量:', potentialBlockers.length);
+    potentialBlockers.slice(0, 8).forEach((obj, index) => {
+        const depth = (obj as any).depth;
+        const type = obj.constructor.name;
+        const visible = (obj as any).visible;
+        const bounds = (obj as any).getBounds?.();
+        const size = bounds ? `${bounds.width}×${bounds.height}` : 'no-bounds';
+        console.log(`✓ 層級${index+1}: ${type} depth=${depth} visible=${visible} size=${size}`);
+    });
+    
+    // 4. 我們的背景物件在整體中的位置
+    console.log('🔍 我們的背景物件定位:');
+    if (this.testGraphicsBackground) {
+        const myGraphicsIndex = this.children.list.indexOf(this.testGraphicsBackground);
+        console.log(`✓ 我們的Graphics在children中的索引: ${myGraphicsIndex}`);
+    }
+    if (this.testRectangleBackground) {
+        const myRectIndex = this.children.list.indexOf(this.testRectangleBackground);
+        console.log(`✓ 我們的Rectangle在children中的索引: ${myRectIndex}`);
+    }
+    if (this.sceneBackground) {
+        const mySceneIndex = this.children.list.indexOf(this.sceneBackground);
+        console.log(`✓ 我們的Scene.png在children中的索引: ${mySceneIndex}`);
     }
   }
 
