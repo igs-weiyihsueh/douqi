@@ -8382,6 +8382,17 @@ export class GameScene extends Phaser.Scene {
       }
       if (this.testRectangleBackground) {
         this.testRectangleBackground.setVisible(true);
+        
+        // ★緊急Rectangle切換時狀態檢測
+        console.log('🔍 Rectangle切換後狀態檢測:');
+        console.log('✓ Rectangle exists:', !!this.testRectangleBackground);
+        console.log('✓ Rectangle visible after set:', this.testRectangleBackground.visible);
+        console.log('✓ Rectangle alpha:', this.testRectangleBackground.alpha);
+        console.log('✓ Rectangle depth:', this.testRectangleBackground.depth);
+        console.log('✓ Rectangle position:', `(${this.testRectangleBackground.x}, ${this.testRectangleBackground.y})`);
+        console.log('✓ Rectangle size:', `${this.testRectangleBackground.width} × ${this.testRectangleBackground.height}`);
+        console.log('✓ Rectangle active:', this.testRectangleBackground.active);
+        console.log('✓ Rectangle scene:', this.testRectangleBackground.scene?.scene?.key || 'unknown');
       }
       console.log('🌋 切換到新場景：火山地獄風格 (Scene.png + Graphics + Rectangle備用)');
     } else {
@@ -8497,12 +8508,44 @@ export class GameScene extends Phaser.Scene {
       if (!this.testRectangleBackground) {
         this.testRectangleBackground = coloredRect;
         console.log('✅ Rectangle備用方案已準備');
+        
+        // ★緊急Rectangle狀態檢測
+        console.log('🔍 Rectangle創建時狀態檢測:');
+        console.log('✓ Rectangle created:', !!coloredRect);
+        console.log('✓ Rectangle visible:', coloredRect?.visible);
+        console.log('✓ Rectangle alpha:', coloredRect?.alpha);
+        console.log('✓ Rectangle depth:', coloredRect?.depth);
+        console.log('✓ Rectangle x:', coloredRect?.x);
+        console.log('✓ Rectangle y:', coloredRect?.y);
+        console.log('✓ Rectangle width:', coloredRect?.width);
+        console.log('✓ Rectangle height:', coloredRect?.height);
       }
     }
     
     // ★關鍵診斷3：最終狀態確認
     const finalState = this.isNewSceneActive ? '新場景' : '舊場景';
     console.log(`📋 場景狀態：${finalState} (F4切換)`);
+    
+    // ★緊急全局渲染狀態檢測
+    if (this.isNewSceneActive) {
+      console.log('🚨 緊急診斷：全局渲染狀態檢測');
+      console.log('✓ 場景子物件總數:', this.children.length);
+      console.log('✓ 相機位置:', `(${this.cameras.main.x}, ${this.cameras.main.y})`);
+      console.log('✓ 相機zoom:', this.cameras.main.zoom);
+      console.log('✓ 相機可見:', this.cameras.main.visible);
+      console.log('✓ 渲染器類型:', this.renderer.type === Phaser.WEBGL ? 'WebGL' : 'Canvas');
+      console.log('✓ Canvas尺寸:', `${this.game.canvas.width} × ${this.game.canvas.height}`);
+      
+      // 檢查所有深度-10到0的物件
+      const backgroundObjects = this.children.list.filter(obj => 
+        (obj as any).depth <= 0 && (obj as any).depth >= -10
+      );
+      console.log('✓ 背景層物件數:', backgroundObjects.length);
+      backgroundObjects.forEach((obj, i) => {
+        const gameObj = obj as any;
+        console.log(`  ${i+1}. ${gameObj.constructor.name} depth=${gameObj.depth} visible=${gameObj.visible}`);
+      });
+    }
   }
 
   /**
