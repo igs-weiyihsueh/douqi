@@ -10,7 +10,34 @@ export const GameConfig = {
   /** 除錯開關 */
   debug: {
     /** 顯示慢速模式即時調參面板(藍圈/衝刺距離/速度)——用戶要求預設關 */
-    showSlowTuningPanel: false
+    showSlowTuningPanel: false,
+    /** 顯示相機zoom編輯器——用戶可調整鏡頭縮放級別 */
+    showZoomEditor: true
+  },
+
+  /** ★相機zoom編輯器配置 */
+  zoomEditor: {
+    /** 預設zoom級別 */
+    defaultZoom: 1.0,
+    /** zoom調整範圍 */
+    minZoom: 0.3,
+    maxZoom: 3.0,
+    /** zoom調整步進 */
+    zoomStep: 0.1,
+    /** 編輯器UI位置 */
+    panelX: 50,
+    panelY: 200,
+    /** 編輯器面板寬高 */
+    panelWidth: 280,
+    panelHeight: 150,
+    /** 快捷鍵綁定：1-5數字鍵對應的zoom級別 */
+    hotkeyZooms: {
+      '1': 0.5,  // 1鍵 = 0.5x (拉遠)
+      '2': 0.75, // 2鍵 = 0.75x  
+      '3': 1.0,  // 3鍵 = 1.0x (原始)
+      '4': 1.5,  // 4鍵 = 1.5x (拉近)
+      '5': 2.0   // 5鍵 = 2.0x (更近)
+    } as Record<string, number>
   },
 
   /** ★波次進度 HUD(關卡制:節點序列 ●─●─◆);只純波次顯示,事件/BOSS 隱藏 */
