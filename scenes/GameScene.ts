@@ -9176,10 +9176,10 @@ export class GameScene extends Phaser.Scene {
     
     const width = 600;
     const height = 500;
-    const x = GameConfig.width - width - 20;
-    const y = 20;
+    const x = GameConfig.width / 2; // 居中顯示
+    const y = GameConfig.height / 2; // 居中顯示
     
-    console.log(`📐 編輯器位置: (${x}, ${y}), 尺寸: ${width}×${height}`);
+    console.log(`📐 編輯器位置: (${x}, ${y}), 尺寸: ${width}×${height} - 居中顯示`);
 
     try {
       // 主容器
@@ -9522,6 +9522,9 @@ export class GameScene extends Phaser.Scene {
     // 先清除可能存在的舊監聽器
     this.clearEditorControls();
     
+    // 禁用角色移動鍵，避免衝突
+    this.disablePlayerMovement();
+    
     // 方向鍵控制
     this.input.keyboard?.on('keydown-UP', (event: KeyboardEvent) => {
       if (!this.editorActive || !this.editorPanel) {
@@ -9596,8 +9599,39 @@ export class GameScene extends Phaser.Scene {
     });
 
     console.log('⌨️ 編輯器鍵盤控制已啟用，包含詳細日誌和事件保護');
+    console.log('🔒 角色移動鍵已禁用，避免操作衝突');
     console.log(`📊 當前滑條數量: ${this.editorSliders.length}`);
     console.log(`🎯 當前選中滑條: ${this.selectedSlider}`);
+  }
+
+  private disablePlayerMovement(): void {
+    // 禁用角色移動相關的鍵盤輸入
+    if (this.slowKeys) {
+      this.slowKeys.up.enabled = false;
+      this.slowKeys.down.enabled = false;
+      this.slowKeys.left.enabled = false;
+      this.slowKeys.right.enabled = false;
+      this.slowKeys.w.enabled = false;
+      this.slowKeys.a.enabled = false;
+      this.slowKeys.s.enabled = false;
+      this.slowKeys.d.enabled = false;
+      console.log('🔒 角色移動鍵已禁用（UP/DOWN/LEFT/RIGHT + WASD）');
+    }
+  }
+
+  private enablePlayerMovement(): void {
+    // 重新啟用角色移動相關的鍵盤輸入
+    if (this.slowKeys) {
+      this.slowKeys.up.enabled = true;
+      this.slowKeys.down.enabled = true;
+      this.slowKeys.left.enabled = true;
+      this.slowKeys.right.enabled = true;
+      this.slowKeys.w.enabled = true;
+      this.slowKeys.a.enabled = true;
+      this.slowKeys.s.enabled = true;
+      this.slowKeys.d.enabled = true;
+      console.log('🔓 角色移動鍵已重新啟用（UP/DOWN/LEFT/RIGHT + WASD）');
+    }
   }
 
   private clearEditorControls(): void {
@@ -9608,7 +9642,11 @@ export class GameScene extends Phaser.Scene {
     this.input.keyboard?.off('keydown-RIGHT');
     this.input.keyboard?.off('keydown-ENTER');
     this.input.keyboard?.off('keydown-ESC');
-    console.log('🧹 舊的鍵盤監聽器已清除');
+    
+    // 重新啟用角色移動
+    this.enablePlayerMovement();
+    
+    console.log('🧹 舊的鍵盤監聽器已清除，角色移動已恢復');
   }
 
   private handleSliderClick(index: number, pointer: Phaser.Input.Pointer, _sliderY: number): void {
@@ -9621,20 +9659,28 @@ export class GameScene extends Phaser.Scene {
     const slider = this.editorSliders[index];
     if (!slider) return;
     
+    // 獲取滑條在世界座標中的位置
+    const panel = this.editorPanel!;
+    const worldX = panel.x;
+    
+    // 滑條相對於面板的位置
+    const sliderRelativeX = -100; // 滑條在面板中的X位置
+    const sliderWorldX = worldX + sliderRelativeX;
+    
     // 計算點擊位置對應的值
-    const sliderStartX = -200; // 滑條起始X座標
-    const sliderWidth = 200;   // 滑條寬度
+    const sliderWidth = 200;
     
     // 獲取相對於滑條的點擊位置
-    const relativeX = pointer.worldX - (this.editorPanel!.x + sliderStartX);
+    const relativeX = pointer.worldX - (sliderWorldX - sliderWidth / 2);
     const progress = Phaser.Math.Clamp(relativeX / sliderWidth, 0, 1);
+    
+    console.log(`🎯 滑條點擊位置: worldX=${pointer.worldX}, sliderWorldX=${sliderWorldX}, relativeX=${relativeX.toFixed(1)}px, 進度: ${(progress * 100).toFixed(1)}%`);
     
     // 計算新數值
     const rawValue = slider.min + (slider.max - slider.min) * progress;
     const steppedValue = Math.round(rawValue / slider.step) * slider.step;
     const clampedValue = Phaser.Math.Clamp(steppedValue, slider.min, slider.max);
     
-    console.log(`🎯 滑條點擊位置: ${relativeX.toFixed(1)}px, 進度: ${(progress * 100).toFixed(1)}%`);
     console.log(`🔢 計算數值: ${rawValue.toFixed(1)} → ${steppedValue} → ${clampedValue}`);
     
     // 更新數值
@@ -9645,27 +9691,41 @@ export class GameScene extends Phaser.Scene {
     const slider = this.editorSliders[index];
     if (!slider) return;
     
+    console.log(`🖱️ 拖拽滑條 ${index}: ${slider.name}`);
+    
+    // 獲取滑條在世界座標中的位置
+    const panel = this.editorPanel!;
+    const worldX = panel.x;
+    
+    // 滑條相對於面板的位置
+    const sliderRelativeX = -100; // 滑條在面板中的X位置
+    const sliderWorldX = worldX + sliderRelativeX;
+    
     // 計算拖拽位置對應的值
-    const sliderStartX = -200;
     const sliderWidth = 200;
     
-    // 限制手柄在滑條範圍內
-    const relativeX = pointer.worldX - (this.editorPanel!.x + sliderStartX);
+    // 滑鼠相對於滑條起點的位置
+    const relativeX = pointer.worldX - (sliderWorldX - sliderWidth / 2);
     const clampedX = Phaser.Math.Clamp(relativeX, 0, sliderWidth);
     const progress = clampedX / sliderWidth;
+    
+    console.log(`📊 拖拽計算: worldX=${pointer.worldX}, sliderWorldX=${sliderWorldX}, relativeX=${relativeX}, progress=${(progress * 100).toFixed(1)}%`);
     
     // 計算新數值
     const rawValue = slider.min + (slider.max - slider.min) * progress;
     const steppedValue = Math.round(rawValue / slider.step) * slider.step;
     const clampedValue = Phaser.Math.Clamp(steppedValue, slider.min, slider.max);
     
+    console.log(`🔢 數值計算: raw=${rawValue.toFixed(1)}, stepped=${steppedValue}, final=${clampedValue}`);
+    
     // 更新手柄位置（基於實際數值，確保對齊步進）
     const actualProgress = (clampedValue - slider.min) / (slider.max - slider.min);
-    const actualX = sliderStartX + actualProgress * sliderWidth;
+    const actualX = sliderRelativeX + (actualProgress - 0.5) * sliderWidth;
     (handle as any).x = actualX;
     
     // 更新數值（只在值實際改變時）
     if (slider.value !== clampedValue) {
+      console.log(`🔄 更新數值: ${slider.value} → ${clampedValue}`);
       this.updateSliderValue(index, clampedValue);
     }
   }
