@@ -22,22 +22,36 @@ export const GameConfig = {
     /** zoom調整範圍 */
     minZoom: 0.3,
     maxZoom: 3.0,
-    /** zoom調整步進 */
-    zoomStep: 0.1,
+    /** 按鈕微調步進 */
+    fineStep: 0.05,
+    /** 滑桿大步進 */
+    coarseStep: 0.1,
+    /** 鍵盤快調步進 */
+    keyboardStep: 0.2,
     /** 編輯器UI位置 */
     panelX: 50,
     panelY: 200,
     /** 編輯器面板寬高 */
-    panelWidth: 280,
-    panelHeight: 150,
-    /** 快捷鍵綁定：1-5數字鍵對應的zoom級別 */
-    hotkeyZooms: {
-      '1': 0.5,  // 1鍵 = 0.5x (拉遠)
-      '2': 0.75, // 2鍵 = 0.75x  
-      '3': 1.0,  // 3鍵 = 1.0x (原始)
-      '4': 1.5,  // 4鍵 = 1.5x (拉近)
-      '5': 2.0   // 5鍵 = 2.0x (更近)
-    } as Record<string, number>
+    panelWidth: 320,
+    panelHeight: 180,
+    /** 滑桿控制 */
+    slider: {
+      width: 200,
+      height: 20,
+      trackColor: 0x444444,
+      handleColor: 0x00ff00,
+      handleRadius: 10
+    },
+    /** 快捷鍵功能：現在用於快速調整而非固定值 */
+    shortcuts: {
+      zoomIn: ['PLUS', 'NUMPAD_ADD'],      // 放大快捷鍵
+      zoomOut: ['MINUS', 'NUMPAD_SUBTRACT'], // 縮小快捷鍵
+      reset: ['R'],                         // 重置快捷鍵
+      preset: {                            // 預設值快捷鍵
+        '1': 0.5,  '2': 0.75, '3': 1.0, 
+        '4': 1.5,  '5': 2.0,  '0': 3.0   // 0鍵=最大zoom
+      }
+    }
   },
 
   /** ★波次進度 HUD(關卡制:節點序列 ●─●─◆);只純波次顯示,事件/BOSS 隱藏 */
