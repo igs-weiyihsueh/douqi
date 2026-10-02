@@ -8419,6 +8419,13 @@ export class GameScene extends Phaser.Scene {
       console.log('✓ willRender:', this.testGraphicsBackground?.willRender?.(this.cameras.main));
       console.log('✓ camera:', this.cameras.main?.name || 'main');
       console.log('✓ cameraVisible:', this.testGraphicsBackground ? this.cameras.main.visible : false);
+      
+      // ★檢測E - Graphics場景歸屬深度確認
+      console.log('🔍 檢測E - Graphics場景歸屬深度確認:');
+      console.log('✓ scene.name:', this.testGraphicsBackground?.scene?.scene?.key || 'unknown');
+      console.log('✓ scene.children.length:', this.children.length);
+      console.log('✓ graphics.parentScene:', this.testGraphicsBackground?.scene === this ? 'correct' : 'wrong');
+      console.log('✓ inDisplayList:', this.children.exists(this.testGraphicsBackground));
     }
     
     // ★關鍵診斷3：最終狀態確認
