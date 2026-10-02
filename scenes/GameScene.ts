@@ -8413,6 +8413,12 @@ export class GameScene extends Phaser.Scene {
       console.log('✓ active:', this.testGraphicsBackground.active);
       console.log('✓ visible:', this.testGraphicsBackground.visible);
       console.log('✓ alpha:', this.testGraphicsBackground.alpha);
+      
+      // ★檢測D - Graphics渲染狀態檢測
+      console.log('🔍 檢測D - Graphics渲染狀態檢測:');
+      console.log('✓ willRender:', this.testGraphicsBackground?.willRender?.(this.cameras.main));
+      console.log('✓ camera:', this.cameras.main?.name || 'main');
+      console.log('✓ cameraVisible:', this.testGraphicsBackground ? this.cameras.main.visible : false);
     }
     
     // ★關鍵診斷3：最終狀態確認
