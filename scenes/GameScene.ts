@@ -8394,6 +8394,13 @@ export class GameScene extends Phaser.Scene {
       console.log('✓ scaleX:', this.testGraphicsBackground.scaleX);
       console.log('✓ scaleY:', this.testGraphicsBackground.scaleY); 
       console.log('✓ scale:', this.testGraphicsBackground.scale);
+      
+      // ★檢測B - Graphics容器歸屬檢測
+      console.log('🔍 檢測B - Graphics容器歸屬檢測:');
+      console.log('✓ scene:', this.testGraphicsBackground.scene?.constructor.name);
+      console.log('✓ parent:', this.testGraphicsBackground.parentContainer?.constructor.name || 'null');
+      console.log('✓ displayList:', !!(this.testGraphicsBackground as any).displayList);
+      console.log('✓ updateList:', !!(this.testGraphicsBackground as any).updateList);
     }
     
     // ★關鍵診斷3：最終狀態確認
