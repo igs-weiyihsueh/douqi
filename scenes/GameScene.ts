@@ -8362,9 +8362,12 @@ export class GameScene extends Phaser.Scene {
     
     // ★新增：F5鍵開啟實時參數編輯器 (阻止瀏覽器默認刷新行為)
     this.input.keyboard?.on('keydown-F5', (event: KeyboardEvent) => {
+      console.log('🎯 Phaser收到F5鍵事件');
       event.preventDefault(); // 阻止瀏覽器默認的F5刷新行為
       event.stopPropagation(); // 阻止事件冒泡
+      console.log('🔧 開始執行toggleParameterEditor...');
       this.toggleParameterEditor();
+      console.log('✅ toggleParameterEditor執行完成');
     });
     
     console.log('⌨️ F1熱鍵監聽器已設置');
@@ -9002,58 +9005,95 @@ export class GameScene extends Phaser.Scene {
    * - 場景邊距
    */
   private toggleParameterEditor(): void {
-    if (this.editorActive) {
-      this.closeParameterEditor();
-    } else {
-      this.openParameterEditor();
+    console.log('🎯 toggleParameterEditor被調用，當前狀態:', this.editorActive);
+    console.log('📊 Scene狀態檢查:');
+    console.log(`  - Scene active: ${this.scene.isActive()}`);
+    console.log(`  - Scene visible: ${this.scene.isVisible()}`);
+    console.log(`  - Add factory available: ${!!this.add}`);
+    console.log(`  - Input available: ${!!this.input}`);
+    console.log(`  - Physics available: ${!!this.physics}`);
+    
+    try {
+      if (this.editorActive) {
+        console.log('🔄 關閉已存在的編輯器');
+        this.closeParameterEditor();
+      } else {
+        console.log('🚀 開啟新的編輯器');
+        this.openParameterEditor();
+      }
+    } catch (error) {
+      console.error('❌ toggleParameterEditor執行錯誤:', error);
     }
   }
 
   private openParameterEditor(): void {
-    console.log('🔧 開啟實時參數編輯器');
-    this.editorActive = true;
-
-    // 創建編輯器面板
-    this.createEditorPanel();
+    console.log('🔧 開始創建實時參數編輯器...');
     
-    // 設置鍵盤監聽
-    this.setupEditorControls();
+    try {
+      this.editorActive = true;
+
+      // 創建編輯器面板
+      this.createEditorPanel();
+      
+      // 設置鍵盤監聽
+      this.setupEditorControls();
+      
+      console.log('✅ 參數編輯器創建完成');
+    } catch (error) {
+      console.error('❌ 創建參數編輯器失敗:', error);
+      this.editorActive = false;
+    }
   }
 
   private createEditorPanel(): void {
+    console.log('📋 開始創建編輯器面板...');
+    
     const width = 600;
     const height = 500;
     const x = GameConfig.width - width - 20;
     const y = 20;
+    
+    console.log(`📐 編輯器位置: (${x}, ${y}), 尺寸: ${width}×${height}`);
 
-    // 主容器
-    this.editorPanel = this.add.container(x, y);
-    this.editorPanel.setDepth(1000); // 最高深度確保在最上層
+    try {
+      // 主容器
+      this.editorPanel = this.add.container(x, y);
+      this.editorPanel.setDepth(1000); // 最高深度確保在最上層
+      console.log('✅ 主容器創建成功');
 
-    // 背景面板
-    this.editorBackground = this.add.rectangle(0, 0, width, height, 0x1a1a1a, 0.9);
-    this.editorBackground.setStrokeStyle(2, 0x4a9eff);
-    this.editorPanel.add(this.editorBackground);
+      // 背景面板
+      this.editorBackground = this.add.rectangle(0, 0, width, height, 0x1a1a1a, 0.9);
+      this.editorBackground.setStrokeStyle(2, 0x4a9eff);
+      this.editorPanel.add(this.editorBackground);
+      console.log('✅ 背景面板創建成功');
 
-    // 標題
-    const title = this.add.text(0, -height/2 + 30, '🔧 實時參數編輯器', {
-      fontSize: '20px',
-      color: '#ffffff',
-      fontFamily: 'Arial'
-    }).setOrigin(0.5);
-    this.editorPanel.add(title);
+      // 標題
+      const title = this.add.text(0, -height/2 + 30, '🔧 實時參數編輯器', {
+        fontSize: '20px',
+        color: '#ffffff',
+        fontFamily: 'Arial'
+      }).setOrigin(0.5);
+      this.editorPanel.add(title);
+      console.log('✅ 標題創建成功');
 
-    // 說明文字
-    const instructions = this.add.text(0, -height/2 + 60, 
-      '↑↓ 選擇參數  ←→ 調整數值  Enter 保存  Esc 取消', {
-      fontSize: '14px',
-      color: '#cccccc',
-      fontFamily: 'Arial'
-    }).setOrigin(0.5);
-    this.editorPanel.add(instructions);
+      // 說明文字
+      const instructions = this.add.text(0, -height/2 + 60, 
+        '↑↓ 選擇參數  ←→ 調整數值  Enter 保存  Esc 取消', {
+        fontSize: '14px',
+        color: '#cccccc',
+        fontFamily: 'Arial'
+      }).setOrigin(0.5);
+      this.editorPanel.add(instructions);
+      console.log('✅ 說明文字創建成功');
 
-    // 創建參數滑條
-    this.createParameterSliders();
+      // 創建參數滑條
+      this.createParameterSliders();
+      
+      console.log('🎉 編輯器面板創建完成');
+    } catch (error) {
+      console.error('❌ 創建編輯器面板失敗:', error);
+      throw error;
+    }
   }
 
   private createParameterSliders(): void {

@@ -36,14 +36,17 @@ const game = new Phaser.Game(config);
 // 除錯用把 game 實例掛到 window（無害；供自動化測試/主控台檢視）
 (window as unknown as { __game: Phaser.Game }).__game = game;
 
-// ★全局防護：阻止F5刷新頁面，確保F5專用於遊戲內編輯器
+// ★全局防護：阻止F5刷新頁面，但優先讓Phaser處理F5
 window.addEventListener('keydown', (event) => {
   if (event.key === 'F5') {
-    event.preventDefault();
-    event.stopPropagation();
-    console.log('🔒 F5刷新已阻止，F5專用於遊戲參數編輯器');
+    // 給Phaser一點時間處理，然後才阻止默認行為
+    setTimeout(() => {
+      event.preventDefault();
+      event.stopPropagation();
+      console.log('🔒 F5刷新已阻止（延遲攔截），F5專用於遊戲參數編輯器');
+    }, 1);
   }
-}, true); // 使用capture模式確保最早攔截
+}, false); // 改為bubble模式，讓Phaser優先處理
 
 // 額外防護：阻止右鍵菜單刷新
 window.addEventListener('contextmenu', (event) => {
