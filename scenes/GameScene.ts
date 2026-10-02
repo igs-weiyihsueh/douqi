@@ -421,6 +421,16 @@ export class GameScene extends Phaser.Scene {
       this.quitToTitle();
     });
 
+    // ★F4 鍵：切換背景圖 (Scene.png 開關)
+    this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.F4).on('down', () => {
+      this.toggleSceneBackground();
+    });
+
+    // ★F2 鍵：強制重載 Scene.png
+    this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.F2).on('down', () => {
+      this.forceReloadSceneBackground();
+    });
+
     // ★除錯熱鍵 [ / ] :切換預覽關卡場景(1-4),即時重繪當前子區地貌+遠景(給看 4 關對比用)。
     if (this.levelMode) {
       this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.OPEN_BRACKET).on('down', () => {
@@ -8368,15 +8378,7 @@ export class GameScene extends Phaser.Scene {
     
     console.log('🎨 Graphics測試背景已創建：紫紅色 (depth=-9, hidden)');
 
-    // F4熱鍵監聽 (改為F4避免與瀏覽器F1快捷鍵衝突)
-    this.input.keyboard?.on('keydown-F4', () => {
-      this.toggleSceneBackground();
-    });
-    
-    // ★新增：F2鍵強制重載Scene.png
-    this.input.keyboard?.on('keydown-F2', () => {
-      this.forceReloadSceneBackground();
-    });
+    // Graphics測試背景現在由F4/F2鍵控制，已移至create()方法的鍵盤綁定區
     
     console.log('⌨️ F1熱鍵監聽器已設置');
     console.log('⌨️ F2強制重載已設置');
@@ -8410,12 +8412,11 @@ export class GameScene extends Phaser.Scene {
       if (this.textures.exists('scene-background')) {
         console.log('🔧 嘗試立即創建Scene.png背景...');
         const gameArea = this.calculateGameArea();
-        this.sceneBackground = this.add.image(gameArea.x, gameArea.y, 'scene-background')
-          .setOrigin(0, 0)
-          .setDisplaySize(gameArea.width, gameArea.height)
-          .setDepth(1)  // 深度1：覆蓋地面圖片但不遮擋遊戲元素
+        this.sceneBackground = this.add.image(gameArea.centerX, gameArea.centerY, 'scene-background')
+          .setOrigin(0.5, 0.5)  // 中心對齊
+          .setDepth(1)          // 深度1：覆蓋地面圖片但不遮擋遊戲元素
           .setVisible(false)
-          .setScrollFactor(0);
+          .setScrollFactor(0);  // ★保持原始尺寸，不縮放
         console.log('✅ Scene.png背景已重新創建');
       } else {
         console.error('❌ scene-background紋理不存在，無法創建背景');
