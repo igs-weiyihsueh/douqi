@@ -35,6 +35,24 @@ export class GameScene extends Phaser.Scene {
   private testRectangleBackground: Phaser.GameObjects.Rectangle | null = null;
   private isNewSceneActive = false;
 
+  // ★實時參數編輯器系統
+  private editorActive = false;
+  private editorPanel: Phaser.GameObjects.Container | null = null;
+  private editorBackground: Phaser.GameObjects.Rectangle | null = null;
+  private editorSliders: Array<{
+    name: string;
+    value: number;
+    min: number;
+    max: number;
+    step: number;
+    slider: Phaser.GameObjects.Rectangle;
+    handle: Phaser.GameObjects.GameObject;
+    label: Phaser.GameObjects.Text;
+    valueText: Phaser.GameObjects.Text;
+    originalValue: number;
+  }> = [];
+  private selectedSlider = 0;
+
   private survivalMs = 0;
   private gameOver = false;
 
@@ -8342,8 +8360,14 @@ export class GameScene extends Phaser.Scene {
       this.forceReloadSceneBackground();
     });
     
+    // ★新增：F5鍵開啟實時參數編輯器
+    this.input.keyboard?.on('keydown-F5', () => {
+      this.toggleParameterEditor();
+    });
+    
     console.log('⌨️ F1熱鍵監聽器已設置');
     console.log('⌨️ F2強制重載已設置');
+    console.log('⌨️ F5實時參數編輯器已設置');
   }
 
   /**
@@ -8964,5 +8988,371 @@ export class GameScene extends Phaser.Scene {
     });
     
     this.load.start();
+  }
+
+  /**
+   * ★實時參數編輯器
+   * F5鍵觸發，讓用戶實時調整相機和邊界參數
+   * 支持的參數：
+   * - 競技場邊距 (arena.padding)
+   * - 相機跟隨死區寬度/高度
+   * - 關卡arena尺寸
+   * - 場景邊距
+   */
+  private toggleParameterEditor(): void {
+    if (this.editorActive) {
+      this.closeParameterEditor();
+    } else {
+      this.openParameterEditor();
+    }
+  }
+
+  private openParameterEditor(): void {
+    console.log('🔧 開啟實時參數編輯器');
+    this.editorActive = true;
+
+    // 創建編輯器面板
+    this.createEditorPanel();
+    
+    // 設置鍵盤監聽
+    this.setupEditorControls();
+  }
+
+  private createEditorPanel(): void {
+    const width = 600;
+    const height = 500;
+    const x = GameConfig.width - width - 20;
+    const y = 20;
+
+    // 主容器
+    this.editorPanel = this.add.container(x, y);
+    this.editorPanel.setDepth(1000); // 最高深度確保在最上層
+
+    // 背景面板
+    this.editorBackground = this.add.rectangle(0, 0, width, height, 0x1a1a1a, 0.9);
+    this.editorBackground.setStrokeStyle(2, 0x4a9eff);
+    this.editorPanel.add(this.editorBackground);
+
+    // 標題
+    const title = this.add.text(0, -height/2 + 30, '🔧 實時參數編輯器', {
+      fontSize: '20px',
+      color: '#ffffff',
+      fontFamily: 'Arial'
+    }).setOrigin(0.5);
+    this.editorPanel.add(title);
+
+    // 說明文字
+    const instructions = this.add.text(0, -height/2 + 60, 
+      '↑↓ 選擇參數  ←→ 調整數值  Enter 保存  Esc 取消', {
+      fontSize: '14px',
+      color: '#cccccc',
+      fontFamily: 'Arial'
+    }).setOrigin(0.5);
+    this.editorPanel.add(instructions);
+
+    // 創建參數滑條
+    this.createParameterSliders();
+  }
+
+  private createParameterSliders(): void {
+    this.editorSliders = [];
+    const startY = -180;
+    const spacing = 70;
+    
+    const parameters = [
+      { 
+        name: '競技場邊距', 
+        current: GameConfig.arena.padding, 
+        min: 20, 
+        max: 150, 
+        step: 2,
+        configPath: 'arena.padding' 
+      },
+      { 
+        name: '相機跟隨死區寬', 
+        current: GameConfig.stage.followDeadzoneW, 
+        min: 200, 
+        max: 800, 
+        step: 10,
+        configPath: 'stage.followDeadzoneW' 
+      },
+      { 
+        name: '相機跟隨死區高', 
+        current: GameConfig.stage.followDeadzoneH, 
+        min: 200, 
+        max: 800, 
+        step: 10,
+        configPath: 'stage.followDeadzoneH' 
+      },
+      { 
+        name: '關卡Arena寬', 
+        current: GameConfig.stage.arenaW, 
+        min: 1000, 
+        max: 2000, 
+        step: 20,
+        configPath: 'stage.arenaW' 
+      },
+      { 
+        name: '關卡Arena高', 
+        current: GameConfig.stage.arenaH, 
+        min: 600, 
+        max: 1200, 
+        step: 20,
+        configPath: 'stage.arenaH' 
+      },
+      { 
+        name: '場景邊距', 
+        current: GameConfig.stage.sceneMargin, 
+        min: 100, 
+        max: 500, 
+        step: 10,
+        configPath: 'stage.sceneMargin' 
+      }
+    ];
+
+    parameters.forEach((param, index) => {
+      const y = startY + index * spacing;
+      
+      // 參數標籤
+      const label = this.add.text(-250, y - 15, param.name, {
+        fontSize: '16px',
+        color: '#ffffff',
+        fontFamily: 'Arial'
+      });
+      this.editorPanel!.add(label);
+      
+      // 滑條背景
+      const sliderBg = this.add.rectangle(-100, y, 200, 8, 0x333333);
+      this.editorPanel!.add(sliderBg);
+      
+      // 滑條前景
+      const slider = this.add.rectangle(-100, y, 200, 8, 0x4a9eff);
+      this.editorPanel!.add(slider);
+      
+      // 滑條手柄
+      const progress = (param.current - param.min) / (param.max - param.min);
+      const handleX = -200 + progress * 200;
+      const handle = this.add.circle(-100 + handleX, y, 8, 0xffffff);
+      this.editorPanel!.add(handle);
+      
+      // 數值顯示
+      const valueText = this.add.text(150, y, param.current.toString(), {
+        fontSize: '16px',
+        color: '#4a9eff',
+        fontFamily: 'Arial'
+      });
+      this.editorPanel!.add(valueText);
+
+      this.editorSliders.push({
+        name: param.name,
+        value: param.current,
+        min: param.min,
+        max: param.max,
+        step: param.step,
+        slider: slider,
+        handle: handle,
+        label: label,
+        valueText: valueText,
+        originalValue: param.current
+      });
+    });
+
+    // 高亮第一個滑條
+    this.updateSliderHighlight();
+  }
+
+  private updateSliderHighlight(): void {
+    this.editorSliders.forEach((slider, index) => {
+      if (index === this.selectedSlider) {
+        slider.label.setColor('#ffff00'); // 黃色高亮
+        slider.slider.setFillStyle(0xffaa00); // 橙色滑條
+      } else {
+        slider.label.setColor('#ffffff'); // 白色
+        slider.slider.setFillStyle(0x4a9eff); // 藍色滑條
+      }
+    });
+  }
+
+  private setupEditorControls(): void {
+    // 方向鍵控制
+    this.input.keyboard?.on('keydown-UP', () => {
+      if (!this.editorActive) return;
+      this.selectedSlider = Math.max(0, this.selectedSlider - 1);
+      this.updateSliderHighlight();
+    });
+
+    this.input.keyboard?.on('keydown-DOWN', () => {
+      if (!this.editorActive) return;
+      this.selectedSlider = Math.min(this.editorSliders.length - 1, this.selectedSlider + 1);
+      this.updateSliderHighlight();
+    });
+
+    // 左右鍵調整數值
+    this.input.keyboard?.on('keydown-LEFT', () => {
+      if (!this.editorActive) return;
+      this.adjustSelectedParameter(-1);
+    });
+
+    this.input.keyboard?.on('keydown-RIGHT', () => {
+      if (!this.editorActive) return;
+      this.adjustSelectedParameter(1);
+    });
+
+    // Enter保存，Esc取消
+    this.input.keyboard?.on('keydown-ENTER', () => {
+      if (!this.editorActive) return;
+      this.saveParameters();
+    });
+
+    this.input.keyboard?.on('keydown-ESC', () => {
+      if (!this.editorActive) return;
+      this.cancelParameters();
+    });
+  }
+
+  private adjustSelectedParameter(direction: number): void {
+    const slider = this.editorSliders[this.selectedSlider];
+    if (!slider) return;
+
+    const newValue = Phaser.Math.Clamp(
+      slider.value + (direction * slider.step),
+      slider.min,
+      slider.max
+    );
+
+    slider.value = newValue;
+    slider.valueText.setText(newValue.toString());
+
+    // 更新滑條位置
+    const progress = (newValue - slider.min) / (slider.max - slider.min);
+    const handleX = -200 + progress * 200;
+    (slider.handle as any).x = -100 + handleX;
+
+    // 即時應用參數
+    this.applyParameterChanges(this.selectedSlider, newValue);
+  }
+
+  private applyParameterChanges(index: number, value: number): void {
+    // 立即應用參數變化到遊戲配置
+    switch (index) {
+      case 0: // 競技場邊距
+        (GameConfig.arena as any).padding = value;
+        this.updateArenaSize();
+        break;
+      case 1: // 相機跟隨死區寬
+        (GameConfig.stage as any).followDeadzoneW = value;
+        break;
+      case 2: // 相機跟隨死區高
+        (GameConfig.stage as any).followDeadzoneH = value;
+        break;
+      case 3: // 關卡Arena寬
+        (GameConfig.stage as any).arenaW = value;
+        if (this.levelMode) this.updateLevelArenas();
+        break;
+      case 4: // 關卡Arena高
+        (GameConfig.stage as any).arenaH = value;
+        if (this.levelMode) this.updateLevelArenas();
+        break;
+      case 5: // 場景邊距
+        (GameConfig.stage as any).sceneMargin = value;
+        if (this.levelMode) this.updateLevelArenas();
+        break;
+    }
+  }
+
+  private updateArenaSize(): void {
+    // 更新競技場大小
+    const pad = GameConfig.arena.padding;
+    const arenaW = GameConfig.width - pad * 2;
+    const arenaH = GameConfig.height - pad * 2;
+    this.arena = new Phaser.Geom.Rectangle(pad, pad, arenaW, arenaH);
+    console.log(`🔧 競技場邊距更新為: ${pad}, 新尺寸: ${arenaW}×${arenaH}`);
+  }
+
+  private updateLevelArenas(): void {
+    // 重新計算關卡arena尺寸
+    if (!this.levelMode) return;
+    
+    const st = GameConfig.stage;
+    const aW = st.arenaW;
+    const aH = st.arenaH;
+    const m = st.sceneMargin;
+    const gap = st.subGap;
+    const slotW = aW + m * 2;
+
+    // 重新定義三個slot的arena區域
+    this.zoneA = new Phaser.Geom.Rectangle(slotW + gap + m, m, aW, aH);
+    this.zoneBLeft = new Phaser.Geom.Rectangle(m, m, aW, aH);  
+    this.zoneBRight = new Phaser.Geom.Rectangle((slotW + gap) * 2 + m, m, aW, aH);
+
+    console.log(`🔧 關卡Arena更新: ${aW}×${aH}, 邊距: ${m}`);
+  }
+
+  private saveParameters(): void {
+    console.log('💾 保存參數到配置文件');
+    
+    // 生成新的配置文件內容
+    const configUpdates = this.generateConfigUpdates();
+    
+    // 顯示更新內容
+    console.log('📝 配置更新內容:');
+    console.log(configUpdates);
+    
+    // 關閉編輯器
+    this.closeParameterEditor();
+    
+    console.log('✅ 參數已保存！請手動更新config.ts文件中的對應數值');
+    console.log('🔧 或者重新載入遊戲以使用新參數');
+  }
+
+  private generateConfigUpdates(): string {
+    let updates = '// 實時參數編輯器生成的配置更新:\n';
+    
+    this.editorSliders.forEach((slider, index) => {
+      const configPaths = [
+        'arena.padding',
+        'stage.followDeadzoneW', 
+        'stage.followDeadzoneH',
+        'stage.arenaW',
+        'stage.arenaH',
+        'stage.sceneMargin'
+      ];
+      
+      updates += `${configPaths[index]}: ${slider.value}, // 原值: ${slider.originalValue}\n`;
+    });
+    
+    return updates;
+  }
+
+  private cancelParameters(): void {
+    console.log('🚫 取消參數修改，恢復原值');
+    
+    // 恢復所有原始值
+    this.editorSliders.forEach((slider, index) => {
+      this.applyParameterChanges(index, slider.originalValue);
+    });
+    
+    this.closeParameterEditor();
+  }
+
+  private closeParameterEditor(): void {
+    console.log('🔧 關閉實時參數編輯器');
+    this.editorActive = false;
+    
+    if (this.editorPanel) {
+      this.editorPanel.destroy();
+      this.editorPanel = null;
+    }
+    
+    this.editorSliders = [];
+    this.selectedSlider = 0;
+    
+    // 清除鍵盤監聽（這些是臨時的）
+    this.input.keyboard?.off('keydown-UP');
+    this.input.keyboard?.off('keydown-DOWN');
+    this.input.keyboard?.off('keydown-LEFT');
+    this.input.keyboard?.off('keydown-RIGHT');
+    this.input.keyboard?.off('keydown-ENTER');
+    this.input.keyboard?.off('keydown-ESC');
   }
 }
