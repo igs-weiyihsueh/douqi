@@ -8293,7 +8293,7 @@ export class GameScene extends Phaser.Scene {
       this.sceneBackground = this.add.image(gameArea.x, gameArea.y, 'scene-background')
         .setOrigin(0, 0)        // 左上角對齊
         .setDisplaySize(gameArea.width, gameArea.height)  // 縮放到覆蓋完整遊戲區域
-        .setDepth(-1)           // 背景層深度，不遮擋遊戲元素
+        .setDepth(1)            // 深度1：覆蓋地面圖片(depth=0)但不遮擋遊戲元素
         .setVisible(false)      // 預設隱藏
         .setScrollFactor(0);    // ★關鍵：固定不隨相機移動，像UI一樣
       
@@ -8377,7 +8377,7 @@ export class GameScene extends Phaser.Scene {
         this.sceneBackground = this.add.image(gameArea.x, gameArea.y, 'scene-background')
           .setOrigin(0, 0)
           .setDisplaySize(gameArea.width, gameArea.height)
-          .setDepth(-1)  // 背景層深度，不遮擋遊戲元素
+          .setDepth(1)  // 深度1：覆蓋地面圖片但不遮擋遊戲元素
           .setVisible(false)
           .setScrollFactor(0);
         console.log('✅ Scene.png背景已重新創建');
@@ -8413,17 +8413,17 @@ export class GameScene extends Phaser.Scene {
       console.log('🔍 Scene.png顯示邏輯檢查:');
       
       if (this.sceneBackground && sceneTextureLoaded) {
-        // 設置合適的背景深度，確保不遮擋遊戲元素
+        // 設置Scene.png深度為1，覆蓋地面圖片但不遮擋遊戲元素
         console.log('✅ Scene.png載入成功，設置顯示屬性:');
         this.sceneBackground.setVisible(true);
         this.sceneBackground.setAlpha(1);
-        this.sceneBackground.setDepth(-1);  // 設置為-1，在原背景之上但不遮擋遊戲元素
+        this.sceneBackground.setDepth(1);  // 設置為1，覆蓋地面(depth=0)但低於遊戲元素
         this.sceneBackground.setActive(true);
         
         // 檢查設置後的狀態
         console.log(`  ✓ 設置後visible: ${this.sceneBackground.visible}`);
         console.log(`  ✓ 設置後alpha: ${this.sceneBackground.alpha}`);
-        console.log(`  ✓ 設置後depth: ${this.sceneBackground.depth} (背景層，不遮擋遊戲元素)`);
+        console.log(`  ✓ 設置後depth: ${this.sceneBackground.depth} (覆蓋地面圖片，不遮擋遊戲元素)`);
         console.log(`  ✓ 設置後active: ${this.sceneBackground.active}`);
         console.log(`  ✓ 位置: (${this.sceneBackground.x}, ${this.sceneBackground.y})`);
         console.log(`  ✓ 顯示尺寸: ${this.sceneBackground.displayWidth} × ${this.sceneBackground.displayHeight}`);
@@ -8439,7 +8439,7 @@ export class GameScene extends Phaser.Scene {
         this.sceneBackground.setTexture('scene-background');
         console.log('🔄 已強制刷新Scene.png紋理');
         
-        console.log('🌋 真正的火山背景 Scene.png 已顯示 (火焰山場景)');
+        console.log('🌋 真正的火山背景 Scene.png 已顯示，完全覆蓋遊戲區域');
         
         // 隱藏測試背景
         if (this.testGraphicsBackground) {
@@ -8672,7 +8672,7 @@ export class GameScene extends Phaser.Scene {
         bg.setVisible(true);
         bg.setAlpha(1);
         bg.setActive(true);
-        bg.setDepth(-1);  // 確保設置為背景層深度
+        bg.setDepth(1);  // 確保設置為深度1，覆蓋地面但不遮擋遊戲元素
         console.log(`  ✓ 強制設置後visible: ${bg.visible}`);
         
       }
@@ -8949,7 +8949,7 @@ export class GameScene extends Phaser.Scene {
       // 重新創建背景物件
       this.sceneBackground = this.add.image(0, 0, 'scene-background-new')
         .setOrigin(0, 0)
-        .setDepth(-1)  // 背景層深度，不遮擋遊戲元素
+        .setDepth(1)  // 深度1：覆蓋地面圖片但不遮擋遊戲元素
         .setVisible(this.isNewSceneActive)
         .setScrollFactor(0)
         .setDisplaySize(GameConfig.width, GameConfig.height);
