@@ -9237,12 +9237,40 @@ export class GameScene extends Phaser.Scene {
     
     const parameters = [
       { 
-        name: '競技場邊距', 
-        current: GameConfig.arena.padding, 
-        min: 20, 
-        max: 150, 
-        step: 2,
-        configPath: 'arena.padding' 
+        name: '邊界寬度', 
+        current: this.levelMode ? GameConfig.stage.arenaW : (GameConfig.width - GameConfig.arena.padding * 2),
+        min: 800, 
+        max: 1800, 
+        step: 20,
+        configPath: 'boundary.width',
+        description: '藍色邊界框的寬度'
+      },
+      { 
+        name: '邊界高度', 
+        current: this.levelMode ? GameConfig.stage.arenaH : (GameConfig.height - GameConfig.arena.padding * 2),
+        min: 400, 
+        max: 1000, 
+        step: 20,
+        configPath: 'boundary.height',
+        description: '藍色邊界框的高度'
+      },
+      { 
+        name: '邊界位置X', 
+        current: this.levelMode ? (this.zoneA?.x || GameConfig.arena.padding) : GameConfig.arena.padding,
+        min: 50, 
+        max: 500, 
+        step: 10,
+        configPath: 'boundary.x',
+        description: '邊界框左上角X座標'
+      },
+      { 
+        name: '邊界位置Y', 
+        current: this.levelMode ? (this.zoneA?.y || GameConfig.arena.padding) : GameConfig.arena.padding,
+        min: 50, 
+        max: 300, 
+        step: 10,
+        configPath: 'boundary.y', 
+        description: '邊界框左上角Y座標'
       },
       { 
         name: '相機跟隨死區寬', 
@@ -9250,7 +9278,8 @@ export class GameScene extends Phaser.Scene {
         min: 200, 
         max: 800, 
         step: 10,
-        configPath: 'stage.followDeadzoneW' 
+        configPath: 'stage.followDeadzoneW',
+        description: '相機水平跟隨的延遲區域'
       },
       { 
         name: '相機跟隨死區高', 
@@ -9258,31 +9287,8 @@ export class GameScene extends Phaser.Scene {
         min: 200, 
         max: 800, 
         step: 10,
-        configPath: 'stage.followDeadzoneH' 
-      },
-      { 
-        name: '關卡Arena寬', 
-        current: GameConfig.stage.arenaW, 
-        min: 1000, 
-        max: 2000, 
-        step: 20,
-        configPath: 'stage.arenaW' 
-      },
-      { 
-        name: '關卡Arena高', 
-        current: GameConfig.stage.arenaH, 
-        min: 600, 
-        max: 1200, 
-        step: 20,
-        configPath: 'stage.arenaH' 
-      },
-      { 
-        name: '場景邊距', 
-        current: GameConfig.stage.sceneMargin, 
-        min: 100, 
-        max: 500, 
-        step: 10,
-        configPath: 'stage.sceneMargin' 
+        configPath: 'stage.followDeadzoneH',
+        description: '相機垂直跟隨的延遲區域'
       }
     ];
 
