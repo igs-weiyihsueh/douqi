@@ -32,6 +32,7 @@ export class GameScene extends Phaser.Scene {
   // ★場景切換系統
   private sceneBackground: Phaser.GameObjects.Image | null = null;
   private testGraphicsBackground: Phaser.GameObjects.Graphics | null = null;
+  private testRectangleBackground: Phaser.GameObjects.Rectangle | null = null;
   private isNewSceneActive = false;
 
   private survivalMs = 0;
@@ -8325,8 +8326,8 @@ export class GameScene extends Phaser.Scene {
     
     console.log('🎨 Graphics測試背景已創建：紫紅色 (depth=-9, hidden)');
 
-    // F1熱鍵監聽
-    this.input.keyboard?.on('keydown-F1', () => {
+    // F4熱鍵監聽 (改為F4避免與瀏覽器F1快捷鍵衝突)
+    this.input.keyboard?.on('keydown-F4', () => {
       this.toggleSceneBackground();
     });
     
@@ -8358,7 +8359,7 @@ export class GameScene extends Phaser.Scene {
    */
   private toggleSceneBackground(): void {
     // ★簡化LOG：只保留3個關鍵診斷訊息
-    console.log('🎯 F1按鍵觸發 - 場景切換開始');
+    console.log('🎯 F4按鍵觸發 - 場景切換開始 (熱鍵已改為F4)');
     
     if (!this.sceneBackground) {
       console.warn('⚠️ 場景背景圖片不可用，無法切換');
@@ -8379,7 +8380,10 @@ export class GameScene extends Phaser.Scene {
       if (this.testGraphicsBackground) {
         this.testGraphicsBackground.setVisible(true);
       }
-      console.log('🌋 切換到新場景：火山地獄風格 (Scene.png + Graphics測試)');
+      if (this.testRectangleBackground) {
+        this.testRectangleBackground.setVisible(true);
+      }
+      console.log('🌋 切換到新場景：火山地獄風格 (Scene.png + Graphics + Rectangle備用)');
     } else {
       // 隱藏新場景背景，顯示原場景
       if (this.sceneBackground) {
@@ -8387,6 +8391,9 @@ export class GameScene extends Phaser.Scene {
       }
       if (this.testGraphicsBackground) {
         this.testGraphicsBackground.setVisible(false);
+      }
+      if (this.testRectangleBackground) {
+        this.testRectangleBackground.setVisible(false);
       }
       console.log('🏛️ 切換到舊場景：原始程式生成場景');
     }
@@ -8462,11 +8469,40 @@ export class GameScene extends Phaser.Scene {
       const newBounds = (this.testGraphicsBackground as any)?.getBounds?.();
       console.log('✓ 重繪後width:', newBounds?.width || 'still unknown');
       console.log('✓ 重繪後height:', newBounds?.height || 'still unknown');
+      
+      // ★Graphics繪製失效問題深入調查
+      console.log('🔍 Phaser環境調查:');
+      console.log('✓ Phaser版本:', Phaser.VERSION);
+      console.log('✓ 渲染類型:', this.renderer.type === Phaser.WEBGL ? 'WebGL' : 'Canvas');
+      console.log('✓ Graphics構造函數:', typeof Phaser.GameObjects.Graphics);
+      
+      // 調查2: 重新創建測試
+      console.log('🔧 重新創建測試:');
+      const newGraphics = this.add.graphics();
+      newGraphics.fillStyle(0x00FF00, 1);  // 綠色測試
+      newGraphics.fillRect(100, 100, 200, 200);
+      const testBounds = (newGraphics as any).getBounds();
+      console.log('✓ 新Graphics bounds:', testBounds?.width || 'failed', 'x', testBounds?.height || 'failed');
+      newGraphics.destroy(); // 清理測試物件
+      
+      // 調查3: 替代繪製方案測試
+      console.log('🎨 替代方案測試:');
+      const coloredRect = this.add.rectangle(640, 360, 1280, 720, 0xFF0000); // 紅色矩形
+      coloredRect.setDepth(-8);
+      coloredRect.setVisible(false); // 預設隱藏
+      const rectBounds = (coloredRect as any).getBounds();
+      console.log('✓ Rectangle方案bounds:', rectBounds?.width || 'failed', 'x', rectBounds?.height || 'failed');
+      
+      // 將Rectangle作為備用方案
+      if (!this.testRectangleBackground) {
+        this.testRectangleBackground = coloredRect;
+        console.log('✅ Rectangle備用方案已準備');
+      }
     }
     
     // ★關鍵診斷3：最終狀態確認
     const finalState = this.isNewSceneActive ? '新場景' : '舊場景';
-    console.log(`📋 場景狀態：${finalState} (F1切換)`);
+    console.log(`📋 場景狀態：${finalState} (F4切換)`);
   }
 
   /**
