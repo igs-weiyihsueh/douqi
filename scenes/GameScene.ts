@@ -8361,9 +8361,6 @@ export class GameScene extends Phaser.Scene {
 
     // ★關鍵診斷1：Scene.png載入狀態
     console.log('🖼️ Scene.png狀態:', this.textures.exists('scene-background') ? '載入成功' : '載入失敗');
-    
-    // ★關鍵診斷2：Graphics測試結果  
-    console.log('🎨 Graphics紫紅色背景:', this.testGraphicsBackground?.visible ? '已顯示' : '未顯示');
 
     // 切換狀態
     this.isNewSceneActive = !this.isNewSceneActive;
@@ -8387,6 +8384,9 @@ export class GameScene extends Phaser.Scene {
       }
       console.log('🏛️ 切換到舊場景：原始程式生成場景');
     }
+    
+    // ★關鍵診斷2：Graphics測試結果 (切換後檢查)  
+    console.log('🎨 Graphics紫紅色背景:', this.testGraphicsBackground?.visible ? '已顯示' : '未顯示');
     
     // ★關鍵診斷3：最終狀態確認
     const finalState = this.isNewSceneActive ? '新場景' : '舊場景';
