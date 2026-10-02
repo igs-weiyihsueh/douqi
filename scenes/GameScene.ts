@@ -8384,7 +8384,7 @@ export class GameScene extends Phaser.Scene {
    */
   private initCharacterSkin(): void {
     if (this.textures.exists('character-goku-skin')) {
-      // 在P1角色位置創建皮膚覆蓋
+      // 在P1角色位置創建普通皮膚覆蓋
       const playerPos = this.player ? { x: this.player.x, y: this.player.y } : { x: 0, y: 0 };
       this.characterSkin = this.add.image(playerPos.x, playerPos.y, 'character-goku-skin')
         .setOrigin(0.5, 0.5)
@@ -8396,14 +8396,48 @@ export class GameScene extends Phaser.Scene {
     } else {
       console.warn('⚠️ Goku皮膚資源不存在：character-goku-skin');
     }
+
+    // 檢查二段變身皮膚資源是否存在
+    if (this.textures.exists('character-goku-skin-2')) {
+      console.log('✨ Goku二段變身皮膚資源已就緒：character-goku-skin-2');
+    } else {
+      console.warn('⚠️ Goku二段變身皮膚資源不存在：character-goku-skin-2');
+    }
   }
 
   /**
    * ★更新角色皮膚覆蓋位置，跟隨P1角色
    */
+  /**
+   * ★更新角色皮膚覆蓋位置和類型
+   * 
+   * 功能：
+   * - 同步皮膚覆蓋位置到P1角色位置  
+   * - 根據P1強化狀態動態切換皮膚材質：
+   *   · 普通狀態：使用Goku_1.png (character-goku-skin)
+   *   · 強化狀態：使用Goku_2.png (character-goku-skin-2) 金色光環版本
+   */
   private updateCharacterSkin(): void {
     if (this.characterSkin && this.player.alive) {
+      // 同步位置到P1角色
       this.characterSkin.setPosition(this.player.x, this.player.y);
+      
+      // 根據P1強化狀態動態切換皮膚材質
+      const now = this.time.now;
+      const isEmpowered = this.player.isEmpowered(now);
+      
+      // 決定應該使用的材質key
+      const targetTexture = isEmpowered ? 'character-goku-skin-2' : 'character-goku-skin';
+      
+      // 只有在需要切換時才更改材質，避免每幀都設定
+      if (this.characterSkin.texture.key !== targetTexture) {
+        if (this.textures.exists(targetTexture)) {
+          this.characterSkin.setTexture(targetTexture);
+          console.log(`✨ 角色皮膚已切換：${isEmpowered ? 'Goku_2 (強化金色光環)' : 'Goku_1 (普通)'}`);
+        } else {
+          console.warn(`⚠️ 皮膚材質不存在：${targetTexture}`);
+        }
+      }
     }
   }
 
