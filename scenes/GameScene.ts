@@ -8585,8 +8585,133 @@ export class GameScene extends Phaser.Scene {
     console.log('  ✓ Rectangle: depth=-3 (覆蓋sky層)');
     console.log('  → 新背景應該能覆蓋原背景系統');
     
-    // ★研究當前背景系統 - 重新定義問題
-    console.log('🔍 ===== 當前背景系統深度調查 =====');
+    // ★完整背景系統診斷 - 找出根本原因
+    console.log('🔍 ===== 完整背景系統診斷開始 =====');
+    
+    // 1. 掃描所有depth<0物件的完整信息
+    console.log('📊 診斷1: 掃描所有負深度物件');
+    const allNegativeDepthObjects = this.children.list.filter(obj => (obj as any).depth < 0);
+    console.log(`✓ 負深度物件總數: ${allNegativeDepthObjects.length}`);
+    
+    allNegativeDepthObjects
+      .sort((a, b) => (a as any).depth - (b as any).depth)
+      .forEach((obj, index) => {
+        const gameObj = obj as any;
+        const bounds = gameObj.getBounds?.();
+        const transform = gameObj.getWorldTransformMatrix?.();
+        console.log(`  ${index + 1}. [${gameObj.constructor.name}]`);
+        console.log(`     depth=${gameObj.depth} visible=${gameObj.visible} active=${gameObj.active}`);
+        console.log(`     position=(${gameObj.x}, ${gameObj.y}) alpha=${gameObj.alpha}`);
+        console.log(`     bounds=${bounds ? `${Math.round(bounds.x)},${Math.round(bounds.y)},${Math.round(bounds.width)}×${Math.round(bounds.height)}` : 'none'}`);
+        console.log(`     scrollFactor=(${gameObj.scrollFactorX}, ${gameObj.scrollFactorY})`);
+        if (transform) {
+          console.log(`     transform=matrix(${transform.a.toFixed(2)}, ${transform.b.toFixed(2)}, ${transform.c.toFixed(2)}, ${transform.d.toFixed(2)}, ${Math.round(transform.tx)}, ${Math.round(transform.ty)})`);
+        }
+        
+        // 特別檢測我們的背景物件
+        if (gameObj === this.testGraphicsBackground) {
+          console.log(`     ★ 這是我們的Graphics背景！`);
+        } else if (gameObj === this.testRectangleBackground) {
+          console.log(`     ★ 這是我們的Rectangle背景！`);
+        } else if (gameObj === this.sceneBackground) {
+          console.log(`     ★ 這是我們的Scene.png背景！`);
+        }
+      });
+    
+    // 2. 檢測邊界內特殊背景層
+    console.log('🎯 診斷2: 邊界內特殊背景層檢測');
+    if (this.levelMode && this.zoneA) {
+      console.log(`✓ 關卡模式啟用，中央A區邊界: (${this.zoneA.x}, ${this.zoneA.y}) ${this.zoneA.width}×${this.zoneA.height}`);
+      
+      // 檢查是否有物件專門在zoneA區域內繪製
+      const potentialZoneObjects = this.children.list.filter(obj => {
+        const gameObj = obj as any;
+        const bounds = gameObj.getBounds?.();
+        if (!bounds) return false;
+        
+        // 檢查物件是否與zoneA區域重疊
+        return bounds.x < this.zoneA.right && bounds.right > this.zoneA.x &&
+               bounds.y < this.zoneA.bottom && bounds.bottom > this.zoneA.y;
+      });
+      
+      console.log(`✓ 與中央A區重疊的物件數量: ${potentialZoneObjects.length}`);
+      potentialZoneObjects.slice(0, 10).forEach((obj, i) => {
+        const gameObj = obj as any;
+        const bounds = gameObj.getBounds();
+        console.log(`  ${i + 1}. ${gameObj.constructor.name} depth=${gameObj.depth} bounds=${Math.round(bounds.x)},${Math.round(bounds.y)},${Math.round(bounds.width)}×${Math.round(bounds.height)}`);
+      });
+    }
+    
+    // 3. 測試隱藏原背景實驗
+    console.log('🧪 診斷3: 原背景隱藏實驗');
+    const originalBackgrounds = this.children.list.filter(obj => {
+      const gameObj = obj as any;
+      return gameObj.depth < 0 && gameObj.visible && 
+             gameObj !== this.testGraphicsBackground &&
+             gameObj !== this.testRectangleBackground &&
+             gameObj !== this.sceneBackground;
+    });
+    
+    console.log(`✓ 發現 ${originalBackgrounds.length} 個可能的原背景物件`);
+    originalBackgrounds.forEach((obj, i) => {
+      const gameObj = obj as any;
+      console.log(`  隱藏測試${i + 1}: ${gameObj.constructor.name} depth=${gameObj.depth}`);
+      gameObj.setVisible(false);
+    });
+    
+    console.log('✓ 已暫時隱藏所有原背景物件');
+    
+    // 4. 相機和渲染系統檢測
+    console.log('📷 診斷4: 相機和渲染系統檢測');
+    console.log(`✓ 相機位置: (${Math.round(this.cameras.main.x)}, ${Math.round(this.cameras.main.y)})`);
+    console.log(`✓ 相機zoom: ${this.cameras.main.zoom}`);
+    console.log(`✓ 相機bounds: (${(this.cameras.main as any)._bounds?.x || 'unbounded'}, ${(this.cameras.main as any)._bounds?.y || 'unbounded'}) ${(this.cameras.main as any)._bounds?.width || 'unbounded'}×${(this.cameras.main as any)._bounds?.height || 'unbounded'}`);
+    console.log(`✓ 相機跟隨目標: ${(this.cameras.main as any).followTarget?.constructor.name || 'none'}`);
+    console.log(`✓ 渲染器類型: ${this.renderer.type === Phaser.WEBGL ? 'WebGL' : 'Canvas'}`);
+    console.log(`✓ Canvas尺寸: ${this.game.canvas.width} × ${this.game.canvas.height}`);
+    console.log(`✓ 世界bounds: (${this.physics.world.bounds.x}, ${this.physics.world.bounds.y}) ${this.physics.world.bounds.width}×${this.physics.world.bounds.height}`);
+    
+    // 5. 我們的新背景詳細狀態  
+    console.log('🎨 診斷5: 新背景物件詳細狀態');
+    console.log(`Graphics背景存在: ${!!this.testGraphicsBackground}`);
+    console.log(`Rectangle背景存在: ${!!this.testRectangleBackground}`);
+    console.log(`Scene.png背景存在: ${!!this.sceneBackground}`);
+    
+    // 6. 最終診斷結論
+    console.log('📋 診斷6: 問題根本原因分析');
+    console.log('✓ 負深度物件掃描完成');
+    console.log('✓ 邊界內背景層檢測完成');
+    console.log('✓ 原背景隱藏實驗完成');
+    console.log('✓ 新背景狀態分析完成');
+    console.log('');
+    console.log('🎯 關鍵發現:');
+    console.log('1. 如果隱藏原背景後新背景仍不可見 → 新背景本身有問題');
+    console.log('2. 如果隱藏原背景後新背景可見 → 原背景在更高層級');
+    console.log('3. 如果Graphics bounds為0×0 → fillRect沒有正確執行');
+    console.log('4. 如果willRender返回false → 相機無法看到背景');
+    console.log('');
+    console.log('📱 請用戶檢查:');
+    console.log('- 隱藏原背景後背景是否變化?');
+    console.log('- Graphics背景的bounds是否正確?');
+    console.log('- 新背景的willRender是否返回true?');
+    
+    
+    // 恢復原背景顯示(診斷完成後)
+    setTimeout(() => {
+      console.log('🔄 診斷結束，恢復原背景顯示');
+      const hiddenBackgrounds = this.children.list.filter(obj => {
+        const gameObj = obj as any;
+        return gameObj.depth < 0 && !gameObj.visible && 
+               gameObj !== this.testGraphicsBackground &&
+               gameObj !== this.testRectangleBackground &&
+               gameObj !== this.sceneBackground;
+      });
+      
+      hiddenBackgrounds.forEach(obj => {
+        (obj as any).setVisible(true);
+      });
+      console.log(`✓ 已恢復 ${hiddenBackgrounds.length} 個原背景物件的顯示`);
+    }, 5000); // 5秒後恢復
     
     // 1. 背景生成代碼調查
     console.log('🔍 當前背景系統調查:');
