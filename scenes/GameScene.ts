@@ -8426,6 +8426,19 @@ export class GameScene extends Phaser.Scene {
       console.log('✓ scene.children.length:', this.children.length);
       console.log('✓ graphics.parentScene:', this.testGraphicsBackground?.scene === this ? 'correct' : 'wrong');
       console.log('✓ inDisplayList:', this.children.exists(this.testGraphicsBackground));
+      
+      // ★檢測F - Graphics變換矩陣檢測
+      console.log('🔍 檢測F - Graphics變換矩陣檢測:');
+      const worldTransform = this.testGraphicsBackground?.getWorldTransformMatrix?.();
+      console.log('✓ worldTransform exists:', !!worldTransform);
+      if (worldTransform) {
+        console.log('✓ matrix.tx (x):', worldTransform.tx);
+        console.log('✓ matrix.ty (y):', worldTransform.ty);
+        console.log('✓ matrix.a (scaleX):', worldTransform.a);
+        console.log('✓ matrix.d (scaleY):', worldTransform.d);
+      }
+      console.log('✓ getBounds width:', (this.testGraphicsBackground as any)?.getBounds?.()?.width || 'unknown');
+      console.log('✓ getBounds height:', (this.testGraphicsBackground as any)?.getBounds?.()?.height || 'unknown');
     }
     
     // ★關鍵診斷3：最終狀態確認
