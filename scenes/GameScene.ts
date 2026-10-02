@@ -8316,16 +8316,15 @@ export class GameScene extends Phaser.Scene {
   private initSceneBackground(): void {
     // 創建新場景背景圖（預設隱藏）
     if (this.textures.exists('scene-background')) {
-      // 動態計算Scene.png的覆蓋區域
-      const gameArea = this.calculateGameArea();
+      // 創建場景背景，使用固定中心位置確保在所有情況下都穩定可見
+      const centerX = GameConfig.width / 2;
+      const centerY = GameConfig.height / 2;
       
-      // 創建場景背景，保持原始尺寸不縮放
-      this.sceneBackground = this.add.image(gameArea.centerX, gameArea.centerY, 'scene-background')
+      this.sceneBackground = this.add.image(centerX, centerY, 'scene-background')
         .setOrigin(0.5, 0.5)    // 中心對齊
         .setDepth(1)            // 深度1：覆蓋地面圖片(depth=0)但不遮擋遊戲元素
         .setVisible(false)      // 預設隱藏
         .setScrollFactor(0);    // ★關鍵：固定不隨相機移動，像UI一樣
-        // ★移除setDisplaySize以保持原始尺寸，不因邊界調整而縮放
       
       // 場景背景已創建
       
@@ -8395,12 +8394,13 @@ export class GameScene extends Phaser.Scene {
       // 嘗試立即創建Scene.png背景作為修復
       if (this.textures.exists('scene-background')) {
         console.log('🔧 嘗試立即創建Scene.png背景...');
-        const gameArea = this.calculateGameArea();
-        this.sceneBackground = this.add.image(gameArea.centerX, gameArea.centerY, 'scene-background')
+        const centerX = GameConfig.width / 2;
+        const centerY = GameConfig.height / 2;
+        this.sceneBackground = this.add.image(centerX, centerY, 'scene-background')
           .setOrigin(0.5, 0.5)  // 中心對齊
           .setDepth(1)          // 深度1：覆蓋地面圖片但不遮擋遊戲元素
           .setVisible(false)
-          .setScrollFactor(0);  // ★保持原始尺寸，不縮放
+          .setScrollFactor(0);  // 固定位置，保持原始尺寸
         console.log('✅ Scene.png背景已重新創建');
       } else {
         console.error('❌ scene-background紋理不存在，無法創建背景');
@@ -8967,13 +8967,16 @@ export class GameScene extends Phaser.Scene {
     this.load.once('complete', () => {
       console.log('✅ 新紋理載入完成，重新創建背景...');
       
-      // 重新創建背景物件，保持原始尺寸
-      const gameArea = this.calculateGameArea();
-      this.sceneBackground = this.add.image(gameArea.centerX, gameArea.centerY, 'scene-background-new')
+      // 重新創建背景物件，使用固定中心位置確保穩定性
+      // 使用GameConfig確定的固定尺寸，避免依賴可能不穩定的calculateGameArea()
+      const centerX = GameConfig.width / 2;
+      const centerY = GameConfig.height / 2;
+      
+      this.sceneBackground = this.add.image(centerX, centerY, 'scene-background-new')
         .setOrigin(0.5, 0.5)  // 中心對齊
         .setDepth(1)          // 深度1：覆蓋地面圖片但不遮擋遊戲元素
         .setVisible(this.isNewSceneActive)
-        .setScrollFactor(0);  // ★移除setDisplaySize以保持原始尺寸
+        .setScrollFactor(0);  // 固定位置，不隨相機移動
     });
     
     this.load.start();
