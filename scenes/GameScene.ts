@@ -8285,16 +8285,17 @@ export class GameScene extends Phaser.Scene {
       console.log(`  相機範圍：(${cameraBounds.x}, ${cameraBounds.y}) ${cameraBounds.width}×${cameraBounds.height}`);
       console.log(`  遊戲配置尺寸：${GameConfig.width} × ${GameConfig.height}`);
       
-      // 創建場景背景，確保覆蓋整個相機視野
-      this.sceneBackground = this.add.image(0, 0, 'scene-background')
+      // 動態計算Scene.png的覆蓋區域
+      const gameArea = this.calculateGameArea();
+      console.log('🖼️ Scene.png覆蓋區域:', gameArea);
+      
+      // 創建場景背景，確保覆蓋整個遊戲區域
+      this.sceneBackground = this.add.image(gameArea.x, gameArea.y, 'scene-background')
         .setOrigin(0, 0)        // 左上角對齊
+        .setDisplaySize(gameArea.width, gameArea.height)  // 縮放到覆蓋完整遊戲區域
         .setDepth(-2)          // 調整到-2，確保覆蓋原背景系統
         .setVisible(false)      // 預設隱藏
-        .setScrollFactor(0)     // ★關鍵：固定不隨相機移動，像UI一樣
-        .setDisplaySize(
-          Math.max(GameConfig.width, cameraBounds.width), 
-          Math.max(GameConfig.height, cameraBounds.height)
-        ); // 確保填滿整個視野
+        .setScrollFactor(0);    // ★關鍵：固定不隨相機移動，像UI一樣
       
       // 詳細創建資訊
       console.log('🖼️ 新場景背景已創建：');
@@ -8313,10 +8314,15 @@ export class GameScene extends Phaser.Scene {
     // ★新增：創建Graphics測試背景（純色）
     this.testGraphicsBackground = this.add.graphics()
       .fillStyle(0xFF00FF, 1)  // 超鮮豔紫紅色
-      .fillRect(0, 0, GameConfig.width, GameConfig.height)
       .setDepth(-4)            // 調整到-4，覆蓋原背景系統(-3,-2,-1)
       .setScrollFactor(0)      // 固定不移動
-      .setVisible(false);      // 預設隱藏
+      .setVisible(false);      // 預設隐藏
+    
+    // 動態計算遊戲區域大小，確保覆蓋所有區域
+    const gameArea = this.calculateGameArea();
+    console.log('🎯 遊戲區域計算:', gameArea);
+    
+    this.testGraphicsBackground.fillRect(gameArea.x, gameArea.y, gameArea.width, gameArea.height);
     
     // ★修復：確保Graphics正確加入更新系統
     if (this.testGraphicsBackground && !(this.testGraphicsBackground as any).updateList) {
@@ -8498,11 +8504,13 @@ export class GameScene extends Phaser.Scene {
       
       // 調查3: 替代繪製方案測試
       console.log('🎨 替代方案測試:');
-      const coloredRect = this.add.rectangle(640, 360, 1280, 720, 0xFF0000); // 紅色矩形
+      const gameArea = this.calculateGameArea();
+      const coloredRect = this.add.rectangle(gameArea.centerX, gameArea.centerY, gameArea.width, gameArea.height, 0xFF0000); // 紅色矩形
       coloredRect.setDepth(-3);  // 調整到-3，確保覆蓋原背景系統
       coloredRect.setVisible(false); // 預設隱藏
       const rectBounds = (coloredRect as any).getBounds();
       console.log('✓ Rectangle方案bounds:', rectBounds?.width || 'failed', 'x', rectBounds?.height || 'failed');
+      console.log('✓ Rectangle覆蓋區域:', `x=${gameArea.x}, y=${gameArea.y}, w=${gameArea.width}, h=${gameArea.height}`);
       
       // 將Rectangle作為備用方案
       if (!this.testRectangleBackground) {
@@ -8520,6 +8528,49 @@ export class GameScene extends Phaser.Scene {
         console.log('✓ Rectangle width:', coloredRect?.width);
         console.log('✓ Rectangle height:', coloredRect?.height);
       }
+    }
+  }
+
+  /**
+   * 計算完整的遊戲區域，包括所有slot和zone
+   */
+  private calculateGameArea(): { x: number, y: number, width: number, height: number, centerX: number, centerY: number } {
+    if (this.levelMode) {
+      // 關卡模式：計算包含所有三個slot的完整區域
+      const gap = GameConfig.stage.subGap;
+      const st = GameConfig.stage;
+      const aW = st.arenaW, aH = st.arenaH, m = st.sceneMargin;
+      const slotW = aW + m * 2, slotH = aH + m * 2;
+      const worldW = slotW * 3 + gap * 2;
+      const worldH = slotH;
+      
+      console.log('🎯 關卡模式遊戲區域:');
+      console.log('  ✓ slotW:', slotW, 'slotH:', slotH);
+      console.log('  ✓ worldW:', worldW, 'worldH:', worldH);
+      console.log('  ✓ 三slot範圍:', `slotBLeft(0,0,${slotW},${slotH}) slotA(${slotW + gap},0,${slotW},${slotH}) slotBRight(${(slotW + gap) * 2},0,${slotW},${slotH})`);
+      
+      return {
+        x: 0,
+        y: 0,
+        width: worldW,
+        height: worldH,
+        centerX: worldW / 2,
+        centerY: worldH / 2
+      };
+    } else {
+      // 經典模式：使用GameConfig的寬高
+      console.log('🎯 經典模式遊戲區域:');
+      console.log('  ✓ GameConfig.width:', GameConfig.width);
+      console.log('  ✓ GameConfig.height:', GameConfig.height);
+      
+      return {
+        x: 0,
+        y: 0,
+        width: GameConfig.width,
+        height: GameConfig.height,
+        centerX: GameConfig.width / 2,
+        centerY: GameConfig.height / 2
+      };
     }
     
     // ★關鍵診斷3：最終狀態確認
@@ -8600,15 +8651,15 @@ export class GameScene extends Phaser.Scene {
     // 4. 我們的背景物件在整體中的位置
     console.log('🔍 我們的背景物件定位:');
     if (this.testGraphicsBackground) {
-        const myGraphicsIndex = this.children.list.indexOf(this.testGraphicsBackground);
+        const myGraphicsIndex = this.children.list.indexOf(this.testGraphicsBackground as Phaser.GameObjects.GameObject);
         console.log(`✓ 我們的Graphics在children中的索引: ${myGraphicsIndex}`);
     }
     if (this.testRectangleBackground) {
-        const myRectIndex = this.children.list.indexOf(this.testRectangleBackground);
+        const myRectIndex = this.children.list.indexOf(this.testRectangleBackground as Phaser.GameObjects.GameObject);
         console.log(`✓ 我們的Rectangle在children中的索引: ${myRectIndex}`);
     }
     if (this.sceneBackground) {
-        const mySceneIndex = this.children.list.indexOf(this.sceneBackground);
+        const mySceneIndex = this.children.list.indexOf(this.sceneBackground as Phaser.GameObjects.GameObject);
         console.log(`✓ 我們的Scene.png在children中的索引: ${mySceneIndex}`);
     }
   }
