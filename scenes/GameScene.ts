@@ -8317,6 +8317,12 @@ export class GameScene extends Phaser.Scene {
       .setScrollFactor(0)      // 固定不移動
       .setVisible(false);      // 預設隱藏
     
+    // ★修復：確保Graphics正確加入更新系統
+    if (this.testGraphicsBackground && !(this.testGraphicsBackground as any).updateList) {
+      this.add.existing(this.testGraphicsBackground);
+      console.log('🔧 Graphics updateList修復：重新加入場景更新系統');
+    }
+    
     console.log('🎨 Graphics測試背景已創建：紫紅色 (depth=-9, hidden)');
 
     // F1熱鍵監聽
