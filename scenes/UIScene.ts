@@ -137,6 +137,10 @@ export class UIScene extends Phaser.Scene {
   // ★覆蓋模式控制標誌 - 防止updateStats()強制顯示P1頭頂UI
   private isP1HeadUIHidden = false;
   
+  // ★底部面板替換系統
+  private bottomPanelOverlay: Phaser.GameObjects.Image | null = null;
+  private isBottomPanelOverlayMode = false;
+  
   // ★頭上UI佈局常數：避免魔術數字
   private readonly OVERHEAD_UI_CONFIG = {
     // 編號牌配置 - 左側位置
@@ -353,6 +357,9 @@ export class UIScene extends Phaser.Scene {
 
     // ★頭上UI系統初始化 - 替換舊的左上角COMBO/能量系統
     this.createOverheadUISystem();
+    
+    // ★底部面板替換系統初始化
+    this.initBottomPanelOverlay();
 
     // 🔄 NEW UI：角色狀態列重大改版 - 圓形標籤 + 雙欄位系統，移除血條系統
     const count = GameConfig.characters.count;
@@ -1602,5 +1609,108 @@ export class UIScene extends Phaser.Scene {
       console.warn('⚠️ [頭頂UI控制] P1頭頂UI容器不存在，可能尚未創建');
       console.log(`🎯 [頭頂UI控制] 當前overheadUIs大小: ${this.overheadUIs.size}`);
     }
+  }
+
+  /**
+   * ★初始化底部面板替換系統
+   * 
+   * 創建1P.png覆蓋圖片，用於F4切換時替代原始的底部狀態面板
+   * - 初始隱藏，由F4切換控制顯示
+   * - 定位在畫面底部，覆蓋原始面板位置
+   */
+  private initBottomPanelOverlay(): void {
+    console.log('🔧 [底部面板] 開始初始化底部面板替換系統');
+    console.log('🔧 [底部面板] bottom-panel-overlay紋理存在:', this.textures.exists('bottom-panel-overlay'));
+    
+    if (this.textures.exists('bottom-panel-overlay')) {
+      const w = GameConfig.width;
+      const h = GameConfig.height;
+      
+      // 創建底部面板覆蓋，定位在畫面底部中央
+      this.bottomPanelOverlay = this.add.image(w / 2, h - 50, 'bottom-panel-overlay')
+        .setOrigin(0.5, 0.5)
+        .setDepth(1000)  // 高深度確保在原始面板之上
+        .setVisible(false)
+        .setScrollFactor(0);  // 固定位置，不隨相機移動
+      
+      console.log(`🎮 底部面板覆蓋已創建：1P.png在位置(${w / 2}, ${h - 50}) (depth=1000, hidden)`);
+    } else {
+      console.warn('⚠️ 底部面板覆蓋資源不存在：bottom-panel-overlay (1P.png)');
+    }
+  }
+
+  /**
+   * ★底部面板替換控制方法
+   * 
+   * 控制底部狀態面板的顯示/隱藏，並切換1P.png覆蓋
+   * 
+   * @param useOverlay - true顯示1P.png覆蓋並隱藏原始面板，false恢復原始面板
+   */
+  setBottomPanelOverlay(useOverlay: boolean): void {
+    console.log(`🔧 [底部面板] setBottomPanelOverlay被調用，useOverlay=${useOverlay}`);
+    
+    // 設置覆蓋模式標誌
+    this.isBottomPanelOverlayMode = useOverlay;
+    console.log(`🔧 [底部面板] 覆蓋模式設為: ${this.isBottomPanelOverlayMode}`);
+    
+    if (useOverlay) {
+      // 顯示1P.png覆蓋
+      if (this.bottomPanelOverlay) {
+        this.bottomPanelOverlay.setVisible(true);
+        console.log('✅ [底部面板] 1P.png覆蓋已顯示');
+      } else {
+        console.warn('⚠️ [底部面板] 1P.png覆蓋不存在');
+      }
+      
+      // 隱藏原始底部面板 (rows[0] = P1面板)
+      if (this.rows && this.rows.length > 0) {
+        const p1Panel = this.rows[0];
+        this.setRowPanelVisible(p1Panel, false);
+        console.log('🔒 [底部面板] 原始P1底部面板已隱藏');
+      }
+    } else {
+      // 隱藏1P.png覆蓋
+      if (this.bottomPanelOverlay) {
+        this.bottomPanelOverlay.setVisible(false);
+        console.log('🔒 [底部面板] 1P.png覆蓋已隱藏');
+      }
+      
+      // 恢復原始底部面板
+      if (this.rows && this.rows.length > 0) {
+        const p1Panel = this.rows[0];
+        this.setRowPanelVisible(p1Panel, true);
+        console.log('✅ [底部面板] 原始P1底部面板已恢復');
+      }
+    }
+  }
+
+  /**
+   * ★設置底部面板行的可見性
+   * 
+   * @param panel - 面板對象 (rows中的元素)
+   * @param visible - 是否可見
+   */
+  private setRowPanelVisible(panel: any, visible: boolean): void {
+    if (!panel) return;
+    
+    // 設置P1底部面板的所有元素可見性
+    const elements = [
+      panel.circle,        // 圓形標籤
+      panel.labelText,     // "P1"文字
+      panel.killIconText,  // 💀圖案
+      panel.killText,      // 擊殺數字
+      panel.ticketIconText,// 🎫圖案
+      panel.ticketText,    // 彩票數字
+      panel.panelBg,       // 背景面板
+      panel.killBox,       // 💀小框
+      panel.ticketBox      // 🎫彩票數小框
+    ];
+    
+    elements.forEach((element, index) => {
+      if (element && typeof element.setVisible === 'function') {
+        element.setVisible(visible);
+        console.log(`  [底部面板] 元素${index}設置為${visible ? '可見' : '隱藏'}`);
+      }
+    });
   }
 }

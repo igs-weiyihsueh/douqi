@@ -8588,6 +8588,9 @@ export class GameScene extends Phaser.Scene {
       console.log('🔧 [調試] F4激活 - 準備隱藏P1頭頂UI');
       this.controlP1HeadUI(false);
       
+      // ★新增：激活底部面板替換
+      this.controlBottomPanelOverlay(true);
+      
       // 隱藏測試背景
       if (this.testGraphicsBackground) {
         this.testGraphicsBackground.setVisible(false);
@@ -8615,6 +8618,9 @@ export class GameScene extends Phaser.Scene {
       // ★新增：恢復原始P1頭頂UI
       console.log('🔧 [調試] F4關閉 - 準備恢復P1頭頂UI');
       this.controlP1HeadUI(true);
+      
+      // ★新增：關閉底部面板替換
+      this.controlBottomPanelOverlay(false);
       
       if (this.testGraphicsBackground) {
         this.testGraphicsBackground.setVisible(false);
@@ -9157,6 +9163,53 @@ export class GameScene extends Phaser.Scene {
       }
     } else {
       console.error('❌ [頭頂UI控制] setP1HeadUIVisible方法不存在');
+    }
+  }
+
+  /**
+   * ★底部面板替換控制方法
+   * 
+   * 控制UIScene中的底部面板替換系統
+   * 包含時序安全檢查，確保UIScene已準備就緒
+   * 
+   * @param useOverlay - 是否使用1P.png覆蓋
+   * @param retryCount - 重試計數，避免無限重試
+   */
+  private controlBottomPanelOverlay(useOverlay: boolean, retryCount = 0): void {
+    const maxRetries = 5;
+    
+    console.log(`🔧 [底部面板控制] 嘗試控制底部面板替換，useOverlay=${useOverlay}，重試=${retryCount}`);
+    
+    const uiScene = this.scene.get('UIScene') as any;
+    console.log('🔧 [底部面板控制] UIScene獲取結果:', !!uiScene);
+    
+    if (!uiScene) {
+      console.error('❌ [底部面板控制] 無法獲取UIScene引用');
+      return;
+    }
+    
+    console.log('🔧 [底部面板控制] setBottomPanelOverlay存在:', typeof uiScene.setBottomPanelOverlay);
+    
+    if (typeof uiScene.setBottomPanelOverlay === 'function') {
+      // 檢查底部面板是否已經創建
+      const hasBottomPanel = uiScene.rows && uiScene.rows.length > 0;
+      console.log('🔧 [底部面板控制] 底部面板已創建:', hasBottomPanel);
+      
+      if (hasBottomPanel) {
+        // 底部面板已創建，可以安全調用
+        console.log('✅ [底部面板控制] 底部面板已準備就緒，執行控制操作');
+        uiScene.setBottomPanelOverlay(useOverlay);
+      } else if (retryCount < maxRetries) {
+        // 底部面板尚未創建，延遲重試
+        console.log(`⏳ [底部面板控制] 底部面板尚未創建，100ms後重試 (${retryCount + 1}/${maxRetries})`);
+        this.time.delayedCall(100, () => {
+          this.controlBottomPanelOverlay(useOverlay, retryCount + 1);
+        });
+      } else {
+        console.error('❌ [底部面板控制] 重試次數已達上限，底部面板控制失敗');
+      }
+    } else {
+      console.error('❌ [底部面板控制] setBottomPanelOverlay方法不存在');
     }
   }
 }
