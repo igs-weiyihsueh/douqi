@@ -8325,13 +8325,13 @@ export class GameScene extends Phaser.Scene {
       const gameArea = this.calculateGameArea();
       console.log('🖼️ Scene.png覆蓋區域:', gameArea);
       
-      // 創建場景背景，確保覆蓋整個遊戲區域
-      this.sceneBackground = this.add.image(gameArea.x, gameArea.y, 'scene-background')
-        .setOrigin(0, 0)        // 左上角對齊
-        .setDisplaySize(gameArea.width, gameArea.height)  // 縮放到覆蓋完整遊戲區域
+      // 創建場景背景，保持原始尺寸不縮放
+      this.sceneBackground = this.add.image(gameArea.centerX, gameArea.centerY, 'scene-background')
+        .setOrigin(0.5, 0.5)    // 中心對齊
         .setDepth(1)            // 深度1：覆蓋地面圖片(depth=0)但不遮擋遊戲元素
         .setVisible(false)      // 預設隱藏
         .setScrollFactor(0);    // ★關鍵：固定不隨相機移動，像UI一樣
+        // ★移除setDisplaySize以保持原始尺寸，不因邊界調整而縮放
       
       // 詳細創建資訊
       console.log('🖼️ 新場景背景已創建：');
@@ -8982,13 +8982,13 @@ export class GameScene extends Phaser.Scene {
     this.load.once('complete', () => {
       console.log('✅ 新紋理載入完成，重新創建背景...');
       
-      // 重新創建背景物件
-      this.sceneBackground = this.add.image(0, 0, 'scene-background-new')
-        .setOrigin(0, 0)
-        .setDepth(1)  // 深度1：覆蓋地面圖片但不遮擋遊戲元素
+      // 重新創建背景物件，保持原始尺寸
+      const gameArea = this.calculateGameArea();
+      this.sceneBackground = this.add.image(gameArea.centerX, gameArea.centerY, 'scene-background-new')
+        .setOrigin(0.5, 0.5)  // 中心對齊
+        .setDepth(1)          // 深度1：覆蓋地面圖片但不遮擋遊戲元素
         .setVisible(this.isNewSceneActive)
-        .setScrollFactor(0)
-        .setDisplaySize(GameConfig.width, GameConfig.height);
+        .setScrollFactor(0);  // ★移除setDisplaySize以保持原始尺寸
     });
     
     this.load.start();
