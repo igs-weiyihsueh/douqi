@@ -8360,8 +8360,10 @@ export class GameScene extends Phaser.Scene {
       this.forceReloadSceneBackground();
     });
     
-    // ★新增：F5鍵開啟實時參數編輯器
-    this.input.keyboard?.on('keydown-F5', () => {
+    // ★新增：F5鍵開啟實時參數編輯器 (阻止瀏覽器默認刷新行為)
+    this.input.keyboard?.on('keydown-F5', (event: KeyboardEvent) => {
+      event.preventDefault(); // 阻止瀏覽器默認的F5刷新行為
+      event.stopPropagation(); // 阻止事件冒泡
       this.toggleParameterEditor();
     });
     
@@ -9175,39 +9177,47 @@ export class GameScene extends Phaser.Scene {
 
   private setupEditorControls(): void {
     // 方向鍵控制
-    this.input.keyboard?.on('keydown-UP', () => {
+    this.input.keyboard?.on('keydown-UP', (event: KeyboardEvent) => {
       if (!this.editorActive) return;
+      event.preventDefault();
       this.selectedSlider = Math.max(0, this.selectedSlider - 1);
       this.updateSliderHighlight();
     });
 
-    this.input.keyboard?.on('keydown-DOWN', () => {
+    this.input.keyboard?.on('keydown-DOWN', (event: KeyboardEvent) => {
       if (!this.editorActive) return;
+      event.preventDefault();
       this.selectedSlider = Math.min(this.editorSliders.length - 1, this.selectedSlider + 1);
       this.updateSliderHighlight();
     });
 
     // 左右鍵調整數值
-    this.input.keyboard?.on('keydown-LEFT', () => {
+    this.input.keyboard?.on('keydown-LEFT', (event: KeyboardEvent) => {
       if (!this.editorActive) return;
+      event.preventDefault();
       this.adjustSelectedParameter(-1);
     });
 
-    this.input.keyboard?.on('keydown-RIGHT', () => {
+    this.input.keyboard?.on('keydown-RIGHT', (event: KeyboardEvent) => {
       if (!this.editorActive) return;
+      event.preventDefault();
       this.adjustSelectedParameter(1);
     });
 
     // Enter保存，Esc取消
-    this.input.keyboard?.on('keydown-ENTER', () => {
+    this.input.keyboard?.on('keydown-ENTER', (event: KeyboardEvent) => {
       if (!this.editorActive) return;
+      event.preventDefault();
       this.saveParameters();
     });
 
-    this.input.keyboard?.on('keydown-ESC', () => {
+    this.input.keyboard?.on('keydown-ESC', (event: KeyboardEvent) => {
       if (!this.editorActive) return;
+      event.preventDefault();
       this.cancelParameters();
     });
+
+    console.log('⌨️ 編輯器鍵盤控制已啟用，包含preventDefault防護');
   }
 
   private adjustSelectedParameter(direction: number): void {
@@ -9347,12 +9357,14 @@ export class GameScene extends Phaser.Scene {
     this.editorSliders = [];
     this.selectedSlider = 0;
     
-    // 清除鍵盤監聽（這些是臨時的）
+    // 清除編輯器相關的鍵盤監聽（F5保留，其他臨時的清除）
     this.input.keyboard?.off('keydown-UP');
     this.input.keyboard?.off('keydown-DOWN');
     this.input.keyboard?.off('keydown-LEFT');
     this.input.keyboard?.off('keydown-RIGHT');
     this.input.keyboard?.off('keydown-ENTER');
     this.input.keyboard?.off('keydown-ESC');
+    
+    console.log('🔒 編輯器鍵盤監聽已清理，F5功能保持可用');
   }
 }
