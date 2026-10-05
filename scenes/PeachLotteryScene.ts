@@ -529,22 +529,41 @@ export class PeachLotteryScene extends Phaser.Scene {
   }
 
   private assignTickets(): void {
-    // 計算需要多少張彩票
     const alivePlayers = this.players.filter(p => !p.eliminated);
-    const ticketsNeeded = Math.max(1, alivePlayers.length - 1); // 至少1張，最多比玩家少1
-
-    // 在每個活躍玩家的區域中隨機分配彩票
-    const availablePeaches = this.peaches.filter(peach => 
-      !peach.picked && alivePlayers.some(p => p.region === peach.region)
-    );
     
-    // 隨機選擇桃子分配彩票
-    const shuffled = [...availablePeaches].sort(() => Math.random() - 0.5);
-    for (let i = 0; i < Math.min(ticketsNeeded, shuffled.length); i++) {
-      shuffled[i].hasTicket = true;
-    }
+    if (this.currentRound === 1) {
+      // 第一輪：確保所有玩家都能晉級，特別保證P1一定有彩票
+      console.log(`🎫 第1輪特別模式: 確保所有${alivePlayers.length}名玩家都有彩票（體驗輪）`);
+      
+      // 為每個活躍玩家的區域至少分配一張彩票
+      alivePlayers.forEach(player => {
+        const regionPeaches = this.peaches.filter(peach => 
+          peach.region === player.region && !peach.picked
+        );
+        if (regionPeaches.length > 0) {
+          // 隨機選擇該區域的一個桃子給彩票
+          const randomPeach = regionPeaches[Math.floor(Math.random() * regionPeaches.length)];
+          randomPeach.hasTicket = true;
+          console.log(`🍑 為玩家${player.id}區域的桃子${randomPeach.id}分配彩票`);
+        }
+      });
+    } else {
+      // 第二輪起：正常競爭模式
+      const ticketsNeeded = Math.max(1, alivePlayers.length - 1); // 至少1張，最多比玩家少1
 
-    console.log(`🎫 第${this.currentRound}輪: ${alivePlayers.length}名玩家, ${ticketsNeeded}張彩票`);
+      // 在每個活躍玩家的區域中隨機分配彩票
+      const availablePeaches = this.peaches.filter(peach => 
+        !peach.picked && alivePlayers.some(p => p.region === peach.region)
+      );
+      
+      // 隨機選擇桃子分配彩票
+      const shuffled = [...availablePeaches].sort(() => Math.random() - 0.5);
+      for (let i = 0; i < Math.min(ticketsNeeded, shuffled.length); i++) {
+        shuffled[i].hasTicket = true;
+      }
+
+      console.log(`🎫 第${this.currentRound}輪: ${alivePlayers.length}名玩家, ${ticketsNeeded}張彩票`);
+    }
   }
 
   private getRandomPeachInRegion(regionId: number): number {
@@ -573,13 +592,28 @@ export class PeachLotteryScene extends Phaser.Scene {
     const remaining = this.roundTimeLimit - elapsed;
 
     if (remaining <= 0) {
-      // 時間到，沒確認選擇的玩家淘汰
-      this.players.forEach(player => {
-        if (!player.eliminated && !player.hasConfirmedChoice) {
-          player.eliminated = true;
-          console.log(`⏰ 玩家${player.id}超時淘汰`);
-        }
-      });
+      // 時間到的處理：第一輪不淘汰任何人，後續輪次才淘汰沒確認的玩家
+      if (this.currentRound === 1) {
+        // 第一輪：絕對不淘汰任何玩家，包括P1
+        console.log('⏰ 第1輪時間到 - 所有玩家都安全晉級（包括未確認選擇的玩家）');
+        
+        // 為未確認的玩家自動選擇一個桃子確保遊戲繼續
+        this.players.forEach(player => {
+          if (!player.eliminated && !player.hasConfirmedChoice) {
+            // 自動為該玩家打開一個桃子
+            this.autoOpenPeachForPlayer(player);
+            console.log(`🍑 第1輪自動為玩家${player.id}打開桃子`);
+          }
+        });
+      } else {
+        // 第二輪起：才淘汰沒確認選擇的玩家
+        this.players.forEach(player => {
+          if (!player.eliminated && !player.hasConfirmedChoice) {
+            player.eliminated = true;
+            console.log(`⏰ 玩家${player.id}超時淘汰`);
+          }
+        });
+      }
       this.beginReveal();
       return;
     }
@@ -670,8 +704,12 @@ export class PeachLotteryScene extends Phaser.Scene {
       // BOT在時間過半後開始點擊桃子
       const elapsed = this.time.now - this.roundStartTime;
       if (elapsed > this.roundTimeLimit * 0.3) {
-        // BOT模擬點擊行為，比P1快一些
-        if (Math.random() < 0.03) { // 3%機率每幀點擊
+        // 檢查P1是否被淘汰，如果P1被淘汰則BOT加快速度避免卡死
+        const p1Eliminated = this.players[0]?.eliminated || false;
+        const clickChance = p1Eliminated ? 0.08 : 0.03; // P1被淘汰時BOT更積極
+        
+        // BOT模擬點擊行為
+        if (Math.random() < clickChance) {
           this.clickPeach(player);
         }
       }
@@ -795,6 +833,33 @@ export class PeachLotteryScene extends Phaser.Scene {
         }
       }
     });
+  }
+
+  // ── 為玩家自動打開桃子（第一輪超時時使用）──
+  private autoOpenPeachForPlayer(player: Player): void {
+    // 獲取玩家區域內可用的桃子
+    const availablePeaches = this.peaches.filter(p => 
+      p.region === player.region && !p.picked && !p.isLocked
+    );
+    
+    if (availablePeaches.length === 0) return;
+    
+    // 選擇一個桃子（優先選擇已選中的，或第一個可用的）
+    let targetPeach = availablePeaches.find(p => p.id === player.selectedPeach);
+    if (!targetPeach) {
+      targetPeach = availablePeaches[0];
+    }
+    
+    // 設置桃子為已打開狀態
+    targetPeach.clickCount = targetPeach.requiredClicks || Phaser.Math.Between(2, 5);
+    targetPeach.requiredClicks = targetPeach.clickCount;
+    
+    // 標記玩家已確認選擇
+    player.selectedPeach = targetPeach.id;
+    player.hasConfirmedChoice = true;
+    
+    // 執行打開桃子的邏輯
+    this.openPeach(player, targetPeach);
   }
 
   // ── 選擇機制優化：只允許選擇未鎖定的桃子 ──
