@@ -96,6 +96,20 @@ export class PeachLotteryScene extends Phaser.Scene {
 
     console.log('🍑 [桃樹彩票] 開始重構版本初始化...');
     
+    // 🔧 完整狀態重置 - 修復scene.restart()後狀態混亂問題
+    this.peaches = [];
+    this.players = [];
+    this.currentRound = 1;
+    this.roundStartTime = 0;
+    this.phase = 'intro';
+    this.running = false;
+    this.statusTexts = [];
+    this.endButtons = [];
+    this.endSelected = 0;
+    this.endHighlight = undefined;
+    this.introLayer = undefined;
+    this.keyboardCheckEvent = undefined;
+    
     // 🔧 註冊清理事件
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       if (this.keyboardCheckEvent) {
@@ -495,7 +509,6 @@ export class PeachLotteryScene extends Phaser.Scene {
     
     // 🔧 修復「再玩一次」後選擇框消失 - 延遲更新確保所有狀態就緒
     this.time.delayedCall(100, () => {
-      console.log('🔧 延遲更新UI確保選擇框顯示');
       this.updateUI();
     });
   }
@@ -545,8 +558,8 @@ export class PeachLotteryScene extends Phaser.Scene {
       this.updatePlaying();
     }
     
-    // UI始終更新
-    this.updateUI();
+    // 🔧 移除每幀調用updateUI，避免LOG刷屏
+    // updateUI只應該在狀態變化時調用，不應每幀調用
   }
 
   private updatePlaying(): void {
@@ -581,30 +594,25 @@ export class PeachLotteryScene extends Phaser.Scene {
   }
 
   private handlePlayerInput(): void {
-    console.log('🎮 handlePlayerInput調用 - running:', this.running, 'players:', this.players.length);
-    
     if (!this.running || this.players.length === 0) {
-      console.log('🚨 handlePlayerInput提早返回 - running:', this.running, 'players.length:', this.players.length);
       return;
     }
 
     const player = this.players[0]; // P1
     if (!player || player.eliminated || !player.keys || !player.actionKey) {
-      console.log('🚨 P1狀態檢查失敗');
       return;
     }
 
     // 🔧 簡化版：直接循環選擇區域內的桃子
     const regionPeaches = this.peaches.filter(p => p.region === player.region && !p.picked);
     if (regionPeaches.length === 0) {
-      console.log('🚨 沒有可用桃子');
       return;
     }
 
     // 確保P1有選中的桃子
     if (player.selectedPeach === -1 || !regionPeaches.find(p => p.id === player.selectedPeach)) {
       player.selectedPeach = regionPeaches[0].id;
-      console.log('🔧 重置P1選中桃子為:', player.selectedPeach);
+      this.updateUI(); // 狀態變化時更新UI
     }
 
     // 簡化的方向鍵邏輯：左右循環選擇
@@ -615,34 +623,24 @@ export class PeachLotteryScene extends Phaser.Scene {
     if (Phaser.Input.Keyboard.JustDown(player.keys.left)) {
       newIndex = (currentIndex - 1 + regionPeaches.length) % regionPeaches.length;
       moved = true;
-      console.log('🎯 左鍵：從', currentIndex, '到', newIndex);
     }
     if (Phaser.Input.Keyboard.JustDown(player.keys.right)) {
       newIndex = (currentIndex + 1) % regionPeaches.length;
       moved = true;
-      console.log('🎯 右鍵：從', currentIndex, '到', newIndex);
     }
     if (Phaser.Input.Keyboard.JustDown(player.keys.up)) {
       newIndex = (currentIndex - 2 + regionPeaches.length) % regionPeaches.length;
       moved = true;
-      console.log('🎯 上鍵：從', currentIndex, '到', newIndex);
     }
     if (Phaser.Input.Keyboard.JustDown(player.keys.down)) {
       newIndex = (currentIndex + 2) % regionPeaches.length;
       moved = true;
-      console.log('🎯 下鍵：從', currentIndex, '到', newIndex);
     }
 
     if (moved && newIndex !== currentIndex) {
       player.selectedPeach = regionPeaches[newIndex].id;
-      console.log('🎯✅ 選中新桃子:', player.selectedPeach);
+      this.updateUI(); // 狀態變化時更新UI
     }
-
-    // 額外的輸入檢測（使用isDown作為備用）
-    if (player.keys.left.isDown) console.log('⌨️ 左鍵isDown = true');
-    if (player.keys.right.isDown) console.log('⌨️ 右鍵isDown = true');
-    if (player.keys.up.isDown) console.log('⌨️ 上鍵isDown = true');
-    if (player.keys.down.isDown) console.log('⌨️ 下鍵isDown = true');
   }
 
   private updateBots(): void {
@@ -652,7 +650,6 @@ export class PeachLotteryScene extends Phaser.Scene {
       // BOT在時間過半後有機率確認選擇
       const elapsed = this.time.now - this.roundStartTime;
       if (elapsed > this.roundTimeLimit * 0.3 && Math.random() < 0.01) { // 降低自動確認機率
-        console.log(`🤖 BOT${player.id}自動確認選擇`);
         this.confirmChoice(player);
       }
     });
@@ -662,7 +659,7 @@ export class PeachLotteryScene extends Phaser.Scene {
     if (player.hasConfirmedChoice || player.selectedPeach === -1) return;
     
     player.hasConfirmedChoice = true;
-    console.log(`✅ 玩家${player.id}確認選擇桃子${player.selectedPeach}`);
+    this.updateUI(); // 狀態變化時更新UI
   }
 
   private pickPeach(player: Player): void {
@@ -976,20 +973,9 @@ export class PeachLotteryScene extends Phaser.Scene {
     // 選擇指示器 - 重新實現更清晰的反饋
     if (this.players.length > 0) {
       const p1 = this.players[0];
-      console.log('🎯 updateUI選擇框檢查:', {
-        p1Exists: !!p1,
-        eliminated: p1?.eliminated,
-        selectedPeach: p1?.selectedPeach,
-        phase: this.phase
-      });
       
       if (p1 && !p1.eliminated && p1.selectedPeach !== -1) {
         const selectedPeach = this.peaches.find(p => p.id === p1.selectedPeach);
-        console.log('🎯 找到選中桃子:', {
-          peachId: selectedPeach?.id,
-          picked: selectedPeach?.picked,
-          hasSelector: !!selectedPeach?.sprite.getData('selector')
-        });
         
         if (selectedPeach && !selectedPeach.picked) {
           // 黃色高亮選中的桃子
@@ -1017,7 +1003,6 @@ export class PeachLotteryScene extends Phaser.Scene {
           });
           
           selectedPeach.sprite.setData('selector', selector);
-          console.log('🎯✅ 選擇框創建成功');
         }
       }
 
