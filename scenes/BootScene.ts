@@ -54,6 +54,8 @@ export class BootScene extends Phaser.Scene {
     this.makeCollectShapeTexture('collect-star', 0xffd23f, 0x8a6a00);
     this.makeCollectShapeTexture('collect-heart', 0xff5a7a, 0x7a1030);
     this.makeCollectShapeTexture('collect-gem', 0x4ade80, 0x0a5a2a);
+    // 小遊戲「桃樹彩票」桃子貼圖（粉紅桃子形狀 + 綠葉）
+    this.makePeachTexture('peach');
     // 小遊戲「炸彈人對戰」:炸彈貼圖(黑圓身 + 引信 + 高光)
     this.makeBombTexture('bomb');
     this.makeGroundTexture();
@@ -545,5 +547,79 @@ export class BootScene extends Phaser.Scene {
     };
     
     tryNextPath();
+  }
+
+  /**
+   * 小遊戲「桃樹彩票」專用：桃子貼圖
+   * 粉紅色桃子形狀 + 小綠葉，清楚的桃子外觀
+   */
+  private makePeachTexture(key: string): void {
+    const radius = 30; // 桃子大小
+    const size = radius * 2 + 8;
+    const cx = size / 2;
+    const cy = size / 2;
+    const g = this.add.graphics();
+
+    // 桃子主體（心形變種，更像桃子）
+    const peachBody = (scale: number): Array<[number, number]> => {
+      const out: Array<[number, number]> = [];
+      for (let i = 0; i <= 32; i++) {
+        const t = (i / 32) * Math.PI * 2;
+        const x = 16 * Math.pow(Math.sin(t), 3);
+        // 稍微壓扁，更像桃子
+        const y = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t));
+        out.push([(x / 18) * radius * scale, (y / 20) * radius * scale * 0.9]);
+      }
+      return out;
+    };
+
+    const drawPoly = (pts: Array<[number, number]>) => {
+      if (pts.length === 0) return;
+      g.beginPath();
+      g.moveTo(cx + pts[0][0], cy + pts[0][1]);
+      for (let j = 1; j < pts.length; j++) {
+        g.lineTo(cx + pts[j][0], cy + pts[j][1]);
+      }
+      g.closePath();
+    };
+
+    // 桃子陰影（深一點的粉紅）
+    g.fillStyle(0xd63384, 1);
+    drawPoly(peachBody(1.05));
+    g.fillPath();
+
+    // 桃子主體（粉紅色）
+    g.fillStyle(0xff6b9d, 1);
+    drawPoly(peachBody(1));
+    g.fillPath();
+
+    // 桃子高光
+    g.fillStyle(0xff9dc2, 0.8);
+    drawPoly(peachBody(0.6));
+    g.fillPath();
+
+    // 桃子頂部小凹槽
+    g.fillStyle(0xd63384, 0.6);
+    g.fillEllipse(cx, cy - radius * 0.7, radius * 0.15, radius * 0.08);
+
+    // 綠色小葉子
+    g.fillStyle(0x28a745, 1);
+    const leafCx = cx + radius * 0.3;
+    const leafCy = cy - radius * 0.8;
+    const leafW = radius * 0.15;
+    const leafH = radius * 0.25;
+    // 手動繪製橢圓形葉子
+    g.fillEllipse(leafCx, leafCy, leafW, leafH);
+
+    // 葉子紋理
+    g.lineStyle(1, 0x155724, 0.7);
+    g.beginPath();
+    g.moveTo(cx + radius * 0.25, cy - radius * 0.9);
+    g.lineTo(cx + radius * 0.35, cy - radius * 0.7);
+    g.closePath();
+    g.strokePath();
+
+    g.generateTexture(key, size, size);
+    g.destroy();
   }
 }

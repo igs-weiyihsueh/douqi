@@ -210,9 +210,8 @@ export class PeachLotteryScene extends Phaser.Scene {
           region: regionId,
           x: region.x + pos.dx,
           y: region.y + pos.dy,
-          sprite: this.add.image(region.x + pos.dx, region.y + pos.dy, 'heart')
+          sprite: this.add.image(region.x + pos.dx, region.y + pos.dy, 'peach')
             .setDisplaySize(60, 60)
-            .setTint(0xff1744)
             .setDepth(this.DEPTHS.GAME_OBJECTS),
           hasTicket: false,
           picked: false
@@ -263,7 +262,7 @@ export class PeachLotteryScene extends Phaser.Scene {
         id: i,
         region: i,
         isBot: i > 0,
-        sprite: this.add.image(region.x, region.y - 40, 'heart')
+        sprite: this.add.image(region.x, region.y - 40, 'peach')
           .setDisplaySize(35, 35)
           .setTint(region.color)
           .setDepth(this.DEPTHS.GAME_OBJECTS + 1),
@@ -516,7 +515,7 @@ export class PeachLotteryScene extends Phaser.Scene {
   private resetPeaches(): void {
     this.peaches.forEach(peach => {
       if (!peach.picked) {
-        peach.sprite.setTint(0xff69b4).setAlpha(1);
+        peach.sprite.clearTint().setAlpha(1);
         peach.hasTicket = false;
       }
     });
@@ -699,7 +698,20 @@ export class PeachLotteryScene extends Phaser.Scene {
         onComplete: () => glow.destroy()
       });
     } else {
-      peach.sprite.setTint(0xff0000).setDisplaySize(100, 100); // 紅色大桃子
+      // 失敗時：桃子變暗並放大
+      peach.sprite.setAlpha(0.7).setDisplaySize(100, 100);
+      
+      // 紅色失敗光圈效果
+      const failGlow = this.add.circle(peach.x, peach.y, 80, 0xff0000, 0.4)
+        .setDepth(30);
+      this.tweens.add({
+        targets: failGlow,
+        scaleX: { from: 1, to: 1.5 },
+        scaleY: { from: 1, to: 1.5 },
+        alpha: { from: 0.4, to: 0 },
+        duration: 800,
+        onComplete: () => failGlow.destroy()
+      });
       
       // 失敗震動效果
       this.tweens.add({
@@ -978,8 +990,8 @@ export class PeachLotteryScene extends Phaser.Scene {
         const selectedPeach = this.peaches.find(p => p.id === p1.selectedPeach);
         
         if (selectedPeach && !selectedPeach.picked) {
-          // 黃色高亮選中的桃子
-          selectedPeach.sprite.setDisplaySize(75, 75).setTint(0xffff00);
+          // 選中的桃子：放大顯示，但保持原色
+          selectedPeach.sprite.setDisplaySize(75, 75).clearTint();
           
           // 🔧 強制重新創建選擇指示器，避免重新開始後的狀態問題
           const existingSelector = selectedPeach.sprite.getData('selector');
@@ -988,16 +1000,16 @@ export class PeachLotteryScene extends Phaser.Scene {
             selectedPeach.sprite.setData('selector', null);
           }
           
-          // 創建新的選擇指示器
+          // 創建新的選擇指示器（更明顯的黃色圓圈）
           const selector = this.add.circle(selectedPeach.x, selectedPeach.y, 45, 0x000000, 0)
-            .setStrokeStyle(4, 0xffff00, 1)
+            .setStrokeStyle(5, 0xffd700, 1)
             .setDepth(this.DEPTHS.EFFECTS);
           
           this.tweens.add({
             targets: selector,
-            scaleX: { from: 1, to: 1.2 },
-            scaleY: { from: 1, to: 1.2 },
-            duration: 800,
+            scaleX: { from: 1, to: 1.3 },
+            scaleY: { from: 1, to: 1.3 },
+            duration: 700,
             yoyo: true,
             repeat: -1
           });
@@ -1009,7 +1021,7 @@ export class PeachLotteryScene extends Phaser.Scene {
       // 重置其他桃子
       this.peaches.forEach(peach => {
         if (p1 && peach.id !== p1.selectedPeach && !peach.picked) {
-          peach.sprite.setDisplaySize(60, 60).setTint(0xff1744);
+          peach.sprite.setDisplaySize(60, 60).clearTint();
           
           const selector = peach.sprite.getData('selector');
           if (selector) {
