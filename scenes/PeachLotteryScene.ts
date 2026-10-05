@@ -81,6 +81,10 @@ export class PeachLotteryScene extends Phaser.Scene {
     this.setupUI();
     this.setupPeaches();
     this.setupPlayers();
+    
+    // 調試日誌
+    console.log(`🍑 [桃樹彩票] 初始化完成: ${this.players.length}名玩家, ${this.statusTexts.length}個狀態文字`);
+    
     this.startNewRound();
   }
 
@@ -267,6 +271,11 @@ export class PeachLotteryScene extends Phaser.Scene {
   }
 
   update(): void {
+    // 確保所有初始化完成
+    if (!this.roundText || !this.timerText || this.statusTexts.length === 0 || this.players.length === 0) {
+      return;
+    }
+
     if (this.phase === 'playing') {
       this.updatePlaying();
     }
@@ -303,8 +312,10 @@ export class PeachLotteryScene extends Phaser.Scene {
   }
 
   private handlePlayerInput(): void {
+    if (this.players.length === 0) return; // 確保players已初始化
+    
     const player = this.players[0]; // P1
-    if (player.eliminated || !player.keys || !player.actionKey) return;
+    if (!player || player.eliminated || !player.keys || !player.actionKey) return;
 
     const regionPeaches = this.peaches.filter(p => p.region === player.region && !p.picked);
     if (regionPeaches.length === 0) return;
@@ -461,9 +472,11 @@ export class PeachLotteryScene extends Phaser.Scene {
   }
 
   private selectEndButton(dir: number): void {
+    if (this.endButtons.length === 0) return; // 防止空數組錯誤
+    
     this.endSelected = (this.endSelected + dir + this.endButtons.length) % this.endButtons.length;
     const btn = this.endButtons[this.endSelected];
-    if (this.endHighlight) {
+    if (this.endHighlight && btn) {
       this.endHighlight.x = btn.x;
       this.endHighlight.y = btn.y;
     }
@@ -490,8 +503,14 @@ export class PeachLotteryScene extends Phaser.Scene {
       this.timerText.setText('');
     }
 
-    // 更新玩家狀態
+    // 更新玩家狀態 - 添加安全檢查
     this.players.forEach((player, i) => {
+      // 確保statusTexts[i]存在
+      if (!this.statusTexts[i]) {
+        console.warn(`StatusText ${i} not initialized`);
+        return;
+      }
+      
       const statusText = this.statusTexts[i];
       const name = player.id === 0 ? 'P1' : `BOT${player.id}`;
       
@@ -505,21 +524,23 @@ export class PeachLotteryScene extends Phaser.Scene {
       }
     });
 
-    // 高亮當前選中的桃子 (僅P1)
-    const p1 = this.players[0];
-    if (!p1.eliminated && p1.selectedPeach !== -1) {
-      const selectedPeach = this.peaches.find(p => p.id === p1.selectedPeach);
-      if (selectedPeach && !selectedPeach.picked) {
-        // 簡單的高亮效果：稍微放大
-        selectedPeach.sprite.setDisplaySize(70, 70);
+    // 高亮當前選中的桃子 (僅P1) - 添加安全檢查
+    if (this.players.length > 0) {
+      const p1 = this.players[0];
+      if (p1 && !p1.eliminated && p1.selectedPeach !== -1) {
+        const selectedPeach = this.peaches.find(p => p.id === p1.selectedPeach);
+        if (selectedPeach && !selectedPeach.picked) {
+          // 簡單的高亮效果：稍微放大
+          selectedPeach.sprite.setDisplaySize(70, 70);
+        }
       }
-    }
 
-    // 重置其他桃子大小
-    this.peaches.forEach(peach => {
-      if (peach.id !== p1.selectedPeach && !peach.picked) {
-        peach.sprite.setDisplaySize(60, 60);
-      }
-    });
+      // 重置其他桃子大小
+      this.peaches.forEach(peach => {
+        if (p1 && peach.id !== p1.selectedPeach && !peach.picked) {
+          peach.sprite.setDisplaySize(60, 60);
+        }
+      });
+    }
   }
 }
