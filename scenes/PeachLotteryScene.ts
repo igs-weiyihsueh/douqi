@@ -41,6 +41,9 @@ export class PeachLotteryScene extends Phaser.Scene {
   private phase: 'intro' | 'playing' | 'revealing' | 'ended' = 'intro';
   private running = false; // 控制遊戲邏輯是否運行
   
+  // 🔧 診斷系統引用
+  private keyboardCheckEvent?: Phaser.Time.TimerEvent;
+  
   // 🎨 標準化布局系統
   private readonly LAYOUT = {
     ZONES: {
@@ -92,6 +95,14 @@ export class PeachLotteryScene extends Phaser.Scene {
     const h = GameConfig.height;
 
     console.log('🍑 [桃樹彩票] 開始重構版本初始化...');
+    
+    // 🔧 註冊清理事件
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      if (this.keyboardCheckEvent) {
+        this.keyboardCheckEvent.destroy();
+        this.keyboardCheckEvent = undefined;
+      }
+    });
 
     // 🎨 背景 - 使用標準深度
     this.add.tileSprite(0, 0, w, h, 'ground').setOrigin(0, 0).setDepth(this.DEPTHS.BACKGROUND);
@@ -358,21 +369,36 @@ export class PeachLotteryScene extends Phaser.Scene {
     };
 
     const checkKeys = () => {
-      const pressed = [];
-      if (testKeys.left.isDown) pressed.push('LEFT');
-      if (testKeys.right.isDown) pressed.push('RIGHT');
-      if (testKeys.up.isDown) pressed.push('UP');
-      if (testKeys.down.isDown) pressed.push('DOWN');
+      // 🔧 安全檢查：確保文本對象還存在
+      if (!testText || !testText.active || testText.scene === null) {
+        console.log('🚨 testText已被銷毀，停止鍵盤檢查');
+        return;
+      }
       
-      if (pressed.length > 0) {
-        testText.setText(`鍵盤狀態: ${pressed.join('+')} 被按下`);
-      } else {
-        testText.setText('鍵盤狀態: 等待輸入...');
+      try {
+        const pressed = [];
+        if (testKeys.left.isDown) pressed.push('LEFT');
+        if (testKeys.right.isDown) pressed.push('RIGHT');
+        if (testKeys.up.isDown) pressed.push('UP');
+        if (testKeys.down.isDown) pressed.push('DOWN');
+        
+        if (pressed.length > 0) {
+          testText.setText(`鍵盤狀態: ${pressed.join('+')} 被按下`);
+        } else {
+          testText.setText('鍵盤狀態: 等待輸入...');
+        }
+      } catch (error) {
+        console.log('🚨 setText錯誤:', error);
+        // 停止這個檢查循環
+        if (this.keyboardCheckEvent) {
+          this.keyboardCheckEvent.destroy();
+          this.keyboardCheckEvent = undefined;
+        }
       }
     };
 
-    // 添加定時檢查
-    this.time.addEvent({
+    // 添加定時檢查，並保存引用以便清理
+    this.keyboardCheckEvent = this.time.addEvent({
       delay: 100,
       loop: true,
       callback: checkKeys
@@ -405,6 +431,13 @@ export class PeachLotteryScene extends Phaser.Scene {
     console.log('🎮 [桃樹彩票] 遊戲開始！');
     
     this.phase = 'playing';
+    
+    // 🔧 清理診斷系統定時器
+    if (this.keyboardCheckEvent) {
+      this.keyboardCheckEvent.destroy();
+      this.keyboardCheckEvent = undefined;
+    }
+    
     if (this.introLayer) { 
       this.introLayer.destroy(); 
       this.introLayer = undefined; 
