@@ -1069,9 +1069,11 @@ export class GameScene extends Phaser.Scene {
 
     // v46 slow：畫玩家周圍的【自動鎖定範圍圈】(半透明圈+環)。只 slow 顯示、fast 不畫。
     // v47：半徑改讀即時可調 slowTuning.lockRadius；移除面向指示線(只留圈+環)。
+    // ★調整：鎖定範圍圈移到角色腳底下，像圓盤一樣
     if (this.controlMode === 'slow' && this.player.alive) {
       const R = this.slowTuning.lockRadius;
-      const px = this.player.x, py = this.player.y;
+      const px = this.player.x;
+      const py = this.player.y + GameConfig.player.radius; // 角色腳底位置
       this.lockGfx.fillStyle(0x66ccff, 0.05);
       this.lockGfx.fillCircle(px, py, R);
       this.lockGfx.lineStyle(2, 0x66ccff, 0.35);

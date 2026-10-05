@@ -899,15 +899,16 @@ export class UIScene extends Phaser.Scene {
       g.fillCircle(ex, ey, ind.endMarkerRadius);
     }
 
-    // 方向圓環
+    // ★調整：方向圓環移到角色腳底下，像圓盤一樣
+    const footY = ay + GameConfig.player.radius; // 角色腳底位置
     g.lineStyle(cfg.ringThickness, cfg.ringColor, cfg.ringAlpha);
-    g.strokeCircle(ax, ay, cfg.ringRadius);
+    g.strokeCircle(ax, footY, cfg.ringRadius);
 
-    // 箭頭
+    // ★調整：箭頭也移到腳底圓環上
     const tipX = ax + Math.cos(a.angle) * (cfg.ringRadius + cfg.arrowSize * 0.6);
-    const tipY = ay + Math.sin(a.angle) * (cfg.ringRadius + cfg.arrowSize * 0.6);
+    const tipY = footY + Math.sin(a.angle) * (cfg.ringRadius + cfg.arrowSize * 0.6);
     const baseX = ax + Math.cos(a.angle) * (cfg.ringRadius - cfg.arrowSize * 0.4);
-    const baseY = ay + Math.sin(a.angle) * (cfg.ringRadius - cfg.arrowSize * 0.4);
+    const baseY = footY + Math.sin(a.angle) * (cfg.ringRadius - cfg.arrowSize * 0.4);
     const perp = a.angle + Math.PI / 2;
     const half = cfg.arrowSize * 0.5;
     g.fillStyle(cfg.arrowColor, 1);
