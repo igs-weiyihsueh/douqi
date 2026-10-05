@@ -8428,8 +8428,8 @@ export class GameScene extends Phaser.Scene {
     console.log('🔧 [調試] character-ui-overlay紋理存在:', this.textures.exists('character-ui-overlay'));
     
     if (this.textures.exists('character-ui-overlay')) {
-      // ★調整：使用與頭頂UI系統一致的偏移值-150
-      const playerPos = this.player ? { x: this.player.x, y: this.player.y - 150 } : { x: 0, y: -150 };
+      // ★調整：使用與頭頂UI系統一致的偏移值-130
+      const playerPos = this.player ? { x: this.player.x, y: this.player.y - 130 } : { x: 0, y: -130 };
       console.log('🔧 [調試] P1角色位置:', { x: this.player?.x, y: this.player?.y });
       console.log('🔧 [調試] UI覆蓋目標位置:', playerPos);
       
@@ -8490,9 +8490,9 @@ export class GameScene extends Phaser.Scene {
    */
   private updateCharacterUIOverlay(): void {
     if (this.characterUIOverlay && this.player.alive) {
-      // ★調整：同步位置到P1角色上方，使用與頭頂UI系統一致的偏移值-150
+      // ★調整：同步位置到P1角色上方，使用與頭頂UI系統一致的偏移值-130
       const newX = this.player.x;
-      const newY = this.player.y - 150;
+      const newY = this.player.y - 130;
       this.characterUIOverlay.setPosition(newX, newY);
       
       // 調試：每100幀輸出一次位置信息

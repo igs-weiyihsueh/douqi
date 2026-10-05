@@ -1410,9 +1410,9 @@ export class UIScene extends Phaser.Scene {
       return;
     }
     
-    // ★用戶要求調整：頭頂UI偏移值從-200調整為-150
+    // ★用戶要求調整：頭頂UI偏移值從-150調整為-130
     const worldX = character.x;
-    const worldY = character.y - 150; // ★調整：從-200改為-150，向下移動50px
+    const worldY = character.y - 130; // ★調整：從-150改為-130，向下移動20px
     
     // 座標系統轉換：世界座標 → 螢幕座標
     // UIScene使用固定相機，需要減去GameScene相機的捲動偏移
@@ -1447,7 +1447,7 @@ export class UIScene extends Phaser.Scene {
     const gameScene = this.scene.get('GameScene') as any;
     const gcam = gameScene?.cameras?.main;
     const screenX = worldX - (gcam?.scrollX || 0);
-    const screenY = worldY - (gcam?.scrollY || 0) - 150; // ★調整：與頭頂UI位置一致，角色頭上150px
+    const screenY = worldY - (gcam?.scrollY || 0) - 130; // ★調整：與頭頂UI位置一致，角色頭上130px
     
     // 從配置讀取參數（恢復原始設計）
     const config = GameConfig.ticketEffect;
