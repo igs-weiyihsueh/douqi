@@ -262,8 +262,8 @@ export class PeachLotteryScene extends Phaser.Scene {
         id: i,
         region: i,
         isBot: i > 0,
-        sprite: this.add.image(region.x, region.y - 40, 'peach')
-          .setDisplaySize(35, 35)
+        sprite: this.add.image(region.x, region.y - 80, 'peach')
+          .setDisplaySize(25, 25)
           .setTint(region.color)
           .setDepth(this.DEPTHS.GAME_OBJECTS + 1),
         eliminated: false,
@@ -273,7 +273,7 @@ export class PeachLotteryScene extends Phaser.Scene {
       };
 
       // 玩家白色邊框指示器
-      this.add.circle(region.x, region.y - 40, 20, 0x000000, 0)
+      this.add.circle(region.x, region.y - 80, 15, 0x000000, 0)
         .setStrokeStyle(2, 0xffffff, 0.9)
         .setDepth(this.DEPTHS.GAME_OBJECTS);
 
