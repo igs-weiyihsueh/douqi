@@ -37,6 +37,13 @@ export const MINIGAMES: MinigameEntry[] = [
     sceneKey: 'BombArenaScene',
     desc: '撿炸彈、朝面向丟向對手!撞到即爆、落地倒數爆、連鎖引爆,炸到出局,最後活著者勝。(1 人 vs 3 BOT)',
     icon: '💣'
+  },
+  {
+    key: 'peach-lottery',
+    name: '桃樹彩票',
+    sceneKey: 'PeachLotteryScene',
+    desc: '四人分區摘桃子找彩票！10秒內選擇，有票晉級無票淘汰，最後一名獲大獎！(1 人 vs 3 BOT)',
+    icon: '🍑'
   }
   // 之後新增小遊戲：在此加一項 + 寫對應 Scene + main.ts 註冊
 ];
