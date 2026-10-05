@@ -21,6 +21,8 @@ interface Player {
   selectedPeach: number; // 當前選中的桃子ID
   hasTicket: boolean;    // 本輪是否獲得彩票
   hasConfirmedChoice: boolean; // 是否已確認選擇（P1按空格，BOT自動確認）
+  clickCount: number;    // 當前桃子的點擊次數
+  requiredClicks: number; // 打開這個桃子需要的點擊次數
   // 控制相關
   keys?: Record<string, Phaser.Input.Keyboard.Key>;
   actionKey?: Phaser.Input.Keyboard.Key;
@@ -28,8 +30,9 @@ interface Player {
 
 /**
  * 桃樹彩票小遊戲
- * 四名玩家分配四個區域，每區域4顆桃子。每輪10秒內選桃子，有彩票晉級無彩票淘汰。
- * 第2輪開始每輪淘汰一名，最後剩一名獲勝。
+ * 四名玩家分配四個區域，每區域4顆桃子。每輪10秒內選桃子，點擊數下打開查看彩票。
+ * 第1輪：所有人晉級（不淘汰任何人）
+ * 第2輪開始：每輪淘汰一名沒彩票的玩家，最後剩一名獲勝。
  */
 export class PeachLotteryScene extends Phaser.Scene {
   private peaches: Peach[] = [];
@@ -265,14 +268,16 @@ export class PeachLotteryScene extends Phaser.Scene {
         eliminated: false,
         selectedPeach: -1,
         hasTicket: false,
-        hasConfirmedChoice: false  // 初始化確認狀態
+        hasConfirmedChoice: false, // 初始化確認狀態
+        clickCount: 0,             // 初始化點擊計數
+        requiredClicks: 0          // 初始化所需點擊數
       };
 
       // P1特別標示 - 移至FOOTER區域
       if (i === 0) {
         const footerY = this.LAYOUT.ZONES.FOOTER.y + 30;
         this.add.text(GameConfig.width / 2, footerY, 
-          '👤 你控制左上角紅色區域 | ←→ 選擇桃子，空格摘取', {
+          '👤 你控制左上角紅色區域 | ←→ 選擇桃子，空格點擊打開', {
           fontFamily: 'monospace',
           fontSize: '18px',
           color: '#ffffff',
@@ -323,13 +328,14 @@ export class PeachLotteryScene extends Phaser.Scene {
     // 遊戲規則
     const rules = [
       '⭐ 4名玩家分配到4個區域，每區域有4顆桃子',
-      '⭐ 每輪10秒內選擇一顆桃子並確認(空格鍵)',
+      '⭐ 每輪10秒內選擇一顆桃子並點擊打開(空格鍵)',
       '⭐ 只有部分桃子藏有彩票，摘到彩票才能晉級',
-      '⭐ 沒有彩票的玩家被淘汰，最後1名獲勝',
+      '⭐ 第1輪：所有人晉級（體驗輪）',
+      '⭐ 第2輪起：沒有彩票的玩家被淘汰，最後1名獲勝',
       '',
       '🎮 操作方式：',
       '   ←→↑↓ 方向鍵：選擇桃子 (2x2網格)',
-      '   空格鍵：確認選擇並摘取桃子',
+      '   空格鍵：點擊打開選中的桃子',
       '',
       '🔧 鍵盤測試：按任意方向鍵測試...'
     ];
@@ -450,7 +456,7 @@ export class PeachLotteryScene extends Phaser.Scene {
     if (this.phase === 'playing' && this.running) {
       const player = this.players[0];
       if (player && !player.eliminated && !player.hasConfirmedChoice) {
-        this.confirmChoice(player);
+        this.clickPeach(player);
       }
     }
   }
@@ -482,6 +488,8 @@ export class PeachLotteryScene extends Phaser.Scene {
         }
         player.hasTicket = false;
         player.hasConfirmedChoice = false; // 重要：重置確認狀態
+        player.clickCount = 0;             // 重置點擊計數
+        player.requiredClicks = 0;         // 重置所需點擊數
       }
     });
 
@@ -496,8 +504,23 @@ export class PeachLotteryScene extends Phaser.Scene {
   private resetPeaches(): void {
     this.peaches.forEach(peach => {
       if (!peach.picked) {
-        peach.sprite.clearTint().setAlpha(1);
+        peach.sprite.clearTint().setAlpha(1).setDisplaySize(80, 80); // 重置大小
         peach.hasTicket = false;
+        peach.picked = false;
+        
+        // 清理點擊進度文字
+        const progressText = peach.sprite.getData('progressText');
+        if (progressText) {
+          progressText.destroy();
+          peach.sprite.setData('progressText', null);
+        }
+        
+        // 移除選擇指示器
+        const selector = peach.sprite.getData('selector');
+        if (selector) {
+          selector.destroy();
+          peach.sprite.setData('selector', null);
+        }
       }
     });
   }
@@ -627,19 +650,111 @@ export class PeachLotteryScene extends Phaser.Scene {
     this.players.forEach(player => {
       if (player.eliminated || !player.isBot || player.hasConfirmedChoice) return;
       
-      // BOT在時間過半後有機率確認選擇
+      // BOT在時間過半後開始點擊桃子
       const elapsed = this.time.now - this.roundStartTime;
-      if (elapsed > this.roundTimeLimit * 0.3 && Math.random() < 0.01) { // 降低自動確認機率
-        this.confirmChoice(player);
+      if (elapsed > this.roundTimeLimit * 0.3) {
+        // BOT模擬點擊行為，比P1快一些
+        if (Math.random() < 0.03) { // 3%機率每幀點擊
+          this.clickPeach(player);
+        }
       }
     });
   }
 
-  private confirmChoice(player: Player): void {
-    if (player.hasConfirmedChoice || player.selectedPeach === -1) return;
+  // ── 點擊桃子機制 ──
+  private clickPeach(player: Player): void {
+    if (player.selectedPeach === -1) return;
     
+    const peach = this.peaches.find(p => p.id === player.selectedPeach);
+    if (!peach || peach.picked) return;
+    
+    // 第一次點擊這個桃子時，生成所需點擊數
+    if (player.requiredClicks === 0) {
+      player.requiredClicks = Phaser.Math.Between(2, 5); // 隨機需要2-5次點擊
+      player.clickCount = 0;
+      console.log(`🍑 桃子${peach.id}需要點擊${player.requiredClicks}次才能打開`);
+      
+      // 顯示點擊進度
+      this.showClickProgress(player, peach);
+    }
+    
+    // 增加點擊次數
+    player.clickCount++;
+    console.log(`🖱️ 玩家${player.id}點擊桃子${peach.id}，進度：${player.clickCount}/${player.requiredClicks}`);
+    
+    // 更新點擊進度顯示
+    this.updateClickProgress(player, peach);
+    
+    // 檢查是否達到所需點擊數
+    if (player.clickCount >= player.requiredClicks) {
+      // 桃子打開！
+      this.openPeach(player, peach);
+    }
+  }
+
+  // ── 顯示點擊進度 ──
+  private showClickProgress(player: Player, peach: Peach): void {
+    const progressText = this.add.text(peach.x, peach.y - 80, 
+      `🖱️ 點擊打開 ${player.clickCount}/${player.requiredClicks}`, {
+      fontFamily: 'monospace',
+      fontSize: '20px',
+      color: '#ffff00',
+      backgroundColor: '#000000',
+      padding: { x: 8, y: 4 },
+      stroke: '#000000',
+      strokeThickness: 2
+    }).setOrigin(0.5).setDepth(40);
+    
+    // 保存進度文字到桃子數據中
+    peach.sprite.setData('progressText', progressText);
+  }
+
+  // ── 更新點擊進度 ──
+  private updateClickProgress(player: Player, peach: Peach): void {
+    const progressText = peach.sprite.getData('progressText');
+    if (progressText) {
+      progressText.setText(`🖱️ 點擊打開 ${player.clickCount}/${player.requiredClicks}`);
+      
+      // 添加點擊視覺反饋
+      this.tweens.add({
+        targets: progressText,
+        scaleX: { from: 1, to: 1.2 },
+        scaleY: { from: 1, to: 1.2 },
+        duration: 100,
+        yoyo: true,
+        ease: 'Bounce.easeOut'
+      });
+      
+      // 桃子震動反饋
+      this.tweens.add({
+        targets: peach.sprite,
+        x: peach.x + 5,
+        duration: 50,
+        yoyo: true,
+        repeat: 1,
+        ease: 'Power2'
+      });
+    }
+  }
+
+  // ── 打開桃子 ──
+  private openPeach(player: Player, peach: Peach): void {
+    console.log(`🎊 玩家${player.id}成功打開桃子${peach.id}！`);
+    
+    // 移除點擊進度顯示
+    const progressText = peach.sprite.getData('progressText');
+    if (progressText) {
+      progressText.destroy();
+      peach.sprite.setData('progressText', null);
+    }
+    
+    // 標記為已確認選擇（桃子已打開）
     player.hasConfirmedChoice = true;
-    this.updateUI(); // 狀態變化時更新UI
+    
+    // 執行原來的摘桃子邏輯
+    this.pickPeach(player);
+    
+    this.updateUI(); // 更新UI顯示狀態變化
   }
 
   private pickPeach(player: Player): void {
@@ -751,14 +866,50 @@ export class PeachLotteryScene extends Phaser.Scene {
   private processElimination(): void {
     console.log('💀 處理淘汰邏輯');
     
-    // 淘汰沒有彩票的玩家
-    this.players.forEach(player => {
-      if (!player.eliminated && !player.hasTicket) {
-        player.eliminated = true;
-        player.sprite.setAlpha(0.3);
-        console.log(`💀 玩家${player.id}被淘汰`);
-      }
-    });
+    if (this.currentRound === 1) {
+      // 第一輪：所有人晉級，不淘汰任何人
+      console.log('🎊 第1輪結束 - 所有人晉級！（體驗輪）');
+      
+      // 顯示第一輪特殊訊息
+      const w = GameConfig.width;
+      const specialText = this.add.text(w / 2, 400, 
+        '🎊 第1輪完成！\n✨ 所有玩家都晉級到第2輪！\n🍑 從第2輪開始才會淘汰沒彩票的玩家', {
+        fontFamily: 'monospace',
+        fontSize: '32px',
+        color: '#00ff00',
+        backgroundColor: '#000000',
+        padding: { x: 20, y: 15 },
+        align: 'center',
+        stroke: '#ffffff',
+        strokeThickness: 2
+      }).setOrigin(0.5).setDepth(50);
+      
+      // 特殊訊息動畫
+      this.tweens.add({
+        targets: specialText,
+        scaleX: { from: 0.8, to: 1.1 },
+        scaleY: { from: 0.8, to: 1.1 },
+        duration: 300,
+        yoyo: true,
+        ease: 'Back.easeOut'
+      });
+      
+      // 3秒後移除特殊訊息
+      this.time.delayedCall(3000, () => {
+        specialText.destroy();
+      });
+    } else {
+      // 第二輪起：淘汰沒有彩票的玩家
+      console.log(`💀 第${this.currentRound}輪 - 開始淘汰沒彩票的玩家`);
+      
+      this.players.forEach(player => {
+        if (!player.eliminated && !player.hasTicket) {
+          player.eliminated = true;
+          player.sprite.setAlpha(0.3);
+          console.log(`💀 玩家${player.id}被淘汰（沒有彩票）`);
+        }
+      });
+    }
 
     // 檢查遊戲是否結束
     const alivePlayers = this.players.filter(p => !p.eliminated);
