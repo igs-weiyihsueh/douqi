@@ -324,7 +324,9 @@ export class PeachLotteryScene extends Phaser.Scene {
       '',
       '🎮 操作方式：',
       '   ←→↑↓ 方向鍵：選擇桃子 (2x2網格)',
-      '   空格鍵：確認選擇並摘取桃子'
+      '   空格鍵：確認選擇並摘取桃子',
+      '',
+      '🔧 鍵盤測試：按任意方向鍵測試...'
     ];
     
     cont.add(this.add.text(w / 2, h / 2 - 40, rules.join('\n'), {
@@ -338,6 +340,43 @@ export class PeachLotteryScene extends Phaser.Scene {
       stroke: '#000000', strokeThickness: 3
     }).setOrigin(0.5);
     cont.add(startHint);
+
+    // 鍵盤測試文本
+    const testText = this.add.text(w / 2, h / 2 + 200, '鍵盤狀態: 等待輸入...', {
+      fontFamily: 'monospace', fontSize: '14px', color: '#ffd700'
+    }).setOrigin(0.5);
+    cont.add(testText);
+
+    // 添加鍵盤測試邏輯
+    const KC = Phaser.Input.Keyboard.KeyCodes;
+    const kb = this.input.keyboard!;
+    const testKeys = {
+      left: kb.addKey(KC.LEFT),
+      right: kb.addKey(KC.RIGHT),
+      up: kb.addKey(KC.UP),
+      down: kb.addKey(KC.DOWN)
+    };
+
+    const checkKeys = () => {
+      const pressed = [];
+      if (testKeys.left.isDown) pressed.push('LEFT');
+      if (testKeys.right.isDown) pressed.push('RIGHT');
+      if (testKeys.up.isDown) pressed.push('UP');
+      if (testKeys.down.isDown) pressed.push('DOWN');
+      
+      if (pressed.length > 0) {
+        testText.setText(`鍵盤狀態: ${pressed.join('+')} 被按下`);
+      } else {
+        testText.setText('鍵盤狀態: 等待輸入...');
+      }
+    };
+
+    // 添加定時檢查
+    this.time.addEvent({
+      delay: 100,
+      loop: true,
+      callback: checkKeys
+    });
     
     // 開始提示閃爍效果
     this.tweens.add({ 
@@ -503,64 +542,68 @@ export class PeachLotteryScene extends Phaser.Scene {
   }
 
   private handlePlayerInput(): void {
-    if (!this.running || this.players.length === 0) return;
+    console.log('🎮 handlePlayerInput調用 - running:', this.running, 'players:', this.players.length);
+    
+    if (!this.running || this.players.length === 0) {
+      console.log('🚨 handlePlayerInput提早返回 - running:', this.running, 'players.length:', this.players.length);
+      return;
+    }
 
     const player = this.players[0]; // P1
-    if (!player || player.eliminated || !player.keys || !player.actionKey) return;
-
-    const regionPeaches = this.peaches.filter(p => p.region === player.region && !p.picked);
-    if (regionPeaches.length === 0) return;
-
-    // 方向鍵選擇桃子 - 基於2x2網格的真實位置
-    if (Phaser.Input.Keyboard.JustDown(player.keys.left) || 
-        Phaser.Input.Keyboard.JustDown(player.keys.right) || 
-        Phaser.Input.Keyboard.JustDown(player.keys.up) || 
-        Phaser.Input.Keyboard.JustDown(player.keys.down)) {
-      
-      // 找到當前選中桃子的網格位置
-      const currentPeach = regionPeaches.find(p => p.id === player.selectedPeach);
-      if (!currentPeach) return;
-      
-      // 基於桃子的相對位置計算網格座標
-      const region = this.regions[player.region];
-      const currentGridX = currentPeach.x > region.x ? 1 : 0; // 右側為1，左側為0
-      const currentGridY = currentPeach.y > region.y ? 1 : 0; // 下方為1，上方為0
-      
-      let newGridX = currentGridX;
-      let newGridY = currentGridY;
-      let moved = false;
-      
-      // 根據按鍵調整網格位置
-      if (Phaser.Input.Keyboard.JustDown(player.keys.left)) {
-        newGridX = Math.max(0, currentGridX - 1);
-        moved = true;
-      }
-      if (Phaser.Input.Keyboard.JustDown(player.keys.right)) {
-        newGridX = Math.min(1, currentGridX + 1);  
-        moved = true;
-      }
-      if (Phaser.Input.Keyboard.JustDown(player.keys.up)) {
-        newGridY = Math.max(0, currentGridY - 1);
-        moved = true;
-      }
-      if (Phaser.Input.Keyboard.JustDown(player.keys.down)) {
-        newGridY = Math.min(1, currentGridY + 1);
-        moved = true;
-      }
-      
-      // 如果位置有變化，找到對應的桃子
-      if (moved && (newGridX !== currentGridX || newGridY !== currentGridY)) {
-        const targetPeach = regionPeaches.find(p => {
-          const targetGridX = p.x > region.x ? 1 : 0;
-          const targetGridY = p.y > region.y ? 1 : 0;
-          return targetGridX === newGridX && targetGridY === newGridY;
-        });
-        
-        if (targetPeach) {
-          player.selectedPeach = targetPeach.id;
-        }
-      }
+    if (!player || player.eliminated || !player.keys || !player.actionKey) {
+      console.log('🚨 P1狀態檢查失敗');
+      return;
     }
+
+    // 🔧 簡化版：直接循環選擇區域內的桃子
+    const regionPeaches = this.peaches.filter(p => p.region === player.region && !p.picked);
+    if (regionPeaches.length === 0) {
+      console.log('🚨 沒有可用桃子');
+      return;
+    }
+
+    // 確保P1有選中的桃子
+    if (player.selectedPeach === -1 || !regionPeaches.find(p => p.id === player.selectedPeach)) {
+      player.selectedPeach = regionPeaches[0].id;
+      console.log('🔧 重置P1選中桃子為:', player.selectedPeach);
+    }
+
+    // 簡化的方向鍵邏輯：左右循環選擇
+    let moved = false;
+    const currentIndex = regionPeaches.findIndex(p => p.id === player.selectedPeach);
+    let newIndex = currentIndex;
+
+    if (Phaser.Input.Keyboard.JustDown(player.keys.left)) {
+      newIndex = (currentIndex - 1 + regionPeaches.length) % regionPeaches.length;
+      moved = true;
+      console.log('🎯 左鍵：從', currentIndex, '到', newIndex);
+    }
+    if (Phaser.Input.Keyboard.JustDown(player.keys.right)) {
+      newIndex = (currentIndex + 1) % regionPeaches.length;
+      moved = true;
+      console.log('🎯 右鍵：從', currentIndex, '到', newIndex);
+    }
+    if (Phaser.Input.Keyboard.JustDown(player.keys.up)) {
+      newIndex = (currentIndex - 2 + regionPeaches.length) % regionPeaches.length;
+      moved = true;
+      console.log('🎯 上鍵：從', currentIndex, '到', newIndex);
+    }
+    if (Phaser.Input.Keyboard.JustDown(player.keys.down)) {
+      newIndex = (currentIndex + 2) % regionPeaches.length;
+      moved = true;
+      console.log('🎯 下鍵：從', currentIndex, '到', newIndex);
+    }
+
+    if (moved && newIndex !== currentIndex) {
+      player.selectedPeach = regionPeaches[newIndex].id;
+      console.log('🎯✅ 選中新桃子:', player.selectedPeach);
+    }
+
+    // 額外的輸入檢測（使用isDown作為備用）
+    if (player.keys.left.isDown) console.log('⌨️ 左鍵isDown = true');
+    if (player.keys.right.isDown) console.log('⌨️ 右鍵isDown = true');
+    if (player.keys.up.isDown) console.log('⌨️ 上鍵isDown = true');
+    if (player.keys.down.isDown) console.log('⌨️ 下鍵isDown = true');
   }
 
   private updateBots(): void {
