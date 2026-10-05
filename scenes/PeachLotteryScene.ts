@@ -20,6 +20,7 @@ interface Player {
   eliminated: boolean;
   selectedPeach: number; // 當前選中的桃子ID
   hasTicket: boolean;    // 本輪是否獲得彩票
+  hasConfirmedChoice: boolean; // 是否已確認選擇（P1按空格，BOT自動確認）
   // 控制相關
   keys?: Record<string, Phaser.Input.Keyboard.Key>;
   actionKey?: Phaser.Input.Keyboard.Key;
@@ -238,7 +239,8 @@ export class PeachLotteryScene extends Phaser.Scene {
           .setDepth(this.DEPTHS.GAME_OBJECTS + 1),
         eliminated: false,
         selectedPeach: -1,
-        hasTicket: false
+        hasTicket: false,
+        hasConfirmedChoice: false  // 初始化確認狀態
       };
 
       // 玩家白色邊框指示器
@@ -296,6 +298,8 @@ export class PeachLotteryScene extends Phaser.Scene {
       return;
     }
 
+    console.log(`🍑 [桃樹彩票] 開始第${this.currentRound}輪`);
+    
     this.phase = 'playing';
     this.roundStartTime = this.time.now;
 
@@ -303,11 +307,18 @@ export class PeachLotteryScene extends Phaser.Scene {
     this.resetPeaches();
     this.assignTickets();
     
-    // 重置玩家選擇
+    // 重置玩家選擇 - 修復：P1不自動選擇，但需要有初始選中的桃子用於顯示
     this.players.forEach(player => {
       if (!player.eliminated) {
-        player.selectedPeach = this.getRandomPeachInRegion(player.region);
+        if (player.isBot) {
+          // BOT自動選擇初始桃子
+          player.selectedPeach = this.getRandomPeachInRegion(player.region);
+        } else {
+          // P1玩家有初始選中的桃子，但不算"已選擇"
+          player.selectedPeach = this.getRandomPeachInRegion(player.region);
+        }
         player.hasTicket = false;
+        player.hasConfirmedChoice = false; // 重要：重置確認狀態
       }
     });
 
@@ -365,10 +376,11 @@ export class PeachLotteryScene extends Phaser.Scene {
     const remaining = this.roundTimeLimit - elapsed;
 
     if (remaining <= 0) {
-      // 時間到，沒選擇的玩家淘汰
+      // 時間到，沒確認選擇的玩家淘汰
       this.players.forEach(player => {
-        if (!player.eliminated && player.selectedPeach === -1) {
+        if (!player.eliminated && !player.hasConfirmedChoice) {
           player.eliminated = true;
+          console.log(`⏰ 玩家${player.id}超時淘汰`);
         }
       });
       this.revealResults();
@@ -378,13 +390,14 @@ export class PeachLotteryScene extends Phaser.Scene {
     // 處理P1輸入
     this.handlePlayerInput();
     
-    // BOT AI
+    // BOT AI - 修改為確認選擇而非自動確認
     this.updateBots();
 
-    // 檢查是否所有活躍玩家都已選擇
+    // 檢查是否所有活躍玩家都已確認選擇
     const alivePlayers = this.players.filter(p => !p.eliminated);
-    const allSelected = alivePlayers.every(p => p.selectedPeach !== -1);
-    if (allSelected) {
+    const allConfirmed = alivePlayers.every(p => p.hasConfirmedChoice);
+    if (allConfirmed) {
+      console.log('✅ 所有玩家都已確認選擇，揭曉結果');
       this.revealResults();
     }
   }
@@ -414,20 +427,29 @@ export class PeachLotteryScene extends Phaser.Scene {
 
     // 空格鍵確認選擇
     if (Phaser.Input.Keyboard.JustDown(player.actionKey)) {
-      this.pickPeach(player);
+      console.log(`🎯 P1確認選擇桃子${player.selectedPeach}`);
+      this.confirmChoice(player);
     }
   }
 
   private updateBots(): void {
     this.players.forEach(player => {
-      if (player.eliminated || !player.isBot || player.selectedPeach === -1) return;
+      if (player.eliminated || !player.isBot || player.hasConfirmedChoice) return;
       
-      // BOT有50%機率在時間過半後自動摘取
+      // BOT在時間過半後有機率確認選擇
       const elapsed = this.time.now - this.roundStartTime;
-      if (elapsed > this.roundTimeLimit * 0.5 && Math.random() < 0.02) { // 每frame 2%機率
-        this.pickPeach(player);
+      if (elapsed > this.roundTimeLimit * 0.3 && Math.random() < 0.01) { // 降低自動確認機率
+        console.log(`🤖 BOT${player.id}自動確認選擇`);
+        this.confirmChoice(player);
       }
     });
+  }
+
+  private confirmChoice(player: Player): void {
+    if (player.hasConfirmedChoice || player.selectedPeach === -1) return;
+    
+    player.hasConfirmedChoice = true;
+    console.log(`✅ 玩家${player.id}確認選擇桃子${player.selectedPeach}`);
   }
 
   private pickPeach(player: Player): void {
@@ -505,18 +527,31 @@ export class PeachLotteryScene extends Phaser.Scene {
   private revealResults(): void {
     this.phase = 'revealing';
     
-    // 淘汰沒有彩票的玩家
+    console.log('🎭 揭曉結果階段開始');
+    
+    // 先為所有確認選擇的玩家摘取桃子
     this.players.forEach(player => {
-      if (!player.eliminated && !player.hasTicket) {
-        player.eliminated = true;
-        player.sprite.setAlpha(0.3);
+      if (!player.eliminated && player.hasConfirmedChoice) {
+        this.pickPeach(player);
       }
     });
+    
+    // 短暫延遲後處理淘汰
+    this.time.delayedCall(1500, () => {
+      // 淘汰沒有彩票的玩家
+      this.players.forEach(player => {
+        if (!player.eliminated && !player.hasTicket) {
+          player.eliminated = true;
+          player.sprite.setAlpha(0.3);
+          console.log(`💀 玩家${player.id}被淘汰`);
+        }
+      });
 
-    // 2秒後開始下一輪
-    this.time.delayedCall(2000, () => {
-      this.currentRound++;
-      this.startNewRound();
+      // 2秒後開始下一輪
+      this.time.delayedCall(2000, () => {
+        this.currentRound++;
+        this.startNewRound();
+      });
     });
   }
 
@@ -634,7 +669,7 @@ export class PeachLotteryScene extends Phaser.Scene {
       this.timerText.setAlpha(1);
     }
 
-    // 更新玩家狀態 - 簡潔明了
+    // 更新玩家狀態 - 顯示確認狀態
     this.players.forEach((player, i) => {
       if (!this.statusTexts[i]) return;
       
@@ -644,10 +679,10 @@ export class PeachLotteryScene extends Phaser.Scene {
       if (player.eliminated) {
         statusText.setText(`${name}: ❌淘汰`).setColor('#ff6b6b');
       } else if (this.phase === 'playing') {
-        if (player.selectedPeach !== -1) {
-          statusText.setText(`${name}: ✓已選`).setColor('#4ecdc4');
+        if (player.hasConfirmedChoice) {
+          statusText.setText(`${name}: ✅已確認`).setColor('#00ff00');
         } else {
-          statusText.setText(`${name}: 🤔選擇中`).setColor('#ffd700');
+          statusText.setText(`${name}: 🎯選擇中`).setColor('#ffd700');
         }
       } else {
         const result = player.hasTicket ? '🎫晉級' : '❌淘汰';
