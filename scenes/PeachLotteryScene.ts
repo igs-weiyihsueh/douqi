@@ -257,25 +257,16 @@ export class PeachLotteryScene extends Phaser.Scene {
 
   private setupPlayers(): void {
     for (let i = 0; i < 4; i++) {
-      const region = this.regions[i];
       const player: Player = {
         id: i,
         region: i,
         isBot: i > 0,
-        sprite: this.add.image(region.x, region.y - 80, 'peach')
-          .setDisplaySize(25, 25)
-          .setTint(region.color)
-          .setDepth(this.DEPTHS.GAME_OBJECTS + 1),
+        sprite: this.add.image(0, 0, 'peach').setVisible(false), // 創建但隱藏，保持接口兼容性
         eliminated: false,
         selectedPeach: -1,
         hasTicket: false,
         hasConfirmedChoice: false  // 初始化確認狀態
       };
-
-      // 玩家白色邊框指示器
-      this.add.circle(region.x, region.y - 80, 15, 0x000000, 0)
-        .setStrokeStyle(2, 0xffffff, 0.9)
-        .setDepth(this.DEPTHS.GAME_OBJECTS);
 
       // P1特別標示 - 移至FOOTER區域
       if (i === 0) {
@@ -290,16 +281,6 @@ export class PeachLotteryScene extends Phaser.Scene {
           stroke: '#000000',
           strokeThickness: 2
         }).setOrigin(0.5).setDepth(this.DEPTHS.GLOBAL_UI);
-        
-        // P1玩家輕微脈動
-        this.tweens.add({
-          targets: player.sprite,
-          scaleX: { from: 1, to: 1.15 },
-          scaleY: { from: 1, to: 1.15 },
-          duration: 1000,
-          yoyo: true,
-          repeat: -1
-        });
       }
 
       // P1控制設置
