@@ -36,7 +36,7 @@ export class PeachLotteryScene extends Phaser.Scene {
   private players: Player[] = [];
   private currentRound = 1;
   private maxRounds = 4; // 最多4輪：4→3→2→1
-  private roundTimeLimit = 10000; // 10秒
+  private roundTimeLimit = 10500; // 10.5秒 (確保倒計時從10開始)
   private roundStartTime = 0;
   private phase: 'intro' | 'playing' | 'revealing' | 'ended' = 'intro';
   
@@ -411,18 +411,57 @@ export class PeachLotteryScene extends Phaser.Scene {
     const regionPeaches = this.peaches.filter(p => p.region === player.region && !p.picked);
     if (regionPeaches.length === 0) return;
 
-    // 方向鍵選擇桃子
-    if (player.keys.left.isDown || player.keys.right.isDown || 
-        player.keys.up.isDown || player.keys.down.isDown) {
+    // 方向鍵選擇桃子 - 基於2x2網格的真實位置
+    let moved = false;
+    
+    if (Phaser.Input.Keyboard.JustDown(player.keys.left) || 
+        Phaser.Input.Keyboard.JustDown(player.keys.right) || 
+        Phaser.Input.Keyboard.JustDown(player.keys.up) || 
+        Phaser.Input.Keyboard.JustDown(player.keys.down)) {
       
-      // 簡化版：循環選擇區域內的桃子
-      const currentIndex = regionPeaches.findIndex(p => p.id === player.selectedPeach);
-      let nextIndex = currentIndex;
+      // 找到當前選中桃子的網格位置
+      const currentPeach = regionPeaches.find(p => p.id === player.selectedPeach);
+      if (!currentPeach) return;
       
-      if (player.keys.right.isDown) nextIndex = (currentIndex + 1) % regionPeaches.length;
-      if (player.keys.left.isDown) nextIndex = (currentIndex - 1 + regionPeaches.length) % regionPeaches.length;
+      // 基於桃子的相對位置計算網格座標
+      const region = this.regions[player.region];
+      const currentGridX = currentPeach.x > region.x ? 1 : 0; // 右側為1，左側為0
+      const currentGridY = currentPeach.y > region.y ? 1 : 0; // 下方為1，上方為0
       
-      player.selectedPeach = regionPeaches[nextIndex].id;
+      let newGridX = currentGridX;
+      let newGridY = currentGridY;
+      
+      // 根據按鍵調整網格位置
+      if (Phaser.Input.Keyboard.JustDown(player.keys.left)) {
+        newGridX = Math.max(0, currentGridX - 1);
+        moved = true;
+      }
+      if (Phaser.Input.Keyboard.JustDown(player.keys.right)) {
+        newGridX = Math.min(1, currentGridX + 1);  
+        moved = true;
+      }
+      if (Phaser.Input.Keyboard.JustDown(player.keys.up)) {
+        newGridY = Math.max(0, currentGridY - 1);
+        moved = true;
+      }
+      if (Phaser.Input.Keyboard.JustDown(player.keys.down)) {
+        newGridY = Math.min(1, currentGridY + 1);
+        moved = true;
+      }
+      
+      // 如果位置有變化，找到對應的桃子
+      if (moved && (newGridX !== currentGridX || newGridY !== currentGridY)) {
+        const targetPeach = regionPeaches.find(p => {
+          const targetGridX = p.x > region.x ? 1 : 0;
+          const targetGridY = p.y > region.y ? 1 : 0;
+          return targetGridX === newGridX && targetGridY === newGridY;
+        });
+        
+        if (targetPeach) {
+          player.selectedPeach = targetPeach.id;
+          console.log(`🎯 P1移動到網格位置 (${newGridX}, ${newGridY}), 桃子ID: ${targetPeach.id}`);
+        }
+      }
     }
 
     // 空格鍵確認選擇
@@ -649,8 +688,8 @@ export class PeachLotteryScene extends Phaser.Scene {
     // 更新計時器 - 簡化但醒目的設計
     if (this.phase === 'playing') {
       const remaining = Math.max(0, this.roundTimeLimit - (this.time.now - this.roundStartTime));
-      const seconds = Math.ceil(remaining / 1000);
-      this.timerText.setText(`⏰ ${seconds}秒`);
+      const seconds = Math.floor(remaining / 1000) + 1; // +1 確保倒數從10開始
+      this.timerText.setText(`⏰ ${Math.max(0, seconds)}秒`);
       
       // 時間緊迫時的視覺警告
       if (seconds <= 3) {
