@@ -137,8 +137,8 @@ export class UIScene extends Phaser.Scene {
   // ★覆蓋模式控制標誌 - 防止updateStats()強制顯示P1頭頂UI
   private isP1HeadUIHidden = false;
   
-  // ★底部面板替換系統
-  private bottomPanelOverlay: Phaser.GameObjects.Image | null = null;
+  // ★多角色底部面板替換系統
+  private bottomPanelOverlays: Array<Phaser.GameObjects.Image | null> = [null, null, null, null]; // [1P, 2P, 3P, 4P]
   private isBottomPanelOverlayMode = false;
   
   // ★頭上UI佈局常數：避免魔術數字
@@ -358,8 +358,8 @@ export class UIScene extends Phaser.Scene {
     // ★頭上UI系統初始化 - 替換舊的左上角COMBO/能量系統
     this.createOverheadUISystem();
     
-    // ★底部面板替換系統初始化
-    this.initBottomPanelOverlay();
+    // ★多角色底部面板替換系統初始化
+    this.initMultiPlayerBottomPanelOverlays();
 
     // 🔄 NEW UI：角色狀態列重大改版 - 圓形標籤 + 雙欄位系統，移除血條系統
     const count = GameConfig.characters.count;
@@ -1612,123 +1612,146 @@ export class UIScene extends Phaser.Scene {
   }
 
   /**
-   * ★初始化底部面板替換系統
+   * ★多角色底部面板替換系統初始化
    * 
-   * 創建1P.png覆蓋圖片，用於F4切換時替代原始的底部狀態面板
-   * - 初始隱藏，由F4切換控制顯示
-   * - 定位在畫面底部，覆蓋原始面板位置
+   * 創建1P、2P、3P、4P的底部面板覆蓋UI
+   * - 每個角色使用獨立的覆蓋圖片 (1P.png, 2P.png, 3P.png, 4P.png)
+   * - 精確定位到對應角色的原始面板位置
+   * - 初始隱藏，由F4切換統一控制所有角色
    */
-  private initBottomPanelOverlay(): void {
-    console.log('🔧 [底部面板] 開始初始化底部面板替換系統');
-    console.log('🔧 [底部面板] bottom-panel-overlay紋理存在:', this.textures.exists('bottom-panel-overlay'));
+  private initMultiPlayerBottomPanelOverlays(): void {
+    console.log('🔧 [多角色底部面板] 開始初始化多角色底部面板替換系統');
     
-    if (this.textures.exists('bottom-panel-overlay')) {
-      const w = GameConfig.width;
-      const h = GameConfig.height;
+    const w = GameConfig.width;
+    const h = GameConfig.height;
+    
+    // 🎯 計算所有角色面板的位置參數（與原始面板佈局一致）
+    const count = GameConfig.characters.count;
+    const panelW = 200;
+    const panelH = 60;
+    const panelGap = 12;
+    const startX = (w - (count * panelW + (count - 1) * panelGap)) / 2; // 居中排列
+    const rowTopY = h - 80;
+    
+    // 角色標籤和資源映射
+    const playerLabels = ['1P', '2P', '3P', '4P'];
+    const resourceKeys = ['bottom-panel-1P', 'bottom-panel-2P', 'bottom-panel-3P', 'bottom-panel-4P'];
+    
+    for (let i = 0; i < count; i++) {
+      const playerLabel = playerLabels[i];
+      const resourceKey = resourceKeys[i];
       
-      // 檢查紋理是否成功載入
-      const texture = this.textures.get('bottom-panel-overlay');
-      if (texture && texture.key !== '__MISSING') {
-        // 🎯 計算P1原始面板的準確位置
-        const count = GameConfig.characters.count;
-        const panelW = 200;
-        const panelH = 60;
-        const panelGap = 12;
-        const startX = (w - (count * panelW + (count - 1) * panelGap)) / 2; // 居中排列
-        const rowTopY = h - 80;
-        
-        // P1面板位置 (i=0)
-        const p1PanelX = startX;
-        const p1PanelY = rowTopY;
-        const p1CenterX = p1PanelX + panelW / 2; // 面板中心X座標
-        const p1CenterY = p1PanelY + panelH / 2; // 面板中心Y座標
-        
-        // 🎯 1P.png原始尺寸: 324x166，目標面板: 200x60
-        // 計算保持比例的縮放方案
-        const originalW = 324;
-        const originalH = 166;
-        const aspectRatio = originalW / originalH; // 1.95
-        
-        // 方案A：保持原始尺寸（用戶偏好）
-        const displayW = originalW;
-        const displayH = originalH;
-        
-        // 創建底部面板覆蓋，精確對準P1原始面板位置
-        this.bottomPanelOverlay = this.add.image(p1CenterX, p1CenterY, 'bottom-panel-overlay')
-          .setOrigin(0.5, 0.5)
-          .setDepth(1000)  // 高深度確保在原始面板之上
-          .setVisible(false)
-          .setScrollFactor(0)  // 固定位置，不隨相機移動
-          .setDisplaySize(displayW, displayH);  // 🎨 保持1P.png原始尺寸324x166
-        
-        console.log(`✅ [底部面板] 底部面板覆蓋已創建：1P.png在P1面板位置(${p1CenterX}, ${p1CenterY}) 原始尺寸(${displayW}x${displayH}) (depth=1000, hidden)`);
-        console.log(`📐 [底部面板] 1P.png原始: ${originalW}x${originalH}, 寬高比: ${aspectRatio.toFixed(2)}, 顯示: ${displayW}x${displayH}`);
-        console.log(`📐 [底部面板] 計算參數: panelW=${panelW}, panelH=${panelH}, startX=${startX}, rowTopY=${rowTopY}`);
+      console.log(`🔧 [多角色底部面板] 處理 ${playerLabel}, 資源key: ${resourceKey}`);
+      console.log(`🔧 [多角色底部面板] ${resourceKey}紋理存在:`, this.textures.exists(resourceKey));
+      
+      if (this.textures.exists(resourceKey)) {
+        // 檢查紋理是否成功載入
+        const texture = this.textures.get(resourceKey);
+        if (texture && texture.key !== '__MISSING') {
+          // 🎯 計算當前角色面板的精確位置
+          const playerPanelX = startX + i * (panelW + panelGap);
+          const playerPanelY = rowTopY;
+          const playerCenterX = playerPanelX + panelW / 2; // 面板中心X座標
+          const playerCenterY = playerPanelY + panelH / 2; // 面板中心Y座標
+          
+          // 🎨 根據原始圖片尺寸設定顯示尺寸（假設所有角色UI尺寸一致）
+          const originalW = 324; // 基於1P.png的尺寸
+          const originalH = 166;
+          const displayW = originalW;
+          const displayH = originalH;
+          
+          // 創建角色底部面板覆蓋，精確對準該角色的原始面板位置
+          this.bottomPanelOverlays[i] = this.add.image(playerCenterX, playerCenterY, resourceKey)
+            .setOrigin(0.5, 0.5)
+            .setDepth(1000 + i)  // 每個角色不同深度避免衝突
+            .setVisible(false)
+            .setScrollFactor(0)  // 固定位置，不隨相機移動
+            .setDisplaySize(displayW, displayH);  // 🎨 保持原始尺寸比例
+          
+          console.log(`✅ [多角色底部面板] ${playerLabel}底部面板覆蓋已創建：位置(${playerCenterX}, ${playerCenterY}) 尺寸(${displayW}x${displayH}) (depth=${1000 + i}, hidden)`);
+        } else {
+          console.error(`❌ [多角色底部面板] ${playerLabel}紋理載入失敗或損壞`);
+          this.bottomPanelOverlays[i] = null;
+        }
       } else {
-        console.error('❌ [底部面板] 1P.png紋理載入失敗或損壞');
-        this.bottomPanelOverlay = null;
+        console.warn(`⚠️ [多角色底部面板] ${playerLabel}底部面板覆蓋資源不存在：${playerLabel}.png`);
+        console.log(`💡 [多角色底部面板] 請將${playerLabel}.png文件放入public/assets/目錄`);
+        this.bottomPanelOverlays[i] = null;
       }
-    } else {
-      console.warn('⚠️ [底部面板] 底部面板覆蓋資源不存在：1P.png');
-      console.log('💡 [底部面板] 請將1P.png文件放入public/assets/目錄');
-      this.bottomPanelOverlay = null;
     }
+    
+    console.log('🔧 [多角色底部面板] 多角色底部面板替換系統初始化完成');
+    console.log(`📐 [多角色底部面板] 面板佈局參數: count=${count}, panelW=${panelW}, panelH=${panelH}, startX=${startX}, rowTopY=${rowTopY}`);
   }
 
   /**
-   * ★底部面板替換控制方法
+   * ★多角色底部面板替換控制方法
    * 
-   * 控制底部狀態面板的顯示/隱藏，並切換1P.png覆蓋
+   * 控制所有角色底部狀態面板的顯示/隱藏，並切換多角色覆蓋UI
    * 
-   * @param useOverlay - true顯示1P.png覆蓋並隱藏原始面板，false恢復原始面板
+   * @param useOverlay - true顯示所有覆蓋並隱藏原始面板，false恢復所有原始面板
    */
   setBottomPanelOverlay(useOverlay: boolean): void {
-    console.log(`🔧 [底部面板] setBottomPanelOverlay被調用，useOverlay=${useOverlay}`);
+    console.log(`🔧 [多角色底部面板] setBottomPanelOverlay被調用，useOverlay=${useOverlay}`);
     
     // 設置覆蓋模式標誌
     this.isBottomPanelOverlayMode = useOverlay;
-    console.log(`🔧 [底部面板] 覆蓋模式設為: ${this.isBottomPanelOverlayMode}`);
+    console.log(`🔧 [多角色底部面板] 覆蓋模式設為: ${this.isBottomPanelOverlayMode}`);
+    
+    const playerLabels = ['1P', '2P', '3P', '4P'];
+    const count = GameConfig.characters.count;
     
     if (useOverlay) {
-      // 檢查1P.png覆蓋是否可用
-      if (this.bottomPanelOverlay) {
-        this.bottomPanelOverlay.setVisible(true);
-        console.log('✅ [底部面板] 1P.png覆蓋已顯示');
+      // 激活所有角色的底部面板覆蓋
+      for (let i = 0; i < count; i++) {
+        const playerLabel = playerLabels[i];
+        const playerOverlay = this.bottomPanelOverlays[i];
         
-        // 只有當覆蓋圖片可用時才隱藏原始面板
-        if (this.rows && this.rows.length > 0) {
-          const p1Panel = this.rows[0];
-          this.setRowPanelVisible(p1Panel, false);
-          console.log('🔒 [底部面板] 原始P1底部面板已隱藏');
-        }
-      } else {
-        console.warn('⚠️ [底部面板] 1P.png覆蓋不存在，保持原始面板顯示');
-        
-        // 如果沒有覆蓋圖片，保持原始面板顯示
-        if (this.rows && this.rows.length > 0) {
-          const p1Panel = this.rows[0];
-          this.setRowPanelVisible(p1Panel, true);
-          console.log('✅ [底部面板] 保持原始P1底部面板顯示（覆蓋圖片不存在）');
+        if (playerOverlay) {
+          playerOverlay.setVisible(true);
+          console.log(`✅ [多角色底部面板] ${playerLabel}覆蓋已顯示`);
+          
+          // 隱藏對應的原始面板
+          if (this.rows && this.rows.length > i) {
+            const playerPanel = this.rows[i];
+            this.setRowPanelVisible(playerPanel, false);
+            console.log(`🔒 [多角色底部面板] 原始${playerLabel}底部面板已隱藏`);
+          }
+        } else {
+          console.warn(`⚠️ [多角色底部面板] ${playerLabel}覆蓋不存在，保持原始面板顯示`);
+          
+          // 如果沒有覆蓋圖片，保持原始面板顯示
+          if (this.rows && this.rows.length > i) {
+            const playerPanel = this.rows[i];
+            this.setRowPanelVisible(playerPanel, true);
+            console.log(`✅ [多角色底部面板] 保持原始${playerLabel}底部面板顯示（覆蓋圖片不存在）`);
+          }
         }
       }
     } else {
-      // 隱藏1P.png覆蓋
-      if (this.bottomPanelOverlay) {
-        this.bottomPanelOverlay.setVisible(false);
-        console.log('🔒 [底部面板] 1P.png覆蓋已隱藏');
-      }
-      
-      // 恢復原始底部面板
-      if (this.rows && this.rows.length > 0) {
-        const p1Panel = this.rows[0];
-        this.setRowPanelVisible(p1Panel, true);
-        console.log('✅ [底部面板] 原始P1底部面板已恢復');
+      // 關閉所有角色的底部面板覆蓋
+      for (let i = 0; i < count; i++) {
+        const playerLabel = playerLabels[i];
+        const playerOverlay = this.bottomPanelOverlays[i];
+        
+        // 隱藏覆蓋UI
+        if (playerOverlay) {
+          playerOverlay.setVisible(false);
+          console.log(`🔒 [多角色底部面板] ${playerLabel}覆蓋已隱藏`);
+        }
+        
+        // 恢復原始底部面板
+        if (this.rows && this.rows.length > i) {
+          const playerPanel = this.rows[i];
+          this.setRowPanelVisible(playerPanel, true);
+          console.log(`✅ [多角色底部面板] 原始${playerLabel}底部面板已恢復`);
+        }
       }
     }
   }
 
   /**
-   * ★設置底部面板行的可見性
+   * ★設置底部面板行的可見性（通用方法，適用所有角色）
    * 
    * @param panel - 面板對象 (rows中的元素)
    * @param visible - 是否可見
@@ -1736,10 +1759,10 @@ export class UIScene extends Phaser.Scene {
   private setRowPanelVisible(panel: any, visible: boolean): void {
     if (!panel) return;
     
-    // 設置P1底部面板的所有元素可見性
+    // 設置底部面板的所有元素可見性（適用於任何角色）
     const elements = [
       panel.circle,        // 圓形標籤
-      panel.labelText,     // "P1"文字
+      panel.labelText,     // 角色文字 (P1/BOT1等)
       panel.killIconText,  // 💀圖案
       panel.killText,      // 擊殺數字
       panel.ticketIconText,// 🎫圖案
