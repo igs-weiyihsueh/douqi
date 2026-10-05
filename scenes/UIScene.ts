@@ -1629,14 +1629,30 @@ export class UIScene extends Phaser.Scene {
       // 檢查紋理是否成功載入
       const texture = this.textures.get('bottom-panel-overlay');
       if (texture && texture.key !== '__MISSING') {
-        // 創建底部面板覆蓋，定位在畫面底部中央
-        this.bottomPanelOverlay = this.add.image(w / 2, h - 50, 'bottom-panel-overlay')
+        // 🎯 計算P1原始面板的準確位置
+        const count = GameConfig.characters.count;
+        const panelW = 200;
+        const panelH = 60;
+        const panelGap = 12;
+        const startX = (w - (count * panelW + (count - 1) * panelGap)) / 2; // 居中排列
+        const rowTopY = h - 80;
+        
+        // P1面板位置 (i=0)
+        const p1PanelX = startX;
+        const p1PanelY = rowTopY;
+        const p1CenterX = p1PanelX + panelW / 2; // 面板中心X座標
+        const p1CenterY = p1PanelY + panelH / 2; // 面板中心Y座標
+        
+        // 創建底部面板覆蓋，精確對準P1原始面板位置
+        this.bottomPanelOverlay = this.add.image(p1CenterX, p1CenterY, 'bottom-panel-overlay')
           .setOrigin(0.5, 0.5)
           .setDepth(1000)  // 高深度確保在原始面板之上
           .setVisible(false)
-          .setScrollFactor(0);  // 固定位置，不隨相機移動
+          .setScrollFactor(0)  // 固定位置，不隨相機移動
+          .setDisplaySize(panelW, panelH);  // 🎯 調整覆蓋圖片尺寸匹配原始面板 (200x60)
         
-        console.log(`✅ [底部面板] 底部面板覆蓋已創建：1P.png在位置(${w / 2}, ${h - 50}) (depth=1000, hidden)`);
+        console.log(`✅ [底部面板] 底部面板覆蓋已創建：1P.png在P1面板位置(${p1CenterX}, ${p1CenterY}) 尺寸(${panelW}x${panelH}) (depth=1000, hidden)`);
+        console.log(`📐 [底部面板] 計算參數: panelW=${panelW}, panelH=${panelH}, startX=${startX}, rowTopY=${rowTopY}`);
       } else {
         console.error('❌ [底部面板] 1P.png紋理載入失敗或損壞');
         this.bottomPanelOverlay = null;
