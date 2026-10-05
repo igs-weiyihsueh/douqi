@@ -1410,11 +1410,10 @@ export class UIScene extends Phaser.Scene {
       return;
     }
     
-    // ★重新計算頭頂UI位置：確保完全不遮擋角色
-    // 角色半徑16px + 標籤間距12px + 標籤高度12px + UI安全間距40px = 80px
-    // 考慮UI本身也有高度（COMBO系統向上45px），總計需要更大偏移
+    // ★用戶要求調整：頭頂UI向上移動100px
+    // 將偏移值從-100改為-200，確保UI完全不會遮擋角色
     const worldX = character.x;
-    const worldY = character.y - 100; // ★調整：從-78改為-100，確保足夠間距
+    const worldY = character.y - 200; // ★調整：從-100改為-200，向上移動100px
     
     // 座標系統轉換：世界座標 → 螢幕座標
     // UIScene使用固定相機，需要減去GameScene相機的捲動偏移
@@ -1449,7 +1448,7 @@ export class UIScene extends Phaser.Scene {
     const gameScene = this.scene.get('GameScene') as any;
     const gcam = gameScene?.cameras?.main;
     const screenX = worldX - (gcam?.scrollX || 0);
-    const screenY = worldY - (gcam?.scrollY || 0) - 100; // ★修復：與頭頂UI位置一致，角色頭上100px
+    const screenY = worldY - (gcam?.scrollY || 0) - 200; // ★調整：與頭頂UI位置一致，角色頭上200px
     
     // 從配置讀取參數（恢復原始設計）
     const config = GameConfig.ticketEffect;
