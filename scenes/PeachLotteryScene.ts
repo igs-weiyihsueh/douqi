@@ -39,12 +39,35 @@ export class PeachLotteryScene extends Phaser.Scene {
   private roundStartTime = 0;
   private phase: 'intro' | 'playing' | 'revealing' | 'ended' = 'intro';
   
-  // 桃樹區域配置 (1920x1080)
+  // 🎨 標準化布局系統
+  private readonly LAYOUT = {
+    ZONES: {
+      HEADER: { y: 20, height: 80 },      // 標題區
+      INFO: { y: 100, height: 60 },       // 回合/計時器
+      GAME: { y: 180, height: 740 },      // 主遊戲區
+      FOOTER: { y: 920, height: 160 }     // 結束按鈕區
+    },
+    MARGINS: { left: 60, right: 60, top: 20, bottom: 20 },
+    PADDING: { small: 10, medium: 20, large: 30 }
+  };
+
+  // 🎨 統一深度層級系統
+  private readonly DEPTHS = {
+    BACKGROUND: -10,
+    GAME_AREA: 0,        // 區域圓圈
+    GAME_OBJECTS: 10,    // 桃子
+    GAME_UI: 20,         // 區域狀態文字
+    GLOBAL_UI: 30,       // 全局UI(計時器等)
+    EFFECTS: 40,         // 選擇特效
+    OVERLAY: 50          // 結束界面
+  };
+
+  // 🌳 重新設計的區域配置
   private regions = [
-    { x: 480, y: 300, color: 0xff6b6b }, // 左上 - P1 (紅)
-    { x: 1440, y: 300, color: 0x4ecdc4 }, // 右上 - P2 (綠) 
-    { x: 480, y: 780, color: 0x45b7d1 }, // 左下 - P3 (藍)
-    { x: 1440, y: 780, color: 0xf9ca24 }  // 右下 - P4 (黃)
+    { x: 400, y: 360, color: 0xff6b6b },   // P1左上 (紅)
+    { x: 1520, y: 360, color: 0x4ecdc4 },  // P2右上 (綠) 
+    { x: 400, y: 720, color: 0x45b7d1 },   // P3左下 (藍)
+    { x: 1520, y: 720, color: 0xf9ca24 }   // P4右下 (黃)
   ];
 
   // UI元素
@@ -65,33 +88,17 @@ export class PeachLotteryScene extends Phaser.Scene {
     const w = GameConfig.width;
     const h = GameConfig.height;
 
-    // 背景 - 降低深度
-    this.add.tileSprite(0, 0, w, h, 'ground').setOrigin(0, 0).setDepth(-2);
-    this.add.rectangle(0, 0, w, h, 0x1a4c2b, 0.4).setOrigin(0, 0).setDepth(-1); // 深綠色桃園背景，增加對比度
+    console.log('🍑 [桃樹彩票] 開始重構版本初始化...');
 
-    // 主標題 - 提高深度和視覺效果
-    this.add.text(w / 2, 60, '🍑 桃樹彩票', {
-      fontFamily: 'monospace',
-      fontSize: '52px',
-      color: '#ff4757',
-      stroke: '#000000',
-      strokeThickness: 8,
-      shadow: { 
-        offsetX: 3, 
-        offsetY: 3, 
-        color: '#000000', 
-        blur: 5, 
-        stroke: true, 
-        fill: true 
-      }
-    }).setOrigin(0.5).setDepth(100);
+    // 🎨 背景 - 使用標準深度
+    this.add.tileSprite(0, 0, w, h, 'ground').setOrigin(0, 0).setDepth(this.DEPTHS.BACKGROUND);
+    this.add.rectangle(0, 0, w, h, 0x1a4c2b, 0.4).setOrigin(0, 0).setDepth(this.DEPTHS.BACKGROUND + 1);
 
     this.setupUI();
     this.setupPeaches();
     this.setupPlayers();
     
-    // 調試日誌
-    console.log(`🍑 [桃樹彩票] 初始化完成: ${this.players.length}名玩家, ${this.statusTexts.length}個狀態文字`);
+    console.log(`🍑 [桃樹彩票] 重構版初始化完成: ${this.players.length}名玩家, ${this.statusTexts.length}個狀態文字`);
     
     this.startNewRound();
   }
@@ -99,111 +106,72 @@ export class PeachLotteryScene extends Phaser.Scene {
   private setupUI(): void {
     const w = GameConfig.width;
     
-    // 創建半透明UI背景面板
-    this.add.rectangle(w / 2, 150, w - 100, 200, 0x000000, 0.7)
-      .setStrokeStyle(3, 0xffffff, 0.8)
-      .setDepth(90);
-    
-    // 回合顯示 - 大幅提高可見性
-    this.roundText = this.add.text(w / 2, 120, '', {
+    // 🎨 HEADER區域 - 僅主標題
+    const headerCenter = { x: w / 2, y: this.LAYOUT.ZONES.HEADER.y + 40 };
+    this.add.text(headerCenter.x, headerCenter.y, '🍑 桃樹彩票', {
       fontFamily: 'monospace',
-      fontSize: '28px', 
+      fontSize: '42px',
+      color: '#ff4757',
+      stroke: '#000000',
+      strokeThickness: 6
+    }).setOrigin(0.5).setDepth(this.DEPTHS.GLOBAL_UI);
+
+    // 🎨 INFO區域 - 回合信息和計時器並排
+    const infoCenter = { x: w / 2, y: this.LAYOUT.ZONES.INFO.y + 30 };
+    
+    // 回合顯示 - 左側
+    this.roundText = this.add.text(infoCenter.x - 200, infoCenter.y, '', {
+      fontFamily: 'monospace',
+      fontSize: '20px', 
       color: '#ffffff',
       backgroundColor: '#4a5568',
-      padding: { x: 20, y: 10 },
-      stroke: '#000000',
-      strokeThickness: 2
-    }).setOrigin(0.5).setDepth(95);
-
-    // 計時器 - 更加醒目的設計
-    this.timerText = this.add.text(w / 2, 170, '', {
-      fontFamily: 'monospace',
-      fontSize: '48px',
-      color: '#ffffff',
-      backgroundColor: '#e53e3e',
-      padding: { x: 30, y: 15 },
-      stroke: '#000000',
-      strokeThickness: 6,
-      shadow: { 
-        offsetX: 2, 
-        offsetY: 2, 
-        color: '#000000', 
-        blur: 3, 
-        stroke: true, 
-        fill: true 
-      }
-    }).setOrigin(0.5).setDepth(95);
-
-    // 操作說明 - 更清晰可見
-    this.add.text(w / 2, 220, 
-      'P1: ←→ 選擇桃子，空格摘取 | BOT: 自動選擇', {
-      fontFamily: 'monospace',
-      fontSize: '20px',
-      color: '#ffffff',
-      backgroundColor: '#2d3748',
       padding: { x: 15, y: 8 },
       stroke: '#000000',
       strokeThickness: 1
-    }).setOrigin(0.5).setDepth(95);
+    }).setOrigin(0.5).setDepth(this.DEPTHS.GLOBAL_UI);
 
-    // 當前玩家選擇提示區域
-    this.add.text(w / 2, 260, 
-      '你的區域：左上角紅色區域', {
+    // 計時器 - 右側
+    this.timerText = this.add.text(infoCenter.x + 200, infoCenter.y, '', {
       fontFamily: 'monospace',
-      fontSize: '18px',
-      color: '#ff6b6b',
-      backgroundColor: '#2d3748',
-      padding: { x: 12, y: 6 },
+      fontSize: '28px',
+      color: '#ffffff',
+      backgroundColor: '#e53e3e',
+      padding: { x: 20, y: 10 },
       stroke: '#000000',
-      strokeThickness: 1
-    }).setOrigin(0.5).setDepth(95);
+      strokeThickness: 3
+    }).setOrigin(0.5).setDepth(this.DEPTHS.GLOBAL_UI);
 
-    // 玩家狀態顯示區域 - 每個區域都有清晰的狀態顯示
+    // 🎨 初始化狀態文字數組 - 將在setupPeaches中創建
     this.statusTexts = [];
-    for (let i = 0; i < 4; i++) {
-      const region = this.regions[i];
-      const statusText = this.add.text(
-        region.x, 
-        region.y - 100,
-        '', {
-        fontFamily: 'monospace',
-        fontSize: '20px',
-        color: '#ffffff',
-        backgroundColor: '#2d3748',
-        padding: { x: 15, y: 8 },
-        stroke: '#000000',
-        strokeThickness: 2
-      }).setOrigin(0.5).setDepth(85);
-      this.statusTexts.push(statusText);
-    }
   }
 
   private setupPeaches(): void {
-    // 每個區域4顆桃子，2x2排列
+    // 🌳 桃子在區域內的相對位置 (2x2排列)
     const peachPositions = [
-      { dx: -50, dy: -50 }, { dx: 50, dy: -50 },
-      { dx: -50, dy: 50 }, { dx: 50, dy: 50 }
+      { dx: -40, dy: -40 }, { dx: 40, dy: -40 },
+      { dx: -40, dy: 40 }, { dx: 40, dy: 40 }
     ];
 
     let peachId = 0;
     for (let regionId = 0; regionId < 4; regionId++) {
       const region = this.regions[regionId];
       
-      // 創建區域背景圓圈 - 更加醒目
-      const regionCircle = this.add.circle(region.x, region.y, 150, region.color, 0.15)
-        .setStrokeStyle(6, region.color, 1)
-        .setDepth(10);
+      // 🎨 區域背景圓圈 - 使用標準深度
+      const regionCircle = this.add.circle(region.x, region.y, 120, region.color, 0.12)
+        .setStrokeStyle(4, region.color, 0.8)
+        .setDepth(this.DEPTHS.GAME_AREA);
         
-      // 添加區域脈動效果
+      // 區域輕微脈動效果
       this.tweens.add({
         targets: regionCircle,
-        scaleX: { from: 1, to: 1.05 },
-        scaleY: { from: 1, to: 1.05 },
-        duration: 1000,
+        scaleX: { from: 1, to: 1.03 },
+        scaleY: { from: 1, to: 1.03 },
+        duration: 1200,
         yoyo: true,
         repeat: -1
       });
       
+      // 🍑 創建桃子
       for (let i = 0; i < 4; i++) {
         const pos = peachPositions[i];
         const peach: Peach = {
@@ -212,42 +180,49 @@ export class PeachLotteryScene extends Phaser.Scene {
           x: region.x + pos.dx,
           y: region.y + pos.dy,
           sprite: this.add.image(region.x + pos.dx, region.y + pos.dy, 'heart')
-            .setDisplaySize(80, 80) // 增大桃子尺寸
-            .setTint(0xff1744) // 鮮紅色桃子
-            .setDepth(20),
+            .setDisplaySize(60, 60)
+            .setTint(0xff1744)
+            .setDepth(this.DEPTHS.GAME_OBJECTS),
           hasTicket: false,
           picked: false
         };
         
-        // 為桃子添加白色邊框使其更顯眼
-        this.add.circle(peach.x, peach.y, 45, 0x000000, 0)
-          .setStrokeStyle(4, 0xffffff, 1)
-          .setDepth(19);
-        
-        // 桃子脈動效果
-        this.tweens.add({
-          targets: peach.sprite,
-          scaleX: { from: 1, to: 1.1 },
-          scaleY: { from: 1, to: 1.1 },
-          duration: 1500 + Math.random() * 500,
-          yoyo: true,
-          repeat: -1
-        });
+        // 桃子白色邊框
+        this.add.circle(peach.x, peach.y, 32, 0x000000, 0)
+          .setStrokeStyle(2, 0xffffff, 0.8)
+          .setDepth(this.DEPTHS.GAME_OBJECTS - 1);
         
         this.peaches.push(peach);
       }
       
-      // 區域標籤 - 更大更清晰
-      this.add.text(region.x, region.y - 180, `P${regionId + 1} 專屬區域`, {
+      // 🎨 區域標籤 - 放在區域上方安全位置
+      this.add.text(region.x, region.y - 160, `P${regionId + 1} 區域`, {
         fontFamily: 'monospace',
-        fontSize: '24px',
+        fontSize: '18px',
         color: '#ffffff',
         backgroundColor: `#${region.color.toString(16).padStart(6, '0')}`,
-        padding: { x: 20, y: 10 },
+        padding: { x: 12, y: 6 },
         stroke: '#000000',
-        strokeThickness: 3
-      }).setOrigin(0.5).setDepth(80);
+        strokeThickness: 2
+      }).setOrigin(0.5).setDepth(this.DEPTHS.GAME_UI);
+
+      // 🎨 狀態文字 - 放在區域標籤上方
+      const statusText = this.add.text(
+        region.x, 
+        region.y - 190,  // 區域標籤上方30px
+        '', {
+        fontFamily: 'monospace',
+        fontSize: '16px',
+        color: '#ffffff',
+        backgroundColor: '#2d3748',
+        padding: { x: 10, y: 5 },
+        stroke: '#000000',
+        strokeThickness: 1
+      }).setOrigin(0.5).setDepth(this.DEPTHS.GAME_UI);
+      this.statusTexts.push(statusText);
     }
+
+    console.log('🌳 [桃樹彩票] 遊戲區域重構完成');
   }
 
   private setupPlayers(): void {
@@ -256,39 +231,41 @@ export class PeachLotteryScene extends Phaser.Scene {
       const player: Player = {
         id: i,
         region: i,
-        isBot: i > 0, // P1是玩家，P2-P4是BOT
-        sprite: this.add.image(region.x, region.y - 60, 'heart')
-          .setDisplaySize(50, 50)
+        isBot: i > 0,
+        sprite: this.add.image(region.x, region.y - 40, 'heart')
+          .setDisplaySize(35, 35)
           .setTint(region.color)
-          .setDepth(30),
+          .setDepth(this.DEPTHS.GAME_OBJECTS + 1),
         eliminated: false,
         selectedPeach: -1,
         hasTicket: false
       };
 
-      // 為玩家添加白色邊框指示器
-      this.add.circle(region.x, region.y - 60, 30, 0x000000, 0)
-        .setStrokeStyle(4, 0xffffff, 1)
-        .setDepth(29);
+      // 玩家白色邊框指示器
+      this.add.circle(region.x, region.y - 40, 20, 0x000000, 0)
+        .setStrokeStyle(2, 0xffffff, 0.9)
+        .setDepth(this.DEPTHS.GAME_OBJECTS);
 
-      // P1特別標示
+      // P1特別標示 - 移至FOOTER區域
       if (i === 0) {
-        this.add.text(region.x, region.y - 200, '👤 你在這裡！', {
+        const footerY = this.LAYOUT.ZONES.FOOTER.y + 30;
+        this.add.text(GameConfig.width / 2, footerY, 
+          '👤 你控制左上角紅色區域 | ←→ 選擇桃子，空格摘取', {
           fontFamily: 'monospace',
-          fontSize: '20px',
+          fontSize: '18px',
           color: '#ffffff',
           backgroundColor: '#e53e3e',
-          padding: { x: 15, y: 8 },
+          padding: { x: 20, y: 8 },
           stroke: '#000000',
           strokeThickness: 2
-        }).setOrigin(0.5).setDepth(85);
+        }).setOrigin(0.5).setDepth(this.DEPTHS.GLOBAL_UI);
         
-        // P1玩家脈動效果
+        // P1玩家輕微脈動
         this.tweens.add({
           targets: player.sprite,
-          scaleX: { from: 1, to: 1.2 },
-          scaleY: { from: 1, to: 1.2 },
-          duration: 800,
+          scaleX: { from: 1, to: 1.15 },
+          scaleY: { from: 1, to: 1.15 },
+          duration: 1000,
           yoyo: true,
           repeat: -1
         });
@@ -309,6 +286,8 @@ export class PeachLotteryScene extends Phaser.Scene {
 
       this.players.push(player);
     }
+    
+    console.log('👥 [桃樹彩票] 玩家設置完成');
   }
 
   private startNewRound(): void {
@@ -630,80 +609,74 @@ export class PeachLotteryScene extends Phaser.Scene {
   private updateUI(): void {
     // 更新回合信息
     const alivePlayers = this.players.filter(p => !p.eliminated);
-    this.roundText.setText(`第 ${this.currentRound} 輪 (剩餘 ${alivePlayers.length} 名玩家)`);
+    this.roundText.setText(`第${this.currentRound}輪 (${alivePlayers.length}名)`);
 
-    // 更新計時器 - 更醒目的時間顯示
+    // 更新計時器 - 簡化但醒目的設計
     if (this.phase === 'playing') {
       const remaining = Math.max(0, this.roundTimeLimit - (this.time.now - this.roundStartTime));
       const seconds = Math.ceil(remaining / 1000);
-      this.timerText.setText(`⏰ ${seconds} 秒`);
+      this.timerText.setText(`⏰ ${seconds}秒`);
       
       // 時間緊迫時的視覺警告
       if (seconds <= 3) {
-        this.timerText.setColor('#ffffff').setBackgroundColor('#ff0000');
-        // 緊急閃爍效果
-        this.timerText.setAlpha(seconds % 2 === 0 ? 1 : 0.3);
+        this.timerText.setBackgroundColor('#ff0000');
+        this.timerText.setAlpha(seconds % 2 === 0 ? 1 : 0.6);
       } else if (seconds <= 5) {
-        this.timerText.setColor('#ffffff').setBackgroundColor('#ff6b47');
+        this.timerText.setBackgroundColor('#ff6b47');
         this.timerText.setAlpha(1);
       } else {
-        this.timerText.setColor('#ffffff').setBackgroundColor('#e53e3e');
+        this.timerText.setBackgroundColor('#e53e3e');
         this.timerText.setAlpha(1);
       }
     } else {
-      this.timerText.setText('準備下一輪...');
-      this.timerText.setColor('#ffffff').setBackgroundColor('#4a5568');
+      this.timerText.setText('準備中...');
+      this.timerText.setBackgroundColor('#4a5568');
       this.timerText.setAlpha(1);
     }
 
-    // 更新玩家狀態 - 添加安全檢查和更清晰的狀態
+    // 更新玩家狀態 - 簡潔明了
     this.players.forEach((player, i) => {
-      // 確保statusTexts[i]存在
-      if (!this.statusTexts[i]) {
-        console.warn(`StatusText ${i} not initialized`);
-        return;
-      }
+      if (!this.statusTexts[i]) return;
       
       const statusText = this.statusTexts[i];
-      const name = player.id === 0 ? '你(P1)' : `BOT${player.id}`;
+      const name = player.id === 0 ? 'P1' : `B${player.id}`;
       
       if (player.eliminated) {
-        statusText.setText(`${name} - ❌ 淘汰`).setColor('#ff6b6b');
+        statusText.setText(`${name}: ❌淘汰`).setColor('#ff6b6b');
       } else if (this.phase === 'playing') {
         if (player.selectedPeach !== -1) {
-          const selectedPeach = this.peaches.find(p => p.id === player.selectedPeach);
-          const peachPos = selectedPeach ? `桃${selectedPeach.id % 4 + 1}` : '???';
-          statusText.setText(`${name} - ✓ 選中${peachPos}`).setColor('#4ecdc4');
+          statusText.setText(`${name}: ✓已選`).setColor('#4ecdc4');
         } else {
-          statusText.setText(`${name} - 🤔 選擇中...`).setColor('#ffd700');
+          statusText.setText(`${name}: 🤔選擇中`).setColor('#ffd700');
         }
       } else {
-        const result = player.hasTicket ? '🎫 晉級' : '❌ 淘汰';
-        statusText.setText(`${name} - ${result}`)
+        const result = player.hasTicket ? '🎫晉級' : '❌淘汰';
+        statusText.setText(`${name}: ${result}`)
           .setColor(player.hasTicket ? '#4ecdc4' : '#ff6b6b');
       }
     });
 
-    // 高亮當前選中的桃子 - 更明顯的選擇指示
+    // 選擇指示器 - 重新實現更清晰的反饋
     if (this.players.length > 0) {
       const p1 = this.players[0];
       if (p1 && !p1.eliminated && p1.selectedPeach !== -1) {
         const selectedPeach = this.peaches.find(p => p.id === p1.selectedPeach);
         if (selectedPeach && !selectedPeach.picked) {
-          // 大幅放大和發光效果
-          selectedPeach.sprite.setDisplaySize(120, 120).setTint(0xffff00); // 黃色高亮
+          // 黃色高亮選中的桃子
+          selectedPeach.sprite.setDisplaySize(75, 75).setTint(0xffff00);
           
-          // 在選中桃子周圍添加旋轉的選擇指示器
+          // 創建選擇指示器
           if (!selectedPeach.sprite.getData('selector')) {
-            const selector = this.add.circle(selectedPeach.x, selectedPeach.y, 70, 0x000000, 0)
-              .setStrokeStyle(8, 0xffff00, 1)
-              .setDepth(25);
+            const selector = this.add.circle(selectedPeach.x, selectedPeach.y, 45, 0x000000, 0)
+              .setStrokeStyle(4, 0xffff00, 1)
+              .setDepth(this.DEPTHS.EFFECTS);
             
-            // 旋轉動畫
             this.tweens.add({
               targets: selector,
-              rotation: Math.PI * 2,
-              duration: 1000,
+              scaleX: { from: 1, to: 1.2 },
+              scaleY: { from: 1, to: 1.2 },
+              duration: 800,
+              yoyo: true,
               repeat: -1
             });
             
@@ -712,12 +685,11 @@ export class PeachLotteryScene extends Phaser.Scene {
         }
       }
 
-      // 重置其他桃子 - 恢復正常外觀
+      // 重置其他桃子
       this.peaches.forEach(peach => {
         if (p1 && peach.id !== p1.selectedPeach && !peach.picked) {
-          peach.sprite.setDisplaySize(80, 80).setTint(0xff1744);
+          peach.sprite.setDisplaySize(60, 60).setTint(0xff1744);
           
-          // 移除選擇指示器
           const selector = peach.sprite.getData('selector');
           if (selector) {
             selector.destroy();
