@@ -1,230 +1,35 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>3C大亂鬥 - UI獨立化測試版 (Debug)</title>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    
-    body {
-      font-family: Arial, sans-serif;
-      background: #12131a;
-      color: white;
-      overflow: hidden;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-    }
-    
-    #game {
-      max-width: 100vw;
-      max-height: 100vh;
-      display: block;
-      border: 2px solid #60a5fa;
-    }
-    
-    .debug-panel {
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      background: rgba(0,0,0,0.9);
-      padding: 15px;
-      font-size: 11px;
-      font-family: monospace;
-      color: #60a5fa;
-      border-radius: 6px;
-      z-index: 9999;
-      max-width: 300px;
-      max-height: 400px;
-      overflow-y: auto;
-    }
-    
-    .error-log {
-      position: fixed;
-      bottom: 10px;
-      left: 10px;
-      background: rgba(139, 0, 0, 0.9);
-      padding: 10px;
-      font-size: 11px;
-      font-family: monospace;
-      color: #ff6b6b;
-      border-radius: 4px;
-      z-index: 9999;
-      max-width: 400px;
-      max-height: 200px;
-      overflow-y: auto;
-      display: none;
-    }
-    
-    #loading {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      font-size: 20px;
-      color: #60a5fa;
-      text-align: center;
-    }
-  </style>
-</head>
-<body>
-  <div class="debug-panel">
-    <div><strong>🎮 UI獨立化測試版 Debug</strong></div>
-    <div>Time: <span id="time"></span></div>
-    <div>Status: <span id="status">Initializing...</span></div>
-    <div>Game Div: <span id="game-status">Checking...</span></div>
-    <div>Phaser: <span id="phaser-status">Loading...</span></div>
-    <div>Canvas: <span id="canvas-status">Waiting...</span></div>
-    <div>JS Size: <span id="js-size">Unknown</span></div>
-    <div>Errors: <span id="error-count">0</span></div>
-    <hr style="margin: 8px 0; border-color: #60a5fa;">
-    <div id="debug-log" style="font-size: 10px; max-height: 150px; overflow-y: auto;"></div>
-  </div>
-  
-  <div class="error-log" id="error-log">
-    <strong>❌ JavaScript Errors:</strong><br>
-    <div id="error-content"></div>
-  </div>
-  
-  <div id="loading">
-    🎮 載入UI獨立化測試版本...<br>
-    <small>檢查Console和Network面板以診斷問題</small>
-  </div>
-  <div id="game"></div>
-  
-  <script>
-    // Debug 工具
-    const log = (msg) => {
-      console.log('🎮 [DEBUG]', msg);
-      const logDiv = document.getElementById('debug-log');
-      logDiv.innerHTML += `${new Date().toLocaleTimeString()}: ${msg}<br>`;
-      logDiv.scrollTop = logDiv.scrollHeight;
-    };
-    
-    const updateStatus = (id, value, color = '#60a5fa') => {
-      const el = document.getElementById(id);
-      if (el) {
-        el.textContent = value;
-        el.style.color = color;
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>鬥氣割草</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #0d0d12;
+        touch-action: none;
+        -webkit-tap-highlight-color: transparent;
       }
-    };
-    
-    // 初始化
-    document.getElementById('time').textContent = new Date().toLocaleTimeString();
-    log('🚀 Debug mode initialized');
-    
-    // 檢查game div
-    const checkGameDiv = () => {
-      const gameDiv = document.getElementById('game');
-      if (gameDiv) {
-        updateStatus('game-status', `✅ Found (${gameDiv.offsetWidth}x${gameDiv.offsetHeight})`, '#4ade80');
-        log(`✅ Game div found: ${gameDiv.offsetWidth}x${gameDiv.offsetHeight}`);
-        return true;
-      } else {
-        updateStatus('game-status', '❌ Missing', '#ef4444');
-        log('❌ Game div not found');
-        return false;
+      #game {
+        width: 100%;
+        height: 100%;
       }
-    };
-    
-    // 錯誤處理
-    let errorCount = 0;
-    const handleError = (error, source = 'unknown') => {
-      errorCount++;
-      updateStatus('error-count', errorCount, '#ef4444');
-      updateStatus('status', `❌ Error (${errorCount})`, '#ef4444');
-      
-      const errorLog = document.getElementById('error-log');
-      const errorContent = document.getElementById('error-content');
-      errorLog.style.display = 'block';
-      errorContent.innerHTML += `<div>[${source}] ${error.message || error}</div>`;
-      
-      log(`❌ Error from ${source}: ${error.message || error}`);
-      console.error('🎮 [ERROR]', error);
-    };
-    
-    // 全局錯誤監聽
-    window.addEventListener('error', (e) => {
-      handleError(e.error || e.message, 'window');
-    });
-    
-    window.addEventListener('unhandledrejection', (e) => {
-      handleError(e.reason, 'promise');
-    });
-    
-    // 檢查JS載入
-    updateStatus('status', 'Loading JS...', '#fbbf24');
-    log('📦 Starting JS load check...');
-    
-    // DOM Ready
-    document.addEventListener('DOMContentLoaded', () => {
-      log('📄 DOM Ready');
-      checkGameDiv();
-      updateStatus('status', 'DOM Ready', '#fbbf24');
-    });
-    
-    // Window Load
-    window.addEventListener('load', () => {
-      log('🌐 Window loaded');
-      updateStatus('status', 'Window Loaded', '#60a5fa');
-      
-      // 延遲檢查
-      setTimeout(() => {
-        log('🔍 Post-load checks...');
-        checkGameDiv();
-        
-        // 檢查 Phaser
-        if (typeof window.Phaser !== 'undefined') {
-          updateStatus('phaser-status', '✅ Loaded', '#4ade80');
-          log('✅ Phaser detected');
-        } else {
-          updateStatus('phaser-status', '❌ Missing', '#ef4444');
-          log('❌ Phaser not found');
-        }
-        
-        // 檢查 Canvas
-        const canvas = document.querySelector('canvas');
-        if (canvas) {
-          updateStatus('canvas-status', `✅ Found (${canvas.width}x${canvas.height})`, '#4ade80');
-          log(`✅ Canvas found: ${canvas.width}x${canvas.height}`);
-        } else {
-          updateStatus('canvas-status', '❌ Missing', '#ef4444');
-          log('❌ Canvas not found');
-        }
-        
-        // 隱藏loading如果成功
-        if (canvas && typeof window.Phaser !== 'undefined') {
-          document.getElementById('loading').style.display = 'none';
-          updateStatus('status', '✅ Game Ready', '#4ade80');
-          log('🎉 Game initialization appears successful');
-        }
-        
-        // 獲取JS大小
-        fetch('./assets/main-CbaDQGVi.js')
-          .then(res => res.blob())
-          .then(blob => {
-            const size = Math.round(blob.size / 1024 / 1024 * 100) / 100;
-            updateStatus('js-size', `${size}MB`, '#4ade80');
-            log(`📦 JS size: ${size}MB`);
-          })
-          .catch(err => {
-            updateStatus('js-size', 'Error', '#ef4444');
-            handleError(err, 'js-fetch');
-          });
-        
-      }, 3000);
-    });
-    
-    log('🎬 Script setup complete, waiting for JS module...');
-    updateStatus('status', 'Waiting for module...', '#fbbf24');
-  </script>
-  
-  <script type="module" crossorigin src="./assets/main-CbaDQGVi.js" onerror="handleError('JS module failed to load', 'module')"></script>
-</body>
+      canvas {
+        display: block;
+      }
+    </style>
+    <script type="module" crossorigin src="./assets/index-B8oikkV7.js"></script>
+  </head>
+  <body>
+    <div id="game"></div>
+  </body>
 </html>
