@@ -492,6 +492,12 @@ export class PeachLotteryScene extends Phaser.Scene {
     });
 
     this.updateUI();
+    
+    // 🔧 修復「再玩一次」後選擇框消失 - 延遲更新確保所有狀態就緒
+    this.time.delayedCall(100, () => {
+      console.log('🔧 延遲更新UI確保選擇框顯示');
+      this.updateUI();
+    });
   }
 
   private resetPeaches(): void {
@@ -970,29 +976,48 @@ export class PeachLotteryScene extends Phaser.Scene {
     // 選擇指示器 - 重新實現更清晰的反饋
     if (this.players.length > 0) {
       const p1 = this.players[0];
+      console.log('🎯 updateUI選擇框檢查:', {
+        p1Exists: !!p1,
+        eliminated: p1?.eliminated,
+        selectedPeach: p1?.selectedPeach,
+        phase: this.phase
+      });
+      
       if (p1 && !p1.eliminated && p1.selectedPeach !== -1) {
         const selectedPeach = this.peaches.find(p => p.id === p1.selectedPeach);
+        console.log('🎯 找到選中桃子:', {
+          peachId: selectedPeach?.id,
+          picked: selectedPeach?.picked,
+          hasSelector: !!selectedPeach?.sprite.getData('selector')
+        });
+        
         if (selectedPeach && !selectedPeach.picked) {
           // 黃色高亮選中的桃子
           selectedPeach.sprite.setDisplaySize(75, 75).setTint(0xffff00);
           
-          // 創建選擇指示器
-          if (!selectedPeach.sprite.getData('selector')) {
-            const selector = this.add.circle(selectedPeach.x, selectedPeach.y, 45, 0x000000, 0)
-              .setStrokeStyle(4, 0xffff00, 1)
-              .setDepth(this.DEPTHS.EFFECTS);
-            
-            this.tweens.add({
-              targets: selector,
-              scaleX: { from: 1, to: 1.2 },
-              scaleY: { from: 1, to: 1.2 },
-              duration: 800,
-              yoyo: true,
-              repeat: -1
-            });
-            
-            selectedPeach.sprite.setData('selector', selector);
+          // 🔧 強制重新創建選擇指示器，避免重新開始後的狀態問題
+          const existingSelector = selectedPeach.sprite.getData('selector');
+          if (existingSelector) {
+            existingSelector.destroy();
+            selectedPeach.sprite.setData('selector', null);
           }
+          
+          // 創建新的選擇指示器
+          const selector = this.add.circle(selectedPeach.x, selectedPeach.y, 45, 0x000000, 0)
+            .setStrokeStyle(4, 0xffff00, 1)
+            .setDepth(this.DEPTHS.EFFECTS);
+          
+          this.tweens.add({
+            targets: selector,
+            scaleX: { from: 1, to: 1.2 },
+            scaleY: { from: 1, to: 1.2 },
+            duration: 800,
+            yoyo: true,
+            repeat: -1
+          });
+          
+          selectedPeach.sprite.setData('selector', selector);
+          console.log('🎯✅ 選擇框創建成功');
         }
       }
 
