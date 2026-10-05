@@ -1069,13 +1069,13 @@ export class GameScene extends Phaser.Scene {
 
     // v46 slow：畫玩家周圍的【自動鎖定範圍圈】(半透明圈+環)。只 slow 顯示、fast 不畫。
     // v47：半徑改讀即時可調 slowTuning.lockRadius；移除面向指示線(只留圈+環)。
-    // ★橢圓圓盤：透視地面圓盤效果
+    // ★橢圓圓盤：透視地面圓盤效果（腳底位置+放大尺寸）
     if (this.controlMode === 'slow' && this.player.alive) {
       const R = this.slowTuning.lockRadius;
       const px = this.player.x;
-      const diskY = this.player.y + GameConfig.player.radius + 8; // 腳底下方8px
-      const ellipseWidth = R;
-      const ellipseHeight = R * 0.4; // 透視壓縮40%
+      const diskY = this.player.y + GameConfig.player.radius + 20; // 腳底下方20px，確保到真正腳底
+      const ellipseWidth = R * 1.3; // 放大尺寸130%
+      const ellipseHeight = R * 1.3 * 0.4; // 透視壓縮40%，但整體放大
       
       // 設定圓盤在角色下方圖層
       this.lockGfx.setDepth(-1);
