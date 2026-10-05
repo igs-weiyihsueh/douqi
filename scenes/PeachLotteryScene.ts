@@ -30,7 +30,7 @@ interface Player {
 
 /**
  * 桃樹彩票小遊戲 - 新獎勵機制
- * 四名玩家分配四個區域，每區域4顆桃子。每輪10秒內選擇一顆桃子點擊確認。
+ * 四名玩家分配四個區域，每區域5顆桃子。每輪10秒內選擇一顆桃子點擊確認。
  * 
  * 獎勵機制：
  * - 第1輪：只有小獎，所有人晉級（體驗輪）
@@ -186,18 +186,18 @@ export class PeachLotteryScene extends Phaser.Scene {
   }
 
   private setupPeaches(): void {
-    // 🌳 桃子在區域內的相對位置 (2x2排列)
+    // 🌳 桃子在區域內的相對位置 (2x3排列，總共5顆)
     const peachPositions = [
-      { dx: -40, dy: -40 }, { dx: 40, dy: -40 },
-      { dx: -40, dy: 40 }, { dx: 40, dy: 40 }
+      { dx: -50, dy: -40 }, { dx: 0, dy: -40 }, { dx: 50, dy: -40 },  // 上排3顆
+      { dx: -25, dy: 40 }, { dx: 25, dy: 40 }                        // 下排2顆
     ];
 
     let peachId = 0;
     for (let regionId = 0; regionId < 4; regionId++) {
       const region = this.regions[regionId];
       
-      // 🎨 區域背景圓圈 - 使用標準深度
-      const regionCircle = this.add.circle(region.x, region.y, 120, region.color, 0.12)
+      // 🎨 區域背景圓圈 - 放大區域
+      const regionCircle = this.add.circle(region.x, region.y, 150, region.color, 0.12)
         .setStrokeStyle(4, region.color, 0.8)
         .setDepth(this.DEPTHS.GAME_AREA);
         
@@ -211,8 +211,8 @@ export class PeachLotteryScene extends Phaser.Scene {
         repeat: -1
       });
       
-      // 🍑 創建桃子
-      for (let i = 0; i < 4; i++) {
+      // 🍑 創建桃子 - 增加到5顆
+      for (let i = 0; i < 5; i++) {
         const pos = peachPositions[i];
         const peach: Peach = {
           id: peachId++,
@@ -333,7 +333,7 @@ export class PeachLotteryScene extends Phaser.Scene {
 
     // 遊戲規則
     const rules = [
-      '⭐ 4名玩家分配到4個區域，每區域有4顆桃子',
+      '⭐ 4名玩家分配到4個區域，每區域有5顆桃子',
       '⭐ 每輪10秒內選擇一顆桃子並點擊確認(空格鍵)',
       '⭐ 第1輪：只有小獎，所有人晉級（體驗輪）',
       '⭐ 第2輪起：三種結果 - 沒獎(淘汰)、小獎(晉級)、大獎(獲勝)',
@@ -481,6 +481,16 @@ export class PeachLotteryScene extends Phaser.Scene {
 
     console.log(`🔧 DEBUG: 第${this.currentRound}輪開始 - phase=${this.phase}, running=${this.running}`);
 
+    // 🚨 強制清理所有選擇指示器，防止殘留
+    this.peaches.forEach(peach => {
+      const selector = peach.sprite.getData('selector');
+      if (selector) {
+        selector.destroy();
+        peach.sprite.setData('selector', null);
+        console.log(`🧹 清理桃子${peach.id}的殘留選擇框`);
+      }
+    });
+
     // 重置桃子狀態並隨機分配彩票
     this.resetPeaches();
     this.assignRewards();
@@ -537,6 +547,21 @@ export class PeachLotteryScene extends Phaser.Scene {
         peach.sprite.setAlpha(0.3).setTint(0x666666); // 灰色暗淡
         peach.isSelected = false; // 重置選定狀態
         peach.isLocked = true;    // 鎖定不可選
+        
+        // 🚨 修復：也要清理已開過桃子的選擇指示器
+        const selector = peach.sprite.getData('selector');
+        if (selector) {
+          selector.destroy();
+          peach.sprite.setData('selector', null);
+        }
+        
+        // 清理選定標記（如果有的話）
+        const selectedMark = peach.sprite.getData('selectedMark');
+        if (selectedMark) {
+          selectedMark.destroy();
+          peach.sprite.setData('selectedMark', null);
+        }
+        
         console.log(`🔒 桃子${peach.id}已使用過，不可重複選擇`);
       }
     });
@@ -930,7 +955,7 @@ export class PeachLotteryScene extends Phaser.Scene {
     if (bigWinner) {
       // 有人獲得大獎，直接獲勝
       console.log(`🏆 玩家${bigWinner.id}獲得大獎，直接獲勝！`);
-      this.time.delayedCall(1500, () => {
+      this.time.delayedCall(800, () => {
         this.endGame();
       });
       return;
@@ -956,12 +981,12 @@ export class PeachLotteryScene extends Phaser.Scene {
     
     if (remainingPlayers.length <= 1 || this.currentRound >= this.maxRounds) {
       // 遊戲結束
-      this.time.delayedCall(1500, () => {
+      this.time.delayedCall(800, () => {
         this.endGame();
       });
     } else {
-      // 下一輪
-      this.time.delayedCall(1500, () => {
+      // 下一輪 - 縮短準備時間
+      this.time.delayedCall(800, () => {
         this.currentRound++;
         this.startNewRound();
       });
