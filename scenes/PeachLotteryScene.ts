@@ -512,25 +512,32 @@ export class PeachLotteryScene extends Phaser.Scene {
 
   private resetPeaches(): void {
     this.peaches.forEach(peach => {
-      // 重置所有桃子，不論是否被摘取（修復第二輪問題）
-      peach.sprite.clearTint().setAlpha(1).setDisplaySize(60, 60); // 重置大小和顏色
-      peach.rewardType = 'small';   // 重置獎勵類型
-      peach.picked = false;         // 重置摘取狀態
-      peach.isSelected = false;     // 重置選定狀態
-      peach.isLocked = false;       // 解除鎖定
-      
-      // 清理選定標記
-      const selectedMark = peach.sprite.getData('selectedMark');
-      if (selectedMark) {
-        selectedMark.destroy();
-        peach.sprite.setData('selectedMark', null);
-      }
-      
-      // 移除選擇指示器
-      const selector = peach.sprite.getData('selector');
-      if (selector) {
-        selector.destroy();
-        peach.sprite.setData('selector', null);
+      if (!peach.picked) {
+        // 只重置未開過的桃子
+        peach.sprite.clearTint().setAlpha(1).setDisplaySize(60, 60);
+        peach.rewardType = 'small';
+        peach.isSelected = false;
+        peach.isLocked = false;
+        
+        // 清理選定標記
+        const selectedMark = peach.sprite.getData('selectedMark');
+        if (selectedMark) {
+          selectedMark.destroy();
+          peach.sprite.setData('selectedMark', null);
+        }
+        
+        // 移除選擇指示器
+        const selector = peach.sprite.getData('selector');
+        if (selector) {
+          selector.destroy();
+          peach.sprite.setData('selector', null);
+        }
+      } else {
+        // 已開過的桃子保持暗淡顯示，表示不可再用
+        peach.sprite.setAlpha(0.3).setTint(0x666666); // 灰色暗淡
+        peach.isSelected = false; // 重置選定狀態
+        peach.isLocked = true;    // 鎖定不可選
+        console.log(`🔒 桃子${peach.id}已使用過，不可重複選擇`);
       }
     });
   }
@@ -721,12 +728,12 @@ export class PeachLotteryScene extends Phaser.Scene {
     this.players.forEach(player => {
       if (player.eliminated || !player.isBot || player.hasSelected) return;
       
-      // BOT在時間過半後開始選定桃子
+      // BOT在時間過1/4後開始選定桃子，速度更快
       const elapsed = this.time.now - this.roundStartTime;
-      if (elapsed > this.roundTimeLimit * 0.3) {
-        // 檢查P1是否被淘汰，如果P1被淘汰則BOT加快速度避免卡死
+      if (elapsed > this.roundTimeLimit * 0.25) {
+        // 提高AI選擇速度，讓遊戲更流暢
         const p1Eliminated = this.players[0]?.eliminated || false;
-        const selectChance = p1Eliminated ? 0.05 : 0.02; // P1被淘汰時BOT更積極
+        const selectChance = p1Eliminated ? 0.15 : 0.08; // 大幅提高選擇機率
         
         // BOT模擬選定行為
         if (Math.random() < selectChance) {
@@ -895,6 +902,21 @@ export class PeachLotteryScene extends Phaser.Scene {
     });
 
     console.log(`🎊 玩家${player.id}揭曉桃子${peach.id}: ${peach.rewardType}`);
+    
+    // 標記桃子為已使用，後續輪次不可再選
+    this.time.delayedCall(2000, () => {
+      // 延遲標記，讓結果展示完成
+      const usedMark = this.add.text(peach.x, peach.y + 40, '✗ 已使用', {
+        fontFamily: 'monospace',
+        fontSize: '16px',
+        color: '#666666',
+        backgroundColor: '#000000',
+        padding: { x: 6, y: 3 }
+      }).setOrigin(0.5).setDepth(25).setAlpha(0.8);
+      
+      peach.sprite.setData('usedMark', usedMark);
+      console.log(`🔒 桃子${peach.id}標記為已使用，後續輪次不可選擇`);
+    });
   }
 
   // ── 處理獎勵結果 ──
