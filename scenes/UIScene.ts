@@ -498,7 +498,7 @@ export class UIScene extends Phaser.Scene {
       });
     }
 
-    this.aimGraphics = this.add.graphics().setDepth(30);
+    this.aimGraphics = this.add.graphics().setDepth(-1); // 圓盤在角色下方
 
     // v28 BOSS 血條（上方中央，預設隱藏）
     const bossBarY = 116;
@@ -899,16 +899,25 @@ export class UIScene extends Phaser.Scene {
       g.fillCircle(ex, ey, ind.endMarkerRadius);
     }
 
-    // ★調整：方向圓環移到角色腳底下，像圓盤一樣
-    const footY = ay + GameConfig.player.radius; // 角色腳底位置
+    // ★橢圓圓盤：透視地面圓盤效果
+    const diskY = ay + GameConfig.player.radius + 8; // 腳底下方8px
+    const ellipseWidth = cfg.ringRadius;
+    const ellipseHeight = cfg.ringRadius * 0.4; // 透視壓縮40%
     g.lineStyle(cfg.ringThickness, cfg.ringColor, cfg.ringAlpha);
-    g.strokeCircle(ax, footY, cfg.ringRadius);
+    g.strokeEllipse(ax, diskY, ellipseWidth, ellipseHeight);
 
-    // ★調整：箭頭也移到腳底圓環上
-    const tipX = ax + Math.cos(a.angle) * (cfg.ringRadius + cfg.arrowSize * 0.6);
-    const tipY = footY + Math.sin(a.angle) * (cfg.ringRadius + cfg.arrowSize * 0.6);
-    const baseX = ax + Math.cos(a.angle) * (cfg.ringRadius - cfg.arrowSize * 0.4);
-    const baseY = footY + Math.sin(a.angle) * (cfg.ringRadius - cfg.arrowSize * 0.4);
+    // ★箭頭配合橢圓圓盤：在橢圓邊緣上的位置計算
+    const cosAngle = Math.cos(a.angle);
+    const sinAngle = Math.sin(a.angle);
+    // 橢圓邊緣距離計算（考慮橢圓形狀）
+    const arrowRadius = Math.sqrt(
+      Math.pow(ellipseWidth * cosAngle, 2) + 
+      Math.pow(ellipseHeight * sinAngle, 2)
+    );
+    const tipX = ax + cosAngle * (arrowRadius + cfg.arrowSize * 0.6);
+    const tipY = diskY + sinAngle * (arrowRadius + cfg.arrowSize * 0.6);
+    const baseX = ax + cosAngle * (arrowRadius - cfg.arrowSize * 0.4);
+    const baseY = diskY + sinAngle * (arrowRadius - cfg.arrowSize * 0.4);
     const perp = a.angle + Math.PI / 2;
     const half = cfg.arrowSize * 0.5;
     g.fillStyle(cfg.arrowColor, 1);

@@ -1069,15 +1069,21 @@ export class GameScene extends Phaser.Scene {
 
     // v46 slow：畫玩家周圍的【自動鎖定範圍圈】(半透明圈+環)。只 slow 顯示、fast 不畫。
     // v47：半徑改讀即時可調 slowTuning.lockRadius；移除面向指示線(只留圈+環)。
-    // ★調整：鎖定範圍圈移到角色腳底下，像圓盤一樣
+    // ★橢圓圓盤：透視地面圓盤效果
     if (this.controlMode === 'slow' && this.player.alive) {
       const R = this.slowTuning.lockRadius;
       const px = this.player.x;
-      const py = this.player.y + GameConfig.player.radius; // 角色腳底位置
+      const diskY = this.player.y + GameConfig.player.radius + 8; // 腳底下方8px
+      const ellipseWidth = R;
+      const ellipseHeight = R * 0.4; // 透視壓縮40%
+      
+      // 設定圓盤在角色下方圖層
+      this.lockGfx.setDepth(-1);
+      
       this.lockGfx.fillStyle(0x66ccff, 0.05);
-      this.lockGfx.fillCircle(px, py, R);
+      this.lockGfx.fillEllipse(px, diskY, ellipseWidth, ellipseHeight);
       this.lockGfx.lineStyle(2, 0x66ccff, 0.35);
-      this.lockGfx.strokeCircle(px, py, R);
+      this.lockGfx.strokeEllipse(px, diskY, ellipseWidth, ellipseHeight);
     }
 
     // 收集：目標 → 鎖定它的角色 index 列表（依角色順序，色點才穩定）
