@@ -29,16 +29,23 @@ interface Player {
 }
 
 /**
- * 桃樹彩票小遊戲 - 新獎勵機制
+ * 桃樹彩票小遊戲 - 淘汰輪與大獎輪互斥機制
  * 四名玩家分配四個區域，每區域5顆桃子。每輪10秒內選擇一顆桃子點擊確認。
  * 
- * 獎勵機制：
- * - 第1輪：只有小獎，所有人晉級（體驗輪）
- * - 第2輪起：三種結果 - 沒獎(淘汰)、小獎(晉級)、大獎(直接獲勝)
- * - 大獎：從第2輪才出現，必定只開出一個，獲得者直接獲勝
- * - 沒獎：從第2輪才出現，必定只開出一個，獲得者被淘汰
- * - 小獎：其餘都是小獎，可以晉級到下一輪
- * - 如果沒人抽到大獎，小獎者全部晉級
+ * 🎯 互斥邏輯設計：
+ * - 第1輪：體驗輪，所有人獲得小獎晉級
+ * - 第2-3輪：淘汰輪，固定淘汰1名，無大獎機會
+ * - 第4輪：大獎輪，有大獎機會，不淘汰任何人
+ * - 第5輪+：淘汰輪，固定淘汰1名，無大獎機會
+ * 
+ * 🏆 獎勞機制：
+ * - 小獎：晉級下一輪（所有輪次都有）
+ * - 大獎：直接獲勝（只在第4輪出現）
+ * - 沒獎：淘汰出局（第4輪不會出現）
+ * 
+ * ⚡ 互斥保護：
+ * - 淘汰輪：確保有且只有1名玩家被淘汰，維持遊戲節奏
+ * - 大獎輪：即使沒人中大獎也不淘汰，保護所有人晉級
  */
 export class PeachLotteryScene extends Phaser.Scene {
   private peaches: Peach[] = [];
@@ -571,7 +578,7 @@ export class PeachLotteryScene extends Phaser.Scene {
     const alivePlayers = this.players.filter(p => !p.eliminated);
     
     if (this.currentRound === 1) {
-      // 第一輪：只有小獎，所有人晉級
+      // 第一輪：只有小獎，所有人晉級（體驗輪）
       console.log(`🏆 第1輪特別模式: 所有${alivePlayers.length}名玩家都獲得小獎（體驗輪）`);
       
       // 為每個玩家區域設置小獎
@@ -588,7 +595,7 @@ export class PeachLotteryScene extends Phaser.Scene {
         }
       });
     } else {
-      // 第二輪起：三種獎勵機制
+      // 第二輪起：淘汰輪與大獎輪互斥機制
       console.log(`🏆 第${this.currentRound}輪: ${alivePlayers.length}名玩家，設置獎勵...`);
       
       // 重置所有桃子為小獎
@@ -603,22 +610,44 @@ export class PeachLotteryScene extends Phaser.Scene {
         !peach.picked && alivePlayers.some(p => p.region === peach.region)
       );
       
-      if (availablePeaches.length >= 2) {
-        // 隨機選擇桃子分配特殊獎勵
+      if (availablePeaches.length >= 1) {
         const shuffled = [...availablePeaches].sort(() => Math.random() - 0.5);
         
-        // 設置1個大獎（直接獲勝）
-        shuffled[0].rewardType = 'big';
-        console.log(`🏆 桃子${shuffled[0].id}設為大獎`);
-        
-        // 設置1個沒獎（淘汰）
-        shuffled[1].rewardType = 'none';
-        console.log(`💀 桃子${shuffled[1].id}設為沒獎`);
-        
-        // 其餘都是小獎（晉級）
-        console.log(`🏅 其他${shuffled.length - 2}個桃子為小獎`);
+        // 🎯 互斥邏輯：淘汰輪 vs 大獎輪
+        if (this.currentRound === 4) {
+          // 第4輪：大獎輪（固定出現大獎，不淘汰）
+          shuffled[0].rewardType = 'big';
+          console.log(`🏆 第4輪大獎輪: 桃子${shuffled[0].id}設為大獎，無淘汰`);
+          console.log(`🎊 大獎輪模式: 其他${shuffled.length - 1}個桃子為小獎（保護機制）`);
+        } else {
+          // 第2-3輪和第5輪+：淘汰輪（固定淘汰一名，無大獎）
+          shuffled[0].rewardType = 'none';
+          console.log(`💀 第${this.currentRound}輪淘汰輪: 桃子${shuffled[0].id}設為沒獎（淘汰）`);
+          console.log(`🚫 淘汰輪模式: 其他${shuffled.length - 1}個桃子為小獎，無大獎機會`);
+        }
       }
     }
+    
+    // 🔍 輪次類型檢查和日志
+    this.logRoundType();
+  }
+  
+  /**
+   * 記錄當前輪次的類型和邏輯
+   */
+  private logRoundType(): void {
+    const alivePlayers = this.players.filter(p => !p.eliminated);
+    
+    if (this.currentRound === 1) {
+      console.log(`📋 輪次分析: [第${this.currentRound}輪] 體驗輪 - 所有人晉級`);
+    } else if (this.currentRound === 4) {
+      console.log(`📋 輪次分析: [第${this.currentRound}輪] 🏆大獎輪 - 有大獎機會，無淘汰風險`);
+      console.log(`   └─ 互斥邏輯: 大獎輪 ↔ 不淘汰人`);
+    } else {
+      console.log(`📋 輪次分析: [第${this.currentRound}輪] 💀淘汰輪 - 固定淘汰一名，無大獎`);
+      console.log(`   └─ 互斥邏輯: 淘汰輪 ↔ 無大獎機會`);
+    }
+    console.log(`   └─ 存活玩家: ${alivePlayers.length}/4`);
   }
 
   private getRandomPeachInRegion(regionId: number): number {
@@ -950,30 +979,54 @@ export class PeachLotteryScene extends Phaser.Scene {
     
     const alivePlayers = this.players.filter(p => !p.eliminated);
     
-    // 檢查是否有人獲得大獎
-    const bigWinner = alivePlayers.find(p => p.rewardType === 'big');
-    if (bigWinner) {
-      // 有人獲得大獎，直接獲勝
-      console.log(`🏆 玩家${bigWinner.id}獲得大獎，直接獲勝！`);
-      this.time.delayedCall(800, () => {
-        this.endGame();
-      });
-      return;
-    }
-    
-    // 沒有大獎，處理正常淘汰邏輯
-    if (this.currentRound === 1) {
-      // 第一輪：所有人晉級
+    // 🎯 互斥邏輯處理
+    if (this.currentRound === 4) {
+      // 第4輪：大獎輪邏輯（有大獎機會，不淘汰）
+      const bigWinner = alivePlayers.find(p => p.rewardType === 'big');
+      if (bigWinner) {
+        // 有人獲得大獎，直接獲勝
+        console.log(`🏆 第4輪大獎輪: 玩家${bigWinner.id}獲得大獎，直接獲勝！`);
+        console.log(`🎊 大獎輪保護: 無人被淘汰，遊戲結束`);
+        this.time.delayedCall(800, () => {
+          this.endGame();
+        });
+        return;
+      } else {
+        // 大獎輪沒人中大獎，所有人晉級
+        console.log(`🎊 第4輪大獎輪: 無人中大獎，所有${alivePlayers.length}名玩家晉級`);
+        console.log(`🛡️ 大獎輪保護機制: 即使沒中大獎也不淘汰`);
+      }
+    } else if (this.currentRound === 1) {
+      // 第一輪：體驗輪，所有人晉級
       console.log('🎊 第1輪結束 - 所有人晉級！（體驗輪）');
     } else {
-      // 第二輪起：淘汰獲得沒獎的玩家
+      // 第2-3輪和第5輪+：淘汰輪邏輯（固定淘汰一名，無大獎）
+      console.log(`💀 第${this.currentRound}輪淘汰輪: 開始處理淘汰邏輯`);
+      
+      // 檢查並執行淘汰
+      let eliminatedCount = 0;
       alivePlayers.forEach(player => {
         if (player.rewardType === 'none') {
           player.eliminated = true;
           player.sprite.setAlpha(0.3);
-          console.log(`💀 玩家${player.id}獲得沒獎，被淘汰`);
+          eliminatedCount++;
+          console.log(`💀 淘汰輪執行: 玩家${player.id}獲得沒獎，被淘汰`);
         }
       });
+      
+      if (eliminatedCount === 0) {
+        console.log(`⚠️  淘汰輪異常: 應該淘汰1名玩家，實際淘汰${eliminatedCount}名`);
+      } else {
+        console.log(`✅ 淘汰輪完成: 成功淘汰${eliminatedCount}名玩家`);
+      }
+      
+      // 確認無大獎（淘汰輪與大獎輪互斥）
+      const hasBigReward = alivePlayers.some(p => p.rewardType === 'big');
+      if (hasBigReward) {
+        console.log(`🚨 互斥邏輯錯誤: 淘汰輪中出現大獎！`);
+      } else {
+        console.log(`✅ 互斥邏輯正確: 淘汰輪無大獎`);
+      }
     }
 
     // 檢查遊戲是否結束
@@ -981,11 +1034,13 @@ export class PeachLotteryScene extends Phaser.Scene {
     
     if (remainingPlayers.length <= 1 || this.currentRound >= this.maxRounds) {
       // 遊戲結束
+      console.log(`🏁 遊戲結束條件: 剩餘${remainingPlayers.length}名玩家，當前${this.currentRound}/${this.maxRounds}輪`);
       this.time.delayedCall(800, () => {
         this.endGame();
       });
     } else {
       // 下一輪 - 縮短準備時間
+      console.log(`➡️  進入第${this.currentRound + 1}輪，剩餘${remainingPlayers.length}名玩家`);
       this.time.delayedCall(800, () => {
         this.currentRound++;
         this.startNewRound();
