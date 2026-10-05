@@ -39,6 +39,7 @@ export class PeachLotteryScene extends Phaser.Scene {
   private roundTimeLimit = 10000; // 精確10秒
   private roundStartTime = 0;
   private phase: 'intro' | 'playing' | 'revealing' | 'ended' = 'intro';
+  private running = false; // 控制遊戲邏輯是否運行
   
   // 🎨 標準化布局系統
   private readonly LAYOUT = {
@@ -80,6 +81,7 @@ export class PeachLotteryScene extends Phaser.Scene {
   private endButtons: Array<{ x: number; y: number; cb: () => void }> = [];
   private endSelected = 0;
   private endHighlight?: Phaser.GameObjects.Rectangle;
+  private introLayer?: Phaser.GameObjects.Container; // 說明浮層
 
   constructor() {
     super('PeachLotteryScene');
@@ -95,19 +97,16 @@ export class PeachLotteryScene extends Phaser.Scene {
     this.add.tileSprite(0, 0, w, h, 'ground').setOrigin(0, 0).setDepth(this.DEPTHS.BACKGROUND);
     this.add.rectangle(0, 0, w, h, 0x1a4c2b, 0.4).setOrigin(0, 0).setDepth(this.DEPTHS.BACKGROUND + 1);
 
-    // 🔍 第三層診斷：原生鍵盤事件監聽
-    console.log('⌨️ 設置原生鍵盤監聽');
-    this.input.keyboard?.on('keydown', (event: KeyboardEvent) => {
-      console.log('⌨️ 原生按鍵檢測:', event.code, event.key, 'time:', this.time.now);
-    });
-
     this.setupUI();
     this.setupPeaches();
     this.setupPlayers();
     
     console.log(`🍑 [桃樹彩票] 重構版初始化完成: ${this.players.length}名玩家, ${this.statusTexts.length}個狀態文字`);
     
-    this.startNewRound();
+    // 🔄 修復生命週期：先顯示說明，不立即開始遊戲
+    this.phase = 'intro';
+    this.running = false;
+    this.showIntro();
   }
 
   private setupUI(): void {
@@ -281,10 +280,8 @@ export class PeachLotteryScene extends Phaser.Scene {
 
       // P1控制設置
       if (i === 0) {
-        console.log('🔧 開始設置P1鍵盤控制');
         const KC = Phaser.Input.Keyboard.KeyCodes;
         const kb = this.input.keyboard!;
-        console.log('⌨️ 鍵盤系統檢查:', kb ? 'exists' : 'null', 'scene:', this.scene.key);
         
         player.keys = {
           left: kb.addKey(KC.LEFT),
@@ -294,19 +291,102 @@ export class PeachLotteryScene extends Phaser.Scene {
         };
         player.actionKey = kb.addKey(KC.SPACE);
         
-        console.log('🔧 P1鍵盤設置完成:', {
-          leftKey: !!player.keys.left,
-          rightKey: !!player.keys.right,
-          upKey: !!player.keys.up,
-          downKey: !!player.keys.down,
-          actionKey: !!player.actionKey
-        });
+        // 添加統一的空格鍵處理
+        player.actionKey.on('down', () => this.onSpace());
       }
 
       this.players.push(player);
     }
     
     console.log('👥 [桃樹彩票] 玩家設置完成');
+  }
+
+  // ── 顯示遊戲說明浮層 ──
+  private showIntro(): void {
+    const w = GameConfig.width, h = GameConfig.height;
+    const cont = this.add.container(0, 0).setDepth(60); // 比所有遊戲元素都高
+    cont.add(this.add.rectangle(0, 0, w, h, 0x05070c, 0.85).setOrigin(0, 0));
+    const panel = this.add.rectangle(w / 2, h / 2, 720, 480, 0x121a2e, 0.98).setStrokeStyle(4, 0xff6b6b, 0.9);
+    cont.add(panel);
+
+    // 標題
+    cont.add(this.add.text(w / 2, h / 2 - 190, '🍑 桃樹彩票', {
+      fontFamily: 'monospace', fontSize: '42px', color: '#ff4757', fontStyle: 'bold',
+      stroke: '#000000', strokeThickness: 6
+    }).setOrigin(0.5));
+
+    // 遊戲規則
+    const rules = [
+      '⭐ 4名玩家分配到4個區域，每區域有4顆桃子',
+      '⭐ 每輪10秒內選擇一顆桃子並確認(空格鍵)',
+      '⭐ 只有部分桃子藏有彩票，摘到彩票才能晉級',
+      '⭐ 沒有彩票的玩家被淘汰，最後1名獲勝',
+      '',
+      '🎮 操作方式：',
+      '   ←→↑↓ 方向鍵：選擇桃子 (2x2網格)',
+      '   空格鍵：確認選擇並摘取桃子'
+    ];
+    
+    cont.add(this.add.text(w / 2, h / 2 - 40, rules.join('\n'), {
+      fontFamily: 'monospace', fontSize: '16px', color: '#e2e8f0', 
+      align: 'left', lineSpacing: 8
+    }).setOrigin(0.5));
+
+    // 開始提示
+    const startHint = this.add.text(w / 2, h / 2 + 170, '按【空白鍵】開始遊戲！', {
+      fontFamily: 'monospace', fontSize: '24px', color: '#ffe66d', fontStyle: 'bold',
+      stroke: '#000000', strokeThickness: 3
+    }).setOrigin(0.5);
+    cont.add(startHint);
+    
+    // 開始提示閃爍效果
+    this.tweens.add({ 
+      targets: startHint, 
+      alpha: 0.4, 
+      duration: 700, 
+      yoyo: true, 
+      repeat: -1 
+    });
+
+    // 點擊任意處開始
+    panel.setInteractive(new Phaser.Geom.Rectangle(-360, -240, 720, 480), Phaser.Geom.Rectangle.Contains);
+    cont.setInteractive(new Phaser.Geom.Rectangle(0, 0, w, h), Phaser.Geom.Rectangle.Contains);
+    cont.on('pointerdown', () => this.startPlaying());
+    
+    this.introLayer = cont;
+    
+    // 顯示最大輪次數
+    this.timerText.setText('準備中...');
+  }
+
+  // ── 開始遊戲 ──
+  private startPlaying(): void {
+    if (this.phase !== 'intro') return;
+    
+    console.log('🎮 [桃樹彩票] 遊戲開始！');
+    
+    this.phase = 'playing';
+    if (this.introLayer) { 
+      this.introLayer.destroy(); 
+      this.introLayer = undefined; 
+    }
+    
+    this.running = true;
+    this.startNewRound();
+  }
+
+  // ── 空格鍵處理 ──
+  private onSpace(): void {
+    if (this.phase === 'intro') { 
+      this.startPlaying(); 
+      return; 
+    }
+    if (this.phase === 'playing' && this.running) {
+      const player = this.players[0];
+      if (player && !player.eliminated && !player.hasConfirmedChoice) {
+        this.confirmChoice(player);
+      }
+    }
   }
 
   private startNewRound(): void {
@@ -377,31 +457,25 @@ export class PeachLotteryScene extends Phaser.Scene {
   }
 
   update(): void {
-    // 第一層診斷：基礎狀態檢查
-    console.log('🔄 Update調用 - phase:', this.phase, 'time:', this.time.now);
-    
     // 確保所有初始化完成
     if (!this.roundText || !this.timerText || this.statusTexts.length === 0 || this.players.length === 0) {
-      console.log('🚨 初始化未完成 - roundText:', !!this.roundText, 'timerText:', !!this.timerText, 'statusTexts:', this.statusTexts.length, 'players:', this.players.length);
       return;
     }
 
-    if (this.phase === 'playing') {
-      console.log('🎮 進入playing階段，調用updatePlaying');
+    // 使用running控制遊戲邏輯
+    if (this.phase === 'playing' && this.running) {
       this.updatePlaying();
-    } else {
-      console.log('⏸️ 非playing階段，跳過輸入處理');
     }
+    
+    // UI始終更新
     this.updateUI();
   }
 
   private updatePlaying(): void {
-    console.log('🎮 updatePlaying開始');
     const elapsed = this.time.now - this.roundStartTime;
     const remaining = this.roundTimeLimit - elapsed;
 
     if (remaining <= 0) {
-      console.log('⏰ 時間到，處理超時');
       // 時間到，沒確認選擇的玩家淘汰
       this.players.forEach(player => {
         if (!player.eliminated && !player.hasConfirmedChoice) {
@@ -409,15 +483,14 @@ export class PeachLotteryScene extends Phaser.Scene {
           console.log(`⏰ 玩家${player.id}超時淘汰`);
         }
       });
-      this.revealResults();
+      this.beginReveal();
       return;
     }
 
     // 處理P1輸入
-    console.log('🎯 即將調用handlePlayerInput');
     this.handlePlayerInput();
     
-    // BOT AI - 修改為確認選擇而非自動確認
+    // BOT AI
     this.updateBots();
 
     // 檢查是否所有活躍玩家都已確認選擇
@@ -425,124 +498,54 @@ export class PeachLotteryScene extends Phaser.Scene {
     const allConfirmed = alivePlayers.every(p => p.hasConfirmedChoice);
     if (allConfirmed) {
       console.log('✅ 所有玩家都已確認選擇，揭曉結果');
-      this.revealResults();
+      this.beginReveal();
     }
   }
 
   private handlePlayerInput(): void {
-    console.log('🎮 handlePlayerInput被調用');
-    
-    if (this.players.length === 0) {
-      console.log('🚨 玩家數組為空');
-      return;
-    }
+    if (!this.running || this.players.length === 0) return;
 
     const player = this.players[0]; // P1
-    console.log('👤 P1玩家狀態:', {
-      exists: !!player,
-      id: player?.id,
-      eliminated: player?.eliminated,
-      hasKeys: !!player?.keys,
-      hasActionKey: !!player?.actionKey,
-      selectedPeach: player?.selectedPeach,
-      region: player?.region,
-      hasConfirmedChoice: player?.hasConfirmedChoice
-    });
-    
-    if (!player || player.eliminated || !player.keys || !player.actionKey) {
-      console.log('🚨 P1狀態檢查失敗');
-      return;
-    }
+    if (!player || player.eliminated || !player.keys || !player.actionKey) return;
 
     const regionPeaches = this.peaches.filter(p => p.region === player.region && !p.picked);
-    console.log('🍑 桃子狀態:', {
-      totalPeaches: this.peaches.length,
-      playerRegion: player.region,
-      regionPeaches: regionPeaches.length,
-      regionPeachIds: regionPeaches.map(p => ({ id: p.id, x: p.x, y: p.y }))
-    });
-    
-    if (regionPeaches.length === 0) {
-      console.log('🚨 P1區域沒有可用桃子');
-      return;
-    }
-
-    // 🔍 第四層診斷：鍵盤狀態檢查
-    const keyStates = {
-      left: {
-        isDown: player.keys.left.isDown,
-        justDown: Phaser.Input.Keyboard.JustDown(player.keys.left)
-      },
-      right: {
-        isDown: player.keys.right.isDown,
-        justDown: Phaser.Input.Keyboard.JustDown(player.keys.right)
-      },
-      up: {
-        isDown: player.keys.up.isDown,
-        justDown: Phaser.Input.Keyboard.JustDown(player.keys.up)
-      },
-      down: {
-        isDown: player.keys.down.isDown,
-        justDown: Phaser.Input.Keyboard.JustDown(player.keys.down)
-      },
-      space: {
-        isDown: player.actionKey.isDown,
-        justDown: Phaser.Input.Keyboard.JustDown(player.actionKey)
-      }
-    };
-    
-    const anyKeyPressed = Object.values(keyStates).some(state => state.isDown || state.justDown);
-    if (anyKeyPressed) {
-      console.log('⌨️ 按鍵狀態檢測:', keyStates);
-    }
+    if (regionPeaches.length === 0) return;
 
     // 方向鍵選擇桃子 - 基於2x2網格的真實位置
-    let moved = false;
-    
     if (Phaser.Input.Keyboard.JustDown(player.keys.left) || 
         Phaser.Input.Keyboard.JustDown(player.keys.right) || 
         Phaser.Input.Keyboard.JustDown(player.keys.up) || 
         Phaser.Input.Keyboard.JustDown(player.keys.down)) {
       
-      console.log('🎯 檢測到方向鍵輸入 - JustDown觸發');
-      
       // 找到當前選中桃子的網格位置
       const currentPeach = regionPeaches.find(p => p.id === player.selectedPeach);
-      if (!currentPeach) {
-        console.log('🚨 當前選中桃子不存在 - selectedPeach:', player.selectedPeach, 'available:', regionPeaches.map(p => p.id));
-        return;
-      }
+      if (!currentPeach) return;
       
       // 基於桃子的相對位置計算網格座標
       const region = this.regions[player.region];
       const currentGridX = currentPeach.x > region.x ? 1 : 0; // 右側為1，左側為0
       const currentGridY = currentPeach.y > region.y ? 1 : 0; // 下方為1，上方為0
       
-      console.log(`🎯 當前網格位置: (${currentGridX}, ${currentGridY}), 桃子位置: (${currentPeach.x}, ${currentPeach.y}), 區域中心: (${region.x}, ${region.y})`);
-      
       let newGridX = currentGridX;
       let newGridY = currentGridY;
+      let moved = false;
       
       // 根據按鍵調整網格位置
       if (Phaser.Input.Keyboard.JustDown(player.keys.left)) {
         newGridX = Math.max(0, currentGridX - 1);
         moved = true;
-        console.log('🎯 按下左鍵 - 新位置:', newGridX);
       }
       if (Phaser.Input.Keyboard.JustDown(player.keys.right)) {
         newGridX = Math.min(1, currentGridX + 1);  
         moved = true;
-        console.log('🎯 按下右鍵 - 新位置:', newGridX);
       }
       if (Phaser.Input.Keyboard.JustDown(player.keys.up)) {
         newGridY = Math.max(0, currentGridY - 1);
         moved = true;
-        console.log('🎯 按下上鍵 - 新位置:', newGridY);
       }
       if (Phaser.Input.Keyboard.JustDown(player.keys.down)) {
         newGridY = Math.min(1, currentGridY + 1);
         moved = true;
-        console.log('🎯 按下下鍵 - 新位置:', newGridY);
       }
       
       // 如果位置有變化，找到對應的桃子
@@ -555,23 +558,8 @@ export class PeachLotteryScene extends Phaser.Scene {
         
         if (targetPeach) {
           player.selectedPeach = targetPeach.id;
-          console.log(`🎯 P1移動到網格位置 (${newGridX}, ${newGridY}), 桃子ID: ${targetPeach.id}`);
-        } else {
-          console.log(`🚨 找不到目標桃子 (${newGridX}, ${newGridY}), 可用桃子:`, regionPeaches.map(p => ({
-            id: p.id,
-            gridX: p.x > region.x ? 1 : 0,
-            gridY: p.y > region.y ? 1 : 0
-          })));
         }
-      } else if (moved) {
-        console.log(`🎯 已在邊界，無法移動到 (${newGridX}, ${newGridY})`);
       }
-    }
-
-    // 空格鍵確認選擇
-    if (Phaser.Input.Keyboard.JustDown(player.actionKey)) {
-      console.log(`🎯 P1確認選擇桃子${player.selectedPeach}`);
-      this.confirmChoice(player);
     }
   }
 
@@ -667,10 +655,12 @@ export class PeachLotteryScene extends Phaser.Scene {
     player.selectedPeach = -1; // 重置選擇
   }
 
-  private revealResults(): void {
-    this.phase = 'revealing';
+  // ── 開始結果揭曉階段 ──
+  private beginReveal(): void {
+    console.log('🎭 開始結果揭曉階段');
     
-    console.log('🎭 揭曉結果階段開始');
+    this.phase = 'revealing';
+    this.running = false; // 停止遊戲邏輯更新
     
     // 先為所有確認選擇的玩家摘取桃子
     this.players.forEach(player => {
@@ -680,108 +670,175 @@ export class PeachLotteryScene extends Phaser.Scene {
     });
     
     // 短暫延遲後處理淘汰
-    this.time.delayedCall(1500, () => {
-      // 淘汰沒有彩票的玩家
-      this.players.forEach(player => {
-        if (!player.eliminated && !player.hasTicket) {
-          player.eliminated = true;
-          player.sprite.setAlpha(0.3);
-          console.log(`💀 玩家${player.id}被淘汰`);
-        }
-      });
-
-      // 2秒後開始下一輪
-      this.time.delayedCall(2000, () => {
-        this.currentRound++;
-        this.startNewRound();
-      });
+    this.time.delayedCall(2000, () => {
+      this.processElimination();
     });
   }
 
-  private endGame(): void {
-    this.phase = 'ended';
-    const winners = this.players.filter(p => !p.eliminated);
+  // ── 處理淘汰邏輯 ──
+  private processElimination(): void {
+    console.log('💀 處理淘汰邏輯');
     
-    if (winners.length === 1) {
-      const winner = winners[0];
-      const winnerName = winner.id === 0 ? 'P1 (你)' : `BOT${winner.id}`;
-      
-      this.add.text(GameConfig.width / 2, 400, 
-        `🏆 ${winnerName} 獲得大獎！`, {
-        fontFamily: 'monospace',
-        fontSize: '48px',
-        color: '#ffd700',
-        stroke: '#000',
-        strokeThickness: 6
-      }).setOrigin(0.5).setDepth(20);
-    }
+    // 淘汰沒有彩票的玩家
+    this.players.forEach(player => {
+      if (!player.eliminated && !player.hasTicket) {
+        player.eliminated = true;
+        player.sprite.setAlpha(0.3);
+        console.log(`💀 玩家${player.id}被淘汰`);
+      }
+    });
 
+    // 檢查遊戲是否結束
+    const alivePlayers = this.players.filter(p => !p.eliminated);
+    
+    if (alivePlayers.length <= 1 || this.currentRound >= this.maxRounds) {
+      // 遊戲結束
+      this.time.delayedCall(1500, () => {
+        this.endGame();
+      });
+    } else {
+      // 下一輪
+      this.time.delayedCall(1500, () => {
+        this.currentRound++;
+        this.startNewRound();
+      });
+    }
+  }
+
+  private endGame(): void {
+    console.log('🏆 遊戲結束');
+    
+    this.phase = 'ended';
+    this.running = false;
+    
+    const w = GameConfig.width, h = GameConfig.height;
+    
+    // 添加半透明背景
+    this.add.rectangle(0, 0, w, h, 0x000000, 0.75).setOrigin(0, 0).setDepth(this.DEPTHS.OVERLAY);
+    
+    // 找出獲勝者
+    const alivePlayers = this.players.filter(p => !p.eliminated);
+    
+    let resultTitle: string;
+    let resultColor: string;
+    
+    if (alivePlayers.length === 1) {
+      const winner = alivePlayers[0];
+      const winnerName = winner.id === 0 ? '你' : `BOT${winner.id}`;
+      resultTitle = `🏆 ${winnerName} 獲勝！`;
+      resultColor = winner.id === 0 ? '#00ff00' : '#4ecdc4';
+    } else if (alivePlayers.length > 1) {
+      resultTitle = `🤝 ${alivePlayers.length}名玩家平手！`;
+      resultColor = '#ffd700';
+    } else {
+      resultTitle = '💀 全軍覆沒！';
+      resultColor = '#ff6b6b';
+    }
+    
+    // 結果標題
+    this.add.text(w / 2, h * 0.25, resultTitle, {
+      fontFamily: 'monospace',
+      fontSize: '42px',
+      color: resultColor,
+      fontStyle: 'bold',
+      stroke: '#000000',
+      strokeThickness: 6
+    }).setOrigin(0.5).setDepth(this.DEPTHS.OVERLAY + 1);
+    
+    // 遊戲統計
+    const stats = [
+      `完成輪數: ${this.currentRound - 1}/${this.maxRounds}`,
+      `存活玩家: ${alivePlayers.length}/4`
+    ];
+    
+    this.add.text(w / 2, h * 0.4, stats.join('\n'), {
+      fontFamily: 'monospace',
+      fontSize: '20px',
+      color: '#ffffff',
+      align: 'center',
+      lineSpacing: 8
+    }).setOrigin(0.5).setDepth(this.DEPTHS.OVERLAY + 1);
+    
     this.setupEndButtons();
   }
 
   private setupEndButtons(): void {
     const w = GameConfig.width, h = GameConfig.height;
     
-    this.endButtons = [
-      { 
-        x: w / 2 - 130, y: h * 0.78,
-        cb: () => this.scene.restart()
-      },
-      { 
-        x: w / 2 + 130, y: h * 0.78,
-        cb: () => this.scene.start('MinigameMenuScene')
-      }
-    ];
-
-    this.makeEndButton(this.endButtons[0].x, this.endButtons[0].y, '🔄 再玩一次', 0x4a90d9);
-    this.makeEndButton(this.endButtons[1].x, this.endButtons[1].y, '← 小遊戲選單', 0x2d3748);
-    
-    // 鍵盤選擇
+    this.endButtons = [];
     this.endSelected = 0;
-    this.endHighlight = this.add.rectangle(
-      this.endButtons[0].x, this.endButtons[0].y, 240, 52
-    ).setStrokeStyle(3, 0xffe066, 1).setDepth(25);
-
+    this.makeEndButton(w / 2 - 140, h * 0.7, '🔄 再玩一次', 0x4a90d9, () => this.scene.restart());
+    this.makeEndButton(w / 2 + 140, h * 0.7, '← 小遊戲選單', 0x2d3748, () => this.quitToMenu());
+    
+    // 選中高亮框
+    this.endHighlight = this.add.rectangle(0, 0, 240, 65)
+      .setStrokeStyle(4, 0xffe066, 1)
+      .setDepth(this.DEPTHS.OVERLAY + 2);
+    this.tweens.add({ 
+      targets: this.endHighlight, 
+      alpha: { from: 1, to: 0.4 }, 
+      duration: 600, 
+      yoyo: true, 
+      repeat: -1 
+    });
+    this.selectEndButton(0);
+    
+    // 鍵盤控制
     const KC = Phaser.Input.Keyboard.KeyCodes;
     const kb = this.input.keyboard!;
-    kb.addKey(KC.LEFT).on('down', () => this.selectEndButton(-1));
+    const toggle = () => this.selectEndButton(this.endSelected === 0 ? 1 : 0);
+    kb.addKey(KC.LEFT).on('down', () => this.selectEndButton(0));
     kb.addKey(KC.RIGHT).on('down', () => this.selectEndButton(1));
-    kb.addKey(KC.SPACE).on('down', () => this.endButtons[this.endSelected].cb());
-    kb.addKey(KC.ENTER).on('down', () => this.endButtons[this.endSelected].cb());
+    kb.addKey(KC.UP).on('down', toggle);
+    kb.addKey(KC.DOWN).on('down', toggle);
+    
+    const confirm = () => { 
+      const btn = this.endButtons[this.endSelected]; 
+      if (btn) btn.cb(); 
+    };
+    kb.addKey(KC.SPACE).on('down', confirm);
+    kb.addKey(KC.ENTER).on('down', confirm);
   }
 
-  private makeEndButton(x: number, y: number, text: string, color: number): void {
-    const bg = this.add.rectangle(x, y, 240, 48, color, 0.9)
-      .setStrokeStyle(2, 0xffffff, 0.8).setDepth(24);
+  private makeEndButton(x: number, y: number, text: string, color: number, cb: () => void): void {
+    const bg = this.add.rectangle(x, y, 240, 60, color, 0.95)
+      .setStrokeStyle(2, 0xffffff, 0.8)
+      .setDepth(this.DEPTHS.OVERLAY + 1);
     
     this.add.text(x, y, text, {
       fontFamily: 'monospace', 
-      fontSize: '16px', 
-      color: '#ffffff'
-    }).setOrigin(0.5).setDepth(25);
+      fontSize: '18px', 
+      color: '#ffffff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(this.DEPTHS.OVERLAY + 2);
 
-    const btn = this.add.container(0, 0, [bg]).setSize(240, 48).setDepth(24);
+    const btn = this.add.container(0, 0, [bg]).setSize(240, 60)
+      .setDepth(this.DEPTHS.OVERLAY + 1);
     btn.setInteractive(
-      new Phaser.Geom.Rectangle(x - 120, y - 24, 240, 48),
+      new Phaser.Geom.Rectangle(x - 120, y - 30, 240, 60),
       Phaser.Geom.Rectangle.Contains
     );
-    btn.on('pointerover', () => bg.setFillStyle(color + 0x202020, 1));
-    btn.on('pointerout', () => bg.setFillStyle(color, 0.9));
-    btn.on('pointerdown', () => {
-      if (text.includes('再玩')) this.scene.restart();
-      else this.scene.start('MinigameMenuScene');
+    
+    const idx = this.endButtons.length;
+    btn.on('pointerover', () => { 
+      bg.setFillStyle(color, 1); 
+      this.selectEndButton(idx); 
     });
+    btn.on('pointerdown', cb);
+    
+    this.endButtons.push({ x, y, cb });
   }
 
-  private selectEndButton(dir: number): void {
-    if (this.endButtons.length === 0) return; // 防止空數組錯誤
-    
-    this.endSelected = (this.endSelected + dir + this.endButtons.length) % this.endButtons.length;
-    const btn = this.endButtons[this.endSelected];
-    if (this.endHighlight && btn) {
-      this.endHighlight.x = btn.x;
-      this.endHighlight.y = btn.y;
+  private selectEndButton(index: number): void {
+    this.endSelected = index;
+    const btn = this.endButtons[index];
+    if (btn && this.endHighlight) { 
+      this.endHighlight.setPosition(btn.x, btn.y); 
     }
+  }
+
+  private quitToMenu(): void {
+    this.scene.start('MinigameMenuScene');
   }
 
   private updateUI(): void {
