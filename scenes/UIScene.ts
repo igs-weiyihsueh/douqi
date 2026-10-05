@@ -1643,15 +1643,26 @@ export class UIScene extends Phaser.Scene {
         const p1CenterX = p1PanelX + panelW / 2; // 面板中心X座標
         const p1CenterY = p1PanelY + panelH / 2; // 面板中心Y座標
         
+        // 🎯 1P.png原始尺寸: 324x166，目標面板: 200x60
+        // 計算保持比例的縮放方案
+        const originalW = 324;
+        const originalH = 166;
+        const aspectRatio = originalW / originalH; // 1.95
+        
+        // 方案A：保持原始尺寸（用戶偏好）
+        const displayW = originalW;
+        const displayH = originalH;
+        
         // 創建底部面板覆蓋，精確對準P1原始面板位置
         this.bottomPanelOverlay = this.add.image(p1CenterX, p1CenterY, 'bottom-panel-overlay')
           .setOrigin(0.5, 0.5)
           .setDepth(1000)  // 高深度確保在原始面板之上
           .setVisible(false)
           .setScrollFactor(0)  // 固定位置，不隨相機移動
-          .setDisplaySize(panelW, panelH);  // 🎯 調整覆蓋圖片尺寸匹配原始面板 (200x60)
+          .setDisplaySize(displayW, displayH);  // 🎨 保持1P.png原始尺寸324x166
         
-        console.log(`✅ [底部面板] 底部面板覆蓋已創建：1P.png在P1面板位置(${p1CenterX}, ${p1CenterY}) 尺寸(${panelW}x${panelH}) (depth=1000, hidden)`);
+        console.log(`✅ [底部面板] 底部面板覆蓋已創建：1P.png在P1面板位置(${p1CenterX}, ${p1CenterY}) 原始尺寸(${displayW}x${displayH}) (depth=1000, hidden)`);
+        console.log(`📐 [底部面板] 1P.png原始: ${originalW}x${originalH}, 寬高比: ${aspectRatio.toFixed(2)}, 顯示: ${displayW}x${displayH}`);
         console.log(`📐 [底部面板] 計算參數: panelW=${panelW}, panelH=${panelH}, startX=${startX}, rowTopY=${rowTopY}`);
       } else {
         console.error('❌ [底部面板] 1P.png紋理載入失敗或損壞');
