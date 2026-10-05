@@ -476,7 +476,10 @@ export class PeachLotteryScene extends Phaser.Scene {
     console.log(`🍑 [桃樹彩票] 開始第${this.currentRound}輪`);
     
     this.phase = 'playing';
+    this.running = true;        // 🚨 關鍵修復：啟動遊戲邏輯
     this.roundStartTime = this.time.now;
+
+    console.log(`🔧 DEBUG: 第${this.currentRound}輪開始 - phase=${this.phase}, running=${this.running}`);
 
     // 重置桃子狀態並隨機分配彩票
     this.resetPeaches();
@@ -491,9 +494,11 @@ export class PeachLotteryScene extends Phaser.Scene {
         } else {
           // P1玩家有初始選中的桃子，但不算"已選擇"
           player.selectedPeach = this.getRandomPeachInRegion(player.region);
+          console.log(`🔧 DEBUG: P1初始選中桃子${player.selectedPeach}`);
         }
         player.rewardType = 'small';   // 重置獎勵類型
         player.hasSelected = false;    // 重置選定狀態
+        console.log(`🔧 DEBUG: 玩家${player.id} - selectedPeach=${player.selectedPeach}, hasSelected=${player.hasSelected}`);
       }
     });
 
@@ -599,15 +604,19 @@ export class PeachLotteryScene extends Phaser.Scene {
     // 使用running控制遊戲邏輯
     if (this.phase === 'playing' && this.running) {
       this.updatePlaying();
+      // 🚨 關鍵修復：確保每幀更新UI以顯示時間倒數
+      this.updateUI();
     }
-    
-    // 🔧 移除每幀調用updateUI，避免LOG刷屏
-    // updateUI只應該在狀態變化時調用，不應每幀調用
   }
 
   private updatePlaying(): void {
     const elapsed = this.time.now - this.roundStartTime;
     const remaining = this.roundTimeLimit - elapsed;
+
+    // 調試日志：每2秒打印一次狀態
+    if (Math.floor(elapsed / 2000) !== Math.floor((elapsed - 16.67) / 2000)) {
+      console.log(`🔧 DEBUG: 第${this.currentRound}輪 - 剩餘時間: ${(remaining/1000).toFixed(1)}s, running=${this.running}, phase=${this.phase}`);
+    }
 
     if (remaining <= 0) {
       // 時間到的處理：為未選定的玩家自動選定桃子
