@@ -902,7 +902,7 @@ export class UIScene extends Phaser.Scene {
     // ★橢圓圓盤：透視地面圓盤效果（腳底位置+放大尺寸）
     const diskY = ay + GameConfig.player.radius + 44; // 圓盤在角色腳底下方44px (總偏移60px)
     const ellipseWidth = cfg.ringRadius * 2.5; // 放大尺寸250%
-    const ellipseHeight = cfg.ringRadius * 2.5 * 0.4; // 透視壓縮40%，但整體放大
+    const ellipseHeight = cfg.ringRadius * 2.5 * 0.2; // 透視壓縮20%，更扁平的圓盤
     g.lineStyle(cfg.ringThickness, cfg.ringColor, cfg.ringAlpha);
     g.strokeEllipse(ax - 5, diskY, ellipseWidth, ellipseHeight);
 

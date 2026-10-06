@@ -1075,7 +1075,7 @@ export class GameScene extends Phaser.Scene {
       const px = this.player.x;
       const diskY = this.player.y + GameConfig.player.radius + 44; // 圓盤在角色腳底下方44px (總偏移60px)
       const ellipseWidth = R * 1.3; // 放大尺寸130%
-      const ellipseHeight = R * 1.3 * 0.4; // 透視壓縮40%，但整體放大
+      const ellipseHeight = R * 1.3 * 0.2; // 透視壓縮20%，更扁平的圓盤
       
       // 設定圓盤在角色下方圖層
       this.lockGfx.setDepth(-1);
