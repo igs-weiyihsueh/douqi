@@ -904,7 +904,7 @@ export class UIScene extends Phaser.Scene {
     const ellipseWidth = cfg.ringRadius * 2.5; // 放大尺寸250%
     const ellipseHeight = cfg.ringRadius * 2.5 * 0.4; // 透視壓縮40%，但整體放大
     g.lineStyle(cfg.ringThickness, cfg.ringColor, cfg.ringAlpha);
-    g.strokeEllipse(ax, diskY, ellipseWidth, ellipseHeight);
+    g.strokeEllipse(ax - 5, diskY, ellipseWidth, ellipseHeight);
 
     // ★箭頭配合橢圓圓盤：在橢圓邊緣上的位置計算
     const cosAngle = Math.cos(a.angle);

@@ -1081,9 +1081,9 @@ export class GameScene extends Phaser.Scene {
       this.lockGfx.setDepth(-1);
       
       this.lockGfx.fillStyle(0x66ccff, 0.05);
-      this.lockGfx.fillEllipse(px, diskY, ellipseWidth, ellipseHeight);
+      this.lockGfx.fillEllipse(px - 5, diskY, ellipseWidth, ellipseHeight);
       this.lockGfx.lineStyle(2, 0x66ccff, 0.35);
-      this.lockGfx.strokeEllipse(px, diskY, ellipseWidth, ellipseHeight);
+      this.lockGfx.strokeEllipse(px - 5, diskY, ellipseWidth, ellipseHeight);
     }
 
     // 收集：目標 → 鎖定它的角色 index 列表（依角色順序，色點才穩定）
