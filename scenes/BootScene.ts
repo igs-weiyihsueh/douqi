@@ -18,8 +18,8 @@ export class BootScene extends Phaser.Scene {
     }
     // 各敵人類型各一張貼圖
     const types = GameConfig.enemy.types;
-    // 普通怪使用骷髏戰士圖片
-    // this.makeCircleTexture('enemy-normal', types.normal.radius, types.normal.color, types.normal.stroke);
+    // 普通怪：保留程式生成紋理用於F4切換
+    this.makeCircleTexture('enemy-normal', types.normal.radius, types.normal.color, types.normal.stroke);
     // 其他敵人類型仍使用程式生成的圓形
     this.makeCircleTexture('enemy-tank', types.tank.radius, types.tank.color, types.tank.stroke);
     this.makeCircleTexture('enemy-shielder', types.shielder.radius, types.shielder.color, types.shielder.stroke);

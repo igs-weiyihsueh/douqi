@@ -195,11 +195,19 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.bodyRadius = t.radius;
     }
 
-    // 設定紋理：普通怪使用骷髏戰士圖片，其他使用原有紋理
+    // 設定紋理：根據GameScene的當前設定
     if (type === 'normal') {
-      this.setTexture('skeleton-warrior');
-      // 調整骷髏戰士的縮放以符合遊戲平衡
-      this.setScale(0.8); // 調整大小，可根據需要微調
+      // 獲取GameScene的紋理配置
+      const gameScene = this.scene as any; // GameScene
+      if (gameScene.getNormalEnemyTextureConfig) {
+        const config = gameScene.getNormalEnemyTextureConfig();
+        this.setTexture(config.texture);
+        this.setScale(config.scale);
+      } else {
+        // 降級方案：使用骷髏戰士（預設）
+        this.setTexture('skeleton-warrior');
+        this.setScale(0.8);
+      }
     } else {
       this.setTexture(`enemy-${type}`);
     }

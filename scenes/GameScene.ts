@@ -40,6 +40,9 @@ export class GameScene extends Phaser.Scene {
   // ★角色上方UI覆蓋系統  
   private characterUIOverlay: Phaser.GameObjects.Image | null = null;
 
+  // ★敵人外觀切換系統 (F4切換骷髏戰士↔紅色圓形)
+  private useSkeletonWarrior = true; // true=骷髏戰士, false=紅色圓形
+
   private survivalMs = 0;
   private gameOver = false;
 
@@ -8376,6 +8379,11 @@ export class GameScene extends Phaser.Scene {
       this.forceReloadSceneBackground();
     });
     
+    // ★新增：F5鍵切換Normal敵人外觀 (骷髏戰士↔紅色圓形)
+    this.input.keyboard?.on('keydown-F5', () => {
+      this.toggleNormalEnemyAppearance();
+    });
+    
     console.log('⌨️ F1熱鍵監聽器已設置');
     console.log('⌨️ F2強制重載已設置');
   }
@@ -9064,6 +9072,54 @@ export class GameScene extends Phaser.Scene {
     if (this.sceneBackground) {
         const mySceneIndex = this.children.list.indexOf(this.sceneBackground as Phaser.GameObjects.GameObject);
         console.log(`✓ 我們的Scene.png在children中的索引: ${mySceneIndex}`);
+    }
+  }
+
+  /**
+   * ★F5切換Normal敵人外觀 (骷髏戰士↔紅色圓形)
+   */
+  private toggleNormalEnemyAppearance(): void {
+    // 切換狀態
+    this.useSkeletonWarrior = !this.useSkeletonWarrior;
+    
+    const newAppearance = this.useSkeletonWarrior ? '骷髏戰士' : '紅色圓形';
+    console.log(`🎭 F5切換Normal敵人外觀 → ${newAppearance}`);
+    
+    // 更新所有現存的Normal類型敵人
+    this.enemies.children.entries.forEach((enemy) => {
+      const enemyObj = enemy as Enemy;
+      if (enemyObj && enemyObj.enemyType === 'normal') {
+        this.updateEnemyTexture(enemyObj);
+      }
+    });
+    
+    console.log(`✅ Normal敵人外觀已切換至：${newAppearance}`);
+  }
+
+  /**
+   * 更新單個敵人的紋理
+   */
+  private updateEnemyTexture(enemy: Enemy): void {
+    if (enemy.enemyType === 'normal') {
+      if (this.useSkeletonWarrior) {
+        enemy.setTexture('skeleton-warrior');
+        enemy.setScale(0.8);
+      } else {
+        enemy.setTexture('enemy-normal');
+        enemy.setScale(1.0);
+      }
+    }
+  }
+
+  /**
+   * 獲取Normal敵人當前應該使用的紋理設定
+   * 供Enemy類在spawn時調用
+   */
+  public getNormalEnemyTextureConfig(): { texture: string; scale: number } {
+    if (this.useSkeletonWarrior) {
+      return { texture: 'skeleton-warrior', scale: 0.8 };
+    } else {
+      return { texture: 'enemy-normal', scale: 1.0 };
     }
   }
 
