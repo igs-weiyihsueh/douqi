@@ -906,29 +906,7 @@ export class UIScene extends Phaser.Scene {
     g.lineStyle(cfg.ringThickness, cfg.ringColor, cfg.ringAlpha);
     g.strokeEllipse(ax - 5, diskY, ellipseWidth, ellipseHeight);
 
-    // ★箭頭配合橢圓圓盤：在橢圓邊緣上的位置計算
-    const cosAngle = Math.cos(a.angle);
-    const sinAngle = Math.sin(a.angle);
-    // 橢圓邊緣距離計算（考慮橢圓形狀）
-    const arrowRadius = Math.sqrt(
-      Math.pow(ellipseWidth * cosAngle, 2) + 
-      Math.pow(ellipseHeight * sinAngle, 2)
-    );
-    const tipX = ax + cosAngle * (arrowRadius + cfg.arrowSize * 0.6);
-    const tipY = diskY + sinAngle * (arrowRadius + cfg.arrowSize * 0.6);
-    const baseX = ax + cosAngle * (arrowRadius - cfg.arrowSize * 0.4);
-    const baseY = diskY + sinAngle * (arrowRadius - cfg.arrowSize * 0.4);
-    const perp = a.angle + Math.PI / 2;
-    const half = cfg.arrowSize * 0.5;
-    g.fillStyle(cfg.arrowColor, 1);
-    g.fillTriangle(
-      tipX,
-      tipY,
-      baseX + Math.cos(perp) * half,
-      baseY + Math.sin(perp) * half,
-      baseX - Math.cos(perp) * half,
-      baseY - Math.sin(perp) * half
-    );
+    // 箭頭已移除，只保留圓盤
   };
 
   /** ★頭上UI系統：創建跟隨角色的UI容器 */
