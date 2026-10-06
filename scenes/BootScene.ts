@@ -18,7 +18,9 @@ export class BootScene extends Phaser.Scene {
     }
     // 各敵人類型各一張貼圖
     const types = GameConfig.enemy.types;
-    this.makeCircleTexture('enemy-normal', types.normal.radius, types.normal.color, types.normal.stroke);
+    // 普通怪使用骷髏戰士圖片
+    // this.makeCircleTexture('enemy-normal', types.normal.radius, types.normal.color, types.normal.stroke);
+    // 其他敵人類型仍使用程式生成的圓形
     this.makeCircleTexture('enemy-tank', types.tank.radius, types.tank.color, types.tank.stroke);
     this.makeCircleTexture('enemy-shielder', types.shielder.radius, types.shielder.color, types.shielder.stroke);
     this.makeCircleTexture('enemy-shooter', types.shooter.radius, types.shooter.color, types.shooter.stroke);
@@ -96,6 +98,9 @@ export class BootScene extends Phaser.Scene {
     
     // 載入二段變身皮膚：Goku_2.png (金色光環版本)
     this.load.image('character-goku-skin-2', 'assets/Goku_2.png');
+    
+    // 載入骷髏戰士圖片（普通怪替換）
+    this.load.image('skeleton-warrior', 'assets/skeleton-warrior.png');
     
     // 載入角色上方UI覆蓋：MG_1P_Player_all.png (1P玩家UI元素)
     this.load.image('character-ui-overlay', 'assets/MG_1P_Player_all.png');

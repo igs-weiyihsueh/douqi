@@ -195,7 +195,15 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.bodyRadius = t.radius;
     }
 
-    this.setTexture(`enemy-${type}`);
+    // 設定紋理：普通怪使用骷髏戰士圖片，其他使用原有紋理
+    if (type === 'normal') {
+      this.setTexture('skeleton-warrior');
+      // 調整骷髏戰士的縮放以符合遊戲平衡
+      this.setScale(0.8); // 調整大小，可根據需要微調
+    } else {
+      this.setTexture(`enemy-${type}`);
+    }
+    
     this.enableBody(true, x, y, true, true);
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.setCircle(this.bodyRadius, 2, 2);
