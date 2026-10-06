@@ -906,7 +906,15 @@ export class UIScene extends Phaser.Scene {
     g.lineStyle(cfg.ringThickness, cfg.ringColor, cfg.ringAlpha);
     g.strokeEllipse(ax - 5, diskY, ellipseWidth, ellipseHeight);
 
-    // 箭頭已移除，只保留圓盤
+    // 瞄準方向指示：簡化版本（圓點而非箭頭）
+    const dotRadius = 3;
+    const dotDistance = ellipseWidth / 2 + 8; // 圓盤邊緣外8px
+    const dotX = ax - 5 + Math.cos(a.angle) * dotDistance;
+    const dotY = diskY + Math.sin(a.angle) * dotDistance;
+    g.fillStyle(cfg.arrowColor, 0.8);
+    g.fillCircle(dotX, dotY, dotRadius);
+    g.lineStyle(1, 0xffffff, 0.6);
+    g.strokeCircle(dotX, dotY, dotRadius);
   };
 
   /** ★頭上UI系統：創建跟隨角色的UI容器 */
