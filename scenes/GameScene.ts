@@ -1067,28 +1067,8 @@ export class GameScene extends Phaser.Scene {
     this.lockGfx.clear();
     const m = GameConfig.lock.marker;
 
-    // v46 slow：畫玩家周圍的【自動鎖定範圍圈】(半透明圈+環)。只 slow 顯示、fast 不畫。
-    // v47：半徑改讀即時可調 slowTuning.lockRadius；移除面向指示線(只留圈+環)。
-    // ★橢圓圓盤：透視地面圓盤效果（腳底位置+放大尺寸）
-    if (this.controlMode === 'slow' && this.player.alive) {
-      const R = this.slowTuning.lockRadius;
-      const px = this.player.x;
-      const diskY = this.player.y + GameConfig.player.radius + 54; // 圓盤在角色腳底下方54px (總偏移70px)
-      const ellipseWidth = R * 1.3; // 放大尺寸130%
-      const ellipseHeight = R * 1.3 * 0.2; // 透視壓縮20%，更扁平的圓盤
-      
-      // 暫時設定圓盤在角色下方圖層（僅為圓盤）
-      const originalDepth = this.lockGfx.depth;
-      this.lockGfx.setDepth(-1);
-      
-      this.lockGfx.fillStyle(0x66ccff, 0.05);
-      this.lockGfx.fillEllipse(px - 5, diskY, ellipseWidth, ellipseHeight);
-      this.lockGfx.lineStyle(2, 0x66ccff, 0.35);
-      this.lockGfx.strokeEllipse(px - 5, diskY, ellipseWidth, ellipseHeight);
-      
-      // 恢復原深度用於瞄準框繪製
-      this.lockGfx.setDepth(originalDepth);
-    }
+    // v46 slow：原本的【自動鎖定範圍圈】已移除，避免與內層圓盤重疊
+    // v47：專注於瞄準框功能，不再顯示範圍圈
 
     // 收集：目標 → 鎖定它的角色 index 列表（依角色順序，色點才穩定）
     const groups = new Map<Enemy | Item, number[]>();
