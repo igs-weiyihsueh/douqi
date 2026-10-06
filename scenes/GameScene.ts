@@ -1077,13 +1077,17 @@ export class GameScene extends Phaser.Scene {
       const ellipseWidth = R * 1.3; // 放大尺寸130%
       const ellipseHeight = R * 1.3 * 0.2; // 透視壓縮20%，更扁平的圓盤
       
-      // 設定圓盤在角色下方圖層
+      // 暫時設定圓盤在角色下方圖層（僅為圓盤）
+      const originalDepth = this.lockGfx.depth;
       this.lockGfx.setDepth(-1);
       
       this.lockGfx.fillStyle(0x66ccff, 0.05);
       this.lockGfx.fillEllipse(px - 5, diskY, ellipseWidth, ellipseHeight);
       this.lockGfx.lineStyle(2, 0x66ccff, 0.35);
       this.lockGfx.strokeEllipse(px - 5, diskY, ellipseWidth, ellipseHeight);
+      
+      // 恢復原深度用於瞄準框繪製
+      this.lockGfx.setDepth(originalDepth);
     }
 
     // 收集：目標 → 鎖定它的角色 index 列表（依角色順序，色點才穩定）
