@@ -1073,7 +1073,7 @@ export class GameScene extends Phaser.Scene {
     if (this.controlMode === 'slow' && this.player.alive) {
       const R = this.slowTuning.lockRadius;
       const px = this.player.x;
-      const diskY = this.player.y + GameConfig.player.radius + 49; // 圓盤在角色腳底下方49px (總偏移65px)
+      const diskY = this.player.y + GameConfig.player.radius + 54; // 圓盤在角色腳底下方54px (總偏移70px)
       const ellipseWidth = R * 1.3; // 放大尺寸130%
       const ellipseHeight = R * 1.3 * 0.2; // 透視壓縮20%，更扁平的圓盤
       
