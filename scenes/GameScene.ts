@@ -85,6 +85,14 @@ export class GameScene extends Phaser.Scene {
   private currentStage = 1;
   /** 目前小關卡是否進行中（startStage → completeStage 之間）；過場期間為 false，HUD 不採計殘留擊殺數 */
   private stageInProgress = false;
+  /** 剛完成那關的寶箱階級：low → 左右出口平移；high → 上方出口閃黑 */
+  private lastStageChest: 'low' | 'high' = 'low';
+  /** 左右轉場的方向限制：走過一側後只能繼續同方向（不能回頭），高階上方閃黑後解除；null = 兩側都開 */
+  private dirLock: 'L' | 'R' | null = null;
+  /** 目前區域（中央 slot）的場景變體：A = 荒城、B = 火山；相鄰區域一律是另一種（荒城 ↔ 火山交替） */
+  private areaVariant: 'A' | 'B' = 'A';
+  /** 各 slot 的場景繪製物件（key = slot 矩形）；區域往左右延伸時用來回收遠端 slot */
+  private slotLayers = new Map<Phaser.Geom.Rectangle, Phaser.GameObjects.GameObject[]>();
   private currentSub: 'A' | 'B' = 'A';     // 當前子區
   private subWavesDone = 0;                // 當前子區已清波數
   private subWavesTarget = 0;              // 當前子區目標波數
@@ -289,9 +297,7 @@ export class GameScene extends Phaser.Scene {
       this.physics.world.setBounds(this.zoneA.x, this.zoneA.y, this.zoneA.width, this.zoneA.height);
       this.cameras.main.setBounds(0, 0, worldW, worldH);
       // 三個子區各繪製場景:zoneA=變體A(荒城遠景)、B候選=變體B(火山遠景);遠景畫在各自 slot 範圍。
-      this.drawZoneScene(this.slotBLeft, this.zoneBLeft, this.currentLevel, 'B');
-      this.drawZoneScene(this.slotA, this.zoneA, this.currentLevel, 'A');
-      this.drawZoneScene(this.slotBRight, this.zoneBRight, this.currentLevel, 'B');
+      this.drawAreaScenes();
       // ★playing 鏡頭跟隨在玩家建立後啟用(見 create 末 setupFollowIfLevel)。
     } else {
       this.arena = new Phaser.Geom.Rectangle(arenaX, arenaY, arenaW, arenaH);
@@ -519,6 +525,10 @@ export class GameScene extends Phaser.Scene {
     this.currentLevel = GameConfig.stage.sceneLevel;
     this.currentStage = 1;
     this.stageInProgress = false;
+    this.lastStageChest = 'low';
+    this.dirLock = null;
+    this.areaVariant = 'A';
+    this.slotLayers = new Map();
     this.currentSub = 'A';
     this.subWavesDone = 0;
     this.subWavesTarget = 1;
@@ -2289,12 +2299,13 @@ export class GameScene extends Phaser.Scene {
     // 清掉場上殘餘一般怪(進入選邊/出口階段,場地清乾淨)——★保留還在場的寶箱怪(同場地,玩家可繼續打/它自己跑走)
     this.clearAllEnemies(true);
     this.waveState = 'clearing'; // 停止生怪
-    if (this.currentSub === 'A') {
-      // ★階段2:A 清波→【不進 choosing】,開放左右邊界,玩家走左/右邊界→過場進左/右 B。
+    if (this.lastStageChest === 'low') {
+      // 低階寶箱：開放左右邊界（受 dirLock 限制），玩家走到邊界 → 鏡頭平移進相鄰區域
       // ★③ 進 crossing 過場那刻:場上寶箱怪【直接逃走】(不留到過場/不跟到 B)。
       this.fleeTreasureNow();
       this.openCrossing();
     } else {
+      // 高階寶箱：開上方出口 → 閃黑進新區域（方向限制解除）
       this.progressPhase = 'exiting';
       this.showExit();
     }
@@ -2320,22 +2331,28 @@ export class GameScene extends Phaser.Scene {
   private openCrossing(): void {
     this.crossingOpen = true;
     this.crossPhase = 'walk';
-    this.crossSide = null;
+    // 有方向限制時直接鎖定該側（crossClampBounds 只開放 A + 該側）；無限制時兩側都開
+    this.crossSide = this.dirLock;
     this.crossOpenAt = this.time.now; // ★記開放時間→緩衝期內不觸發
     this.progressPhase = 'playing';
-    // 物理:左右都能走(zoneBLeft.left → zoneBRight.right,arena 高)
     const a = this.zoneA;
-    const uL = this.zoneBLeft.left, uR = this.zoneBRight.right;
+    const openL = this.dirLock !== 'R';
+    const openR = this.dirLock !== 'L';
+    // 物理：可走範圍 = A + 開放的側邊
+    const uL = openL ? this.zoneBLeft.left : a.left;
+    const uR = openR ? this.zoneBRight.right : a.right;
     this.physics.world.setBounds(uL, a.top, uR - uL, a.height);
-    // 鏡頭 bounds:slotBLeft.x → slotBRight.right(整段 slot 高);只放寬 bounds、不重呼叫 startFollow(避免 snap)。
+    // 鏡頭 bounds：涵蓋 A 與開放側的 slot；只放寬 bounds、不重呼叫 startFollow(避免 snap)
     const cam = this.cameras.main;
-    cam.setBounds(this.slotBLeft.x, this.slotA.y, this.slotBRight.right - this.slotBLeft.x, this.slotA.height);
-    // 左右走廊都畫(填滿不露黑)
-    this.drawCorridorScene('R');
-    this.drawCorridorScene('L');
-    // 提示:左右都可走
+    const camL = openL ? this.slotBLeft.x : this.slotA.x;
+    const camR = openR ? this.slotBRight.right : this.slotA.right;
+    cam.setBounds(camL, this.slotA.y, camR - camL, this.slotA.height);
+    // 開放側的走廊(填滿不露黑)
+    if (openR) this.drawCorridorScene('R');
+    if (openL) this.drawCorridorScene('L');
+    const hint = openL && openR ? '← 走到左或右邊界前往下一區 →' : openL ? '← 走到左邊界前往下一區' : '走到右邊界前往下一區 →';
     if (this.choiceHint) this.choiceHint.destroy();
-    this.choiceHint = this.add.text(this.zoneA.centerX, this.zoneA.top + 46, '← 走到左或右邊界前往下一區 →', {
+    this.choiceHint = this.add.text(this.zoneA.centerX, this.zoneA.top + 46, hint, {
       fontFamily: 'monospace', fontSize: '24px', color: '#ffe98a'
     }).setOrigin(0.5).setDepth(21).setScrollFactor(1);
     // ★引導箭頭(純視覺提示往左/右可走;非碰箭頭觸發——玩家仍需走到 A 左/右緣才觸發過場)。
@@ -2350,8 +2367,8 @@ export class GameScene extends Phaser.Scene {
     const midY = a.centerY;
     const inset = GameConfig.stage.arrowInset;
     // 比照 showExit:同一個 drawArrow(三角 s34 + 白描邊圈 r48),風格一致、適中大小。
-    this.drawArrow(g, a.left + inset, midY, -1, 0x7affc0);   // 左箭頭指左(同出口色系)
-    this.drawArrow(g, a.right - inset, midY, +1, 0x7affc0);  // 右箭頭指右
+    if (this.dirLock !== 'R') this.drawArrow(g, a.left + inset, midY, -1, 0x7affc0);   // 左箭頭指左(同出口色系)
+    if (this.dirLock !== 'L') this.drawArrow(g, a.right - inset, midY, +1, 0x7affc0);  // 右箭頭指右
     this.choiceGfx = g;
   }
 
@@ -2364,6 +2381,9 @@ export class GameScene extends Phaser.Scene {
    * ★②③ 走廊場景(側別):填滿 A 該側緣 → 該側 B 之間【整個 slot 垂直範圍】,避免露黑塊。多個走廊各存一份 gfx。
    */
   private drawCorridorScene(side: 'L' | 'R'): void {
+    // 同側已有走廊（上一區留下或重複開放）→ 先清掉再畫，避免重疊殘留
+    const old = side === 'R' ? this.corridorGfx : this.corridorGfxL;
+    if (old) old.destroy();
     const sc = GameConfig.scene;
     const lv = (sc.levels as Record<number, any>)[this.currentLevel] ?? (sc.levels as Record<number, any>)[1];
     // 走廊水平範圍:右=A右緣→右B左緣;左=左B右緣→A左緣。
@@ -2414,8 +2434,8 @@ export class GameScene extends Phaser.Scene {
     const r = GameConfig.player.radius;
     const trigR = this.zoneA.right - r - 4;
     const trigL = this.zoneA.left + r + 4;
-    if (this.player.x >= trigR) this.startCameraPanToB('R');
-    else if (this.player.x <= trigL) this.startCameraPanToB('L');
+    if (this.player.x >= trigR && this.dirLock !== 'L') this.startCameraPanToB('R');
+    else if (this.player.x <= trigL && this.dirLock !== 'R') this.startCameraPanToB('L');
   }
 
   /**
@@ -2528,12 +2548,15 @@ export class GameScene extends Phaser.Scene {
     this.crossingOpen = false;
     this.crossSide = null;
     this.lastChoice = side;
-    const zoneB = side === 'L' ? this.zoneBLeft : this.zoneBRight;
-    const slotB = side === 'L' ? this.slotBLeft : this.slotBRight;
+    this.dirLock = side; // 走過這一側後只能繼續同方向，直到高階上方閃黑
     this.clearTreasure();
     // ★保留走廊(不清 corridorGfx/L)→A↔B 銜接不變黑塊。
     if (this.choiceHint) { this.choiceHint.destroy(); this.choiceHint = null; }
-    this.currentSub = 'B';
+    // 世界往該側延伸一格：抵達的區域成為新的中央（A），前方再生成下一個 slot、回收身後最遠的 slot
+    this.recenterOn(side);
+    const zoneB = this.zoneA;
+    const slotB = this.slotA;
+    this.currentSub = 'A';
     this.zoneB = zoneB;
     this.arena = zoneB;
     this.physics.world.setBounds(zoneB.x, zoneB.y, zoneB.width, zoneB.height);
@@ -2546,6 +2569,7 @@ export class GameScene extends Phaser.Scene {
       Phaser.Math.Clamp(zoneB.centerY, slotB.top + halfH, slotB.bottom - halfH)
     );
     this.pendingCamSlot = null;
+    this.enableFollow(slotB); // 每個區域都跟隨玩家（移動區比畫面寬）
     this.clearAllBreakables();
     this.placeStaticBreakables(side);
     this.progressPhase = 'playing';
@@ -2555,6 +2579,68 @@ export class GameScene extends Phaser.Scene {
     this.spawnAccumulator = 0;
     this.startStage();
     this.emitStats();
+  }
+
+  /**
+   * 把 side 側的 slot 重新標記為中央（A）：
+   * - 原中央變成反側鄰格（場景物件保留，畫面不變）
+   * - 身後最遠的 slot 回收（場景物件銷毀、F4 背景圖搬到前方新 slot 重用）
+   * - 前方新增一個 slot 並繪製場景（變體 = 新中央的另一種）
+   * - 走廊：中央與身後鄰格之間那條保留為反側走廊，前方走廊下次開放時再畫
+   *
+   * @param side 抵達的方向（L = 往左延伸、R = 往右延伸）
+   */
+  private recenterOn(side: 'L' | 'R'): void {
+    const step = (side === 'R' ? 1 : -1) * (this.slotA.width + GameConfig.stage.subGap);
+    const behindSlot = side === 'R' ? this.slotBLeft : this.slotBRight;
+    const aheadSlot = side === 'R' ? this.slotBRight : this.slotBLeft;
+    const aheadZone = side === 'R' ? this.zoneBRight : this.zoneBLeft;
+    // 回收身後最遠 slot 的場景物件
+    const removed = new Set(this.slotLayers.get(behindSlot) ?? []);
+    for (const o of removed) o.destroy();
+    this.slotLayers.delete(behindSlot);
+    this.sceneLayers = this.sceneLayers.filter((o) => !removed.has(o));
+    // 新的前方 slot：以抵達的 slot 為基準再往前一格（slot 與 zone 同步）
+    const newAheadSlot = Phaser.Geom.Rectangle.Clone(aheadSlot);
+    const newAheadZone = Phaser.Geom.Rectangle.Clone(aheadZone);
+    newAheadSlot.x += step;
+    newAheadZone.x += step;
+    // 走廊：原「中央 ↔ 抵達側」那條變成新中央的身後走廊；原身後走廊所在的 slot 已回收
+    if (side === 'R') {
+      if (this.corridorGfxL) this.corridorGfxL.destroy();
+      this.corridorGfxL = this.corridorGfx;
+      this.corridorGfx = null;
+    } else {
+      if (this.corridorGfx) this.corridorGfx.destroy();
+      this.corridorGfx = this.corridorGfxL;
+      this.corridorGfxL = null;
+    }
+    // 重新標記：身後 = 原中央、中央 = 原抵達側、前方 = 新 slot
+    const oldSlotA = this.slotA, oldZoneA = this.zoneA;
+    this.slotA = aheadSlot;
+    this.zoneA = aheadZone;
+    if (side === 'R') {
+      this.slotBLeft = oldSlotA; this.zoneBLeft = oldZoneA;
+      this.slotBRight = newAheadSlot; this.zoneBRight = newAheadZone;
+    } else {
+      this.slotBRight = oldSlotA; this.zoneBRight = oldZoneA;
+      this.slotBLeft = newAheadSlot; this.zoneBLeft = newAheadZone;
+    }
+    // 新中央的變體 = 原側邊的變體（與原中央相反）；前方新 slot 再交替
+    this.areaVariant = this.otherVariant(this.areaVariant);
+    this.drawZoneScene(newAheadSlot, newAheadZone, this.currentLevel, this.otherVariant(this.areaVariant));
+    // F4 背景圖：身後那張搬到前方新 slot（陣列順序維持 [左, 中, 右]）
+    if (this.sceneBackgrounds.length === 3) {
+      const [bgL, bgA, bgR] = this.sceneBackgrounds;
+      const recycled = side === 'R' ? bgL : bgR;
+      recycled.setPosition(newAheadSlot.centerX, newAheadSlot.centerY);
+      this.sceneBackgrounds = side === 'R' ? [bgA, bgR, recycled] : [recycled, bgL, bgA];
+    }
+  }
+
+  /** 另一種場景變體（荒城 ↔ 火山） */
+  private otherVariant(v: 'A' | 'B'): 'A' | 'B' {
+    return v === 'A' ? 'B' : 'A';
   }
 
   /**
@@ -2653,24 +2739,23 @@ export class GameScene extends Phaser.Scene {
     const g = this.add.graphics().setDepth(20);
     const a = this.arena;
     const inset = GameConfig.stage.exitInset;
-    const ey = a.bottom - inset;
-    // 出口:下方發光門
+    const ey = a.top + inset;
+    // 出口：上方發光門（高階寶箱 → 閃黑進新區域）
     g.fillStyle(0x7affc0, 0.85);
     g.fillRect(a.centerX - 60, ey - 16, 120, 32);
     g.lineStyle(4, 0xffffff, 0.8);
     g.strokeRect(a.centerX - 60, ey - 16, 120, 32);
-    this.drawArrow(g, a.centerX, ey - 60, 0, 0x7affc0); // 佔位(dir 0→退化三角,改畫向下箭頭)
-    // 明確向下箭頭
+    // 向上箭頭（門的下方，指向門）
     g.fillStyle(0x7affc0, 0.9);
     g.beginPath();
-    g.moveTo(a.centerX, ey - 30);
-    g.lineTo(a.centerX - 22, ey - 58);
-    g.lineTo(a.centerX + 22, ey - 58);
+    g.moveTo(a.centerX, ey + 30);
+    g.lineTo(a.centerX - 22, ey + 58);
+    g.lineTo(a.centerX + 22, ey + 58);
     g.closePath();
     g.fillPath();
     this.choiceGfx = g;
     if (this.choiceHint) this.choiceHint.destroy();
-    this.choiceHint = this.add.text(a.centerX, a.top + 46, '走進下方出口前往下一關 ↓', {
+    this.choiceHint = this.add.text(a.centerX, ey + 90, '走進上方出口前往新區域 ↑', {
       fontFamily: 'monospace', fontSize: '24px', color: '#ffe98a'
     }).setOrigin(0.5).setDepth(21);
   }
@@ -2775,6 +2860,7 @@ export class GameScene extends Phaser.Scene {
    */
   private completeStage(): void {
     const chest = this.stageDef(this.currentStage).chest;
+    this.lastStageChest = chest;
     const tickets = GameConfig.stage.chestTickets[chest];
     for (const c of this.characters) {
       if (c.alive) this.grantStageReward(c, tickets);
@@ -2800,7 +2886,7 @@ export class GameScene extends Phaser.Scene {
   private updateExiting(): void {
     const a = this.arena;
     const inset = GameConfig.stage.exitInset;
-    const ey = a.bottom - inset;
+    const ey = a.top + inset;
     if (Phaser.Math.Distance.Between(this.player.x, this.player.y, a.centerX, ey) <= GameConfig.stage.triggerDist + 20) {
       this.startTransition();
     }
@@ -2831,11 +2917,10 @@ export class GameScene extends Phaser.Scene {
     this.arena = this.zoneA; // 拉回 A 子區(置中)
     // physics bounds = A 移動區
     this.physics.world.setBounds(this.zoneA.x, this.zoneA.y, this.zoneA.width, this.zoneA.height);
-    // ★第二階段:重繪新關卡場景(地貌換成新關卡、A/B 遠景),用 slot 版簽名
-    this.clearSceneLayers();
-    this.drawZoneScene(this.slotBLeft, this.zoneBLeft, this.currentLevel, 'B');
-    this.drawZoneScene(this.slotA, this.zoneA, this.currentLevel, 'A');
-    this.drawZoneScene(this.slotBRight, this.zoneBRight, this.currentLevel, 'B');
+    // 新區域：場景變體交替（荒城 ↔ 火山）、左右方向限制解除；三格重繪（相鄰格為另一種變體）
+    this.dirLock = null;
+    this.areaVariant = this.otherVariant(this.areaVariant);
+    this.drawAreaScenes();
     // ★③玩家進下關【自動走到定位】演出:角色先放在 A【下緣入口】(=從上一關出口走進來的方向),
     //   然後 updateLevelEnter 程式驅動全隊走到 A 中心環狀定位,到位才恢復操控(不再閃黑完就瞬間定住)。
     const cx = this.zoneA.centerX;
@@ -2983,9 +3068,19 @@ export class GameScene extends Phaser.Scene {
   private clearSceneLayers(): void {
     for (const o of this.sceneLayers) o.destroy();
     this.sceneLayers = [];
+    this.slotLayers.clear();
     // ★階段2:切關卡/重繪場景時一併清掉走廊底圖(左右),避免上一關殘留。
     if (this.corridorGfx) { this.corridorGfx.destroy(); this.corridorGfx = null; }
     if (this.corridorGfxL) { this.corridorGfxL.destroy(); this.corridorGfxL = null; }
+  }
+
+  /** 清掉並重繪目前三格場景：中央 = areaVariant，左右鄰格 = 另一種變體 */
+  private drawAreaScenes(): void {
+    this.clearSceneLayers();
+    const side = this.otherVariant(this.areaVariant);
+    this.drawZoneScene(this.slotBLeft, this.zoneBLeft, this.currentLevel, side);
+    this.drawZoneScene(this.slotA, this.zoneA, this.currentLevel, this.areaVariant);
+    this.drawZoneScene(this.slotBRight, this.zoneBRight, this.currentLevel, side);
   }
 
   /** ★方案e:啟用鏡頭跟隨玩家(限制在當前 slot 內、deadzone 緩衝)。playing 時用。 */
@@ -3002,9 +3097,7 @@ export class GameScene extends Phaser.Scene {
   private disableFollow(): void {
     const cam = this.cameras.main;
     cam.stopFollow();
-    const { width: slotW, height: slotH } = GameScene.stageSlotSize();
-    const worldW = slotW * 3 + GameConfig.stage.subGap * 2;
-    cam.setBounds(0, 0, worldW, slotH);
+    cam.setBounds(this.slotBLeft.x, this.slotA.y, this.slotBRight.right - this.slotBLeft.x, this.slotA.height);
   }
 
   /** 關卡制單一 slot 尺寸 = 移動區 + 左右/上下不可踏入邊距(見 GameConfig.stage) */
@@ -3029,6 +3122,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawZoneScene(slot: Phaser.Geom.Rectangle, zone: Phaser.Geom.Rectangle, level: number, variant: 'A' | 'B'): void {
+    const layerStart = this.sceneLayers.length;
+    this.drawZoneSceneLayers(slot, zone, level, variant);
+    // 登記此 slot 新增的場景物件，往左右延伸時可單獨回收
+    this.slotLayers.set(slot, this.sceneLayers.slice(layerStart));
+  }
+
+  /** 實際繪製一個 slot 的場景（遠景、外圍、地面、圍欄、粒子），物件推入 sceneLayers */
+  private drawZoneSceneLayers(slot: Phaser.Geom.Rectangle, zone: Phaser.Geom.Rectangle, level: number, variant: 'A' | 'B'): void {
     const sc = GameConfig.scene;
     const lv = (sc.levels as Record<number, any>)[level] ?? (sc.levels as Record<number, any>)[1];
     const theme = this.sceneThemeOf(level); // ★主題:'wasteland'(1-4 荒城火山) | 'forest'(5-6) | 'cave'(7-8)
