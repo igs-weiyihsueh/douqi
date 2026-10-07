@@ -5,6 +5,21 @@
 
 ---
 
+## [2026-10-07 16:16] 開發完成 | 翼騎完成3項重大功能改進
+**變更摘要**：鏡頭跟隨空間擴大、關卡模式地圖邊界重定義、F4美術模式修正
+**影響頁面**：[systems/camera-system.md] (需新建), [systems/scene-boundaries.md] (需更新), [design/visual-modes.md] (需更新)
+**代碼位置**：
+- 鏡頭系統: deadzone 540×600→320×180, setScrollFactor修正
+- 地圖邊界: sceneMarginX/Top/Bottom重定義, 可移動區2520×840
+- F4美術: 敵人外觀預設改紅圓, 同步切換機制
+**Commit記錄**：7975cc9, b62d292, 2decdde, 66e51cb (已push到deploy-refactor)
+**審查結果**：銳騎review通過 (98/100, 94/100, 96/100分)
+**下次提醒**：
+- 需建立camera-system技術文檔
+- 需更新scene-boundaries配置說明  
+- 待用戶實玩確認鏡頭手感和怪物密度
+- 可能需要零式評估移動區變形後的數值平衡
+
 ## [2026-10-07 15:05] 初始化 | WIKI系統建立完成
 **變更摘要**：建立完整的WIKI基礎架構，包括目錄結構和核心文檔
 **影響頁面**：[README.md] (新建), [systems/project-overview.md] (新建), [conventions/h5-coding-standards.md] (新建), [decisions/team-structure.md] (新建), [guides/development-setup.md] (新建)
@@ -129,3 +144,20 @@
 - 定期檢查是否有新commit需要同步到WIKI
 - 建立commit訊息與WIKI更新的流程機制
 - 考慮自動化detect程式碼變更影響文檔的工具
+
+---
+
+## [2026-10-07 16:16] WIKI小幅同步 | F4敵人外觀預設值與重開狀態修正
+**變更摘要**：翼騎通知commit 66e51cb已合併，需要同步F4敵人外觀預設值變更和UIScene重開狀態修正
+**影響頁面**：
+- [design/ui-ux-decisions.md] (更新) - useSkeletonWarrior預設值 true→false
+- [design/gameplay-evolution.md] (更新) - useSkeletonWarrior預設值修正，補充F4首次切換說明
+- [systems/ui-implementation.md] (更新) - 補充重開狀態重置說明
+- [log.md] (更新) - 維護記錄
+**代碼位置**：
+- commit 66e51cb: useSkeletonWarrior預設false，UIScene.create()重置isP1HeadUIHidden
+- 清理除錯log，移除未使用變數isBottomPanelOverlayMode
+**查重結果**：基於翼騎提供的commit詳情，確保文檔與程式碼一致性
+**下次提醒**：
+- 持續關注commit通知，及時同步WIKI
+- F4相關功能變更需要特別注意多處文檔同步

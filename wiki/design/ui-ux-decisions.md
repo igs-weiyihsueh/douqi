@@ -262,8 +262,9 @@ class GameScene {
   private characterSkin: Phaser.GameObjects.Image | null = null;
   private characterUIOverlay: Phaser.GameObjects.Image | null = null;
   
-  // 敵人外觀切換
-  private useSkeletonWarrior = true;     // 骷髏戰士 vs 紅圓形
+  // 敵人外觀切換 (66e51cb更新：預設false)
+  private useSkeletonWarrior = false;    // false=紅圓形, true=骷髏戰士
+}
 }
 ```
 

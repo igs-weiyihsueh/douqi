@@ -2,7 +2,7 @@
 
 ## UI架構分層
 
-### Scene分離設計
+### Scene分離設計 (66e51cb更新)
 ```typescript
 // GameScene + UIScene 並行架構
 class GameScene {
@@ -15,10 +15,23 @@ class GameScene {
     const uiScene = this.scene.get('UIScene') as UIScene;
     uiScene.updateStats(this.getStatsPayload());
   }
+  
+  // 重開狀態重置 (66e51cb)
+  resetState() {
+    this.useSkeletonWarrior = false;  // 重置敵人外觀預設值
+    // ...其他狀態重置
+  }
 }
 
 // UIScene - 專職HUD管理
 class UIScene extends Phaser.Scene {
+  create() {
+    // 66e51cb: 修正重開後頭頂UI狀態同步問題
+    this.isP1HeadUIHidden = false;  // 重置P1頭頂UI顯示狀態
+    
+    // ...其他初始化
+  }
+  
   // 統計資料接口
   updateStats(payload: StatsPayload): void {
     this.updateCharacterPanels(payload.chars);
