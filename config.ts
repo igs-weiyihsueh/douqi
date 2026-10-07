@@ -983,51 +983,11 @@ export const GameConfig = {
         groundBase: 0x27201f, groundDark: 0x161011, groundLight: 0x352826,
         crackColor: 0xff4a12, pebble: 0x40302c, glow: 0xff5a1a,
         skyTop: 0x2a1512, skyBottom: 0x5a1e12
-      },
-      // ★第二輪(森林→洞窟);階段1 先用佔位配色(複用現有地貌繪製),全新地貌(樹/草/岩壁/鐘乳石)留階段2-3。
-      5: {
-        name: '翠綠森林',
-        groundBase: 0x3a6b32,    // 草綠
-        groundDark: 0x274d22,    // 暗綠(樹影)
-        groundLight: 0x4f8a3e,   // 亮綠(受光草)
-        crackColor: 0x1f3d1a,    // 泥徑/縫
-        pebble: 0x5a7a3a,        // 苔石
-        glow: 0,                 // 森林無發光
-        skyTop: 0x2a3a24,        // 天空(林間暗綠)
-        skyBottom: 0x486a38
-      },
-      6: {
-        name: '幽深林地',
-        groundBase: 0x2f5a2a, groundDark: 0x1e3d1c, groundLight: 0x437a34,
-        crackColor: 0x18301a, pebble: 0x486a30, glow: 0,
-        skyTop: 0x1f2e1c, skyBottom: 0x385230
-      },
-      7: {
-        name: '陰森洞窟',
-        groundBase: 0x2b2f36, groundDark: 0x171a1f, groundLight: 0x3c424b,
-        crackColor: 0x0e1013, pebble: 0x454b54, glow: 0x2a7aa0, // 冷光(磷光/水光)microglow
-        skyTop: 0x141820, skyBottom: 0x20272f
-      },
-      8: {
-        name: '洞窟深淵',
-        groundBase: 0x22262c, groundDark: 0x101216, groundLight: 0x32373f,
-        crackColor: 0x090b0e, pebble: 0x3a3f47, glow: 0x1e6a92,
-        skyTop: 0x0d1016, skyBottom: 0x181e25
       }
     },
     /** 遠景(A/B 共通調色,實際剪影/噴發由繪製函式畫) */
     farA: { label: '荒城天際線', wall: 0x4a3826, tower: 0x3a2c1e, hazeTop: 0x5a4230 },
-    farB: { label: '火山噴發', skyRed: 0x8a2a14, smoke: 0x3a2822, lava: 0xff5a1a, glowSky: 0xc23a10 },
-    /** ★第二輪森林遠景(關5-6):遠樹林/林冠剪影。A/B 各一調(A較亮林緣、B較深林冠)。 */
-    farForestA: { label: '晨光林緣', canopy: 0x2f5a2e, canopyDark: 0x214021, haze: 0x6a8a52, trunk: 0x3a2c1e },
-    farForestB: { label: '幽深林冠', canopy: 0x244a24, canopyDark: 0x162e17, haze: 0x3e5a34, trunk: 0x2a2016 },
-    /** 森林飄葉/光點粒子色(取代火山餘燼) */
-    forestLeaf: 0x8fce5a, forestMote: 0xdfffa0,
-    /** ★第二輪洞窟遠景(關7-8):岩壁/鐘乳石/石筍/深處冷光。A=洞口微光(較亮)、B=洞窟深淵(更暗)。 */
-    farCaveA: { label: '洞口微光', rock: 0x2e333a, rockDark: 0x1a1e23, haze: 0x2a4a58, glow: 0x2a6a8a, drip: 0x3a4048 },
-    farCaveB: { label: '洞窟深淵', rock: 0x22262b, rockDark: 0x121417, haze: 0x1e3844, glow: 0x1e5a7a, drip: 0x2c3138 },
-    /** 洞窟粒子色:水滴/微塵(暗灰)+冷光螢點(藍白冷光,ADD) */
-    caveDrip: 0x6a8aa0, caveMote: 0x8fd8ff, caveGlow: 0x2a7aa0 },
+    farB: { label: '火山噴發', skyRed: 0x8a2a14, smoke: 0x3a2822, lava: 0xff5a1a, glowSky: 0xc23a10 } },
 
   /** v28 波次 BOSS 設定 */
   boss: {
