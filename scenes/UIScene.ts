@@ -139,9 +139,9 @@ export class UIScene extends Phaser.Scene {
   /** 本關擊殺進度：目前畫出的比例（每幀平滑逼近 target）與目標比例，0..1 */
   private stageHudFill = 0;
   private stageHudFillTarget = 0;
-  /** 圓點的寶箱階級：[0] = 目前關卡 */
+  /** 位置標記右邊的寶箱階級：[0] = 本關獎勵（下一個要獲得的寶箱） */
   private stageHudChests: Array<'low' | 'high'> = [];
-  /** 剛完成那關的寶箱階級（遞補動畫中淡出用） */
+  /** 剛獲得的寶箱階級（遞補動畫中，該寶箱在位置標記處淡出、轉為新的位置標記） */
   private stageHudPrevChest: 'low' | 'high' | null = null;
   /** 遞補動畫開始時間（scene time）；動畫時長見 waveHud.shiftMs */
   private stageHudShiftAt = -Infinity;
@@ -786,7 +786,7 @@ export class UIScene extends Phaser.Scene {
     }
     const stage = s.stage!;
     if (stage > this.stageHudStage) {
-      // 進入下一關：舊的最左圓點淡出、其餘左移、最右生成新的
+      // 獲得寶箱、進入下一關：全部左移一格，剛獲得的寶箱轉為位置標記、最右生成新寶箱
       if (this.stageHudStage > 0) {
         this.stageHudPrevChest = this.stageHudChests[0] ?? null;
         this.stageHudShiftAt = this.time.now;
@@ -802,31 +802,33 @@ export class UIScene extends Phaser.Scene {
   }
 
   /**
-   * 繪製小關卡卷軸 HUD：圓點以量條相連，最左 = 目前關卡（脈動高亮），
-   * 第一段量條 = 本關擊殺進度；每個圓點內畫寶箱（高階較大、金色並發光）。
-   * 遞補動畫期間：全部圓點由右往左滑一格，剛完成的圓點在最左淡出、最右新圓點淡入。
+   * 繪製小關卡卷軸 HUD（地圖式進度）：最左 = 目前位置標記，右邊依序為接下來的寶箱
+   * （第 1 個 = 本關獎勵，脈動高亮；共 visibleStages 個，涵蓋一整輪所以永遠看得到一個高階）。
+   * 位置標記 → 第 1 個寶箱之間的量條 = 本關擊殺進度，填滿即獲得該寶箱。
+   * 遞補動畫：全部往左滑一格，舊位置標記淡出、剛獲得的寶箱淡出並轉為新的位置標記、最右新寶箱淡入。
    */
   private drawStageHud(): void {
     const cfg = GameConfig.waveHud;
     const g = this.waveHudGfx;
     g.clear();
-    const count = this.stageHudChests.length;
+    const chestCount = this.stageHudChests.length;
+    const nodeCount = chestCount + 1; // 位置標記 + 寶箱
     const gap = cfg.nodeGap;
-    const startX = cfg.x - ((count - 1) * gap) / 2;
+    const startX = cfg.x - ((nodeCount - 1) * gap) / 2;
     const y = cfg.y;
-    // 遞補動畫進度 e：0 = 剛換關（圓點還在右邊一格）→ 1 = 到定位
+    // 遞補動畫進度 e：0 = 剛獲得寶箱（圓點還在右邊一格）→ 1 = 到定位
     const e = Phaser.Math.Easing.Cubic.Out(Phaser.Math.Clamp((this.time.now - this.stageHudShiftAt) / cfg.shiftMs, 0, 1));
     const slide = (1 - e) * gap;
-    const xAt = (i: number): number => startX + i * gap + slide;
+    const xAt = (slot: number): number => startX + slot * gap + slide;
+    const animating = e < 1;
 
-    // 1) 量條（先畫，圓點蓋在上層）：i = -1 為剛完成那段（動畫中淡出），最右段隨新圓點淡入
-    for (let i = -1; i < count - 1; i++) {
-      if (i === -1 && e >= 1) continue;
-      const alpha = i === -1 ? 1 - e : i === count - 2 ? e : 1;
+    // 1) 量條：slot -1→0 為剛走完的那段（動畫中淡出）；0→1 為本關進度；最右段隨新寶箱淡入
+    for (let i = -1; i < nodeCount - 1; i++) {
+      if (i === -1 && !animating) continue;
+      const alpha = i === -1 ? 1 - e : i === nodeCount - 2 ? e : 1;
       const x1 = xAt(i), x2 = xAt(i + 1);
       g.lineStyle(cfg.lineThickness, cfg.lineColor, cfg.pulse.lineAlpha * alpha);
       g.lineBetween(x1, y, x2, y);
-      // 剛完成段 = 滿；第一段 = 本關進度；其餘未開始
       const fill = i === -1 ? 1 : i === 0 ? this.stageHudFill : 0;
       if (fill > 0) {
         g.lineStyle(cfg.lineThickness, cfg.lineFillColor, alpha);
@@ -834,12 +836,37 @@ export class UIScene extends Phaser.Scene {
       }
     }
 
-    // 2) 圓點 + 寶箱
-    if (e < 1 && this.stageHudPrevChest) this.drawStageNode(xAt(-1), y, this.stageHudPrevChest, 'done', 1 - e);
-    for (let i = 0; i < count; i++) {
-      const alpha = i === count - 1 ? e : 1; // 最右（新生成）淡入
-      this.drawStageNode(xAt(i), y, this.stageHudChests[i], i === 0 ? 'current' : 'pending', alpha);
+    // 2) 位置標記：舊標記在最左淡出；新標記在剛獲得的寶箱位置淡入
+    if (animating) this.drawStageMarker(xAt(-1), y, 1 - e);
+    this.drawStageMarker(xAt(0), y, animating ? e : 1);
+    if (animating && this.stageHudPrevChest) this.drawStageNode(xAt(0), y, this.stageHudPrevChest, 'done', 1 - e);
+
+    // 3) 寶箱：第 1 個 = 本關獎勵（高亮），最右（新生成）淡入
+    for (let i = 0; i < chestCount; i++) {
+      const alpha = i === chestCount - 1 ? e : 1;
+      this.drawStageNode(xAt(i + 1), y, this.stageHudChests[i], i === 0 ? 'current' : 'pending', alpha);
     }
+  }
+
+  /**
+   * 畫卷軸 HUD 的目前位置標記：不透明底盤 + 實心亮點 + 脈動外環
+   *
+   * @param x 圓心 x（螢幕座標）
+   * @param y 圓心 y（螢幕座標）
+   * @param alpha 整體透明度（遞補動畫淡入淡出）
+   */
+  private drawStageMarker(x: number, y: number, alpha: number): void {
+    if (alpha <= 0) return;
+    const cfg = GameConfig.waveHud;
+    const g = this.waveHudGfx;
+    const r = cfg.nodeRadius;
+    const pulse = cfg.pulse.base + cfg.pulse.amplitude * Math.abs(Math.sin(this.time.now / cfg.pulse.period));
+    g.fillStyle(cfg.nodeBgColor, alpha);
+    g.fillCircle(x, y, r + cfg.nodePadding.base);
+    g.fillStyle(cfg.markerColor, alpha);
+    g.fillCircle(x, y, r * cfg.markerDotScale);
+    g.lineStyle(cfg.nodeStrokeWidth.current, cfg.markerColor, pulse * alpha);
+    g.strokeCircle(x, y, r);
   }
 
   /**
@@ -848,7 +875,7 @@ export class UIScene extends Phaser.Scene {
    * @param x 圓心 x（螢幕座標）
    * @param y 圓心 y（螢幕座標）
    * @param chest 寶箱階級
-   * @param state 'current' 目前關卡（脈動高亮）/ 'pending' 未到 / 'done' 剛完成
+   * @param state 'current' 本關獎勵（脈動高亮）/ 'pending' 之後的關卡 / 'done' 剛獲得（轉為位置標記時淡出）
    * @param alpha 整體透明度（遞補動畫淡入淡出）
    */
   private drawStageNode(x: number, y: number, chest: 'low' | 'high', state: StageNodeState, alpha: number): void {

@@ -78,8 +78,11 @@ export const GameConfig = {
     lineFillColor: 0xffe08a,
     /** 線漸進填滿動畫時長(毫秒) */
     lineFillMs: 500,
-    /** 卷軸 HUD 同時顯示的小關卡數（最左 = 目前關卡） */
+    /** 卷軸 HUD 顯示的寶箱數（位置標記右邊依序排列；= 一輪關卡數，確保永遠看得到一個高階） */
     visibleStages: 4,
+    /** 目前位置標記的顏色與中心亮點大小（相對節點半徑） */
+    markerColor: 0x7affc0,
+    markerDotScale: 0.45,
     /** 圓點不透明底盤色（蓋住量條端點） */
     nodeBgColor: 0x1a1408,
     /** 進入下一關時圓點左移遞補的動畫時長(毫秒) */
