@@ -114,7 +114,6 @@ export class GameScene extends Phaser.Scene {
   private crossOpenAt = 0;
   /** ★③關卡間閃黑後:角色自動走到下關定位的演出旗標(true 期間玩家不可操控,程式驅動走位)。 */
   private levelEntering = false;
-  /** ★不可事件接事件:記錄上一個子區類型(事件/純波次);上一子區='event'→這子區強制純波次。 */
   /** ★事件結束時場上還有殘留怪→留給玩家打完才收尾;此旗標 true=等殘留清完再 onSubZoneComplete。 */
   private pendingEventComplete = false;
   /** ★最後一波打完最後一隻怪時場上還有寶箱怪→延後開啟場景切換,等寶箱怪死/離場才 onSubZoneComplete。 */
@@ -296,7 +295,7 @@ export class GameScene extends Phaser.Scene {
       // 物理世界 = arena(玩家只能在移動區內);camera bounds = 整個世界(可跟隨捲動露遠景)
       this.physics.world.setBounds(this.zoneA.x, this.zoneA.y, this.zoneA.width, this.zoneA.height);
       this.cameras.main.setBounds(0, 0, worldW, worldH);
-      // 三個子區各繪製場景:zoneA=變體A(荒城遠景)、B候選=變體B(火山遠景);遠景畫在各自 slot 範圍。
+      // 三格各繪製場景：中央 = areaVariant（開場為荒城），左右鄰格為另一種變體（火山）
       this.drawAreaScenes();
       // ★playing 鏡頭跟隨在玩家建立後啟用(見 create 末 setupFollowIfLevel)。
     } else {
