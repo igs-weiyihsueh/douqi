@@ -8369,7 +8369,13 @@ export class GameScene extends Phaser.Scene {
     
     console.log('🎨 Graphics測試背景已創建：紫紅色 (depth=-9, hidden)');
 
-    // F4熱鍵監聽 - 場景背景切換（已改為F6避免與敵人外觀切換衝突）
+    // F4熱鍵監聽 - 複合功能：UI系統切換 + Normal敵人外觀切換
+    this.input.keyboard?.on('keydown-F4', () => {
+      this.toggleSceneBackground();       // 原有的UI系統切換
+      this.toggleNormalEnemyAppearance(); // 新增的敵人外觀切換
+    });
+    
+    // F6熱鍵監聽 - 僅場景背景切換（備用功能）
     this.input.keyboard?.on('keydown-F6', () => {
       this.toggleSceneBackground();
     });
@@ -8379,14 +8385,9 @@ export class GameScene extends Phaser.Scene {
       this.forceReloadSceneBackground();
     });
     
-    // ★新增：F4鍵切換Normal敵人外觀 (骷髏戰士↔紅色圓形) - 主要功能
-    this.input.keyboard?.on('keydown-F4', () => {
-      this.toggleNormalEnemyAppearance();
-    });
-    
-    console.log('⌨️ F6場景背景切換監聽器已設置');
+    console.log('⌨️ F4複合功能監聽器已設置 (UI切換 + 敵人外觀切換)');
+    console.log('⌨️ F6場景背景切換監聽器已設置 (備用功能)');
     console.log('⌨️ F2強制重載已設置');
-    console.log('⌨️ F4敵人外觀切換監聽器已設置');
   }
 
   /**
@@ -9078,13 +9079,14 @@ export class GameScene extends Phaser.Scene {
 
   /**
    * ★F4切換Normal敵人外觀 (骷髏戰士↔紅色圓形)
+   * 作為F4複合功能的一部分：UI切換 + 敵人外觀切換
    */
   private toggleNormalEnemyAppearance(): void {
     // 切換狀態
     this.useSkeletonWarrior = !this.useSkeletonWarrior;
     
     const newAppearance = this.useSkeletonWarrior ? '骷髏戰士' : '紅色圓形';
-    console.log(`🎭 F4切換Normal敵人外觀 → ${newAppearance}`);
+    console.log(`🎭 F4複合功能 - Normal敵人外觀切換 → ${newAppearance}`);
     
     // 更新所有現存的Normal類型敵人
     this.enemies.children.entries.forEach((enemy) => {
