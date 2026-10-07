@@ -36,7 +36,11 @@ export class GameScene extends Phaser.Scene {
   /** 鎖定標記繪圖層（P1 當前鎖定目標） */
   private lockGfx!: Phaser.GameObjects.Graphics;
 
-  // ★場景切換系統(F4):關卡制每個 slot 各一張 Scene.png(貼在世界上、隨鏡頭捲動);經典模式一張
+  // ★場景切換系統(F4)
+  /**
+   * F4 場景背景圖(Scene.png)。貼在世界上、隨鏡頭捲動:
+   * 關卡制為 [B-左, A-中, B-右] 三個 slot 各一張;經典模式只有一張。由 createSceneBackgrounds 建立。
+   */
   private sceneBackgrounds: Phaser.GameObjects.Image[] = [];
   private isNewSceneActive = false;
 
