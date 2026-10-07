@@ -7,9 +7,30 @@
 
 ---
 
-## ★★★ 2026-09-16 累積（v62 之後的新工作，最新在最上）
+## ★★★ 2026-10-07 累積（v62 之後的新工作，最新在最上）
 
 > 工作流不變：改碼→`npm run build`(tsc+vite 過)→report_result 給海牛→海牛重啟 dev5174(WSL /mnt/d 無 HMR;但 **public/ 靜態檔即時 serve**)→本 instance headless(puppeteer) 真實輸入複驗→清 .cjs+npm uninstall puppeteer→回報。**未 commit**。★真實輸入(fleet decision 7a3acdf0):操作/物理/時序/命中/受擊必須 page.mouse(world→screen 映射)+page.keyboard,不可 evaluate 直接 set 狀態繞過(否則假 PASS)。
+
+### 3C團隊配置更新與文檔規範化 (2026-10-07)
+- **新增銳騎 Code Reviewer**：4段式協作流程 異靈→翼騎/征騎→銳騎→異靈
+- **翼騎升級 Claude-Code + Opus 5.5**：主程式開發能力提升
+- **h5-coding-standards SKILL 系統**：標準化程式碼規範，取代 CODING_STANDARDS.md
+  - SKILL位置：所有3C團隊成員的 `.kiro/skills/h5-coding-standards/`
+  - 評分標準：JSDoc註解(25%)+魔法數字提取(20%)+命名規範(15%)+程式碼結構(15%)+複雜邏輯註解(15%)+TypeScript最佳實踐(10%)
+  - 完整工作流程：Pre-Development Check → Write Standards-Compliant Code → Self-Review Checklist → Code Review Validation
+- **文檔清理**：刪除重複的 CODING_STANDARDS.md 和過時的 PROGRESS.md，修復 CLAUDE.md 重複內容
+- **破壞性操作確認規則**：新增第5條溝通規範，執行可能影響系統穩定性的操作前必須經使用者確認
+- **版本更新**：CLAUDE.md 升級至 v2.1.0 (h5-coding-standards SKILL導入+CODING_STANDARDS.md移除版本)
+
+### 遊戲視覺改善 (2026-10-07)  
+- **F4複合功能恢復**：修復F4按鍵功能損失問題，現在F4同時執行場景背景切換+敵人外觀切換
+- **骷髏戰士系統**：Normal類型敵人可通過F4切換為骷髏戰士外觀，保持原有遊戲機制
+- **底部面板優化**：解決1P/2P/3P/4P面板重疊問題，智能間距計算(約105px)，位置向上調整30px，移除黑色背景
+- **二段能量條視覺問題診斷**：征騎發現問題根因 - 翼騎修改錯誤組件(Character.ts而非UIScene.ts)，需要將視覺改善移植到正確位置
+
+### 技術架構
+- **螢幕解析度測試**：嘗試2520×1680但用戶要求回滾至1920×1080標準解析度
+- **文檔規範化**：建立統一的SKILL系統，消除重複維護負擔
 
 ### 小遊戲框架 + 三個小遊戲(選單 G 鍵進入)
 - **框架**：`src/minigames/registry.ts`(MINIGAMES 陣列 {key,name,sceneKey,desc,icon})+`MinigameMenuScene`(自動列卡片+方向鍵選/空白確認)。新增小遊戲=寫 Scene+main.ts scene 陣列註冊+registry 加項。獨立於 GameScene。
