@@ -7,6 +7,13 @@ import { updateRefillLatch, shouldSpawnMore, type WaveSpawnState } from '../syst
 import { Bullet } from '../objects/Bullet';
 import { Breakable } from '../objects/Breakable';
 
+/** F4 場景背景圖(Scene.png)的紋理 key */
+const SCENE_BG_TEXTURE_KEY = 'scene-background';
+/** F2 強制重載 Scene.png 的路徑(會加 timestamp 防快取) */
+const SCENE_BG_RELOAD_URL = 'assets/Scene.png';
+/** 場景背景圖深度:高於程式繪製地面(0)、低於圍欄(1)與場景粒子(2) */
+const SCENE_BG_DEPTH = 0.5;
+
 /**
  * GameScene（v6：本地單機模擬 4 人共玩）：
  * - 4 個角色：P1（玩家滑鼠瞄準操作）＋ P2/P3/P4（BOT AI 代打），共用 Character 類別。
@@ -29,10 +36,8 @@ export class GameScene extends Phaser.Scene {
   /** 鎖定標記繪圖層（P1 當前鎖定目標） */
   private lockGfx!: Phaser.GameObjects.Graphics;
 
-  // ★場景切換系統
-  private sceneBackground: Phaser.GameObjects.Image | null = null;
-  private testGraphicsBackground: Phaser.GameObjects.Graphics | null = null;
-  private testRectangleBackground: Phaser.GameObjects.Rectangle | null = null;
+  // ★場景切換系統(F4):關卡制每個 slot 各一張 Scene.png(貼在世界上、隨鏡頭捲動);經典模式一張
+  private sceneBackgrounds: Phaser.GameObjects.Image[] = [];
   private isNewSceneActive = false;
 
   // ★角色皮膚覆蓋系統
@@ -252,9 +257,6 @@ export class GameScene extends Phaser.Scene {
   create(): void {
     this.resetState();
 
-    // ★場景圖熱切換系統初始化
-    this.initSceneBackground();
-
     // 固定視角競技場
     // 應用持久化的邊界設定
     let pad, aW, aH, m;
@@ -323,6 +325,9 @@ export class GameScene extends Phaser.Scene {
       );
       border.strokeRect(arenaX, arenaY, arenaW, arenaH);
     }
+
+    // ★場景圖熱切換系統初始化(需在 slot 佈局建立後,背景圖才能對齊各 slot)
+    this.initSceneBackground();
 
     // 敵群
     this.enemies = this.physics.add.group({
@@ -498,7 +503,7 @@ export class GameScene extends Phaser.Scene {
 
   private resetState(): void {
     // ★背景切換狀態重置 - 修復ESC回主菜單後F4失效問題
-    this.sceneBackground = null;
+    this.sceneBackgrounds = [];
     this.isNewSceneActive = false;
     
     // ★角色皮膚狀態重置
@@ -3606,6 +3611,7 @@ export class GameScene extends Phaser.Scene {
         fontStyle: 'bold'
       })
       .setOrigin(0.5)
+      .setScrollFactor(0) // 固定畫面:鏡頭捲動時仍置中
       .setDepth(60)
       .setAlpha(0);
     this.tweens.add({ targets: txt, alpha: 1, scale: { from: 0.6, to: 1.1 }, duration: 400, yoyo: true, hold: 800, onComplete: () => txt.destroy() });
@@ -4320,7 +4326,7 @@ export class GameScene extends Phaser.Scene {
       .text(GameConfig.width / 2, GameConfig.height * 0.32, text, {
         fontFamily: 'monospace', fontSize: '40px', color: '#ffd166', stroke: '#000000', strokeThickness: 7, fontStyle: 'bold'
       })
-      .setOrigin(0.5).setDepth(60).setAlpha(0);
+      .setOrigin(0.5).setScrollFactor(0).setDepth(60).setAlpha(0); // 固定畫面:鏡頭捲動時仍置中
     this.tweens.add({ targets: txt, alpha: 1, scale: { from: 0.6, to: 1.1 }, duration: 400, yoyo: true, hold: 900, onComplete: () => txt.destroy() });
     this.shakeOnce(180, 0.008);
   }
@@ -6471,6 +6477,7 @@ export class GameScene extends Phaser.Scene {
     const overlay = this.add
       .rectangle(0, 0, GameConfig.width, GameConfig.height, 0x2233aa, 0.12)
       .setOrigin(0, 0)
+      .setScrollFactor(0) // 固定畫面:鏡頭捲動時仍蓋滿全螢幕
       .setDepth(15);
     this.time.delayedCall(cfg.durationMs, () => overlay.destroy());
 
@@ -8323,71 +8330,61 @@ export class GameScene extends Phaser.Scene {
 
   /**
    * ★場景圖熱切換系統初始化
-   * 
-   * 在GameScene啟動時設置：
-   * - 新場景背景圖片（Scene.png）在最底層
-   * - F1熱鍵監聽器
-   * - 深度層級管理確保UI不被遮擋
+   *
+   * - 建立 F4 場景背景圖（Scene.png，預設隱藏），貼在世界上、隨鏡頭捲動
+   * - 註冊熱鍵：F4（背景/UI 切換 + 敵人外觀切換）、F6（僅背景切換）、F2（強制重載 Scene.png）
    */
   private initSceneBackground(): void {
-    // 創建新場景背景圖（預設隱藏）
-    if (this.textures.exists('scene-background')) {
-      // 創建場景背景，使用固定中心位置確保在所有情況下都穩定可見
-      const centerX = GameConfig.width / 2;
-      const centerY = GameConfig.height / 2;
-      
-      this.sceneBackground = this.add.image(centerX, centerY, 'scene-background')
-        .setOrigin(0.5, 0.5)    // 中心對齊
-        .setDepth(1)            // 深度1：覆蓋地面圖片(depth=0)但不遮擋遊戲元素
-        .setVisible(false)      // 預設隱藏
-        .setScrollFactor(0);    // ★關鍵：固定不隨相機移動，像UI一樣
-      
-      // 場景背景已創建
-      
-    } else {
-      console.warn('⚠️ 場景背景圖片不存在：scene-background');
-    }
-
-    // ★新增：創建Graphics測試背景（純色）
-    this.testGraphicsBackground = this.add.graphics()
-      .fillStyle(0xFF00FF, 1)  // 超鮮豔紫紅色
-      .setDepth(1)             // 調整到1，覆蓋地面圖片depth=0
-      .setScrollFactor(0)      // 固定不移動
-      .setVisible(false);      // 預設隐藏
-    
-    // 動態計算遊戲區域大小，確保覆蓋所有區域
-    const gameArea = this.calculateGameArea();
-    console.log('🎯 遊戲區域計算:', gameArea);
-    
-    this.testGraphicsBackground.fillRect(gameArea.x, gameArea.y, gameArea.width, gameArea.height);
-    
-    // ★修復：確保Graphics正確加入更新系統
-    if (this.testGraphicsBackground && !(this.testGraphicsBackground as any).updateList) {
-      this.add.existing(this.testGraphicsBackground);
-      console.log('🔧 Graphics updateList修復：重新加入場景更新系統');
-    }
-    
-    console.log('🎨 Graphics測試背景已創建：紫紅色 (depth=-9, hidden)');
+    this.createSceneBackgrounds();
 
     // F4熱鍵監聽 - 複合功能：UI系統切換 + Normal敵人外觀切換
     this.input.keyboard?.on('keydown-F4', () => {
-      this.toggleSceneBackground();       // 原有的UI系統切換
-      this.toggleNormalEnemyAppearance(); // 新增的敵人外觀切換
-    });
-    
-    // F6熱鍵監聽 - 僅場景背景切換（備用功能）
-    this.input.keyboard?.on('keydown-F6', () => {
       this.toggleSceneBackground();
+      this.toggleNormalEnemyAppearance();
     });
-    
-    // ★新增：F2鍵強制重載Scene.png
-    this.input.keyboard?.on('keydown-F2', () => {
-      this.forceReloadSceneBackground();
-    });
-    
-    console.log('⌨️ F4複合功能監聽器已設置 (UI切換 + 敵人外觀切換)');
-    console.log('⌨️ F6場景背景切換監聽器已設置 (備用功能)');
-    console.log('⌨️ F2強制重載已設置');
+    // F6熱鍵監聽 - 僅場景背景切換（備用功能）
+    this.input.keyboard?.on('keydown-F6', () => this.toggleSceneBackground());
+    // F2熱鍵監聽 - 強制重載Scene.png
+    this.input.keyboard?.on('keydown-F2', () => this.forceReloadSceneBackground());
+  }
+
+  /**
+   * 建立場景背景圖（顯示狀態沿用 isNewSceneActive）
+   *
+   * - 關卡制：三個 slot 各一張，蓋滿整個 slot（含四周遠景邊距），鏡頭捲動時背景跟著世界移動
+   * - 經典模式：一張蓋滿畫面（鏡頭不捲動）
+   */
+  private createSceneBackgrounds(): void {
+    if (!this.textures.exists(SCENE_BG_TEXTURE_KEY)) {
+      console.warn(`⚠️ 場景背景圖片不存在：${SCENE_BG_TEXTURE_KEY}`);
+      return;
+    }
+    const rects = this.levelMode
+      ? [this.slotBLeft, this.slotA, this.slotBRight]
+      : [new Phaser.Geom.Rectangle(0, 0, GameConfig.width, GameConfig.height)];
+    this.sceneBackgrounds = rects.map((rect) => this.createCoverImage(SCENE_BG_TEXTURE_KEY, rect));
+  }
+
+  /**
+   * 建立一張蓋滿指定矩形的背景圖：等比放大（cover）後裁掉超出部分，保持原圖比例不變形
+   *
+   * @param textureKey - 紋理 key
+   * @param rect - 要蓋滿的世界座標矩形
+   * @returns 建立好的背景圖（深度 SCENE_BG_DEPTH）
+   */
+  private createCoverImage(textureKey: string, rect: Phaser.Geom.Rectangle): Phaser.GameObjects.Image {
+    const img = this.add.image(rect.centerX, rect.centerY, textureKey)
+      .setOrigin(0.5, 0.5)
+      .setDepth(SCENE_BG_DEPTH)
+      .setVisible(this.isNewSceneActive);
+    // cover：取寬、高放大倍率中較大者，確保整個矩形都被蓋滿
+    const scale = Math.max(rect.width / img.width, rect.height / img.height);
+    img.setScale(scale);
+    // 裁切（紋理座標）：只保留置中、對應 rect 大小的區域，避免溢出到相鄰 slot
+    const cropW = rect.width / scale;
+    const cropH = rect.height / scale;
+    img.setCrop((img.width - cropW) / 2, (img.height - cropH) / 2, cropW, cropH);
+    return img;
   }
 
   /**
@@ -8505,576 +8502,34 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * ★場景背景熱切換功能
-   * 
-   * F1鍵觸發，在新舊場景背景間切換：
-   * - 新場景：顯示Scene.png背景圖
-   * - 舊場景：隱藏背景圖，顯示原始程式生成場景
-   * 
-   * 深度層級保證：
-   * - 新場景背景：depth=-10 (最底層，在所有原場景元素之下)
-   * - 原場景天空：depth=-3
-   * - 原場景遠景：depth=-2  
-   * - 原場景外圍：depth=-1
-   * - 原場景地面：depth=0
-   * - 原場景邊框：depth=1
-   * - 遊戲物件：depth=50-100
-   * - 頭上UI：depth=200-2000 (完全不被遮擋)
+   * ★場景背景熱切換功能（F4 / F6）
+   *
+   * 在新舊場景間切換：
+   * - 新場景：顯示 Scene.png 背景、角色皮膚與角色 UI 覆蓋；隱藏原 P1 頭頂 UI、啟用底部面板替換
+   * - 舊場景：全部還原為程式繪製場景與原 UI
+   *
+   * 深度層級：
+   * - 原場景天空/遠景/外圍/地面：depth -3 ~ 0
+   * - Scene.png 背景：depth 0.5（蓋住程式繪製地面）
+   * - 圍欄：depth 1、場景粒子：depth 2（疊在背景圖上）
+   * - 遊戲物件與 UI：更高層，不被遮擋
    */
   private toggleSceneBackground(): void {
-    // ★簡化LOG：只保留3個關鍵診斷訊息
-    console.log('🎯 F4按鍵觸發 - 場景切換開始 (熱鍵已改為F4)');
-    
-    if (!this.sceneBackground) {
+    // 背景圖缺失時（例如紋理晚到）先嘗試補建
+    if (this.sceneBackgrounds.length === 0) this.createSceneBackgrounds();
+    if (this.sceneBackgrounds.length === 0) {
       console.warn('⚠️ 場景背景圖片不可用，無法切換');
-      
-      // 嘗試立即創建Scene.png背景作為修復
-      if (this.textures.exists('scene-background')) {
-        console.log('🔧 嘗試立即創建Scene.png背景...');
-        const centerX = GameConfig.width / 2;
-        const centerY = GameConfig.height / 2;
-        this.sceneBackground = this.add.image(centerX, centerY, 'scene-background')
-          .setOrigin(0.5, 0.5)  // 中心對齊
-          .setDepth(1)          // 深度1：覆蓋地面圖片但不遮擋遊戲元素
-          .setVisible(false)
-          .setScrollFactor(0);  // 固定位置，保持原始尺寸
-        console.log('✅ Scene.png背景已重新創建');
-      } else {
-        console.error('❌ scene-background紋理不存在，無法創建背景');
-      }
-      
       return;
     }
 
-    // ★關鍵診斷1：Scene.png載入狀態詳細檢查
-    const sceneTextureExists = this.textures.exists('scene-background');
-    let sceneTextureLoaded = false;
-    if (sceneTextureExists) {
-      const texture = this.textures.get('scene-background');
-      sceneTextureLoaded = texture && texture.key !== '__MISSING';
-    }
-    console.log('🖼️ Scene.png詳細狀態:');
-    console.log(`  ✓ 紋理存在: ${sceneTextureExists}`);
-    console.log(`  ✓ 圖片載入完成: ${sceneTextureLoaded}`);
-    console.log(`  ✓ 背景物件存在: ${!!this.sceneBackground}`);
-    if (this.sceneBackground) {
-      console.log(`  ✓ 背景物件visible: ${this.sceneBackground.visible}`);
-      console.log(`  ✓ 背景物件depth: ${this.sceneBackground.depth}`);
-      console.log(`  ✓ 背景物件alpha: ${this.sceneBackground.alpha}`);
-    }
-
-    // 切換狀態
     this.isNewSceneActive = !this.isNewSceneActive;
-    
-    if (this.isNewSceneActive) {
-      // 顯示新場景背景 - 以Scene.png為主
-      if (this.sceneBackground) {
-        this.sceneBackground.setVisible(true);
-        this.sceneBackground.setAlpha(1);
-        this.sceneBackground.setDepth(1);
-        this.sceneBackground.setActive(true);
-      }
-      
-      // 同時顯示角色皮膚覆蓋和UI覆蓋
-      if (this.characterSkin) {
-        this.characterSkin.setVisible(true);
-        console.log('🦍 Goku皮膚已顯示');
-      }
-      
-      if (this.characterUIOverlay) {
-        this.characterUIOverlay.setVisible(true);
-        console.log('🎮 1P UI覆蓋已顯示');
-      }
-      
-      // ★新增：隱藏原始P1頭頂UI
-      console.log('🔧 [調試] F4激活 - 準備隱藏P1頭頂UI');
-      this.controlP1HeadUI(false);
-      
-      // ★新增：激活底部面板替換
-      this.controlBottomPanelOverlay(true);
-      
-      // 隱藏測試背景
-      if (this.testGraphicsBackground) {
-        this.testGraphicsBackground.setVisible(false);
-      }
-      if (this.testRectangleBackground) {
-        this.testRectangleBackground.setVisible(false);
-      }
-    } else {
-      // 隱藏新場景背景，顯示原場景
-      if (this.sceneBackground) {
-        this.sceneBackground.setVisible(false);
-      }
-      
-      // 同時隱藏角色皮膚覆蓋和UI覆蓋
-      if (this.characterSkin) {
-        this.characterSkin.setVisible(false);
-        console.log('🦍 Goku皮膚已隱藏');
-      }
-      
-      if (this.characterUIOverlay) {
-        this.characterUIOverlay.setVisible(false);
-        console.log('🎮 1P UI覆蓋已隱藏');
-      }
-      
-      // ★新增：恢復原始P1頭頂UI
-      console.log('🔧 [調試] F4關閉 - 準備恢復P1頭頂UI');
-      this.controlP1HeadUI(true);
-      
-      // ★新增：關閉底部面板替換
-      this.controlBottomPanelOverlay(false);
-      
-      if (this.testGraphicsBackground) {
-        this.testGraphicsBackground.setVisible(false);
-      }
-      if (this.testRectangleBackground) {
-        this.testRectangleBackground.setVisible(false);
-      }
-    }
-    
-    // ★狀態確認：當前顯示的背景
-    if (this.isNewSceneActive) {
-      if (this.sceneBackground?.visible) {
-        console.log('🎨 當前背景狀態: Scene.png火焰山背景正在顯示');
-      } else if (this.testGraphicsBackground?.visible) {
-        console.log('🎨 當前背景狀態: Graphics測試背景 (Scene.png備用)');
-      } else {
-        console.log('🎨 當前背景狀態: 未知 - 可能存在顯示問題');
-      }
-    } else {
-      console.log('🎨 當前背景狀態: 原始背景');
-    }
-    
-    // ★檢測A - Graphics縮放值檢測
-    if (this.testGraphicsBackground) {
-      console.log('🔍 檢測A - Graphics縮放值檢測:');
-      console.log('✓ scaleX:', this.testGraphicsBackground.scaleX);
-      console.log('✓ scaleY:', this.testGraphicsBackground.scaleY); 
-      console.log('✓ scale:', this.testGraphicsBackground.scale);
-      
-      // ★檢測B - Graphics容器歸屬檢測
-      console.log('🔍 檢測B - Graphics容器歸屬檢測:');
-      console.log('✓ scene:', this.testGraphicsBackground.scene?.constructor.name);
-      console.log('✓ parent:', this.testGraphicsBackground.parentContainer?.constructor.name || 'null');
-      console.log('✓ displayList:', !!(this.testGraphicsBackground as any).displayList);
-      console.log('✓ updateList:', !!(this.testGraphicsBackground as any).updateList);
-      
-      // ★檢測C - Graphics活躍狀態檢測
-      console.log('🔍 檢測C - Graphics活躍狀態檢測:');
-      console.log('✓ active:', this.testGraphicsBackground.active);
-      console.log('✓ visible:', this.testGraphicsBackground.visible);
-      console.log('✓ alpha:', this.testGraphicsBackground.alpha);
-      
-      // ★檢測D - Graphics渲染狀態檢測
-      console.log('🔍 檢測D - Graphics渲染狀態檢測:');
-      console.log('✓ willRender:', this.testGraphicsBackground?.willRender?.(this.cameras.main));
-      console.log('✓ camera:', this.cameras.main?.name || 'main');
-      console.log('✓ cameraVisible:', this.testGraphicsBackground ? this.cameras.main.visible : false);
-      
-      // ★檢測E - Graphics場景歸屬深度確認
-      console.log('🔍 檢測E - Graphics場景歸屬深度確認:');
-      console.log('✓ scene.name:', this.testGraphicsBackground?.scene?.scene?.key || 'unknown');
-      console.log('✓ scene.children.length:', this.children.length);
-      console.log('✓ graphics.parentScene:', this.testGraphicsBackground?.scene === this ? 'correct' : 'wrong');
-      console.log('✓ inDisplayList:', this.children.exists(this.testGraphicsBackground));
-      
-      // ★檢測F - Graphics變換矩陣檢測
-      console.log('🔍 檢測F - Graphics變換矩陣檢測:');
-      const worldTransform = this.testGraphicsBackground?.getWorldTransformMatrix?.();
-      console.log('✓ worldTransform exists:', !!worldTransform);
-      if (worldTransform) {
-        console.log('✓ matrix.tx (x):', worldTransform.tx);
-        console.log('✓ matrix.ty (y):', worldTransform.ty);
-        console.log('✓ matrix.a (scaleX):', worldTransform.a);
-        console.log('✓ matrix.d (scaleY):', worldTransform.d);
-      }
-      console.log('✓ getBounds width:', (this.testGraphicsBackground as any)?.getBounds?.()?.width || 'unknown');
-      console.log('✓ getBounds height:', (this.testGraphicsBackground as any)?.getBounds?.()?.height || 'unknown');
-      
-      // ★檢測G+H - Graphics繪製內容檢測
-      console.log('🔍 檢測G+H - Graphics繪製內容檢測:');
-      
-      // 檢測fillStyle顏色設定
-      console.log('✓ fillStyle設定:', '0xFF00FF (紫紅色)');
-      console.log('✓ 預期RGB:', 'rgb(255, 0, 255)');
-      
-      // 檢測fillRect範圍設定  
-      console.log('✓ fillRect範圍:', `0, 0, ${GameConfig.width}, ${GameConfig.height}`);
-      console.log('✓ 預期尺寸:', `${GameConfig.width} × ${GameConfig.height}`);
-      
-      // 嘗試重新繪製並檢測
-      console.log('🔧 重新繪製測試:');
-      this.testGraphicsBackground?.clear();
-      this.testGraphicsBackground?.fillStyle(0xFF00FF, 1);
-      this.testGraphicsBackground?.fillRect(0, 0, GameConfig.width, GameConfig.height);
-      console.log('✓ 重新繪製完成');
-      
-      // 重新檢測getBounds
-      const newBounds = (this.testGraphicsBackground as any)?.getBounds?.();
-      console.log('✓ 重繪後width:', newBounds?.width || 'still unknown');
-      console.log('✓ 重繪後height:', newBounds?.height || 'still unknown');
-      
-      // ★Graphics繪製失效問題深入調查
-      console.log('🔍 Phaser環境調查:');
-      console.log('✓ Phaser版本:', Phaser.VERSION);
-      console.log('✓ 渲染類型:', this.renderer.type === Phaser.WEBGL ? 'WebGL' : 'Canvas');
-      console.log('✓ Graphics構造函數:', typeof Phaser.GameObjects.Graphics);
-      
-      // 調查2: 重新創建測試
-      console.log('🔧 重新創建測試:');
-      const newGraphics = this.add.graphics();
-      newGraphics.fillStyle(0x00FF00, 1);  // 綠色測試
-      newGraphics.fillRect(100, 100, 200, 200);
-      const testBounds = (newGraphics as any).getBounds();
-      console.log('✓ 新Graphics bounds:', testBounds?.width || 'failed', 'x', testBounds?.height || 'failed');
-      newGraphics.destroy(); // 清理測試物件
-      
-      // 調查3: 替代繪製方案測試
-      console.log('🎨 替代方案測試:');
-      const gameArea = this.calculateGameArea();
-      const coloredRect = this.add.rectangle(gameArea.centerX, gameArea.centerY, gameArea.width, gameArea.height, 0xFF0000); // 紅色矩形
-      coloredRect.setDepth(2);  // 調整到2，確保覆蓋地面圖片depth=0
-      coloredRect.setVisible(false); // 預設隱藏
-      const rectBounds = (coloredRect as any).getBounds();
-      console.log('✓ Rectangle方案bounds:', rectBounds?.width || 'failed', 'x', rectBounds?.height || 'failed');
-      console.log('✓ Rectangle覆蓋區域:', `x=${gameArea.x}, y=${gameArea.y}, w=${gameArea.width}, h=${gameArea.height}`);
-      
-      // 將Rectangle作為備用方案
-      if (!this.testRectangleBackground) {
-        this.testRectangleBackground = coloredRect;
-        console.log('✅ Rectangle備用方案已準備');
-        
-        // ★緊急Rectangle狀態檢測
-        console.log('🔍 Rectangle創建時狀態檢測:');
-        console.log('✓ Rectangle created:', !!coloredRect);
-        console.log('✓ Rectangle visible:', coloredRect?.visible);
-        console.log('✓ Rectangle alpha:', coloredRect?.alpha);
-        console.log('✓ Rectangle depth:', coloredRect?.depth);
-        console.log('✓ Rectangle x:', coloredRect?.x);
-        console.log('✓ Rectangle y:', coloredRect?.y);
-        console.log('✓ Rectangle width:', coloredRect?.width);
-        console.log('✓ Rectangle height:', coloredRect?.height);
-      }
-    }
-  }
-
-  /**
-   * 計算完整的遊戲區域，包括所有slot和zone
-   */
-  private calculateGameArea(): { x: number, y: number, width: number, height: number, centerX: number, centerY: number } {
-    if (this.levelMode) {
-      // 關卡模式：計算包含所有三個slot的完整區域
-      const gap = GameConfig.stage.subGap;
-      const st = GameConfig.stage;
-      const aW = st.arenaW, aH = st.arenaH, m = st.sceneMargin;
-      const slotW = aW + m * 2, slotH = aH + m * 2;
-      const worldW = slotW * 3 + gap * 2;
-      const worldH = slotH;
-      
-      console.log('🎯 關卡模式遊戲區域:');
-      console.log('  ✓ slotW:', slotW, 'slotH:', slotH);
-      console.log('  ✓ worldW:', worldW, 'worldH:', worldH);
-      console.log('  ✓ 三slot範圍:', `slotBLeft(0,0,${slotW},${slotH}) slotA(${slotW + gap},0,${slotW},${slotH}) slotBRight(${(slotW + gap) * 2},0,${slotW},${slotH})`);
-      
-      return {
-        x: 0,
-        y: 0,
-        width: worldW,
-        height: worldH,
-        centerX: worldW / 2,
-        centerY: worldH / 2
-      };
-    } else {
-      // 經典模式：使用GameConfig的寬高
-      console.log('🎯 經典模式遊戲區域:');
-      console.log('  ✓ GameConfig.width:', GameConfig.width);
-      console.log('  ✓ GameConfig.height:', GameConfig.height);
-      
-      return {
-        x: 0,
-        y: 0,
-        width: GameConfig.width,
-        height: GameConfig.height,
-        centerX: GameConfig.width / 2,
-        centerY: GameConfig.height / 2
-      };
-    }
-    
-    // ★關鍵診斷3：最終狀態確認
-    const finalState = this.isNewSceneActive ? '新場景' : '舊場景';
-    console.log(`📋 場景狀態：${finalState} (F4切換)`);
-    
-    // ★簡化核心診斷
-    console.log('🔍 ===== 核心診斷開始 =====');
-    
-    // 診斷1: 關鍵背景物件狀態
-    console.log('📊 當前背景狀態:');
-    
-    // 檢查Scene.png狀態
-    if (this.sceneBackground) {
-      const bg = this.sceneBackground!;  // 非空斷言，因為已經檢查過了
-      if (bg.visible) {
-        console.log(`✅ Scene.png背景: 可見 - 🔥火焰山背景顯示中 (depth=${bg.depth})`);
-        
-        // 額外檢查可能影響顯示的屬性
-        const willRender = bg.willRender?.(this.cameras.main) ?? 'unknown';
-        console.log(`  ⚙️ willRender: ${willRender}`);
-        console.log(`  ⚙️ 在displayList中: ${this.children.exists(bg)}`);
-        console.log(`  ⚙️ parent容器: ${bg.parentContainer?.constructor.name || 'none'}`);
-        console.log(`  ⚙️ 遮罩: ${bg.mask ? 'has mask' : 'no mask'}`);
-        console.log(`  ⚙️ 混合模式: ${bg.blendMode}`);
-        
-      } else {
-        console.log(`⚠️ Scene.png背景: 不可見 - 存在但未顯示 (depth=${bg.depth})`);
-        
-        // 嘗試強制顯示
-        console.log('🔧 嘗試強制顯示Scene.png...');
-        bg.setVisible(true);
-        bg.setAlpha(1);
-        bg.setActive(true);
-        bg.setDepth(1);  // 確保設置為深度1，覆蓋地面但不遮擋遊戲元素
-        console.log(`  ✓ 強制設置後visible: ${bg.visible}`);
-        
-      }
-    } else {
-      console.log(`❌ Scene.png背景: 不存在 - 背景物件未創建`);
-    }
-    
-    // 檢查測試背景狀態
-    const graphicsStatus = this.testGraphicsBackground?.visible ? '可見 - 🔴當前正在顯示' : '不可見 - 已隱藏';
-    const rectangleStatus = this.testRectangleBackground?.visible ? '可見 - 🔴當前正在顯示' : '不可見 - 已隱藏';
-    
-    console.log(`✓ Graphics測試背景: ${graphicsStatus} (depth=${this.testGraphicsBackground?.depth || 'N/A'})`);
-    console.log(`✓ Rectangle測試背景: ${rectangleStatus} (depth=${this.testRectangleBackground?.depth || 'N/A'})`);
-    
-    // 診斷2: 隱藏原背景測試
-    console.log('🧪 隱藏原背景測試:');
-    const originalBgs = this.children.list.filter(obj => {
-      const gameObj = obj as any;
-      return gameObj.depth < 0 && gameObj.visible && 
-             gameObj !== this.testGraphicsBackground &&
-             gameObj !== this.testRectangleBackground &&
-             gameObj !== this.sceneBackground;
-    });
-    
-    console.log(`✓ 找到 ${originalBgs.length} 個原背景，準備隱藏`);
-    originalBgs.forEach(obj => (obj as any).setVisible(false));
-    console.log('🔥 原背景已隱藏！觀察畫面是否變化？');
-    
-    // 診斷結論
-    console.log('📋 結論:');
-    console.log('- 如果現在看到火山背景圖片 → 背景切換成功 🎉');
-    console.log('- 如果仍是舊背景 → 需要檢查Scene.png載入');
-    console.log('🔍 ===== 核心診斷結束 =====');
-    
-    // 5秒後恢復
-    setTimeout(() => {
-      originalBgs.forEach(obj => (obj as any).setVisible(true));
-      console.log('🔄 原背景已恢復');
-    }, 5000);
-    
-    // ★完整背景系統診斷 - 找出根本原因
-    console.log('🔍 ===== 完整背景系統診斷開始 =====');
-    
-    // 1. 掃描所有depth<0物件的完整信息
-    console.log('📊 診斷1: 掃描所有負深度物件');
-    const allNegativeDepthObjects = this.children.list.filter(obj => (obj as any).depth < 0);
-    console.log(`✓ 負深度物件總數: ${allNegativeDepthObjects.length}`);
-    
-    allNegativeDepthObjects
-      .sort((a, b) => (a as any).depth - (b as any).depth)
-      .forEach((obj, index) => {
-        const gameObj = obj as any;
-        const bounds = gameObj.getBounds?.();
-        const transform = gameObj.getWorldTransformMatrix?.();
-        console.log(`  ${index + 1}. [${gameObj.constructor.name}]`);
-        console.log(`     depth=${gameObj.depth} visible=${gameObj.visible} active=${gameObj.active}`);
-        console.log(`     position=(${gameObj.x}, ${gameObj.y}) alpha=${gameObj.alpha}`);
-        console.log(`     bounds=${bounds ? `${Math.round(bounds.x)},${Math.round(bounds.y)},${Math.round(bounds.width)}×${Math.round(bounds.height)}` : 'none'}`);
-        console.log(`     scrollFactor=(${gameObj.scrollFactorX}, ${gameObj.scrollFactorY})`);
-        if (transform) {
-          console.log(`     transform=matrix(${transform.a.toFixed(2)}, ${transform.b.toFixed(2)}, ${transform.c.toFixed(2)}, ${transform.d.toFixed(2)}, ${Math.round(transform.tx)}, ${Math.round(transform.ty)})`);
-        }
-        
-        // 特別檢測我們的背景物件
-        if (gameObj === this.testGraphicsBackground) {
-          console.log(`     ★ 這是我們的Graphics背景！`);
-        } else if (gameObj === this.testRectangleBackground) {
-          console.log(`     ★ 這是我們的Rectangle背景！`);
-        } else if (gameObj === this.sceneBackground) {
-          console.log(`     ★ 這是我們的Scene.png背景！`);
-        }
-      });
-    
-    // 2. 檢測邊界內特殊背景層
-    console.log('🎯 診斷2: 邊界內特殊背景層檢測');
-    if (this.levelMode && this.zoneA) {
-      console.log(`✓ 關卡模式啟用，中央A區邊界: (${this.zoneA.x}, ${this.zoneA.y}) ${this.zoneA.width}×${this.zoneA.height}`);
-      
-      // 檢查是否有物件專門在zoneA區域內繪製
-      const potentialZoneObjects = this.children.list.filter(obj => {
-        const gameObj = obj as any;
-        const bounds = gameObj.getBounds?.();
-        if (!bounds) return false;
-        
-        // 檢查物件是否與zoneA區域重疊
-        return bounds.x < this.zoneA.right && bounds.right > this.zoneA.x &&
-               bounds.y < this.zoneA.bottom && bounds.bottom > this.zoneA.y;
-      });
-      
-      console.log(`✓ 與中央A區重疊的物件數量: ${potentialZoneObjects.length}`);
-      potentialZoneObjects.slice(0, 10).forEach((obj, i) => {
-        const gameObj = obj as any;
-        const bounds = gameObj.getBounds();
-        console.log(`  ${i + 1}. ${gameObj.constructor.name} depth=${gameObj.depth} bounds=${Math.round(bounds.x)},${Math.round(bounds.y)},${Math.round(bounds.width)}×${Math.round(bounds.height)}`);
-      });
-    }
-    
-    // 3. 測試隱藏原背景實驗
-    console.log('🧪 診斷3: 原背景隱藏實驗');
-    const originalBackgrounds = this.children.list.filter(obj => {
-      const gameObj = obj as any;
-      return gameObj.depth < 0 && gameObj.visible && 
-             gameObj !== this.testGraphicsBackground &&
-             gameObj !== this.testRectangleBackground &&
-             gameObj !== this.sceneBackground;
-    });
-    
-    console.log(`✓ 發現 ${originalBackgrounds.length} 個可能的原背景物件`);
-    originalBackgrounds.forEach((obj, i) => {
-      const gameObj = obj as any;
-      console.log(`  隱藏測試${i + 1}: ${gameObj.constructor.name} depth=${gameObj.depth}`);
-      gameObj.setVisible(false);
-    });
-    
-    console.log('✓ 已暫時隱藏所有原背景物件');
-    
-    // 4. 相機和渲染系統檢測
-    console.log('📷 診斷4: 相機和渲染系統檢測');
-    console.log(`✓ 相機位置: (${Math.round(this.cameras.main.x)}, ${Math.round(this.cameras.main.y)})`);
-    console.log(`✓ 相機zoom: ${this.cameras.main.zoom}`);
-    console.log(`✓ 相機bounds: (${(this.cameras.main as any)._bounds?.x || 'unbounded'}, ${(this.cameras.main as any)._bounds?.y || 'unbounded'}) ${(this.cameras.main as any)._bounds?.width || 'unbounded'}×${(this.cameras.main as any)._bounds?.height || 'unbounded'}`);
-    console.log(`✓ 相機跟隨目標: ${(this.cameras.main as any).followTarget?.constructor.name || 'none'}`);
-    console.log(`✓ 渲染器類型: ${this.renderer.type === Phaser.WEBGL ? 'WebGL' : 'Canvas'}`);
-    console.log(`✓ Canvas尺寸: ${this.game.canvas.width} × ${this.game.canvas.height}`);
-    console.log(`✓ 世界bounds: (${this.physics.world.bounds.x}, ${this.physics.world.bounds.y}) ${this.physics.world.bounds.width}×${this.physics.world.bounds.height}`);
-    
-    // 5. 我們的新背景詳細狀態  
-    console.log('🎨 診斷5: 新背景物件詳細狀態');
-    console.log(`Graphics背景存在: ${!!this.testGraphicsBackground}`);
-    console.log(`Rectangle背景存在: ${!!this.testRectangleBackground}`);
-    console.log(`Scene.png背景存在: ${!!this.sceneBackground}`);
-    
-    // 6. 最終診斷結論
-    console.log('📋 診斷6: 問題根本原因分析');
-    console.log('✓ 負深度物件掃描完成');
-    console.log('✓ 邊界內背景層檢測完成');
-    console.log('✓ 原背景隱藏實驗完成');
-    console.log('✓ 新背景狀態分析完成');
-    console.log('');
-    console.log('🎯 關鍵發現:');
-    console.log('1. 如果隱藏原背景後新背景仍不可見 → 新背景本身有問題');
-    console.log('2. 如果隱藏原背景後新背景可見 → 原背景在更高層級');
-    console.log('3. 如果Graphics bounds為0×0 → fillRect沒有正確執行');
-    console.log('4. 如果willRender返回false → 相機無法看到背景');
-    console.log('');
-    console.log('📱 請用戶檢查:');
-    console.log('- 隱藏原背景後背景是否變化?');
-    console.log('- Graphics背景的bounds是否正確?');
-    console.log('- 新背景的willRender是否返回true?');
-    
-    
-    // 恢復原背景顯示(診斷完成後)
-    setTimeout(() => {
-      console.log('🔄 診斷結束，恢復原背景顯示');
-      const hiddenBackgrounds = this.children.list.filter(obj => {
-        const gameObj = obj as any;
-        return gameObj.depth < 0 && !gameObj.visible && 
-               gameObj !== this.testGraphicsBackground &&
-               gameObj !== this.testRectangleBackground &&
-               gameObj !== this.sceneBackground;
-      });
-      
-      hiddenBackgrounds.forEach(obj => {
-        (obj as any).setVisible(true);
-      });
-      console.log(`✓ 已恢復 ${hiddenBackgrounds.length} 個原背景物件的顯示`);
-    }, 5000); // 5秒後恢復
-    
-    // 1. 背景生成代碼調查
-    console.log('🔍 當前背景系統調查:');
-    console.log('✓ drawZoneScene存在:', typeof (this as any).drawZoneScene);
-    if (typeof (this as any).drawZoneScene === 'function') {
-        console.log('✓ drawZoneScene: 關卡場景背景生成方法確認');
-    }
-    
-    // 檢查TileSprite相關
-    const existingTileSprites = this.children.list.filter(obj => 
-        obj.constructor.name === 'TileSprite'
-    );
-    console.log('✓ 現有TileSprite數量:', existingTileSprites.length);
-    existingTileSprites.slice(0, 3).forEach((obj, i) => {
-        const tile = obj as any;
-        console.log(`  TileSprite${i+1}: depth=${tile.depth} visible=${tile.visible} size=${tile.width}×${tile.height}`);
-    });
-    
-    // 檢查Graphics相關 (原背景可能也用Graphics)
-    const existingGraphics = this.children.list.filter(obj => 
-        obj.constructor.name === 'Graphics'
-    );
-    console.log('✓ 現有Graphics數量:', existingGraphics.length);
-    existingGraphics.forEach((obj, i) => {
-        const gfx = obj as any;
-        console.log(`  Graphics${i+1}: depth=${gfx.depth} visible=${gfx.visible} bounds=${gfx.getBounds?.()?.width || 'unknown'}×${gfx.getBounds?.()?.height || 'unknown'}`);
-    });
-    
-    // 2. 背景深度層級分析
-    console.log('🔍 背景層物件分析 (負深度):');
-    const backgroundObjects = this.children.list
-        .filter(obj => (obj as any).depth < 0)
-        .sort((a, b) => (a as any).depth - (b as any).depth);
-    
-    console.log('✓ 背景層物件總數:', backgroundObjects.length);
-    backgroundObjects.forEach((obj, index) => {
-        const depth = (obj as any).depth;
-        const type = obj.constructor.name;
-        const visible = (obj as any).visible;
-        const bounds = (obj as any).getBounds?.();
-        const size = bounds ? `${bounds.width}×${bounds.height}` : 'no-bounds';
-        console.log(`✓ 背景${index+1}: ${type} depth=${depth} visible=${visible} size=${size}`);
-    });
-    
-    // 3. 遮擋關係檢測
-    console.log('🔍 遮擋關係檢測 (depth -10 到 50):');
-    const potentialBlockers = this.children.list.filter(obj => {
-        const depth = (obj as any).depth;
-        return depth > -10 && depth < 50;
-    }).sort((a, b) => (a as any).depth - (b as any).depth);
-    
-    console.log('✓ 可能遮擋物數量:', potentialBlockers.length);
-    potentialBlockers.slice(0, 8).forEach((obj, index) => {
-        const depth = (obj as any).depth;
-        const type = obj.constructor.name;
-        const visible = (obj as any).visible;
-        const bounds = (obj as any).getBounds?.();
-        const size = bounds ? `${bounds.width}×${bounds.height}` : 'no-bounds';
-        console.log(`✓ 層級${index+1}: ${type} depth=${depth} visible=${visible} size=${size}`);
-    });
-    
-    // 4. 我們的背景物件在整體中的位置
-    console.log('🔍 我們的背景物件定位:');
-    if (this.testGraphicsBackground) {
-        const myGraphicsIndex = this.children.list.indexOf(this.testGraphicsBackground as Phaser.GameObjects.GameObject);
-        console.log(`✓ 我們的Graphics在children中的索引: ${myGraphicsIndex}`);
-    }
-    if (this.testRectangleBackground) {
-        const myRectIndex = this.children.list.indexOf(this.testRectangleBackground as Phaser.GameObjects.GameObject);
-        console.log(`✓ 我們的Rectangle在children中的索引: ${myRectIndex}`);
-    }
-    if (this.sceneBackground) {
-        const mySceneIndex = this.children.list.indexOf(this.sceneBackground as Phaser.GameObjects.GameObject);
-        console.log(`✓ 我們的Scene.png在children中的索引: ${mySceneIndex}`);
-    }
+    const active = this.isNewSceneActive;
+    for (const bg of this.sceneBackgrounds) bg.setVisible(active);
+    this.characterSkin?.setVisible(active);
+    this.characterUIOverlay?.setVisible(active);
+    // 新場景改用覆蓋圖 UI → 隱藏原 P1 頭頂 UI、啟用底部面板替換；舊場景反之
+    this.controlP1HeadUI(!active);
+    this.controlBottomPanelOverlay(active);
   }
 
   /**
@@ -9128,45 +8583,16 @@ export class GameScene extends Phaser.Scene {
 
   /**
    * ★F2強制重載Scene.png紋理
-   * 
-   * 排除瀏覽器快取或紋理載入問題
+   *
+   * 排除瀏覽器快取或紋理載入問題：銷毀背景圖並移除舊紋理，加 timestamp 重新載入後重建（保留目前顯示狀態）
    */
   private forceReloadSceneBackground(): void {
-    console.log('🔄 F2強制重載Scene.png...');
-    
-    // 移除舊紋理
-    if (this.textures.exists('scene-background')) {
-      this.textures.remove('scene-background');
-      console.log('🗑️ 舊紋理已移除');
-    }
-    
-    // 銷毀舊背景物件
-    if (this.sceneBackground) {
-      this.sceneBackground.destroy();
-      this.sceneBackground = null;
-      console.log('🗑️ 舊背景物件已銷毀');
-    }
-    
-    // 強制重載圖片（添加timestamp防止快取）
-    const timestamp = Date.now();
-    const imageUrl = `assets/Scene.png?t=${timestamp}`;
-    
-    this.load.image('scene-background-new', imageUrl);
-    this.load.once('complete', () => {
-      console.log('✅ 新紋理載入完成，重新創建背景...');
-      
-      // 重新創建背景物件，使用固定中心位置確保穩定性
-      // 使用GameConfig確定的固定尺寸，避免依賴可能不穩定的calculateGameArea()
-      const centerX = GameConfig.width / 2;
-      const centerY = GameConfig.height / 2;
-      
-      this.sceneBackground = this.add.image(centerX, centerY, 'scene-background-new')
-        .setOrigin(0.5, 0.5)  // 中心對齊
-        .setDepth(1)          // 深度1：覆蓋地面圖片但不遮擋遊戲元素
-        .setVisible(this.isNewSceneActive)
-        .setScrollFactor(0);  // 固定位置，不隨相機移動
-    });
-    
+    for (const bg of this.sceneBackgrounds) bg.destroy();
+    this.sceneBackgrounds = [];
+    if (this.textures.exists(SCENE_BG_TEXTURE_KEY)) this.textures.remove(SCENE_BG_TEXTURE_KEY);
+
+    this.load.image(SCENE_BG_TEXTURE_KEY, `${SCENE_BG_RELOAD_URL}?t=${Date.now()}`);
+    this.load.once(Phaser.Loader.Events.COMPLETE, () => this.createSceneBackgrounds());
     this.load.start();
   }
 
