@@ -2395,24 +2395,15 @@ export class GameScene extends Phaser.Scene {
     const gy = this.zoneA.top, gh = this.zoneA.height;
     g.fillStyle(lv.groundBase ?? 0x6b5a3a, 1);
     g.fillRect(x0, gy, w, gh);
-    // ★走廊配合主題:森林=草叢/落葉;洞窟=碎岩/微弱冷光;其餘=碎石。走廊吃當前主題 palette 不突兀。
-    const theme = this.sceneThemeOf(this.currentLevel);
-    if (theme === 'forest') {
-      for (let i = 0; i < 60; i++) {
-        const px = Phaser.Math.Between(x0 + 4, x0 + w - 4), py = Phaser.Math.Between(gy + 4, gy + gh - 4);
-        if (Math.random() < 0.6) { // 草叢
-          g.lineStyle(1, lv.groundLight, 0.5);
-          for (let k = 0; k < 3; k++) { const a = -Math.PI / 2 + Phaser.Math.FloatBetween(-0.5, 0.5); const ln = Phaser.Math.Between(5, 11); g.beginPath(); g.moveTo(px, py); g.lineTo(px + Math.cos(a) * ln, py + Math.sin(a) * ln); g.strokePath(); }
-        } else { g.fillStyle(GameConfig.scene.forestLeaf, 0.45); g.fillCircle(px, py, Phaser.Math.Between(2, 4)); }
-      }
-      g.lineStyle(0, 0, 0);
-    } else if (theme === 'cave') {
-      for (let i = 0; i < 60; i++) {
-        const px = Phaser.Math.Between(x0 + 4, x0 + w - 4), py = Phaser.Math.Between(gy + 4, gy + gh - 4);
-        const roll = Math.random();
-        if (roll < 0.6) { g.fillStyle(lv.pebble ?? 0x40454d, 0.6); g.fillCircle(px, py, Phaser.Math.Between(2, 5)); }
-        else if (roll < 0.85) { g.fillStyle(lv.groundDark, 0.5); g.fillCircle(px, py, Phaser.Math.Between(4, 9)); }
-        else if (lv.glow) { g.fillStyle(lv.glow, 0.22); g.fillCircle(px, py, Phaser.Math.Between(4, 10)); }
+    // ★走廊地面細節：荒城主題的碎石
+    for (let i = 0; i < 60; i++) {
+      const px = Phaser.Math.Between(x0 + 4, x0 + w - 4), py = Phaser.Math.Between(gy + 4, gy + gh - 4);
+      if (Math.random() < 0.6) { // 碎石
+        g.fillStyle(lv.pebble ?? 0x947963, 0.5); 
+        g.fillCircle(px, py, Phaser.Math.Between(2, 5));
+      } else { // 殘骸
+        g.fillStyle(lv.groundLight, 0.28); 
+        g.fillRect(px, py, Phaser.Math.Between(8, 20), Phaser.Math.Between(4, 12));
       }
     }
     g.lineStyle(3, lv.groundDark ?? 0x4a4030, 0.8);
@@ -3113,13 +3104,6 @@ export class GameScene extends Phaser.Scene {
    * ★方案e:slot 比畫面大,camera 跟隨玩家走到邊緣時露出 slot 邊緣的遠景(荒城/火山)。
    * 靜態底圖用 graphics 一次畫好(depth 0/1),粒子適量,不拖累割草。
    */
-  /** ★場景主題:關1-4=荒城/火山(wasteland)、關5-6=森林(forest)、關7-8=洞窟(cave,階段3)。 */
-  private sceneThemeOf(level: number): 'wasteland' | 'forest' | 'cave' {
-    if (level >= 7) return 'cave';
-    if (level >= 5) return 'forest';
-    return 'wasteland';
-  }
-
   private drawZoneScene(slot: Phaser.Geom.Rectangle, zone: Phaser.Geom.Rectangle, level: number, variant: 'A' | 'B'): void {
     const layerStart = this.sceneLayers.length;
     this.drawZoneSceneLayers(slot, zone, level, variant);
@@ -3131,9 +3115,6 @@ export class GameScene extends Phaser.Scene {
   private drawZoneSceneLayers(slot: Phaser.Geom.Rectangle, zone: Phaser.Geom.Rectangle, level: number, variant: 'A' | 'B'): void {
     const sc = GameConfig.scene;
     const lv = (sc.levels as Record<number, any>)[level] ?? (sc.levels as Record<number, any>)[1];
-    const theme = this.sceneThemeOf(level); // ★主題:'wasteland'(1-4 荒城火山) | 'forest'(5-6) | 'cave'(7-8)
-    const isForest = theme === 'forest';
-    const isCave = theme === 'cave';
 
     // ---- 1) 遠景天空漸層(畫滿整個 slot) ----
     const sky = this.add.graphics().setDepth(-3);
@@ -3145,12 +3126,7 @@ export class GameScene extends Phaser.Scene {
     const far = this.add.graphics().setDepth(-2);
     const bandH = Math.round((zone.top - slot.top) * 1.15);
     const bandTop = slot.top + Math.max(16, (zone.top - slot.top) * 0.1);
-    if (isForest) {
-      if (variant === 'A') this.drawFarForest(far, slot.x + 16, bandTop, slot.width - 32, bandH, 'A');
-      else this.drawFarForest(far, slot.x + 16, bandTop, slot.width - 32, bandH, 'B');
-    } else if (isCave) {
-      this.drawFarCave(far, slot.x + 16, bandTop, slot.width - 32, bandH, variant);
-    } else if (variant === 'A') this.drawFarRuinedCity(far, slot.x + 16, bandTop, slot.width - 32, bandH);
+    if (variant === 'A') this.drawFarRuinedCity(far, slot.x + 16, bandTop, slot.width - 32, bandH);
     else this.drawFarVolcano(far, slot.x + 16, bandTop, slot.width - 32, bandH);
     this.sceneLayers.push(far);
 
@@ -3167,40 +3143,7 @@ export class GameScene extends Phaser.Scene {
       const y = Phaser.Math.Between(slot.top + bandH, slot.bottom - 6); // band 以下
       if (inArena(x, y)) continue;
       const roll = Math.random();
-      if (isCave) {
-        // ★洞窟外圍:碎岩堆/暗岩塊/水漬反光/微弱冷光斑
-        if (roll < 0.42) { // 碎岩堆(暗灰多顆)
-          outer.fillStyle(lv.pebble, 0.6);
-          for (let k = 0; k < 3; k++) outer.fillCircle(x + Phaser.Math.Between(-6, 6), y + Phaser.Math.Between(-5, 5), Phaser.Math.Between(3, 7));
-        } else if (roll < 0.7) { // 暗岩塊(多邊)
-          outer.fillStyle(lv.groundDark, 0.6);
-          const pts: Phaser.Geom.Point[] = []; const rr = Phaser.Math.Between(8, 18);
-          for (let s = 0; s < 5; s++) { const a = (s / 5) * Math.PI * 2; const rad = rr * (0.6 + Math.random() * 0.5); pts.push(new Phaser.Geom.Point(x + Math.cos(a) * rad, y + Math.sin(a) * rad)); }
-          outer.fillPoints(pts, true);
-        } else if (roll < 0.86) { // 水漬反光(冷色橢圓 + 高光)
-          outer.fillStyle(GameConfig.scene.caveGlow, 0.14); outer.fillCircle(x, y, Phaser.Math.Between(6, 14));
-          outer.fillStyle(GameConfig.scene.caveMote, 0.2); outer.fillCircle(x - 2, y - 1, Phaser.Math.Between(2, 4));
-        } else if (lv.glow) { // 微弱冷光斑(磷光)
-          outer.fillStyle(lv.glow, 0.3); outer.fillCircle(x, y, Phaser.Math.Between(3, 8));
-        } else {
-          outer.fillStyle(lv.groundBase, 0.4); outer.fillCircle(x, y, Phaser.Math.Between(6, 14));
-        }
-      } else if (isForest) {
-        // ★森林外圍:灌木叢/蕨葉/苔石/落葉,鋪滿林間空地
-        if (roll < 0.4) { // 灌木叢(深綠橢圓簇)
-          outer.fillStyle(lv.groundDark, 0.55);
-          for (let k = 0; k < 3; k++) outer.fillCircle(x + Phaser.Math.Between(-8, 8), y + Phaser.Math.Between(-6, 6), Phaser.Math.Between(6, 12));
-        } else if (roll < 0.68) { // 蕨葉/草叢(亮綠細條放射)
-          outer.lineStyle(2, lv.groundLight, 0.5);
-          for (let k = 0; k < 5; k++) { const a = -Math.PI / 2 + Phaser.Math.FloatBetween(-0.7, 0.7); const ln = Phaser.Math.Between(8, 16); outer.beginPath(); outer.moveTo(x, y); outer.lineTo(x + Math.cos(a) * ln, y + Math.sin(a) * ln); outer.strokePath(); }
-          outer.lineStyle(0, 0, 0);
-        } else if (roll < 0.85) { // 苔石(灰綠圓)
-          outer.fillStyle(lv.pebble, 0.6); outer.fillCircle(x, y, Phaser.Math.Between(4, 9));
-          outer.fillStyle(lv.groundLight, 0.35); outer.fillCircle(x - 2, y - 2, Phaser.Math.Between(2, 4));
-        } else { // 落葉(小黃綠點)
-          outer.fillStyle(GameConfig.scene.forestLeaf, 0.45); outer.fillCircle(x, y, Phaser.Math.Between(2, 4));
-        }
-      } else if (roll < 0.5) { // 碎石
+      if (roll < 0.5) { // 碎石
         outer.fillStyle(lv.pebble, 0.5); outer.fillCircle(x, y, Phaser.Math.Between(2, 5));
       } else if (roll < 0.82) { // 斷牆/岩塊殘骸(暗矩形)
         outer.fillStyle(lv.groundLight, 0.28); outer.fillRect(x, y, Phaser.Math.Between(10, 28), Phaser.Math.Between(6, 16));
@@ -3218,11 +3161,7 @@ export class GameScene extends Phaser.Scene {
     const gt = this.make.graphics({ x: 0, y: 0 }, false);
     const w = Math.round(zone.width), h = Math.round(zone.height);
     gt.fillStyle(lv.groundBase, 1); gt.fillRect(0, 0, w, h);
-    if (isForest) {
-      this.drawForestGround(gt, w, h, lv, level);
-    } else if (isCave) {
-      this.drawCaveGround(gt, w, h, lv, level);
-    } else {
+    
     // 不規則多邊斑塊(比柔和圓點更像乾裂土塊)
     for (let i = 0; i < 120; i++) {
       const bx = Phaser.Math.Between(0, w), by = Phaser.Math.Between(0, h);
@@ -3282,7 +3221,6 @@ export class GameScene extends Phaser.Scene {
         gt.fillPoints(pts, true);
       }
     }
-    }
     gt.generateTexture(key, w, h); gt.destroy();
     const ground = this.add.image(zone.x, zone.y, key).setOrigin(0, 0).setDepth(0);
     this.sceneLayers.push(ground);
@@ -3295,46 +3233,6 @@ export class GameScene extends Phaser.Scene {
 
     // ---- 5) 餘燼火點粒子(畫在整個 slot;火山關4/熔岩關2 更多、B 變體更多) ----
     if (sc.emberCount > 0) {
-      if (isForest) {
-        const leafCount = variant === 'B' ? Math.round(sc.emberCount * 0.9) : Math.round(sc.emberCount * 0.7);
-        const leaves = this.add.particles(0, 0, 'spark', {
-          x: { min: slot.x, max: slot.right },
-          y: { min: slot.y, max: slot.bottom - 40 },
-          lifespan: 5200, speedY: { min: 10, max: 26 }, speedX: { min: -20, max: 20 },
-          gravityY: 6, rotate: { min: 0, max: 360 },
-          scale: { start: 0.6, end: 0.35 }, alpha: { start: 0.85, end: 0 },
-          tint: [GameConfig.scene.forestLeaf, lv.groundLight], frequency: Math.max(120, 2400 / Math.max(4, leafCount)), quantity: 1
-        }).setDepth(2);
-        this.sceneLayers.push(leaves);
-        // 林間光點(晨光/螢火,ADD 微亮),A 較多
-        const moteCount = variant === 'A' ? Math.round(sc.emberCount * 0.5) : Math.round(sc.emberCount * 0.3);
-        const motes = this.add.particles(0, 0, 'spark', {
-          x: { min: slot.x, max: slot.right }, y: { min: slot.y + bandH * 0.5, max: slot.bottom - 20 },
-          lifespan: 3000, speedY: { min: -10, max: -24 }, speedX: { min: -6, max: 6 },
-          scale: { start: 0.4, end: 0 }, alpha: { start: 0.7, end: 0 },
-          tint: GameConfig.scene.forestMote, frequency: Math.max(140, 2600 / Math.max(3, moteCount)), quantity: 1, blendMode: 'ADD'
-        }).setDepth(2);
-        this.sceneLayers.push(motes);
-      } else if (isCave) {
-        // ★洞窟:下落水滴(暗灰,帶重力)+ 冷光螢點(藍白 ADD)+ 微塵。B(深淵)更暗、螢點少。
-        const dripCount = Math.round(sc.emberCount * 0.5);
-        const drips = this.add.particles(0, 0, 'spark', {
-          x: { min: slot.x, max: slot.right }, y: { min: slot.y + bandH * 0.4, max: slot.y + bandH * 0.9 },
-          lifespan: 1600, speedY: { min: 120, max: 220 }, speedX: { min: -4, max: 4 }, gravityY: 120,
-          scale: { start: 0.28, end: 0.12 }, alpha: { start: 0.7, end: 0 },
-          tint: GameConfig.scene.caveDrip, frequency: Math.max(200, 3200 / Math.max(3, dripCount)), quantity: 1
-        }).setDepth(2);
-        this.sceneLayers.push(drips);
-        // 冷光螢點(磷光/水光,ADD 微亮飄浮)
-        const glowCount = variant === 'A' ? Math.round(sc.emberCount * 0.6) : Math.round(sc.emberCount * 0.35);
-        const glows = this.add.particles(0, 0, 'spark', {
-          x: { min: slot.x, max: slot.right }, y: { min: slot.y + bandH * 0.6, max: slot.bottom - 16 },
-          lifespan: 3400, speedY: { min: -6, max: -16 }, speedX: { min: -8, max: 8 },
-          scale: { start: 0.42, end: 0 }, alpha: { start: 0.65, end: 0 },
-          tint: [GameConfig.scene.caveMote, GameConfig.scene.caveGlow], frequency: Math.max(150, 2600 / Math.max(3, glowCount)), quantity: 1, blendMode: 'ADD'
-        }).setDepth(2);
-        this.sceneLayers.push(glows);
-      } else {
       const glowColor = variant === 'B' ? (sc.farB.lava as number) : (lv.glow || 0xff8a3a);
       // 關4(火山岩盤)餘燼最多、關2(熔岩)次之;B 變體(火山遠景)加成。
       const levelMult = level === 4 ? 1.8 : level === 2 ? 1.3 : 1.0;
@@ -3348,7 +3246,6 @@ export class GameScene extends Phaser.Scene {
         tint: glowColor, frequency: Math.max(45, 1800 / count), quantity: 1, blendMode: 'ADD'
       }).setDepth(2);
       this.sceneLayers.push(emitter);
-      }
     }
   }
 
