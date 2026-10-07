@@ -7,12 +7,6 @@ export const GameConfig = {
   width: 1920,
   height: 1080,
 
-  /** 除錯開關 */
-  debug: {
-    /** 顯示慢速模式即時調參面板(藍圈/衝刺距離/速度)——用戶要求預設關 */
-    showSlowTuningPanel: false
-  },
-
   /** ★波次進度 HUD(關卡制:節點序列 ●─●─◆);只純波次顯示,事件/BOSS 隱藏 */
   waveHud: {
     enabled: true,

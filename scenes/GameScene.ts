@@ -393,8 +393,6 @@ export class GameScene extends Phaser.Scene {
     if (this.controlMode === 'slow') this.player.noHpLoss = true;
     // ★v60 階段3:slow 模式 P1 啟用【強化型態造型】(升級變身視覺;fast 不開,維持原強化視覺)。
     if (this.controlMode === 'slow') this.player.empoweredForm = true;
-    // ★UI調整①:慢速調參面板改由 config.debug.showSlowTuningPanel 控制(預設關)。
-    if (this.controlMode === 'slow') this.createSlowTuningPanel();
 
     // B 鍵：逐一加入 BOT 夥伴（最多湊滿 characters.count）
     this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.B).on('down', () => {
@@ -1498,65 +1496,6 @@ export class GameScene extends Phaser.Scene {
     }
     this.flashWhite(c);
     this.spawnMeleeArcEffect(c.x, c.y, c.aimAngle);
-  }
-
-  /**
-   * v47：慢速模式即時調參欄位——三列(藍圈lockRadius/衝刺距離dashDistance/衝刺速度dashSpeed)，
-   * 每列 −/+ 按鈕(滑鼠點擊,不佔用方向鍵/空白鍵)即時調整 this.slowTuning，立刻生效。
-   * v48(1)：下限放寬(dashDistance→80、dashSpeed→400、lockRadius→60)。
-   * v48(2)：面板移到【右側垂直排列】，避開下方角色 HUD 狀態列(h-52 那排)與上方 HUD，不重疊。
-   */
-  private createSlowTuningPanel(): void {
-    // ★UI調整①:用戶要求隱藏慢速即時調參面板→直接 early-return(保留下方程式供日後除錯)。
-    if (!GameConfig.debug?.showSlowTuningPanel) return;
-    const W = GameConfig.width;
-    const DEPTH = 40; // 高於遊戲物件
-    // 面板：右側垂直長條(避開頂部 team/wave HUD 與底部 4 欄角色狀態列)
-    const panelW = 176;
-    const panelX = W - panelW - 8; // 貼右邊
-    const panelY = 150;            // 頂部 HUD(Lv/expbar 到 ~116)之下
-    const rowGap = 78;
-    const panelH = 24 + rowGap * 3;
-    this.add.rectangle(panelX, panelY, panelW, panelH, 0x0a0c14, 0.72).setOrigin(0, 0).setDepth(DEPTH);
-    this.add.rectangle(panelX, panelY, panelW, 2, 0x66ccff, 0.6).setOrigin(0, 0).setDepth(DEPTH + 1);
-    this.add.text(panelX + 8, panelY + 5, '慢速即時調參', {
-      fontFamily: 'monospace', fontSize: '13px', color: '#9adcff'
-    }).setDepth(DEPTH + 1);
-
-    type Key = 'lockRadius' | 'dashDistance' | 'dashSpeed';
-    const rows: Array<{ key: Key; label: string; min: number; max: number; step: number }> = [
-      { key: 'lockRadius', label: '藍色範圍', min: 60, max: 500, step: 20 },
-      { key: 'dashDistance', label: '衝刺距離', min: 80, max: 600, step: 20 },
-      { key: 'dashSpeed', label: '衝刺速度', min: 400, max: 2200, step: 100 }
-    ];
-    rows.forEach((row, i) => {
-      const cx = panelX + 8;
-      const cy = panelY + 26 + rowGap * i;
-      this.add.text(cx, cy, row.label, {
-        fontFamily: 'monospace', fontSize: '14px', color: '#e2e8f0'
-      }).setDepth(DEPTH + 1);
-      // 數值文字
-      const valText = this.add.text(cx, cy + 20, String(this.slowTuning[row.key]), {
-        fontFamily: 'monospace', fontSize: '20px', color: '#ffe066', fontStyle: 'bold'
-      }).setDepth(DEPTH + 1);
-      const mkBtn = (bx: number, sign: '−' | '+', delta: number): void => {
-        const bg = this.add.rectangle(bx, cy + 28, 34, 34, 0x334155, 0.95)
-          .setStrokeStyle(2, 0x66ccff, 0.8).setDepth(DEPTH + 1)
-          .setInteractive({ useHandCursor: true });
-        this.add.text(bx, cy + 28, sign, {
-          fontFamily: 'monospace', fontSize: '22px', color: '#ffffff', fontStyle: 'bold'
-        }).setOrigin(0.5).setDepth(DEPTH + 2);
-        bg.on('pointerover', () => bg.setFillStyle(0x475569, 1));
-        bg.on('pointerout', () => bg.setFillStyle(0x334155, 0.95));
-        bg.on('pointerdown', () => {
-          const next = Phaser.Math.Clamp(this.slowTuning[row.key] + delta, row.min, row.max);
-          this.slowTuning[row.key] = next;
-          valText.setText(String(next)); // 即時更新顯示（圈/衝刺讀 slowTuning，下一幀自動生效）
-        });
-      };
-      mkBtn(cx + 92, '−', -row.step);
-      mkBtn(cx + 132, '+', row.step);
-    });
   }
 
   /**
