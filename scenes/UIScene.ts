@@ -71,6 +71,11 @@ interface StatsPayload {
   currentSub?: string;
   subWavesDone?: number;
   subWavesTarget?: number;
+  /** 小關卡卷軸 HUD：目前關卡編號、擊殺進度、本關起的寶箱階級（長度 = waveHud.visibleStages） */
+  stage?: number;
+  stageKilled?: number;
+  stageQuota?: number;
+  stageChests?: Array<'low' | 'high'>;
   progressPhase?: string;
   crossingOpen?: boolean;
   /** v31/v55 連段(招式)系統 */
@@ -122,19 +127,21 @@ export class UIScene extends Phaser.Scene {
 
   private aimGraphics!: Phaser.GameObjects.Graphics;
   private joinHintText!: Phaser.GameObjects.Text;
-  /** ★波次進度 HUD:節點序列圖(●─●─◆);Graphics 每幀重繪 */
+  /** 小關卡卷軸 HUD（4 圓點 + 量條）：Graphics 每幀重繪 */
   private waveHudGfx!: Phaser.GameObjects.Graphics;
-  /** 波次 HUD 最新進度(供 update() 每幀重繪脈動用);visible 決定是否顯示 */
-  private waveHudDone = 0;
-  private waveHudTarget = 0;
-  private waveHudShow = false;
-  /** ★線漸進填滿:目前已填滿的「線段進度」(0..target),每幀 lerp 逼近 waveHudFillTarget */
-  private waveHudFill = 0;
-  /** ★③逐怪反饋:目標填線進度 = 已完成波數 + 當前波(waveKilled/waveQuota);每殺一隻怪即前進一點 */
-  private waveHudFillTarget = 0;
-  /** ★D:節點圖案 icons — nodeIcons[]=波次節點(enemy-normal),rewardIcon=獎勵節點(collect-gem) */
-  private nodeIcons: Phaser.GameObjects.Image[] = [];
-  private rewardIcon!: Phaser.GameObjects.Image;
+  /** 卷軸 HUD 是否顯示（關卡制才顯示） */
+  private stageHudShow = false;
+  /** 卷軸 HUD 目前顯示的關卡編號（變大 = 進入下一關，觸發遞補動畫） */
+  private stageHudStage = 0;
+  /** 本關擊殺進度：目前畫出的比例（每幀平滑逼近 target）與目標比例，0..1 */
+  private stageHudFill = 0;
+  private stageHudFillTarget = 0;
+  /** 圓點的寶箱階級：[0] = 目前關卡 */
+  private stageHudChests: Array<'low' | 'high'> = [];
+  /** 剛完成那關的寶箱階級（遞補動畫中淡出用） */
+  private stageHudPrevChest: 'low' | 'high' | null = null;
+  /** 遞補動畫開始時間（scene time）；動畫時長見 waveHud.shiftMs */
+  private stageHudShiftAt = -Infinity;
   /** v25 第8項：P1 普攻命中計數（左上角） */
   private hitText!: Phaser.GameObjects.Text;
   /** ★頭上UI系統 - 替換舊的左上角COMBO系統 */
@@ -336,27 +343,11 @@ export class UIScene extends Phaser.Scene {
       .setOrigin(0.5, 0)
       .setVisible(false);
 
-    // ★波次進度 HUD(關卡制:節點序列 ●─●─◆);固定螢幕、每幀依 stats 重繪,預設隱藏。
+    // 小關卡卷軸 HUD（4 圓點 + 量條）：固定螢幕、每幀依 stats 重繪，預設隱藏
     this.waveHudGfx = this.add.graphics()
       .setScrollFactor(0)
       .setDepth(25)
       .setVisible(false);
-    // ★D:節點 icon(修正版):原本 Graphics 圓形/菱形形狀、發光、pulse 全部保留(Graphics depth25 不動)。
-    // Icon 只是疊在節點中心的【小裝飾】——尺寸明顯小於節點,不蓋住邊框/發光效果。depth=26。不加 mask。
-    const iconMaxWaves = 4;
-    const nr = GameConfig.waveHud.nodeRadius;
-    const waveIconSize = Math.round(nr * 1.6); // 約 nodeRadius×0.8 半徑 → 不蓋外圈
-    for (let i = 0; i < iconMaxWaves; i++) {
-      const icon = this.add.image(0, 0, 'enemy-normal')
-        .setScrollFactor(0).setDepth(26).setVisible(false)
-        .setDisplaySize(waveIconSize, waveIconSize);
-      this.nodeIcons.push(icon);
-    }
-    // 獎勵節點 icon(collect-gem 綠寶石):菱形比圓形略大,icon 縮一點
-    const rewardIconSize = Math.round(nr * 1.6);
-    this.rewardIcon = this.add.image(0, 0, 'collect-gem')
-      .setScrollFactor(0).setDepth(26).setVisible(false)
-      .setDisplaySize(rewardIconSize, rewardIconSize);
 
     // ★UI調整②:加入夥伴提示移到【畫面下方】(角色狀態列上方,置中) - 🚫 用戶要求關閉
     this.joinHintText = this.add
@@ -633,9 +624,6 @@ export class UIScene extends Phaser.Scene {
       this.game.events.off('boss-hp', this.updateBossHp, this);
       this.game.events.off('event-hud', this.updateEventHud, this);
       this.game.events.off('items-state', this.updateItemToggleBtn, this);
-      // ★D:清除節點 icon
-      for (const ic of this.nodeIcons) ic.destroy();
-      if (this.rewardIcon) this.rewardIcon.destroy();
     });
   }
 
@@ -712,39 +700,8 @@ export class UIScene extends Phaser.Scene {
     }
 
     // ★波次進度 HUD(關卡制:節點序列 ●─●─◆);只在【純波次子區】顯示;事件/BOSS/非 levelMode 隱藏。
-    // 這裡只記錄狀態,實際節點繪製在 update() 每幀跑(脈動+線漸填平滑)。
-    const nowShow = !!(GameConfig.waveHud.enabled && s.levelMode &&
-        s.waveState !== 'event' && s.waveState !== 'boss' &&
-        s.progressPhase === 'playing' && !s.crossingOpen &&
-        (s.subWavesTarget ?? 0) > 0);
-    const newDone = s.subWavesDone ?? 0;
-    const newTarget = s.subWavesTarget ?? 0;
-    // ★③逐怪反饋:填線目標 = 已完成波數 + 當前波內殺敵比例(waveKilled/waveQuota),clamp 在 [0,target]。
-    // 每殺一隻怪 onWaveKill→emitStats→這裡更新目標→update() 每幀平滑 lerp 逼近→線一點一點推進(非打完整波才動)。
-    //
-    // ★BUG 修:波與波【過渡期(intermission)】,上一波剛完成 subWavesDone 已 +1,但 waveKilled 仍殘留 = 上一波 quota
-    //   (要到下一波 spawning 才歸零)→ 若照算 curWaveFrac = quota/quota = 1 → fillTarget = done+1 → 第二段線直接跳滿。
-    //   根因:當前波分項在過渡期讀到上一波的殘留殺敵值。修法:非 spawning/clearing(即 intermission 等下一波未開始)
-    //   時,當前波分項一律當 0(下一波還沒開始,不該有進度);waveQuota<=0 也當 0(除零防呆)。
-    const waveActive = (s.waveState === 'spawning' || s.waveState === 'clearing');
-    const wq = s.waveQuota ?? 0;
-    const curWaveFrac = (waveActive && wq > 0)
-      ? Phaser.Math.Clamp((s.waveKilled ?? 0) / wq, 0, 1)
-      : 0;
-    const newFillTarget = Phaser.Math.Clamp(newDone + curWaveFrac, 0, newTarget);
-    // 新子區(target 變 或 從隱藏轉顯示 或 done 倒退)→重置線填滿進度為 0(重新一節一節填)
-    if (newTarget !== this.waveHudTarget || (nowShow && !this.waveHudShow) || newDone < this.waveHudDone) {
-      this.waveHudFill = 0;
-    }
-    this.waveHudShow = nowShow;
-    this.waveHudDone = newDone;
-    this.waveHudTarget = newTarget;
-    this.waveHudFillTarget = newFillTarget;
-    if (!this.waveHudShow) {
-      this.waveHudGfx.setVisible(false);
-      for (const ic of this.nodeIcons) ic.setVisible(false);
-      if (this.rewardIcon) this.rewardIcon.setVisible(false);
-    }
+    // 卷軸 HUD：這裡只記錄狀態，實際繪製在 update() 每幀跑（脈動、量條平滑、遞補動畫）
+    this.updateStageHudState(s);
 
     // 加入夥伴提示：滿了改字
     if (s.count >= s.maxCount) {
@@ -801,112 +758,134 @@ export class UIScene extends Phaser.Scene {
 
   /** 每幀:波次節點序列脈動 + 線漸進填滿重繪(只在顯示時)。 */
   update(_time: number, delta: number): void {
-    // ★頭上UI系統：移除舊的COMBO/能量閃爍邏輯
-    // 保留波次節點相關邏輯
-    if (!this.waveHudShow) return;
-    // ★③逐怪反饋:waveHudFill 每幀 lerp 逼近 waveHudFillTarget(=已完成波+當前波殺敵比例)。
-    // 每殺一隻怪目標往前一點→線一點一點平滑推進(非打完整波才填);一整「段線」約 lineFillMs 填滿速率。
-    const rate = delta / Math.max(1, GameConfig.waveHud.lineFillMs); // 每 ms 前進的段數比例
-    if (this.waveHudFill < this.waveHudFillTarget) {
-      this.waveHudFill = Math.min(this.waveHudFillTarget, this.waveHudFill + rate);
-    } else if (this.waveHudFill > this.waveHudFillTarget) {
-      this.waveHudFill = this.waveHudFillTarget;
+    if (!this.stageHudShow) return;
+    // 量條平滑推進：每殺一隻怪目標前進一點，畫面以 lineFillMs 填滿一整段的速率逼近
+    const rate = delta / Math.max(1, GameConfig.waveHud.lineFillMs);
+    if (this.stageHudFill < this.stageHudFillTarget) {
+      this.stageHudFill = Math.min(this.stageHudFillTarget, this.stageHudFill + rate);
+    } else {
+      this.stageHudFill = this.stageHudFillTarget;
     }
-    this.drawWaveNodes(this.waveHudDone, this.waveHudTarget, this.waveHudFill);
+    this.drawStageHud();
     this.waveHudGfx.setVisible(true);
-    // ★D:更新節點 icons 位置+狀態(跟 waveHudGfx 相同座標系)
-    this.updateNodeIcons(this.waveHudDone, this.waveHudTarget);
   }
 
   /**
-   * ★D:節點 icon 位置/狀態更新(每幀在 drawWaveNodes 後呼叫)。
-   * 波次節點 icon(enemy-normal): done=亮(tint 白)、pending=暗(tint 0x666666)。
-   * 獎勵節點 icon(collect-gem): allDone=亮,else=暗。mask 跟隨節點中心。
+   * 依 stats 更新卷軸 HUD 狀態：關卡編號變大時記下剛完成的寶箱並啟動遞補動畫、量條歸零
+   *
+   * @param s 遊戲狀態
    */
-  private updateNodeIcons(done: number, target: number): void {
-    const cfg = GameConfig.waveHud;
-    const total = target + 1; // 波次節點 + 獎勵節點
-    const gap = cfg.nodeGap;
-    const width = (total - 1) * gap;
-    const startX = cfg.x - width / 2;
-    const y = cfg.y;
-    // 波次節點(target 個):icon 疊在圓形中心,尺寸小於節點,不蓋外圈/發光
-    for (let i = 0; i < this.nodeIcons.length; i++) {
-      const icon = this.nodeIcons[i];
-      if (i >= target) { icon.setVisible(false); continue; }
-      const cx = startX + i * gap;
-      icon.setPosition(cx, y).setVisible(true);
-      icon.setTint(i < done ? 0xffffff : 0x888888); // done=亮白、pending=暗灰
+  private updateStageHudState(s: StatsPayload): void {
+    this.stageHudShow = !!(GameConfig.waveHud.enabled && s.levelMode && s.stage && s.stageChests);
+    if (!this.stageHudShow) {
+      this.waveHudGfx.setVisible(false);
+      return;
     }
-    // 獎勵節點:icon 疊在菱形中心
-    const rx = startX + target * gap;
-    const allDone = done >= target;
-    this.rewardIcon.setPosition(rx, y).setVisible(true);
-    this.rewardIcon.setTint(allDone ? 0xffffff : 0x666666);
+    const stage = s.stage!;
+    if (stage > this.stageHudStage) {
+      // 進入下一關：舊的最左圓點淡出、其餘左移、最右生成新的
+      if (this.stageHudStage > 0) {
+        this.stageHudPrevChest = this.stageHudChests[0] ?? null;
+        this.stageHudShiftAt = this.time.now;
+      }
+      this.stageHudFill = 0;
+    }
+    this.stageHudStage = stage;
+    this.stageHudChests = s.stageChests!;
+    // 過場（尚未開打）時 waveKilled 可能殘留上一關的值，只有在生怪/清場階段才採計進度
+    const active = s.waveState === 'spawning' || s.waveState === 'clearing';
+    const quota = s.stageQuota ?? 0;
+    this.stageHudFillTarget = active && quota > 0 ? Phaser.Math.Clamp((s.stageKilled ?? 0) / quota, 0, 1) : 0;
   }
 
   /**
-   * ★波次進度節點序列 ●─●─◆:target 個波次節點 + 1 個獎勵節點(菱形)。
-   * 先畫線(含漸進填滿 fill)→再畫節點(節點蓋住線交會處,層次壓過線)。
-   * done 個波次已亮、第 done+1 個(當前波)高亮脈動、其餘暗;fill=已填滿的線段進度(0..target)。
+   * 繪製小關卡卷軸 HUD：圓點以量條相連，最左 = 目前關卡（脈動高亮），
+   * 第一段量條 = 本關擊殺進度；每個圓點內畫寶箱（高階較大、金色並發光）。
+   * 遞補動畫期間：全部圓點由右往左滑一格，剛完成的圓點在最左淡出、最右新圓點淡入。
    */
-  private drawWaveNodes(done: number, target: number, fill: number): void {
+  private drawStageHud(): void {
     const cfg = GameConfig.waveHud;
     const g = this.waveHudGfx;
     g.clear();
-    const total = target + 1; // 波次節點 + 獎勵節點
-    const r = cfg.nodeRadius, gap = cfg.nodeGap;
-    const width = (total - 1) * gap;
-    const startX = cfg.x - width / 2;
+    const count = this.stageHudChests.length;
+    const gap = cfg.nodeGap;
+    const startX = cfg.x - ((count - 1) * gap) / 2;
     const y = cfg.y;
-    const pulse = 0.6 + 0.4 * Math.abs(Math.sin(this.time.now / 260));
+    // 遞補動畫進度 e：0 = 剛換關（圓點還在右邊一格）→ 1 = 到定位
+    const e = Phaser.Math.Easing.Cubic.Out(Phaser.Math.Clamp((this.time.now - this.stageHudShiftAt) / cfg.shiftMs, 0, 1));
+    const slide = (1 - e) * gap;
+    const xAt = (i: number): number => startX + i * gap + slide;
 
-    // ---- 1) 連線(先畫,節點會蓋在上層) ----
-    for (let i = 0; i < total - 1; i++) {
-      const x1 = startX + i * gap, x2 = startX + (i + 1) * gap;
-      // 底線(暗)
-      g.lineStyle(cfg.lineThickness, cfg.lineColor, 0.9);
+    // 1) 量條（先畫，圓點蓋在上層）：i = -1 為剛完成那段（動畫中淡出），最右段隨新圓點淡入
+    for (let i = -1; i < count - 1; i++) {
+      if (i === -1 && e >= 1) continue;
+      const alpha = i === -1 ? 1 - e : i === count - 2 ? e : 1;
+      const x1 = xAt(i), x2 = xAt(i + 1);
+      g.lineStyle(cfg.lineThickness, cfg.lineColor, 0.9 * alpha);
       g.lineBetween(x1, y, x2, y);
-      // 已填滿部分(此段的 fill 比例:fill 落在 [i, i+1] 之間→部分填;>=i+1→全填)
-      const segFill = Phaser.Math.Clamp(fill - i, 0, 1);
-      if (segFill > 0) {
-        g.lineStyle(cfg.lineThickness, cfg.lineFillColor, 1);
-        g.lineBetween(x1, y, x1 + (x2 - x1) * segFill, y);
+      // 剛完成段 = 滿；第一段 = 本關進度；其餘未開始
+      const fill = i === -1 ? 1 : i === 0 ? this.stageHudFill : 0;
+      if (fill > 0) {
+        g.lineStyle(cfg.lineThickness, cfg.lineFillColor, alpha);
+        g.lineBetween(x1, y, x1 + (x2 - x1) * fill, y);
       }
     }
 
-    // ---- 2) 波次節點(畫在線上層,★不透明蓋住線交會) ----
-    // 每個節點先畫一層【不透明底盤(alpha1)】把線端點完全蓋掉→線絕不從節點下透出;再畫顏色層。
-    const bg = 0x1a1408; // 深底(HUD 背景色調)——節點不透明底盤
-    for (let i = 0; i < target; i++) {
-      const cx = startX + i * gap;
-      const isDone = i < done;
-      const isCurrent = i === done;
-      // 不透明底盤(半徑略大於線,確保完全蓋住線端點/交會)
-      g.fillStyle(bg, 1); g.fillCircle(cx, y, r + 3);
-      if (isDone) {
-        g.fillStyle(cfg.doneColor, 1); g.fillCircle(cx, y, r);          // 亮金填滿(不透明)
-        g.lineStyle(3, 0x000000, 0.45); g.strokeCircle(cx, y, r);
-      } else if (isCurrent) {
-        // 當前波:不透明實心(用 pulse 調亮度,非 alpha→仍完全不透明蓋線)+ 脈動外框
-        const litColor = this.mixColor(bg, cfg.currentColor, pulse);
-        g.fillStyle(litColor, 1); g.fillCircle(cx, y, r);
-        g.lineStyle(4, cfg.currentColor, 0.5 + 0.5 * pulse); g.strokeCircle(cx, y, r + 6);
-      } else {
-        g.fillStyle(0x000000, 1); g.fillCircle(cx, y, r);               // 暗底(不透明,空心感靠描邊)
-        g.lineStyle(3, cfg.pendingColor, 1); g.strokeCircle(cx, y, r);
-      }
+    // 2) 圓點 + 寶箱
+    if (e < 1 && this.stageHudPrevChest) this.drawStageNode(xAt(-1), y, this.stageHudPrevChest, 'done', 1 - e);
+    for (let i = 0; i < count; i++) {
+      const alpha = i === count - 1 ? e : 1; // 最右（新生成）淡入
+      this.drawStageNode(xAt(i), y, this.stageHudChests[i], i === 0 ? 'current' : 'pending', alpha);
     }
+  }
 
-    // ---- 3) 獎勵/完成節點(菱形 ◆,畫最上層,不透明底盤蓋線) ----
-    const rx = startX + target * gap;
-    const allDone = done >= target;
-    const dr = r + 4;
-    // 不透明圓底盤蓋住線端點(菱形本身有尖角會露線,先用圓底盤墊底)
-    g.fillStyle(bg, 1); g.fillCircle(rx, y, r + 3);
-    const pts = [ new Phaser.Geom.Point(rx, y - dr), new Phaser.Geom.Point(rx + dr, y), new Phaser.Geom.Point(rx, y + dr), new Phaser.Geom.Point(rx - dr, y) ];
-    if (allDone) { g.fillStyle(cfg.rewardColor, 1); g.fillPoints(pts, true); g.lineStyle(3, 0xfff4c2, 1); g.strokePoints(pts, true); }
-    else { g.fillStyle(0x000000, 1); g.fillPoints(pts, true); g.lineStyle(3, cfg.rewardColor, 0.9); g.strokePoints(pts, true); }
+  /**
+   * 畫一個卷軸 HUD 圓點與其中的寶箱圖示
+   *
+   * @param x 圓心 x（螢幕座標）
+   * @param y 圓心 y（螢幕座標）
+   * @param chest 寶箱階級
+   * @param state 'current' 目前關卡（脈動高亮）/ 'pending' 未到 / 'done' 剛完成
+   * @param alpha 整體透明度（遞補動畫淡入淡出）
+   */
+  private drawStageNode(x: number, y: number, chest: 'low' | 'high', state: 'current' | 'pending' | 'done', alpha: number): void {
+    if (alpha <= 0) return;
+    const cfg = GameConfig.waveHud;
+    const g = this.waveHudGfx;
+    const r = cfg.nodeRadius;
+    const high = chest === 'high';
+    const pulse = 0.6 + 0.4 * Math.abs(Math.sin(this.time.now / 260));
+    // 不透明底盤蓋住量條端點
+    g.fillStyle(cfg.nodeBgColor, alpha);
+    g.fillCircle(x, y, r + 3);
+    if (state === 'current') {
+      g.fillStyle(this.mixColor(cfg.nodeBgColor, cfg.currentColor, pulse * 0.5), alpha);
+      g.fillCircle(x, y, r);
+      g.lineStyle(4, cfg.currentColor, (0.5 + 0.5 * pulse) * alpha);
+      g.strokeCircle(x, y, r + 6);
+    } else {
+      g.fillStyle(0x000000, alpha);
+      g.fillCircle(x, y, r);
+      g.lineStyle(3, state === 'done' ? cfg.doneColor : cfg.pendingColor, alpha);
+      g.strokeCircle(x, y, r);
+    }
+    // 高階寶箱：外圈金色光暈（脈動）
+    if (high) {
+      g.lineStyle(3, cfg.highChestColor, (0.35 + 0.35 * pulse) * alpha);
+      g.strokeCircle(x, y, r + 10);
+    }
+    // 寶箱圖示：箱體 + 箱蓋 + 鎖扣
+    const size = r * (high ? cfg.highChestScale : cfg.lowChestScale);
+    const w = size * 1.4, h = size;
+    const bodyColor = high ? cfg.highChestColor : cfg.lowChestColor;
+    g.fillStyle(bodyColor, alpha);
+    g.fillRect(x - w / 2, y - h / 2 + h * 0.35, w, h * 0.65);      // 箱體
+    g.fillStyle(this.mixColor(bodyColor, 0xffffff, 0.25), alpha);
+    g.fillRect(x - w / 2, y - h / 2, w, h * 0.4);                   // 箱蓋（略亮）
+    g.lineStyle(2, cfg.chestOutlineColor, alpha);
+    g.strokeRect(x - w / 2, y - h / 2, w, h);
+    g.fillStyle(cfg.chestOutlineColor, alpha);
+    g.fillRect(x - w * 0.08, y - h * 0.05, w * 0.16, h * 0.25);      // 鎖扣
   }
 
   /** 依比例 t(0..1) 在兩色間線性混色(用於當前波節點脈動亮度,保持不透明填滿)。 */

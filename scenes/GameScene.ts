@@ -80,9 +80,12 @@ export class GameScene extends Phaser.Scene {
 
   // ★關卡系統(第一階段骨架)
   private levelMode = false;               // 是否啟用關卡制
-  private currentLevel = 1;                // 1..totalLevels
+  private currentLevel = 1;                // 場景配色用的關卡 key（無限關卡固定為 stage.sceneLevel）
+  /** 目前小關卡編號（1 起算、無限遞增）；循環內位置與寶箱階級見 stageDef() */
+  private currentStage = 1;
+  /** 目前小關卡是否進行中（startStage → completeStage 之間）；過場期間為 false，HUD 不採計殘留擊殺數 */
+  private stageInProgress = false;
   private currentSub: 'A' | 'B' = 'A';     // 當前子區
-  private eventBag: string[] = [];         // ★事件洗牌佇列(shuffle bag):一輪內 tower/guard/capture 各出一次不重複,pop 空→重洗
   private subWavesDone = 0;                // 當前子區已清波數
   private subWavesTarget = 0;              // 當前子區目標波數
   private lastChoice: 'L' | 'R' = 'L';     // 上一次 A→B 選的邊(影響 B 物件配置)
@@ -104,7 +107,6 @@ export class GameScene extends Phaser.Scene {
   /** ★③關卡間閃黑後:角色自動走到下關定位的演出旗標(true 期間玩家不可操控,程式驅動走位)。 */
   private levelEntering = false;
   /** ★不可事件接事件:記錄上一個子區類型(事件/純波次);上一子區='event'→這子區強制純波次。 */
-  private lastSubZoneKind: 'event' | 'wave' | null = null;
   /** ★事件結束時場上還有殘留怪→留給玩家打完才收尾;此旗標 true=等殘留清完再 onSubZoneComplete。 */
   private pendingEventComplete = false;
   /** ★最後一波打完最後一隻怪時場上還有寶箱怪→延後開啟場景切換,等寶箱怪死/離場才 onSubZoneComplete。 */
@@ -454,12 +456,8 @@ export class GameScene extends Phaser.Scene {
     if (this.levelMode) {
       this.placeStaticBreakables('L'); // 1-A 用預設一套布置
       this.progressPhase = 'playing';
-      this.rollSubZoneContent(true);   // 1-A 隨機:純波次(wavesA) 或 事件
-      // 純波次才開場生一組怪(事件由 startEvent 自管生怪)
-      if (this.waveState === 'spawning' && GameConfig.spawn.spawnOnStart) {
-        this.spawnFormation();
-      }
-      this.showLevelBanner();
+      this.startStage();
+      if (GameConfig.spawn.spawnOnStart) this.spawnFormation();
     } else if (GameConfig.spawn.spawnOnStart) {
       this.spawnFormation();
     }
@@ -518,11 +516,12 @@ export class GameScene extends Phaser.Scene {
     this.waveState = 'spawning';
     this.intermissionUntil = 0;
     // ★關卡系統重置
-    this.currentLevel = 1;
+    this.currentLevel = GameConfig.stage.sceneLevel;
+    this.currentStage = 1;
+    this.stageInProgress = false;
     this.currentSub = 'A';
-    this.eventBag = []; // ★事件洗牌佇列:重開清空→下次要事件時重洗一輪
     this.subWavesDone = 0;
-    this.subWavesTarget = GameConfig.stage.wavesA;
+    this.subWavesTarget = 1;
     this.lastChoice = 'L';
     this.progressPhase = 'playing';
     if (this.choiceGfx) { this.choiceGfx.destroy(); this.choiceGfx = null; }
@@ -2244,6 +2243,7 @@ export class GameScene extends Phaser.Scene {
       if (this.levelMode) {
         this.subWavesDone++;
         if (this.subWavesDone >= this.subWavesTarget) {
+          this.completeStage();
           // ★用戶需求:最後一波打完最後一隻怪時,若場上還有【寶箱怪】→【不立刻開啟場景切換】,
           //   延後(pendingSubZoneComplete),等寶箱怪【死掉或離場(跑走)】後(treasureEnemy 清空)才真正切換。
           //   無寶箱怪→直接開(同現在)。
@@ -2553,7 +2553,7 @@ export class GameScene extends Phaser.Scene {
     this.waveKilled = 0;
     this.waveSpawned = 0;
     this.spawnAccumulator = 0;
-    this.rollSubZoneContent(false);
+    this.startStage();
     this.emitStats();
   }
 
@@ -2745,51 +2745,55 @@ export class GameScene extends Phaser.Scene {
     this.waveKilled = 0;
     this.waveSpawned = 0;
     this.spawnAccumulator = 0;
-    this.rollSubZoneContent(false); // B 子區隨機:事件 或 純波次(1-2波)
+    this.startStage();
     this.emitStats();
   }
 
   /**
-   * ★子區進場隨機:roll bEventChance→限時事件(塔/守護/佔領隨機抽,在 currentArena 觸發) 或 純波次。
-   * isA=true(A子區):純波次波數=wavesA;isA=false(B子區):純波次波數=隨機 wavesBMin~Max(較少)。
-   * 各子區(每關A、每關B)獨立隨機。事件用 this.arena(=當前子區)座標→塔/NPC/圈生在當前場地。
+   * 取得第 stage 關（1 起算）的小關卡設定：依 stage.stageCycle 循環
+   *
+   * @param stage 小關卡編號
+   * @returns 該關的擊殺數與寶箱階級
    */
-  /**
-   * ★事件洗牌佇列(shuffle bag):一輪內 tower/guard/capture 各出一次不重複,出完再洗下一輪。
-   * bag 空→用 bEventPool 複製一份 Fisher-Yates 洗牌填入;pop 一個當本次事件種類。
-   */
-  private drawEventKind(): 'tower' | 'guard' | 'capture' {
-    if (this.eventBag.length === 0) {
-      const bag = [...(GameConfig.stage.bEventPool as ReadonlyArray<string>)];
-      // Fisher-Yates 洗牌
-      for (let i = bag.length - 1; i > 0; i--) {
-        const j = Phaser.Math.Between(0, i);
-        [bag[i], bag[j]] = [bag[j], bag[i]];
-      }
-      this.eventBag = bag;
-    }
-    return (this.eventBag.pop() ?? 'tower') as 'tower' | 'guard' | 'capture';
+  private stageDef(stage: number): { quota: number; chest: 'low' | 'high' } {
+    const cycle = GameConfig.stage.stageCycle;
+    return cycle[(stage - 1) % cycle.length];
   }
 
-  private rollSubZoneContent(isA: boolean): void {
-    const st = GameConfig.stage;
+  /** 開始目前小關卡（currentStage）：清敵關卡，擊殺 quota 隻即完成；小遊戲關卡尚未實作 */
+  private startStage(): void {
     this.subWavesDone = 0;
-    // ★①關卡1 的 A 子區(1-A)固定純波次、不放事件(當作開場教學區);其餘子區照常隨機。
-    // ★新增:不可【事件接事件】——上一個子區是事件→這個子區強制純波次(跳過事件 roll)。
-    const forcePureWaves = (isA && this.currentLevel === 1) || this.lastSubZoneKind === 'event';
-    if (!forcePureWaves && Math.random() < st.bEventChance) {
-      const kind = this.drawEventKind();
-      this.subWavesTarget = 0;       // 事件模式不靠波數
-      this.waveState = 'event';
-      this.lastSubZoneKind = 'event'; // ★記錄本子區為事件→下一子區強制純波次
-      this.startEvent(kind);
-    } else {
-      this.lastSubZoneKind = 'wave'; // ★記錄本子區為純波次
-      this.subWavesTarget = isA ? st.wavesA : Phaser.Math.Between(st.wavesBMin, st.wavesBMax);
-      this.waveQuota = this.computeWaveQuota(this.currentWave);
-      this.waveFormations = 0; // ★子區首波:隊形次數歸零(寶箱怪第2隊形起才可能出→首次生怪不出)
-      this.waveState = 'spawning';
+    this.subWavesTarget = 1;
+    this.waveQuota = this.stageDef(this.currentStage).quota;
+    this.waveFormations = 0; // 首波隊形次數歸零（寶箱怪第 2 隊形起才可能出）
+    this.waveState = 'spawning';
+    this.stageInProgress = true;
+  }
+
+  /**
+   * 小關卡完成：依寶箱階級直接發彩票給每位存活玩家（面板播報獎特效），關卡編號 +1（卷軸 HUD 隨之遞補）
+   */
+  private completeStage(): void {
+    const chest = this.stageDef(this.currentStage).chest;
+    const tickets = GameConfig.stage.chestTickets[chest];
+    for (const c of this.characters) {
+      if (c.alive) this.grantStageReward(c, tickets);
     }
+    this.currentStage++;
+    this.stageInProgress = false;
+  }
+
+  /**
+   * 發放小關卡寶箱獎勵：彩票加到該角色 Credit，並在下方面板播放彩票特效
+   *
+   * @param c 獲得獎勵的角色
+   * @param tickets 彩票張數
+   */
+  private grantStageReward(c: Character, tickets: number): void {
+    c.credit += tickets;
+    const uiScene = this.scene.get('UIScene') as any;
+    // 彩票噴發數量隨張數變化：沿用 COMBO 報獎特效，以張數作為里程碑參數
+    uiScene?.playComboRewardFx?.(c.index, tickets, tickets);
   }
 
   /** exiting 階段每幀:偵測玩家走進下方出口 → 閃黑轉場到下一關 A。 */
@@ -2822,13 +2826,6 @@ export class GameScene extends Phaser.Scene {
     // 清掉 B 的可破壞物件
     this.clearAllBreakables();
     this.clearAllEnemies();
-    this.currentLevel++;
-
-    // ★第二輪:BOSS 關(關4 中場BOSS / 關8 壓軸BOSS)→純BOSS戰。其餘關→一般 A/B 子區。
-    if (this.isBossLevel(this.currentLevel)) {
-      this.startBossLevel();
-      return;
-    }
 
     this.currentSub = 'A';
     this.arena = this.zoneA; // 拉回 A 子區(置中)
@@ -2859,42 +2856,11 @@ export class GameScene extends Phaser.Scene {
     this.spawnAccumulator = 0;
     // ★新關卡 A 子區靜態布置物件(隨機布置)——先布置物件再 roll(事件用當前 arena)
     this.placeStaticBreakables('L');
-    // ★A 子區也隨機:純波次(wavesA) 或 限時事件(塔/守護/佔領)
-    this.rollSubZoneContent(true);
-    this.showLevelBanner();
+    this.startStage();
     // ★啟動自動走位演出:progressPhase 保持 playing,但 levelEntering=true→update() 走 updateLevelEnter,
     //   全隊走到中心環狀定位、期間玩家輸入不生效(見 update 開頭 gate),到位恢復。
     this.levelEntering = true;
     this.progressPhase = 'playing';
-    this.emitStats();
-  }
-
-  /** ★步驟2:關卡4 純BOSS戰——火山岩盤戰場(用 A slot 當戰場)、直接生 BOSS、打贏→通關(onBossKilled→triggerClear)。 */
-  private startBossLevel(): void {
-    this.currentSub = 'A';
-    this.arena = this.zoneA; // BOSS 戰場 = A slot 的移動區(火山岩盤地貌)
-    this.physics.world.setBounds(this.zoneA.x, this.zoneA.y, this.zoneA.width, this.zoneA.height);
-    // 重繪關卡4 場景(火山岩盤 A 荒城 / B 火山遠景,三區都畫,戰場在 A)
-    this.clearSceneLayers();
-    this.drawZoneScene(this.slotBLeft, this.zoneBLeft, this.currentLevel, 'B');
-    this.drawZoneScene(this.slotA, this.zoneA, this.currentLevel, 'A');
-    this.drawZoneScene(this.slotBRight, this.zoneBRight, this.currentLevel, 'B');
-    // 玩家回 A 中心偏下(BOSS 生中央)
-    const cx = this.zoneA.centerX, cy = this.zoneA.bottom - 90;
-    for (const c of this.characters) {
-      if (!c.alive) continue;
-      const off = c === this.player ? 0 : Phaser.Math.Between(24, 50);
-      c.x = cx + Phaser.Math.Between(-off, off);
-      c.y = cy + Phaser.Math.Between(-20, 20);
-      (c.body as Phaser.Physics.Arcade.Body).reset(c.x, c.y);
-    }
-    this.enableFollow(this.slotA);
-    // BOSS 戰:progressPhase=playing、waveState=boss、直接生 BOSS(不生一般波次)
-    this.progressPhase = 'playing';
-    this.waveState = 'boss';
-    this.spawnAccumulator = 0;
-    this.spawnBoss();
-    this.showLevelBanner(); // 顯示「關卡 4 - A」(BOSS 戰)
     this.emitStats();
   }
 
@@ -8031,6 +7997,11 @@ export class GameScene extends Phaser.Scene {
       levelMode: this.levelMode,
       currentLevel: this.currentLevel,
       currentSub: this.currentSub,
+      // 小關卡卷軸 HUD：目前關卡編號、擊殺進度、本關與後續關卡的寶箱階級
+      stage: this.currentStage,
+      stageKilled: this.stageInProgress ? this.waveKilled : 0,
+      stageQuota: this.waveQuota,
+      stageChests: Array.from({ length: GameConfig.waveHud.visibleStages }, (_, i) => this.stageDef(this.currentStage + i).chest),
       subWavesDone: this.subWavesDone,
       subWavesTarget: this.subWavesTarget,
       progressPhase: this.progressPhase,

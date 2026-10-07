@@ -61,9 +61,9 @@ export const GameConfig = {
     x: 960,  // 調整為1920/2 = 960 (置中)
     y: 45,   // 調整為適合1080高度的位置
     /** 節點半徑 */
-    nodeRadius: 15,
+    nodeRadius: 22,
     /** 節點間距(圓心到圓心) */
-    nodeGap: 132,
+    nodeGap: 150,
     /** 連線粗細 */
     lineThickness: 5,
     /** 已完成波次節點(亮/填滿)色 */
@@ -78,8 +78,18 @@ export const GameConfig = {
     lineFillColor: 0xffe08a,
     /** 線漸進填滿動畫時長(毫秒) */
     lineFillMs: 500,
-    /** 獎勵/完成節點(菱形)色 */
-    rewardColor: 0xffd23f
+    /** 卷軸 HUD 同時顯示的小關卡數（最左 = 目前關卡） */
+    visibleStages: 4,
+    /** 圓點不透明底盤色（蓋住量條端點） */
+    nodeBgColor: 0x1a1408,
+    /** 進入下一關時圓點左移遞補的動畫時長(毫秒) */
+    shiftMs: 450,
+    /** 低階 / 高階寶箱圖示色、外框色與尺寸（相對節點半徑） */
+    lowChestColor: 0xb07a3c,
+    highChestColor: 0xffd23f,
+    chestOutlineColor: 0x2a1a08,
+    lowChestScale: 0.7,
+    highChestScale: 0.95
   },
 
   /**
@@ -844,8 +854,22 @@ export const GameConfig = {
   stage: {
     /** 是否啟用關卡制(關掉=回退舊無限波次) */
     enabled: true,
-    /** 總關卡數 ★第二輪:1-4 荒城→火山(第一輪),5-8 森林→洞窟(第二輪);關4=中場BOSS、關8=壓軸BOSS(真通關) */
+    /** 舊 8 關流程的總關卡數（BOSS/通關判定沿用，已不呼叫；保留供日後復用） */
     totalLevels: 8,
+    /**
+     * 小關卡循環（無限延續）：每輪依序打這幾關，打完最後一關回到第一關。
+     * quota = 該關要擊殺的怪數；chest = 完成時的寶箱階級（每輪最後一關為高階 → 卷軸 HUD 的 4 格中永遠有一個高階）
+     */
+    stageCycle: [
+      { quota: 20, chest: 'low' },
+      { quota: 25, chest: 'low' },
+      { quota: 30, chest: 'low' },
+      { quota: 35, chest: 'high' }
+    ] as ReadonlyArray<{ quota: number; chest: 'low' | 'high' }>,
+    /** 寶箱獎勵：完成小關卡直接發給每位存活玩家的彩票張數 */
+    chestTickets: { low: 5, high: 30 },
+    /** 無限關卡固定使用的場景配色（scene.levels 的 key；火山荒城主題） */
+    sceneLevel: 1,
     /**
      * 移動區(arena)尺寸:左右貼齊 slot(=F4 背景圖寬),上下扣掉背景圖的熔岩斷崖/岩石禁區。
      * slot = (arenaW + 2×sceneMarginX) × (arenaH + sceneMarginTop + sceneMarginBottom) = 2520×1680,
