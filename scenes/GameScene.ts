@@ -6,6 +6,7 @@ import { Item, type SkillType } from '../objects/Item';
 import { updateRefillLatch, shouldSpawnMore, type WaveSpawnState } from '../systems/waveMath';
 import { Bullet } from '../objects/Bullet';
 import { Breakable } from '../objects/Breakable';
+import { loadCharacterParams, type CharacterParams } from '../systems/characterParams';
 
 /** F4 場景背景圖(Scene.png)的紋理 key */
 const SCENE_BG_TEXTURE_KEY = 'scene-background';
@@ -209,6 +210,8 @@ export class GameScene extends Phaser.Scene {
     dashDistance: GameConfig.slow.dashDistance,
     dashSpeed: GameConfig.slow.dashSpeed
   };
+  /** 角色編輯器的參數（慢速模式套用於 P1 與 BOT）；每次開局從存檔讀取 */
+  private charParams: CharacterParams = loadCharacterParams();
   /** v46 slow：八方向移動鍵（方向鍵 + WASD） */
   private slowKeys?: {
     up: Phaser.Input.Keyboard.Key; down: Phaser.Input.Keyboard.Key;
@@ -476,6 +479,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   private resetState(): void {
+    // 角色編輯器參數：每局重新讀取（主選單可能剛改過），衝刺距離/速度同步到慢速即時調參
+    this.charParams = loadCharacterParams();
+    this.slowTuning.dashDistance = this.charParams.dashDistance;
+    this.slowTuning.dashSpeed = this.charParams.dashSpeed;
     // ★背景切換狀態重置 - 修復ESC回主菜單後F4失效問題
     this.sceneBackgrounds = [];
     this.isNewSceneActive = false;
@@ -1210,7 +1217,7 @@ export class GameScene extends Phaser.Scene {
         c.setPosition(nx, ny);
       }
       this.performMeleeArc(c, time);
-      c.nextAttackAllowedAt = time + GameConfig.player.attackCooldownMs;
+      c.nextAttackAllowedAt = time + this.attackCooldownMs();
       return;
     }
     // 還在攻擊範圍外 → 朝目標衝，但終點設在【外緣 standoff】而非中心 → 衝到外緣停、不穿進去
@@ -1283,7 +1290,7 @@ export class GameScene extends Phaser.Scene {
       const ny = Phaser.Math.Clamp(c.y + Math.sin(c.aimAngle) * step, this.arena.top + r, this.arena.bottom - r);
       c.setPosition(nx, ny);
       this.performMeleeArc(c, time);
-      c.nextAttackAllowedAt = time + GameConfig.player.attackCooldownMs;
+      c.nextAttackAllowedAt = time + this.attackCooldownMs();
       return;
     }
     // 遠：朝目標衝撞位移（衝刺遇敵停下打 + 衝擊特效）
@@ -1334,7 +1341,7 @@ export class GameScene extends Phaser.Scene {
         const ny = Phaser.Math.Clamp(c.y + Math.sin(c.aimAngle) * step, this.arena.top + r, this.arena.bottom - r);
         c.setPosition(nx, ny);
         this.performMeleeArc(c, time);
-        c.nextAttackAllowedAt = time + GameConfig.player.attackCooldownMs;
+        c.nextAttackAllowedAt = time + this.attackCooldownMs();
       } else {
         // 遠：朝該怪衝刺（沿用遇敵停下）
         this.startDirectionDash(c, time);
@@ -1565,10 +1572,15 @@ export class GameScene extends Phaser.Scene {
     // 正規化對角線 → 速度一致
     const len = Math.hypot(dx, dy);
     const nx = dx / len, ny = dy / len;
-    const spd = GameConfig.slow.moveSpeed;
+    const spd = this.charParams.moveSpeed; // 角色編輯器可調
     body.setVelocity(nx * spd, ny * spd);
     // 面向 = 移動方向（決定攻擊/鎖定方向）
     p.aimAngle = Math.atan2(ny, nx);
+  }
+
+  /** 普攻冷卻（毫秒）：慢速模式讀角色編輯器參數，快速模式讀 config */
+  private attackCooldownMs(): number {
+    return this.controlMode === 'slow' ? this.charParams.attackCooldownMs : GameConfig.player.attackCooldownMs;
   }
 
   private startDirectionDash(c: Character, time: number): void {
@@ -1594,7 +1606,7 @@ export class GameScene extends Phaser.Scene {
       if (reach < GameConfig.player.radius) {
         // 面向被牆擋住、衝不出去 → 原地揮擊(仍有攻擊/命中判定)，按空白不落空。
         this.performMeleeArc(c, time);
-        c.nextAttackAllowedAt = time + GameConfig.player.attackCooldownMs;
+        c.nextAttackAllowedAt = time + this.attackCooldownMs();
         return;
       }
     }
@@ -1624,7 +1636,7 @@ export class GameScene extends Phaser.Scene {
     c.dashDestY = Phaser.Math.Clamp(destY, bnd.top + r, bnd.bottom - r);
     c.isDashing = true;
     c.dashToItem = toItem;
-    c.nextAttackAllowedAt = time + GameConfig.player.attackCooldownMs;
+    c.nextAttackAllowedAt = time + this.attackCooldownMs();
     // v11：衝刺期間賦予護盾（無敵）+ 視覺光環，衝刺結束消失
     if (GameConfig.player.dashShieldInvuln) {
       c.dashShielded = true;
@@ -1690,8 +1702,8 @@ export class GameScene extends Phaser.Scene {
     const dashAngle = Math.atan2(dy, dx);
     const body = c.body as Phaser.Physics.Arcade.Body;
     // v35：強化期間衝向敵人速度加快
-    // v47：slow 模式(僅 P1)衝刺速度改讀即時可調 slowTuning.dashSpeed；fast 讀 config 常數不變。
-    const baseDashSpeed = (this.controlMode === 'slow' && c === this.player)
+    // v47：slow 模式衝刺速度改讀 slowTuning.dashSpeed（角色編輯器可調，P1 與 BOT 都套用）；fast 讀 config 常數不變。
+    const baseDashSpeed = (this.controlMode === 'slow')
       ? this.slowTuning.dashSpeed
       : GameConfig.player.dashSpeed;
     const dashSpeed = baseDashSpeed * (c.isEmpowered(time) ? GameConfig.combo.empower.dashSpeedMult : 1);

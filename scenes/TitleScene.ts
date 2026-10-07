@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GameConfig } from '../config';
+import { CharacterEditorPanel } from '../objects/CharacterEditorPanel';
 
 /**
  * TitleScene（v16）：進入遊戲的第一個畫面。
@@ -13,6 +14,8 @@ export class TitleScene extends Phaser.Scene {
   private selected: 'fast' | 'slow' = 'fast';
   private highlightRect?: Phaser.GameObjects.Rectangle;
   private hlPos: { fast: number; slow: number } = { fast: 0, slow: 0 };
+  /** 角色編輯器面板；開啟時主選單的鍵盤/按鈕操作暫停 */
+  private charEditor!: CharacterEditorPanel;
 
   constructor() {
     super('TitleScene');
@@ -20,12 +23,14 @@ export class TitleScene extends Phaser.Scene {
 
   /** v47：切換選取的模式——移動黃框到該鈕。 */
   private selectMode(mode: 'fast' | 'slow'): void {
+    if (this.charEditor?.isOpen) return; // 角色編輯器開啟中：方向鍵交給面板
     this.selected = mode;
     if (this.highlightRect) this.highlightRect.x = this.hlPos[mode];
   }
 
   create(): void {
     this.started = false;
+    this.charEditor = new CharacterEditorPanel(this);
     const w = GameConfig.width;
     const h = GameConfig.height;
 
@@ -168,7 +173,8 @@ export class TitleScene extends Phaser.Scene {
     this.tweens.add({ targets: hint, alpha: 0.3, duration: 700, yoyo: true, repeat: -1 });
 
     // v47：空白鍵 = 確認【目前選中(黃框)】的模式進入
-    this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE).once('down', () => this.startGame(this.selected));
+    // （用 on 而非 once：角色編輯器開啟時按空白會被忽略，不能因此吃掉唯一一次）
+    this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE).on('down', () => this.startGame(this.selected));
 
     // ── 開發入口：Spine 場景編輯器（開發/美術團隊用工具，在遊戲中以全螢幕 iframe 開啟）──
     // 角落按鈕 + 快捷鍵 E。不擋原本模式選擇/開始流程。
@@ -191,6 +197,26 @@ export class TitleScene extends Phaser.Scene {
     edBtn.on('pointerdown', () => this.openSceneEditor());
     this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.E).on('down', () => this.openSceneEditor());
 
+    // ── 角色編輯器：🛠 角色編輯 (C)（場景編輯器按鈕上方）──
+    const ceBtnW = 200, ceBtnH = 44;
+    const ceX = w - ceBtnW / 2 - 20, ceY = h - ceBtnH / 2 - 80;
+    const ceBg = this.add
+      .rectangle(ceX, ceY, ceBtnW, ceBtnH, 0x1e3a8a, 0.9)
+      .setStrokeStyle(2, 0x60a5fa, 0.9)
+      .setDepth(5);
+    this.add
+      .text(ceX, ceY, '🛠 角色編輯 (C)', { fontFamily: 'monospace', fontSize: '16px', color: '#dbeafe', fontStyle: 'bold' })
+      .setOrigin(0.5).setDepth(6);
+    const ceBtn = this.add.container(0, 0, [ceBg]).setSize(ceBtnW, ceBtnH).setDepth(5);
+    ceBtn.setInteractive(
+      new Phaser.Geom.Rectangle(ceX - ceBtnW / 2, ceY - ceBtnH / 2, ceBtnW, ceBtnH),
+      Phaser.Geom.Rectangle.Contains
+    );
+    ceBtn.on('pointerover', () => ceBg.setFillStyle(0x1d4ed8, 0.95));
+    ceBtn.on('pointerout', () => ceBg.setFillStyle(0x1e3a8a, 0.9));
+    ceBtn.on('pointerdown', () => this.openCharacterEditor());
+    this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.C).on('down', () => this.openCharacterEditor());
+
     // ── 小遊戲入口：🎮 小遊戲 (G) → MinigameMenuScene（與 fast/slow 開始戰鬥並列，互不干擾）──
     const mgBtnW = 200, mgBtnH = 44;
     const mgX = mgBtnW / 2 + 20, mgY = h - mgBtnH / 2 - 20; // 左下角
@@ -208,8 +234,20 @@ export class TitleScene extends Phaser.Scene {
     );
     mgBtn.on('pointerover', () => mgBg.setFillStyle(0x1d6b3c, 0.95));
     mgBtn.on('pointerout', () => mgBg.setFillStyle(0x14532d, 0.9));
-    mgBtn.on('pointerdown', () => this.scene.start('MinigameMenuScene'));
-    this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.G).on('down', () => this.scene.start('MinigameMenuScene'));
+    mgBtn.on('pointerdown', () => this.openMinigameMenu());
+    this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.G).on('down', () => this.openMinigameMenu());
+  }
+
+  /** 開啟角色編輯器（遊戲尚未開始時才可開） */
+  private openCharacterEditor(): void {
+    if (this.started) return;
+    this.charEditor.open();
+  }
+
+  /** 進入小遊戲選單（角色編輯器開啟中不處理） */
+  private openMinigameMenu(): void {
+    if (this.charEditor.isOpen) return;
+    this.scene.start('MinigameMenuScene');
   }
 
   /**
@@ -218,6 +256,7 @@ export class TitleScene extends Phaser.Scene {
    * 右上角關閉鈕(×) + Esc 鍵可關閉、移除 iframe、回到 TitleScene。開啟時暫停本場景(關閉時恢復)。
    */
   private openSceneEditor(): void {
+    if (this.charEditor.isOpen) return; // 角色編輯器開啟中不處理
     if (document.getElementById('scene-editor-overlay')) return; // 已開啟不重複
     // base: './' → 用 import.meta.env.BASE_URL 組相對路徑，dev/build 都正確
     const base = (import.meta as unknown as { env: { BASE_URL: string } }).env.BASE_URL || '/';
@@ -266,6 +305,7 @@ export class TitleScene extends Phaser.Scene {
 
   private startGame(mode: 'fast' | 'slow' = 'fast'): void {
     if (this.started) return; // 防重入（同時點擊+按鍵）
+    if (this.charEditor.isOpen) return; // 角色編輯器開啟中：空白鍵/點擊不開始遊戲
     this.started = true;
     
     this.scene.start('GameScene', { controlMode: mode });
