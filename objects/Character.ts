@@ -80,6 +80,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
   /** v19：角色腳下 血條/鬥氣條（跟隨移動） */
   private hpBarBg!: Phaser.GameObjects.Rectangle;
   private hpBar!: Phaser.GameObjects.Rectangle;
+  private spiritBarBg!: Phaser.GameObjects.Rectangle; // 鬥氣條背景
   private spiritBar!: Phaser.GameObjects.Rectangle;
   /** v19：鬥氣滿/爆發時角色身上的「爆」標記 */
   private burstMark!: Phaser.GameObjects.Text;
@@ -131,6 +132,11 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
       .setStrokeStyle(1, 0xffffff, 0.25)
       .setDepth(11);
     this.hpBar = scene.add.rectangle(x - bw / 2 + 1, footY, bw - 2, 3, 0x4ade80).setOrigin(0, 0.5).setDepth(11);
+    // 鬥氣條背景和前景
+    this.spiritBarBg = scene.add
+      .rectangle(x, footY + 5, bw, 5, 0x000000, 0.6)
+      .setStrokeStyle(1, 0xffffff, 0.25)
+      .setDepth(11);
     this.spiritBar = scene.add.rectangle(x - bw / 2 + 1, footY + 5, 0, 3, 0x60a5fa).setOrigin(0, 0.5).setDepth(11);
 
     // v19：鬥氣滿/爆發標記「爆」（平時隱藏）（v26：字放大更突出）
@@ -242,9 +248,32 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
       this.hpBar.fillColor = hpRatio > 0.5 ? 0x4ade80 : hpRatio > 0.25 ? 0xfacc15 : 0xef4444;
     }
     const spRatio = Phaser.Math.Clamp(this.spirit / GameConfig.spirit.hitsToBurst, 0, 1);
+    const isSpiritFull = spRatio >= 1;
+    
+    // 更新鬥氣條背景位置
+    this.spiritBarBg.setPosition(this.x, footY + 5);
     this.spiritBar.setPosition(this.x - bw / 2 + 1, footY + 5);
-    this.spiritBar.width = (bw - 2) * spRatio;
-    this.spiritBar.fillColor = spRatio >= 1 ? 0xffd700 : 0x60a5fa;
+    
+    if (isSpiritFull) {
+      // 集滿狀態：整條填滿黃色並發光
+      this.spiritBar.width = bw - 2; // 填滿整條
+      this.spiritBar.fillColor = 0xffd700; // 黃色
+      this.spiritBarBg.setVisible(false); // 隱藏背景，讓整條都是黃色
+      
+      // 添加發光效果
+      this.spiritBar.setStrokeStyle(2, 0xffff99, 0.8); // 淡黃色發光邊框
+      
+      // 添加脈動效果
+      const pulseAlpha = 0.7 + 0.3 * Math.sin(this.scene.time.now / 200);
+      this.spiritBar.setAlpha(pulseAlpha);
+    } else {
+      // 正常狀態：顯示背景和比例填充
+      this.spiritBarBg.setVisible(true);
+      this.spiritBar.width = (bw - 2) * spRatio;
+      this.spiritBar.fillColor = 0x60a5fa; // 藍色
+      this.spiritBar.setStrokeStyle(0, 0x000000, 0); // 移除發光邊框
+      this.spiritBar.setAlpha(1); // 恢復正常透明度
+    }
 
     // v19：鬥氣滿或爆發中 → 顯示「爆」標記（跟隨頭上）（v26：放大 + 脈動）
     const showMark = this.spiritFull || this.isBursting;
