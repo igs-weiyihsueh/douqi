@@ -13,6 +13,12 @@ import { BossController, type BossHost } from '../controllers/BossController';
 import { createCoverImage, drawCorridorScenery, drawZoneScenery } from '../systems/zoneScenery';
 import { SkillController, type SkillHost } from '../controllers/SkillController';
 import { pointInOrientedRect } from '../systems/geometry';
+import {
+  applyEnemySeparationSteering, bounceEnemyOffBounds, isStructureEnemy, joinsEnemySeparation,
+  pushBreakablesFromCharacter, pushBreakablesFromEnemy, pushCharacterOutOfStructures, pushEnemiesAwayFromCharacter,
+  pushEnemiesOutOfNpc, pushEnemyOutOfStructures, resolveEnemyOverlap, standCharacterOutside, updateBreakableMotion
+} from '../systems/bodySeparation';
+import { drawEnemyChargeWarnings } from '../systems/enemyWarnings';
 
 /** F4 場景背景圖(Scene.png)的紋理 key */
 const SCENE_BG_TEXTURE_KEY = 'scene-background';
@@ -664,7 +670,7 @@ export class GameScene extends Phaser.Scene {
       undefined,
       this
     );
-    // v59：木箱擋角色的碰撞改用【每幀手動分離 blockCharacterFromBreakables】(Arcade circle collider 高速會 creep 穿透)。
+    // 木箱與角色的碰撞由每幀手動分離處理（systems/bodySeparation），不用 Arcade collider（高速時會慢慢穿透）。
     return c;
   }
 
@@ -823,9 +829,9 @@ export class GameScene extends Phaser.Scene {
     this.updateTreasure(time); // ★寶箱怪:跑點移動/金光閃爍/限時跑走
     this.finishPendingSubZoneIfTreasureGone(); // ★延後的場景切換:寶箱怪死/離場後才開啟
     // v62:守護事件——怪移動後把怪推回守護目標外圈(不疊上去);玩家仍可穿越。放 updateEnemies 之後→怪這幀先移動再被推出,渲染前已在外緣。
-    if (this.waveState === 'event' && this.eventKind === 'guard' && this.guardNpc) this.separateEnemiesFromGuardNpc(this.guardNpc);
+    if (this.waveState === 'event' && this.eventKind === 'guard' && this.guardNpc) pushEnemiesOutOfNpc(this.guardNpc, this.enemies, this.arena);
     this.updateItems(delta, time);
-    this.updateBreakables(delta); // v62：可推動物件的速度整合/摩擦/邊界/物件間分離
+    updateBreakableMotion(this.breakables, this.arena, delta); // 可推動物件的位移 / 摩擦 / 邊界 / 互推
     this.updateBullets(time);
     this.updateChargerCollisions(time);
 
@@ -878,11 +884,11 @@ export class GameScene extends Phaser.Scene {
         }
       }
       // v40(3)：戰鬥時角色與一般怪輕微分離（不完全重疊）；衝刺中不套用(不影響衝刺打擊貼近手感)
-      if (!c.isDashing && !c.isSkillLocked(time)) this.separateCharacterFromEnemies(c);
+      if (!c.isDashing && !c.isSkillLocked(time)) pushEnemiesAwayFromCharacter(c, this.enemies, this.arena);
       // v59：木箱擋角色（不可穿越）——每幀手動把重疊木箱的角色推回木箱外緣(可靠、高速不穿透)；衝刺中不套用(衝刺撞破)
-      if (!c.isDashing && !c.isSkillLocked(time)) this.blockCharacterFromBreakables(c);
+      if (!c.isDashing && !c.isSkillLocked(time)) pushBreakablesFromCharacter(c, this.breakables);
       // ★塔/BOSS 實體碰撞:角色不可穿過塔/BOSS 本體(含衝刺中也擋,不讓穿王/塔身)
-      this.blockCharacterFromStructures(c);
+      pushCharacterOutOfStructures(c, this.enemies);
       this.clampToArena(c);
       c.syncLabel();
     }
@@ -1618,9 +1624,7 @@ export class GameScene extends Phaser.Scene {
         c.stopMoving();
         this.performAttackOn(c, hit, time);
         // v35：衝向「不可推動」大型敵人(BOSS/塔)時，停在外緣避免重疊卡住
-        if (hit.isBoss || hit.enemyType === 'tower') {
-          this.pushCharacterOutOf(c, hit);
-        }
+        if (isStructureEnemy(hit)) standCharacterOutside(c, hit, this.arena);
         this.endDashState(c);
         return;
       }
@@ -1628,7 +1632,7 @@ export class GameScene extends Phaser.Scene {
       const anchor = this.findAnchorInDashPath(c, hitRadius);
       if (anchor) {
         c.stopMoving();
-        this.pushCharacterOutOf(c, anchor);
+        standCharacterOutside(c, anchor, this.arena);
         this.endDashState(c);
         return;
       }
@@ -1668,181 +1672,6 @@ export class GameScene extends Phaser.Scene {
     );
   }
 
-  /**
-   * v60→v62：怪碰到木箱/桶【推動物件】(不再擋怪)。每幀若「可推動一般怪」與物件重疊→把【物件】朝
-   * 「怪→物件」方向推出重疊 + 給推速度(沿此方向)，物件自然被推著走(下面 updateBreakables 整合摩擦/邊界/物件間分離)。
-   * 只怪推、不動怪AI(怪照追玩家、把擋路物件推開)。排除 boss/tower/anchor/npc。
-   */
-  private blockEnemyFromBreakables(e: Enemy): void {
-    if (e.isBoss || e.enemyType === 'tower' || e.isAnchorLike() || e.enemyType === 'npc') return;
-    if (!e.active || e.dead) return;
-    const er = e.getBodyRadius();
-    for (const child of this.breakables.getChildren()) {
-      const bk = child as Breakable;
-      if (!bk.active || bk.dead) continue;
-      const minDist = er + bk.getBodyRadius();
-      const dx = bk.x - e.x, dy = bk.y - e.y; // 怪→物件方向 = 把物件往外推
-      const d = Math.hypot(dx, dy);
-      if (d < minDist) {
-        const overlap = minDist - d;
-        const nx = d > 0.001 ? dx / d : 1, ny = d > 0.001 ? dy / d : 0;
-        bk.setPosition(bk.x + nx * overlap, bk.y + ny * overlap); // 推出重疊
-        const spd = Math.min(GameConfig.breakable.push.maxPushSpeed, GameConfig.slow.moveSpeed);
-        bk.vx += nx * spd; bk.vy += ny * spd; // 給推速度(累加,updateBreakables 會摩擦衰減)
-      }
-    }
-  }
-
-  /**
-   * ★塔/BOSS 實體碰撞:一般怪不可穿過塔/BOSS 本體。每幀把重疊的怪【硬推回本體外緣】(全額,無 maxStep 鬆弛)。
-   * 補「敵人碰撞分離」對 immovable 的鬆弛不足(衝鋒怪高速可能穿)。塔/BOSS 自己不動。
-   */
-  private blockEnemyFromStructures(e: Enemy): void {
-    if (e.isBoss || e.enemyType === 'tower' || e.isAnchorLike() || e.enemyType === 'npc') return; // 結構本身不被此推
-    if (!e.active || e.dead || e.telegraphing) return;
-    const er = e.getBodyRadius();
-    for (const child of this.enemies.getChildren()) {
-      const s = child as Enemy;
-      if (!s.active || s.dead || s.telegraphing) continue;
-      if (!(s.isBoss || s.enemyType === 'tower')) continue; // 只被塔/BOSS 擋
-      const minDist = er + s.getBodyRadius();
-      const dx = e.x - s.x, dy = e.y - s.y; // 塔/BOSS→怪 = 把怪往外推
-      const d = Math.hypot(dx, dy);
-      if (d < minDist) {
-        const overlap = minDist - d;
-        const nx = d > 0.001 ? dx / d : 1, ny = d > 0.001 ? dy / d : 0;
-        e.setPosition(e.x + nx * overlap, e.y + ny * overlap); // 怪被推出、塔/BOSS 不動
-      }
-    }
-  }
-
-  /**
-   * 「角色→物件」方向推出重疊 + 給推速度。衝刺中不呼叫(呼叫端已擋→衝刺撞物件由 handleDash 一撞即破/引爆)。
-   * → 可把爆炸桶推到怪群裡再打破。物件的速度整合/摩擦停下/邊界/物件間分離由 updateBreakables 處理。
-   */
-  private blockCharacterFromBreakables(c: Character): void {
-    const pr = GameConfig.player.radius;
-    for (const child of this.breakables.getChildren()) {
-      const bk = child as Breakable;
-      if (!bk.active || bk.dead) continue;
-      const minDist = pr + bk.getBodyRadius();
-      const dx = bk.x - c.x, dy = bk.y - c.y; // 角色→物件方向 = 把物件往外推
-      const d = Math.hypot(dx, dy);
-      if (d < minDist) {
-        const overlap = minDist - d;
-        const nx = d > 0.001 ? dx / d : 1, ny = d > 0.001 ? dy / d : 0;
-        bk.setPosition(bk.x + nx * overlap, bk.y + ny * overlap); // 推出重疊(物件離開角色)
-        const spd = GameConfig.breakable.push.maxPushSpeed;
-        bk.vx += nx * spd; bk.vy += ny * spd;
-      }
-    }
-  }
-
-  /**
-   * ★塔/BOSS 實體碰撞:角色不可穿過塔/BOSS 本體(immovable 大型)。
-   * 每幀把重疊塔/BOSS 圓的角色【推回本體外緣】(角色被擋、塔/BOSS 不動)。衝刺中也擋(不讓衝刺穿王/塔身)。
-   */
-  private blockCharacterFromStructures(c: Character): void {
-    const pr = GameConfig.player.radius;
-    for (const child of this.enemies.getChildren()) {
-      const e = child as Enemy;
-      if (!e.active || e.dead || e.telegraphing) continue;
-      if (!(e.isBoss || e.enemyType === 'tower')) continue; // 只擋塔/BOSS 本體
-      const minDist = pr + e.getBodyRadius();
-      const dx = c.x - e.x, dy = c.y - e.y; // 塔/BOSS→角色 = 把角色往外推
-      const d = Math.hypot(dx, dy);
-      if (d < minDist && d >= 0) {
-        const overlap = minDist - d;
-        const nx = d > 0.001 ? dx / d : 1, ny = d > 0.001 ? dy / d : 0;
-        c.setPosition(c.x + nx * overlap, c.y + ny * overlap); // 角色被推出、塔/BOSS 不動
-      }
-    }
-  }
-
-  /**
-   * v62：守護事件——把【怪】推回守護目標(NPC)外緣，怪【圍外圈打】不疊在守護目標上。
-   * 用手動位置校正分離(同 blockEnemyFromBreakables，非 Arcade collider→circle collider 高速推會 creep 穿透)。
-   * ★只推【怪】、【玩家可穿越】(玩家不做此分離，保留衝刺穿越走位)。防卡死:只推怪位置出重疊、不動怪AI(怪仍朝NPC攻擊、被擋自然圍外圈)、排除 boss/tower/其他 npc/anchor。
-   * ★怪被擋在外緣(dist = 怪半徑+NPC半徑26 ≈ 40~48) 仍在接觸傷害範圍內(NPC半徑26+contactRange30=56)→怪照樣攻擊NPC扣血、事件正常進行。
-   */
-  private separateEnemiesFromGuardNpc(npc: Enemy): void {
-    if (!npc.active || npc.dead) return;
-    const nr = npc.getBodyRadius();
-    for (const child of this.enemies.getChildren()) {
-      const e = child as Enemy;
-      if (!e.active || e.dead) continue;
-      if (e === npc || e.isBoss || e.enemyType === 'tower' || e.enemyType === 'npc' || e.isAnchorLike()) continue;
-      const minDist = e.getBodyRadius() + nr;
-      const dx = e.x - npc.x, dy = e.y - npc.y;
-      const d = Math.hypot(dx, dy);
-      if (d < minDist) {
-        const overlap = minDist - d;
-        const nx = d > 0.001 ? dx / d : 1, ny = d > 0.001 ? dy / d : 0;
-        // 只推怪出重疊到外緣→圍外圈;夾在場內
-        const ex = Phaser.Math.Clamp(e.x + nx * overlap, this.arena.left + 20, this.arena.right - 20);
-        const ey = Phaser.Math.Clamp(e.y + ny * overlap, this.arena.top + 20, this.arena.bottom - 20);
-        e.setPosition(ex, ey);
-      }
-    }
-  }
-
-  /**
-   * v62：每幀更新可推動物件——速度整合(位移)+摩擦衰減停下 + 夾在場內(推到牆停) + 物件間不重疊(互推)。
-   */
-  private updateBreakables(delta: number): void {
-    const dt = delta / 1000;
-    const children = this.breakables.getChildren();
-    // 0. ★殭屍防護網:任何 active 但 dead 卻沒在 fuse(=沒進正常爆炸/回收流程)的物件→強制回收。
-    //    確保「dead=true 且 active=true 且 !fusing」的殭屍桶絕不可能存在(受擊/推動迴圈開頭都靠 dead 判斷,殭屍會卡場上無法攻擊)。
-    for (const child of children) {
-      const bk = child as Breakable;
-      if (bk.active && bk.dead && !bk.fusing) bk.despawn();
-    }
-    // 1. 速度整合 + 摩擦 + 邊界
-    for (const child of children) {
-      const bk = child as Breakable;
-      if (!bk.active || bk.dead) continue;
-      if (bk.vx === 0 && bk.vy === 0) continue;
-      // 位移
-      let nx = bk.x + bk.vx * dt, ny = bk.y + bk.vy * dt;
-      // 邊界:推到牆停(clamp + 該軸速度歸零)
-      const r = bk.getBodyRadius();
-      if (nx < this.arena.left + r) { nx = this.arena.left + r; bk.vx = 0; }
-      else if (nx > this.arena.right - r) { nx = this.arena.right - r; bk.vx = 0; }
-      if (ny < this.arena.top + r) { ny = this.arena.top + r; bk.vy = 0; }
-      else if (ny > this.arena.bottom - r) { ny = this.arena.bottom - r; bk.vy = 0; }
-      bk.setPosition(nx, ny);
-      // 摩擦衰減
-      const f = Math.max(0, 1 - GameConfig.breakable.push.friction * dt);
-      bk.vx *= f; bk.vy *= f;
-      if (Math.abs(bk.vx) < 3 && Math.abs(bk.vy) < 3) { bk.vx = 0; bk.vy = 0; }
-    }
-    // 2. 物件間不重疊(兩兩分離,各推一半;被推的桶頂到別的桶會一起被頂開)
-    for (let i = 0; i < children.length; i++) {
-      const a = children[i] as Breakable;
-      if (!a.active || a.dead) continue;
-      for (let j = i + 1; j < children.length; j++) {
-        const b = children[j] as Breakable;
-        if (!b.active || b.dead) continue;
-        const minDist = a.getBodyRadius() + b.getBodyRadius();
-        const dx = b.x - a.x, dy = b.y - a.y;
-        const d = Math.hypot(dx, dy);
-        if (d < minDist && d > 0.001) {
-          const push = (minDist - d) / 2;
-          const nx = dx / d, ny = dy / d;
-          a.setPosition(
-            Phaser.Math.Clamp(a.x - nx * push, this.arena.left + a.getBodyRadius(), this.arena.right - a.getBodyRadius()),
-            Phaser.Math.Clamp(a.y - ny * push, this.arena.top + a.getBodyRadius(), this.arena.bottom - a.getBodyRadius())
-          );
-          b.setPosition(
-            Phaser.Math.Clamp(b.x + nx * push, this.arena.left + b.getBodyRadius(), this.arena.right - b.getBodyRadius()),
-            Phaser.Math.Clamp(b.y + ny * push, this.arena.top + b.getBodyRadius(), this.arena.bottom - b.getBodyRadius())
-          );
-        }
-      }
-    }
-  }
-
   private clampToArena(c: Character): void {
     const r = GameConfig.player.radius;
     // ★階段2:crossing 開放期間,玩家/隊友可走 [左右span 或 鎖定側聯集](不再被夾在 zoneA)。
@@ -1855,36 +1684,6 @@ export class GameScene extends Phaser.Scene {
       // v41(1)：衝刺中撞到牆界被夾回 → 直接結束衝刺(速度歸零)，避免「clamp 拉回 vs 高速外衝」牆邊來回震盪、
       //          以及卡在 isDashing 狀態導致按攻擊衝不出去。
       if (c.isDashing) this.endDashState(c);
-    }
-  }
-
-  /**
-   * v40(3)→v56：角色與「一般怪」不重疊。★v56(B方案)：改成【推怪離開角色】(角色位置不動、由玩家控制)，
-   * 而非原本推角色——原本推角色會被怪群從同側圍上來累加分離力推著走(失去走位感)。現在把重疊的怪各自
-   * 朝「離開角色」方向推出重疊(角色不被推)，怪被角色擋在外圍不疊進來。
-   * 只推【可推動一般怪】(排除 anchor/npc/tower/boss，那些各有停外緣/穿越邏輯)。角色衝刺時不套用(呼叫端已擋)，
-   * 衝刺穿怪打手感不變。怪推怪(怪之間)維持原樣，這裡只改角色↔怪。
-   */
-  private separateCharacterFromEnemies(c: Character): void {
-    const pr = GameConfig.player.radius;
-    for (const child of this.enemies.getChildren()) {
-      const e = child as Enemy;
-      if (!e.active || e.dead) continue;
-      if (e.isBoss || e.enemyType === 'tower' || e.isAnchorLike()) continue; // 非可推動大型/位移點跳過
-      const minDist = pr + e.getBodyRadius();
-      const dx = e.x - c.x, dy = e.y - c.y; // v56：方向 = 角色→怪 (把怪往外推)
-      const d = Math.hypot(dx, dy);
-      if (d < minDist) {
-        const overlap = minDist - d;
-        let nx: number, ny: number;
-        if (d > 0.001) { nx = dx / d; ny = dy / d; }
-        else { nx = 1; ny = 0; } // 完全重疊：給預設外推方向
-        // 把怪推到剛好不重疊(全額 overlap)，夾在場內。角色位置完全不動。
-        const er = e.getBodyRadius();
-        const nex = Phaser.Math.Clamp(e.x + nx * overlap, this.arena.left + er, this.arena.right - er);
-        const ney = Phaser.Math.Clamp(e.y + ny * overlap, this.arena.top + er, this.arena.bottom - er);
-        e.setPosition(nex, ney);
-      }
     }
   }
 
@@ -1921,25 +1720,6 @@ export class GameScene extends Phaser.Scene {
       bestD = d; best = e;
     }
     return best;
-  }
-
-  /**
-   * v35：衝向「不可推動」大型敵人(BOSS/塔) 或 anchor-like 位移點(NPC/錨點) 後，
-   * 若角色與其重疊，把角色移到外緣站定，避免卡在牠身上。
-   * 站位方向 = 敵人中心 → 角色（角色原本靠近的一側）；退到 (敵半徑 + 玩家半徑 + margin)。
-   */
-  private pushCharacterOutOf(c: Character, e: Enemy): void {
-    const standoff = e.getBodyRadius() + GameConfig.player.radius + 6;
-    const dx = c.x - e.x;
-    const dy = c.y - e.y;
-    const d = Math.hypot(dx, dy);
-    if (d >= standoff) return; // 沒重疊就不動
-    // d≈0（正中）時給一個預設方向（沿角色朝向的反方向退出）
-    const ang = d > 0.001 ? Math.atan2(dy, dx) : c.aimAngle + Math.PI;
-    const r = GameConfig.player.radius;
-    const nx = Phaser.Math.Clamp(e.x + Math.cos(ang) * standoff, this.arena.left + r, this.arena.right - r);
-    const ny = Phaser.Math.Clamp(e.y + Math.sin(ang) * standoff, this.arena.top + r, this.arena.bottom - r);
-    c.setPosition(nx, ny);
   }
 
   // ---------------------------------------------------------------------------
@@ -4371,67 +4151,16 @@ export class GameScene extends Phaser.Scene {
         const ty = target ? target.y : enemy.y;
         enemy.updateAI(tx, ty, time);
 
-        // v18：近戰蓄力「由內而外填滿」讀條式預警——填滿(進度1)瞬間發動攻擊
-        if (enemy.isCharging()) {
-          const R = GameConfig.enemy.attackRadius;
-          const p = enemy.chargeProgress(time);
-          // 外框（攻擊範圍輪廓）
-          this.chargeWarnGfx.lineStyle(2, 0xff3344, 0.85);
-          this.chargeWarnGfx.strokeCircle(enemy.x, enemy.y, R);
-          // 由內而外填滿的實心圈（半徑 = R×進度）
-          this.chargeWarnGfx.fillStyle(0xff3344, 0.35);
-          this.chargeWarnGfx.fillCircle(enemy.x, enemy.y, R * p);
-        }
-        // 衝鋒怪蓄力預警
-        if (enemy.isChargerCharging() && target) {
-          const angle = Phaser.Math.Angle.Between(enemy.x, enemy.y, target.x, target.y);
-          const len = 220;
-          this.chargeWarnGfx.lineStyle(3, 0xffaa00, 0.8);
-          this.chargeWarnGfx.lineBetween(
-            enemy.x,
-            enemy.y,
-            enemy.x + Math.cos(angle) * len,
-            enemy.y + Math.sin(angle) * len
-          );
-        }
-        // v25 遠程兵雷射蓄力預警：以怪為起點朝鎖定方向，從怪端往盡頭「填滿」
-        if (enemy.isChargingLaser()) {
-          const cfg = GameConfig.enemy.shooter;
-          const a = enemy.getLaserAngle();
-          const p = enemy.laserChargeProgress(time);
-          const ex = enemy.x + Math.cos(a) * cfg.laserLength;
-          const ey = enemy.y + Math.sin(a) * cfg.laserLength;
-          // 全長細虛線（預示方向與盡頭）
-          this.chargeWarnGfx.lineStyle(2, 0x66ff88, 0.4);
-          this.chargeWarnGfx.lineBetween(enemy.x, enemy.y, ex, ey);
-          // 由怪端往盡頭填滿的較粗實線（長度 = laserLength×進度）
-          const fx = enemy.x + Math.cos(a) * cfg.laserLength * p;
-          const fy = enemy.y + Math.sin(a) * cfg.laserLength * p;
-          this.chargeWarnGfx.lineStyle(6, 0x33ff66, 0.85);
-          this.chargeWarnGfx.lineBetween(enemy.x, enemy.y, fx, fy);
-        }
-        // v26 投射兵蓄力預警：畫「怪→鎖定落點」的線 + 落點圈（進度環）
-        if (enemy.isChargingBomb()) {
-          const cfg = GameConfig.enemy.bomber;
-          const tgt = enemy.getBombTarget();
-          const p = enemy.bombChargeProgress(time);
-          this.chargeWarnGfx.lineStyle(2, 0xd08bff, 0.5);
-          this.chargeWarnGfx.lineBetween(enemy.x, enemy.y, tgt.x, tgt.y);
-          // 落點外框 + 由內而外填滿（讀條）
-          this.chargeWarnGfx.lineStyle(2, 0xff6a3a, 0.8);
-          this.chargeWarnGfx.strokeCircle(tgt.x, tgt.y, cfg.bombRadius);
-          this.chargeWarnGfx.fillStyle(0xff6a3a, 0.22);
-          this.chargeWarnGfx.fillCircle(tgt.x, tgt.y, cfg.bombRadius * p);
-        }
+        drawEnemyChargeWarnings(this.chargeWarnGfx, enemy, target, time);
       }
 
       // v13：邊界反彈——敵人被擊飛超出場地時 clamp 回內側並反向該軸速度
-      this.bounceEnemyOffBounds(enemy);
-      // v60：怪也被木箱擋(手動位置校正分離、防卡死)。只擋可推動一般怪(排除 boss/tower/anchor/npc)。
-      //   時停中不套用(怪凍結)。只推出重疊、不改 AI 目標→怪仍朝玩家走、被木箱擋時自然沿邊繞、不卡死。
-      if (!this.timeStopped) this.blockEnemyFromBreakables(enemy);
-      // ★塔/BOSS 實體碰撞:一般怪不可穿過塔/BOSS 本體(硬推出外緣,補分離的鬆弛不足;衝鋒怪也擋)。
-      if (!this.timeStopped) this.blockEnemyFromStructures(enemy);
+      bounceEnemyOffBounds(enemy, this.arena);
+      // 怪推開木箱、不可穿過塔 / BOSS 本體（時停中怪凍結，不套用）
+      if (!this.timeStopped) {
+        pushBreakablesFromEnemy(enemy, this.breakables);
+        pushEnemyOutOfStructures(enemy, this.enemies);
+      }
     }
 
     // ★敵人↔敵人碰撞分離(異靈藍圖):時停/事件聚焦定格中不跑(怪凍結)。
@@ -4439,143 +4168,11 @@ export class GameScene extends Phaser.Scene {
       const separators: Enemy[] = [];
       for (const child of children) {
         const e = child as Enemy;
-        if (this.enemySeparates(e)) separators.push(e);
+        if (joinsEnemySeparation(e)) separators.push(e);
       }
-      // ① 軟分離 steering(主力):改可動怪的移動方向(合成追擊+分離)。
-      for (const e of separators) this.applyEnemySeparationSteering(e, separators);
-      // ② 硬 de-overlap(補刀):推開殘留重疊,迭代收斂。
-      this.resolveEnemyOverlap(separators);
-    }
-  }
-
-  /** v13 邊界反彈：敵人位置超出 arena 時夾回內側，並反向撞牆軸的速度 */
-  private bounceEnemyOffBounds(enemy: Enemy): void {
-    const r = enemy.getBodyRadius();
-    const body = enemy.body as Phaser.Physics.Arcade.Body;
-    const rest = GameConfig.arena.bounceRestitution;
-    const left = this.arena.left + r;
-    const right = this.arena.right - r;
-    const top = this.arena.top + r;
-    const bottom = this.arena.bottom - r;
-    if (enemy.x < left) {
-      enemy.x = left;
-      if (body.velocity.x < 0) body.velocity.x = -body.velocity.x * rest;
-    } else if (enemy.x > right) {
-      enemy.x = right;
-      if (body.velocity.x > 0) body.velocity.x = -body.velocity.x * rest;
-    }
-    if (enemy.y < top) {
-      enemy.y = top;
-      if (body.velocity.y < 0) body.velocity.y = -body.velocity.y * rest;
-    } else if (enemy.y > bottom) {
-      enemy.y = bottom;
-      if (body.velocity.y > 0) body.velocity.y = -body.velocity.y * rest;
-    }
-  }
-
-  // ===========================================================================
-  // ★敵人↔敵人碰撞分離（異靈藍圖 8df9c4fd）：軟分離 steering(主力) + 硬 de-overlap(補刀)
-  // ===========================================================================
-  /**
-   * immovable(像牆,只推別人自己不動)：BOSS / 塔 / 錨點 / 守護NPC / 寶箱怪(跑點) / 蓄力站定中的怪。
-   * 蓄力中的怪站定詠唱→被推走會亂掉演出,故當牆。
-   */
-  private enemyIsImmovable(e: Enemy): boolean {
-    if (e.isBoss || e.enemyType === 'tower' || e.isAnchorLike() || e.enemyType === 'npc' || e.enemyType === 'treasure') return true;
-    // 蓄力/詠唱中站定像牆(近戰蓄力/衝鋒蓄力/雷射蓄力/投射蓄力)
-    if (e.isCharging() || e.isChargerCharging() || e.isChargingLaser() || e.isChargingBomb()) return true;
-    return false;
-  }
-
-  /** 參與分離的怪(可推動、活著、非 telegraph/錨點) */
-  private enemySeparates(e: Enemy): boolean {
-    return e.active && !e.dead && !e.telegraphing && e.enemyType !== 'anchor';
-  }
-
-  /**
-   * ① 軟分離 steering(主力)：對 radiusPx 內每鄰居算遠離向量(平方加權 w=t*t,越近推力越大),
-   * 再 combineWithSeparation(把怪【當前移動方向】先正規化 + 分離向量×weight 合成)→改敵移動【方向】,保速度大小。
-   * ★toTarget(=當前速度方向)先正規化再加分離,否則遠距追擊速度淹沒分離力→還是疊團(藍圖最關鍵踩雷)。
-   * 對 immovable 怪不改向(自己不動);對速度≈0(站定)的怪不改向(方向由硬解處理)。
-   */
-  private applyEnemySeparationSteering(enemy: Enemy, neighbors: Enemy[]): void {
-    if (this.enemyIsImmovable(enemy)) return;
-    const body = enemy.body as Phaser.Physics.Arcade.Body;
-    const spd = Math.hypot(body.velocity.x, body.velocity.y);
-    if (spd < 1) return; // 站定的怪不 steering(交給硬解),避免原地抖
-    const cfg = GameConfig.enemySeparation;
-    const R = cfg.radiusPx;
-    let sx = 0, sy = 0;
-    for (const other of neighbors) {
-      if (other === enemy) continue;
-      const dx = enemy.x - other.x, dy = enemy.y - other.y; // 自己←鄰居 = 遠離方向
-      const dist = Math.hypot(dx, dy);
-      if (dist >= R) continue;
-      let nx: number, ny: number;
-      if (dist > 0.001) { nx = dx / dist; ny = dy / dist; }
-      else { nx = 1; ny = 0; } // 完全重疊→預設方向(硬解會用 index 定向)
-      const t = (R - dist) / R;      // 0(邊緣)~1(貼身)
-      const w = t * t;               // ★平方加權:越近推力越大
-      sx += nx * w; sy += ny * w;
-    }
-    if (sx === 0 && sy === 0) return; // 無鄰居影響
-    // combineWithSeparation:toTarget(當前速度方向)先正規化 + 分離×weight → 合成新方向
-    const tdx = body.velocity.x / spd, tdy = body.velocity.y / spd;
-    let fx = tdx + sx * cfg.weight, fy = tdy + sy * cfg.weight;
-    const fl = Math.hypot(fx, fy);
-    if (fl < 0.001) return;
-    fx /= fl; fy /= fl;
-    body.velocity.x = fx * spd; body.velocity.y = fy * spd; // 保原速度大小,只改方向
-  }
-
-  /**
-   * ② 硬 de-overlap(補刀)：兩兩距離 < r_i+r_j 沿連線推開重疊量,迭代收斂。
-   * - 完全重疊(dist≈0)用 index 定向(i 左推、j 右推)避免 NaN 爆衝。
-   * - 一方 immovable(像牆)→只推另一方(全額);兩方皆可動→各推一半。
-   * - 單幀每次推移夾 maxStepPx(鬆弛分多幀,玩家衝進怪群不瞬移)。位置夾在場內。
-   * ★TODO(多人效能):現直白 O(n²)×iter2,solo(~35隻)可接受。多人 maxAlive 破百(416)時
-   *   改【空間網格 grid】或【軟分離只取最近 K 鄰居】優化(海牛/用戶同意先 solo、多人再做)。
-   */
-  private resolveEnemyOverlap(agents: Enemy[]): void {
-    const cfg = GameConfig.enemySeparation;
-    const maxStep = cfg.maxStepPx;
-    const clampX = (e: Enemy, x: number) => Phaser.Math.Clamp(x, this.arena.left + e.getBodyRadius(), this.arena.right - e.getBodyRadius());
-    const clampY = (e: Enemy, y: number) => Phaser.Math.Clamp(y, this.arena.top + e.getBodyRadius(), this.arena.bottom - e.getBodyRadius());
-    for (let iter = 0; iter < cfg.iterations; iter++) {
-      for (let i = 0; i < agents.length; i++) {
-        const a = agents[i];
-        if (!a.active || a.dead) continue;
-        const ar = a.getBodyRadius();
-        const aImm = this.enemyIsImmovable(a);
-        for (let j = i + 1; j < agents.length; j++) {
-          const b = agents[j];
-          if (!b.active || b.dead) continue;
-          const br = b.getBodyRadius();
-          const minDist = ar + br;
-          let dx = b.x - a.x, dy = b.y - a.y; // a→b
-          let dist = Math.hypot(dx, dy);
-          if (dist >= minDist) continue;
-          let nx: number, ny: number;
-          if (dist > 0.001) { nx = dx / dist; ny = dy / dist; }
-          else { nx = 1; ny = 0; dist = 0; } // 完全重疊:index 定向(i 左 a←、j 右 b→)避免 NaN
-          let overlap = minDist - dist;
-          if (overlap > maxStep) overlap = maxStep; // 單幀鬆弛,分多幀收斂
-          const bImm = this.enemyIsImmovable(b);
-          if (aImm && bImm) continue; // 兩牆不互推
-          if (aImm) {
-            // a 不動→b 全額往外(+n)
-            b.setPosition(clampX(b, b.x + nx * overlap), clampY(b, b.y + ny * overlap));
-          } else if (bImm) {
-            // b 不動→a 全額往內(-n)
-            a.setPosition(clampX(a, a.x - nx * overlap), clampY(a, a.y - ny * overlap));
-          } else {
-            // 兩方可動→各推一半
-            const half = overlap * 0.5;
-            a.setPosition(clampX(a, a.x - nx * half), clampY(a, a.y - ny * half));
-            b.setPosition(clampX(b, b.x + nx * half), clampY(b, b.y + ny * half));
-          }
-        }
-      }
+      // 軟分離（改移動方向）為主，硬分離（推開殘留重疊）補刀
+      for (const e of separators) applyEnemySeparationSteering(e, separators);
+      resolveEnemyOverlap(separators, this.arena);
     }
   }
 

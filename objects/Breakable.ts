@@ -4,7 +4,7 @@ import { GameConfig } from '../config';
 /**
  * v57/v59 可打破物件（瓶罐/箱子）：場上每波成堆隨機灑。
  * - 只有【玩家攻擊(普攻揮擊/衝刺命中/道具招 AOE)】能打破，敵人不能破壞，靜止、不攻擊玩家。
- * - v59：帶「碰撞」擋角色（不可穿越）——碰撞用 GameScene 每幀【手動分離 blockCharacterFromBreakables】實作
+ * - v59：帶「碰撞」擋角色（不可穿越）——碰撞用每幀【手動分離 pushBreakablesFromCharacter（systems/bodySeparation）】實作
  *   (Arcade circle collider 高速持續推會 creep 穿透，改手動把角色推回木箱外緣，可靠)。衝刺撞到→直接打破(不擋)。
  * - 命中判定/分離都用距離數學(不依賴 physics body)，是純顯示 sprite。
  */
