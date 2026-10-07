@@ -71,6 +71,9 @@
 | **CharacterEditorPanel** | 角色編輯器面板類別 (5740cfc新增) | `objects/CharacterEditorPanel.ts:70` | [角色編輯器](./systems/character-editor.md) |
 | **attackCooldownMs** | 攻擊冷卻間隔參數 (5740cfc可調) | `GameScene.ts:xxx` | [角色編輯器](./systems/character-editor.md) |
 | **markerColor** | HUD位置標記顏色(綠色) (05dafae新增) | `config.ts:84` | [關卡系統](./systems/stage-system.md) |
+| **BossController** | BOSS系統控制器類別 (9782518新增) | `controllers/BossController.ts:45` | [BOSS系統](./systems/boss-system.md) |
+| **BossHost** | BOSS控制器場景介面 (9782518新增) | `controllers/BossController.ts:7` | [專案架構](./architecture/project-structure.md) |
+| **TelegraphFx** | 預警特效介面型別 (9782518抽出) | `systems/telegraphFx.ts:5` | [BOSS系統](./systems/boss-system.md) |
 | **markerDotScale** | 位置標記中心亮點縮放 (05dafae新增) | `config.ts:85` | [關卡系統](./systems/stage-system.md) |
 | **drawStageMarker** | HUD位置標記繪製函式 (05dafae新增) | `UIScene.ts:858` | [關卡系統](./systems/stage-system.md) |
 | **stageCycle** | 無限關卡循環配置 (874b8f9新增) | `config.ts:920` | [關卡系統](./systems/stage-system.md) |

@@ -43,14 +43,19 @@ scene: [
 ```
 
 ### 場景職責分工
-| Scene | 檔案 | 主要職責 | 大小 |
-|-------|------|----------|------|
-| `BootScene` | 24KB | 程序化貼圖生成、資源預處理 | 小 |
-| `TitleScene` | 44KB | 主選單、模式選擇、設定面板 | 中 |
-| `GameScene` | 422KB | 🎯 核心遊戲邏輯、戰鬥系統 | **超大** |
-| `UIScene` | 71KB | HUD系統、血條、UI覆蓋 | 大 |
-| `GameOverScene` | 5KB | 結算畫面、重新開始 | 小 |
-| `MinigameMenuScene` | 5KB | 小遊戲選單導航 | 小 |
+| Scene | 檔案 | 主要職責 | 大小 | 更新 |
+|-------|------|----------|------|------|
+| `BootScene` | 24KB | 程序化貼圖生成、資源預處理 | 小 | - |
+| `TitleScene` | 44KB | 主選單、模式選擇、設定面板 | 中 | - |
+| `GameScene` | 382KB | 🎯 核心遊戲邏輯、戰鬥系統 | **大** | P2-1重構 |
+| `UIScene` | 71KB | HUD系統、血條、UI覆蓋 | 大 | - |
+| `GameOverScene` | 5KB | 結算畫面、重新開始 | 小 | - |
+| `MinigameMenuScene` | 5KB | 小遊戲選單導航 | 小 | - |
+
+**P2-1重構成果** (commit 9782518):
+- **GameScene**: 422KB→382KB，8,059行→7,682行 (-4.7%)
+- **BOSS系統**: 抽取到 `controllers/BossController.ts` (651行)
+- **架構升級**: 引入Controller模式，降低GameScene複雜度
 
 ### 場景間通訊
 ```typescript

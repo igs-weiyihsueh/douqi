@@ -5,6 +5,38 @@
 
 ---
 
+## [2026-10-08 00:27] 重構完成 | P2-1 GameScene模組化重構 (9782518)
+**變更摘要**：BOSS系統完整抽取到controllers/BossController.ts，GameScene代碼量下降4.7%，新增Controller模式架構
+**影響頁面**：
+- [architecture/project-structure.md] (新建) - P2-1重構架構設計完整文檔
+- [systems/boss-system.md] (新建) - BOSS系統Controller化完整技術文檔
+- [architecture/game-engine.md] (更新) - GameScene重構統計與架構升級
+- [glossary.md] (更新) - 新增BossController、BossHost、TelegraphFx核心術語
+**代碼位置**：commit 9782518，銳騎review通過，headless測試驗證
+**重構統計**：
+- **BossController.ts**: +651行 (從GameScene完整抽取)
+- **GameScene.ts**: -594行 (8,059→7,682行，-4.7%)  
+- **systems/telegraphFx.ts**: +17行 (預警特效型別抽出)
+- **淨變化**: +723行新增，-539行重構
+**架構升級**：
+1. **新增controllers/目錄**: 放置有狀態、會操作場景物件的系統模組
+2. **系統職責重新定義**: 
+   - controllers/ = 場景操作模組 (有狀態、需要Phaser物件)
+   - systems/ = 純邏輯資料模組 (場景無關、可重用)
+3. **BossHost介面設計**: Controller通過介面存取GameScene能力，不直接存取私有成員
+4. **完整系統抽取**: BOSS登場/三招攻擊/亂入離場/命中掉票/屍體變身全部移至Controller
+**技術特色**：
+- 介面驅動設計：BossHost開放必要場景功能，保護內部實作
+- 狀態封裝：BOSS相關狀態完全封裝在Controller內
+- 行為一致性：headless測試確認重構後遊戲行為不變
+- 可測試性：Controller可獨立單元測試，依賴透過介面注入
+**架構意義**：
+- 首個大型系統模組化成功案例，證明GameScene可進一步拆解
+- 建立Controller模式標準，為後續P2-2角色系統、敵人系統重構奠定基礎
+- GameScene複雜度顯著降低，維護性大幅提升
+**部署狀態**：已部署上線，bundle index-qEj5RwdB.js確認
+**下次提醒**：翼騎可評估P2-2計劃，征騎可學習Controller模式進行類似重構
+
 ## [2026-10-07 21:15] 開發完成 | 主選單角色編輯器系統 (c4882c3+5740cfc)
 **變更摘要**：主選單重大改版 - 移除Zoom系統，新增完整角色編輯器功能，支援慢速模式4項參數自訂
 **影響頁面**：
