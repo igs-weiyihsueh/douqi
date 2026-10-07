@@ -67,7 +67,12 @@
 | **GameConfig** | 遊戲主配置物件 | `config.ts:5` | [效能配置](./systems/performance-config.md) |
 | **levelLerp** | 等級化數值計算函數 | `config.ts` | [效能配置](./systems/performance-config.md) |
 | **arena** | 場地配置 (經典模式) | `config.ts:107-115` | [UI/UX設計](./design/ui-ux-decisions.md) |
-| **stage** | 關卡模式配置 (2decdde更新) | `config.ts` | [架構決策演進](./decisions/architecture-evolution.md) |
+| **stageCycle** | 無限關卡循環配置 (874b8f9新增) | `config.ts:920` | [關卡系統](./systems/stage-system.md) |
+| **chestTickets** | 關卡寶箱彩票獎勵配置 (874b8f9新增) | `config.ts:927` | [關卡系統](./systems/stage-system.md) |
+| **areaVariant** | 場景變體標識('A'荒城/'B'火山) (874b8f9新增) | `GameScene.ts:91` | [關卡系統](./systems/stage-system.md) |
+| **dirLock** | 關卡轉場方向限制 (874b8f9新增) | `GameScene.ts:91` | [關卡系統](./systems/stage-system.md) |
+| **waveHud** | 卷軸HUD視覺配置 (874b8f9重構) | `config.ts:58` | [UI實作](./systems/ui-implementation.md) |
+| **stage** | 關卡模式配置 (2decdde更新→874b8f9重構) | `config.ts` | [架構決策演進](./decisions/architecture-evolution.md) |
 | **followDeadzoneW/H** | 鏡頭跟隨死區 (7975cc9新增) | `config.ts` | [架構決策演進](./decisions/architecture-evolution.md) |
 | **enemySeparation** | 敵人分離系統配置 | `config.ts:123-142` | [效能配置](./systems/performance-config.md) |
 | **enemySticky** | 敵人黏著目標配置 | `config.ts:151-158` | [戰鬥系統](./systems/combat-system.md) |

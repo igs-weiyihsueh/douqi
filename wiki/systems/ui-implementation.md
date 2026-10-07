@@ -148,25 +148,9 @@ interface StatsPayload {
   levelExpInto: number;       // 當前等級內經驗
 }
 
-// 統計面板更新
-updateTeamStats(payload: StatsPayload) {
-  // 團隊擊殺數
-  this.teamKillsText.setText(`團隊擊殺: ${payload.teamKills}`);
-  
-  // 生存時間 (mm:ss格式)
-  const minutes = Math.floor(payload.survivalMs / 60000);
-  const seconds = Math.floor((payload.survivalMs % 60000) / 1000);
-  this.survivalText.setText(`生存時間: ${minutes}:${seconds.toString().padStart(2, '0')}`);
-  
-  // 等級與經驗
-  this.levelText.setText(`等級: ${payload.level}/${payload.levelCap}`);
-  this.updateExpBar(payload.levelExpInto);
-}
-```
-
 ### 角色面板系統
 ```typescript
-// 4角色狀態面板
+// 4角色狀態面板  
 updateCharacterPanels(chars: CharStat[]) {
   chars.forEach((char, index) => {
     const panel = this.characterPanels[index];
@@ -195,6 +179,191 @@ updateCharacterPanels(chars: CharStat[]) {
     // 貨幣顯示
     panel.creditText.setText(`${char.credit}💰`);
   });
+}
+```
+
+### 關卡獎勵特效系統 (874b8f9更新)
+```typescript
+// UIScene.ts - 彩票獎勵特效 (移至面板位置)
+playComboRewardFx(char: Character, text: string): void {
+  const panel = this.characterPanels[char.index];
+  const x = panel.container.x;
+  const y = panel.container.y - 30;           // 角色面板上方
+  
+  // 彩票獎勵文字 (+5彩票 / +30彩票)
+  const rewardText = this.add.text(x, y, text, {
+    fontSize: '42px',                         // 視覺放大 (28→42px)
+    fill: '#FFD700',
+    stroke: '#000000',
+    strokeThickness: 2,
+    fontFamily: 'Arial'
+  }).setOrigin(0.5);
+  
+  // 彩票圖示特效 (30×18px，視覺放大)
+  const ticketIcon = this.add.rectangle(x + 80, y, 30, 18, 0xFFD700);
+  
+  // 閃光特效 (半徑放大12/90)
+  const flash = this.add.circle(x, y, 12, 0xFFFFFF, 0.8);
+  
+  // 動畫序列
+  this.tweens.add({
+    targets: [rewardText, ticketIcon],
+    y: y - 50,
+    alpha: 0,
+    duration: 2000,
+    ease: 'Power2',
+    onComplete: () => {
+      rewardText.destroy();
+      ticketIcon.destroy();
+    }
+  });
+  
+  this.tweens.add({
+    targets: flash,
+    scaleX: 7.5,                              // 90/12 = 7.5倍放大
+    scaleY: 7.5,
+    alpha: 0,
+    duration: 500,
+    onComplete: () => flash.destroy()
+  });
+}
+```
+```
+
+### 關卡進度HUD系統 (874b8f9新增)
+
+#### 卷軸HUD核心架構
+```typescript
+// UIScene.ts:781-800 - HUD狀態管理
+private stageHudState: {
+  stage: number;           // 當前關卡編號
+  stageKilled: number;     // 關卡擊殺數(過場時歸零)
+  stageQuota: number;      // 關卡目標擊殺數
+  stageChests: ('low'|'high')[];  // 4格寶箱階級預覽
+} = { stage: 1, stageKilled: 0, stageQuota: 20, stageChests: [] };
+
+private stageHudFillTarget = 0;        // 進度條目標比例
+private stageHudFill = 0;              // 進度條當前比例
+private stageHudPrevChest: 'low'|'high' = 'low'; // 剛完成的寶箱階級
+private stageHudShiftAt = 0;           // 遞補動畫開始時間
+
+updateStageHudState(stats: GameStats): void {
+  const wasNewStage = stats.stage > this.stageHudState.stage;
+  
+  if (wasNewStage) {
+    // 記錄剛完成的寶箱用於遞補動畫
+    this.stageHudPrevChest = this.stageHudState.stageChests[0];
+    this.stageHudShiftAt = this.time.now;
+    this.stageHudFillTarget = 0;      // 新關卡量條歸零
+  }
+  
+  this.stageHudState = stats;
+  // 只在生怪/清場階段採計進度(過場時stageKilled=0)
+  this.stageHudFillTarget = stats.stageKilled / stats.stageQuota;
+}
+```
+
+#### 視覺渲染系統  
+```typescript
+// UIScene.ts:809-853 - 4圓點卷軸繪製
+drawStageHud(): void {
+  const cfg = GameConfig.waveHud;
+  const state = this.stageHudState;
+  
+  // 量條平滑逼近目標進度
+  const fillSpeed = 1000 / cfg.lineFillMs;
+  this.stageHudFill += (this.stageHudFillTarget - this.stageHudFill) * fillSpeed * this.scene.game.loop.delta;
+  
+  // 遞補動畫進度計算
+  const shiftProgress = Math.min(1, (this.time.now - this.stageHudShiftAt) / cfg.shiftMs);
+  const ease = Phaser.Math.Easing.Cubic.Out(shiftProgress);
+  
+  // 繪製4個圓點和連接線
+  for (let i = 0; i < cfg.visibleStages; i++) {
+    const baseX = cfg.x + i * cfg.nodeGap;
+    const x = baseX - ease * cfg.nodeGap;        // 遞補滑動效果
+    const chest = state.stageChests[i];
+    const nodeState = i === 0 ? 'current' : 'future';
+    const alpha = i === cfg.visibleStages - 1 ? ease : 1; // 新圓點淡入
+    
+    // 繪製連接線(只有第一段顯示進度)
+    if (i === 0) {
+      const lineWidth = cfg.nodeGap - cfg.nodeRadius * 2;
+      const fillWidth = lineWidth * Math.min(1, this.stageHudFill);
+      
+      // 底線(灰色)
+      this.hudGraphics.lineStyle(4, 0x444444, alpha);
+      this.hudGraphics.lineBetween(x + cfg.nodeRadius, cfg.y, x + cfg.nodeRadius + lineWidth, cfg.y);
+      
+      // 進度線(白色)  
+      if (fillWidth > 0) {
+        this.hudGraphics.lineStyle(4, 0xffffff, alpha);
+        this.hudGraphics.lineBetween(x + cfg.nodeRadius, cfg.y, x + cfg.nodeRadius + fillWidth, cfg.y);
+      }
+    }
+    
+    this.drawStageNode(x, cfg.y, chest, nodeState, alpha);
+  }
+}
+
+// UIScene.ts:854-890 - 圓點詳細繪製
+drawStageNode(x: number, y: number, chest: 'low'|'high', 
+              state: StageNodeState, alpha: number): void {
+  const cfg = GameConfig.waveHud;
+  
+  // 底盤圓形
+  this.hudGraphics.fillStyle(0x444444, alpha);
+  this.hudGraphics.fillCircle(x, y, cfg.nodeRadius);
+  
+  // current狀態脈動外框
+  if (state === 'current') {
+    const time = this.time.now * 0.005;
+    const pulse = 0.8 + 0.2 * Math.sin(time);
+    this.hudGraphics.lineStyle(3, 0xffffff, alpha * pulse);
+    this.hudGraphics.strokeCircle(x, y, cfg.nodeRadius + 2);
+  }
+  
+  // 高階寶箱金色光暈
+  if (chest === 'high') {
+    this.hudGraphics.fillStyle(0xffd700, alpha * 0.3);
+    this.hudGraphics.fillCircle(x, y, cfg.nodeRadius + 8);
+  }
+  
+  // 寶箱圖示繪製(箱體+箱蓋+鎖扣)
+  const chestColor = chest === 'high' ? 0xffd700 : 0x8b4513;
+  const size = cfg.nodeRadius * 0.6;
+  
+  // 箱體
+  this.hudGraphics.fillStyle(chestColor, alpha);
+  this.hudGraphics.fillRect(x - size/2, y - size/3, size, size*0.8);
+  
+  // 箱蓋  
+  this.hudGraphics.fillStyle(0x654321, alpha);
+  this.hudGraphics.fillRect(x - size/2, y - size/2, size, size*0.3);
+  
+  // 鎖扣
+  this.hudGraphics.fillStyle(0x444444, alpha);
+  this.hudGraphics.fillCircle(x, y - size/6, size*0.15);
+}
+```
+
+#### HUD配置參數
+```typescript  
+// config.ts:58-80 - waveHud配置(49b634d常數化)
+waveHud: {
+  x: 960, y: 100,                    // HUD中心位置
+  nodeRadius: 22,                    // 圓點半徑
+  nodeGap: 150,                      // 圓點間距  
+  visibleStages: 4,                  // 顯示關卡數
+  shiftMs: 450,                      // 遞補動畫時長
+  lineFillMs: 800,                   // 進度條填充時長
+  
+  // 寶箱視覺配置
+  chestColors: { low: 0x8b4513, high: 0xffd700 },
+  chestRatios: { width: 0.6, height: 0.4, lock: 0.2 },
+  
+  // 脈動配置
+  pulse: { speed: 0.005, min: 0.8, max: 1.0 }
 }
 ```
 

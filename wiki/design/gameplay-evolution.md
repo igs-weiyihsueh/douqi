@@ -199,27 +199,44 @@ class PeachLotteryScene {
 }
 ```
 
-## 關卡系統設計
+## 關卡系統設計 (874b8f9重大改版)
 
-### 關卡制架構
+### 新關卡制架構：無限循環+卷軸HUD
 ```typescript
-// 關卡系統骨架
+// 新關卡系統 - 無限小關卡循環
 class GameScene {
-  private levelMode = false;                    // 關卡制開關
-  private currentLevel = 1;                     // 當前關卡
-  private currentSub: 'A' | 'B' = 'A';         // 子區域
+  private currentStage = 1;                     // 當前關卡編號(1起算,無限遞增) 
+  private currentLevel = 1;                     // 場景配色用關卡(固定為sceneLevel)
+  private stageInProgress = false;              // 關卡進行中標記
+  private lastStageChest: 'low' | 'high';     // 剛完成關卡的寶箱階級
+  private areaVariant: 'A' | 'B' = 'A';       // 場景變體('A'荒城/'B'火山)
+  private dirLock: 'L' | 'R' | null = null;   // 方向限制(null=兩側開放)
   
   // 進程狀態機
   private progressPhase: 'playing' | 'choosing' | 'panning' | 'exiting' | 'transition';
-  
-  // 跨區域系統
-  private crossPhase: 'walk' | 'panning' | 'enter';
-  private crossSide: 'L' | 'R' | null;
-  
-  // 事件系統
-  private eventBag: string[] = [];             // tower/guard/capture輪流
+}
+
+// 核心配置 - 4關循環
+stage: {
+  stageCycle: [
+    { quota: 20, chest: 'low' },              // 關1: 20隻→低階寶箱
+    { quota: 25, chest: 'low' },              // 關2: 25隻→低階寶箱
+    { quota: 30, chest: 'low' },              // 關3: 30隻→低階寶箱  
+    { quota: 35, chest: 'high' }              // 關4: 35隻→高階寶箱
+  ],
+  chestTickets: { low: 5, high: 30 }          // 彩票獎勵(低階5張/高階30張)
 }
 ```
+
+### 核心變更摘要
+- **關卡機制**: 8關波次制 → 無限小關卡循環
+- **進度HUD**: 波次計數器 → 4圓點卷軸HUD  
+- **轉場系統**: 統一轉場 → 階級化轉場(低階左右平移/高階上方閃黑)
+- **世界設計**: 固定場景 → 無限延伸世界+荒城↔火山交替
+- **獎勵機制**: 波次獎勵 → 直接發彩票(低階5張/高階30張)
+- **移除內容**: 森林/洞窟主題、BOSS關、事件輪替、8關限制
+
+詳細技術實作請參考：[關卡系統](../systems/stage-system.md)
 
 ### 鏡頭系統 (7975cc9更新)
 ```typescript
