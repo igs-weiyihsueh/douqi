@@ -363,34 +363,42 @@ export class UIScene extends Phaser.Scene {
 
     // 🔄 NEW UI：角色狀態列重大改版 - 圓形標籤 + 雙欄位系統，移除血條系統
     const count = GameConfig.characters.count;
-    const panelW = 200;
-    const panelH = 60;
-    const panelGap = 12;
-    const startX = (w - (count * panelW + (count - 1) * panelGap)) / 2; // 居中排列
-    const rowTopY = h - 80;
+    
+    // 原始狀態列使用較小的尺寸（保持原有設計）
+    const statusPanelW = 200; 
+    const statusPanelH = 60;
+    
+    // 計算適當間距，讓4個狀態面板平均分佈
+    const availableWidth = w - 100;
+    const totalStatusPanelWidth = count * statusPanelW;
+    const totalGapWidth = availableWidth - totalStatusPanelWidth;
+    const statusPanelGap = Math.max(20, totalGapWidth / (count + 1));
+    
+    const statusStartX = (w - (count * statusPanelW + (count - 1) * statusPanelGap)) / 2;
+    const rowTopY = h - 100; // 稍微向上調整，避免與覆蓋面板重疊
     
     // 🎨 整個狀態列表統一底圖
     this.add
-      .rectangle(startX - 8, rowTopY - 8, count * panelW + (count - 1) * panelGap + 16, panelH + 16, 0x000000, 0.6)
+      .rectangle(statusStartX - 8, rowTopY - 8, count * statusPanelW + (count - 1) * statusPanelGap + 16, statusPanelH + 16, 0x000000, 0.6)
       .setOrigin(0, 0)
       .setStrokeStyle(2, 0x444444, 0.8)
       .setDepth(18); // 在所有元素下方
     
     for (let i = 0; i < count; i++) {
-      const x = startX + i * (panelW + panelGap);
+      const x = statusStartX + i * (statusPanelW + statusPanelGap);
       const color = GameConfig.characters.colors[i];
       const label = GameConfig.characters.labels[i];
       
       // 🎨 個別角色狀態背景 - 配合角色顏色，不透明
       const panelBg = this.add
-        .rectangle(x, rowTopY, panelW, panelH, color, 1.0) // 使用角色顏色，完全不透明
+        .rectangle(x, rowTopY, statusPanelW, statusPanelH, color, 1.0) // 使用角色顏色，完全不透明
         .setOrigin(0, 0)
         .setStrokeStyle(1, 0xffffff, 0.8) // 白色邊框
         .setDepth(19);
       
       // 🔵 左側圓形標籤 (24px半徑，白邊框，角色識別色填充)
       const circleX = x + 24;
-      const circleY = rowTopY + panelH / 2;
+      const circleY = rowTopY + statusPanelH / 2;
       const circleRadius = 24;
       
       const circle = this.add.circle(circleX, circleY, circleRadius, color)
@@ -1613,13 +1621,21 @@ export class UIScene extends Phaser.Scene {
     const w = GameConfig.width;
     const h = GameConfig.height;
     
-    // 🎯 計算所有角色面板的位置參數（與原始面板佈局一致）
+    // 🎯 計算所有角色面板的位置參數（基於實際圖片尺寸）
     const count = GameConfig.characters.count;
-    const panelW = 200;
-    const panelH = 60;
-    const panelGap = 12;
-    const startX = (w - (count * panelW + (count - 1) * panelGap)) / 2; // 居中排列
-    const rowTopY = h - 80;
+    const actualPanelW = 324; // 實際面板圖片寬度
+    const actualPanelH = 166; // 實際面板圖片高度
+    
+    // 計算適當的間距，讓4個面板平均分佈在螢幕寬度上
+    const availableWidth = w - 100; // 留出左右邊距各50px
+    const totalPanelWidth = count * actualPanelW;
+    const totalGapWidth = availableWidth - totalPanelWidth;
+    const panelGap = Math.max(20, totalGapWidth / (count + 1)); // 最小間距20px，或自動計算
+    
+    const startX = (w - (count * actualPanelW + (count - 1) * panelGap)) / 2; // 居中排列
+    const rowTopY = h - 120; // 稍微向上調整，給面板更多空間
+    
+    console.log(`📐 [多角色底部面板] 佈局計算: 螢幕寬度=${w}, 面板寬度=${actualPanelW}, 間距=${panelGap.toFixed(1)}, 起始X=${startX.toFixed(1)}`);
     
     // 角色標籤和資源映射
     const playerLabels = ['1P', '2P', '3P', '4P'];
@@ -1637,16 +1653,14 @@ export class UIScene extends Phaser.Scene {
         const texture = this.textures.get(resourceKey);
         if (texture && texture.key !== '__MISSING') {
           // 🎯 計算當前角色面板的精確位置
-          const playerPanelX = startX + i * (panelW + panelGap);
+          const playerPanelX = startX + i * (actualPanelW + panelGap);
           const playerPanelY = rowTopY;
-          const playerCenterX = playerPanelX + panelW / 2; // 面板中心X座標
-          const playerCenterY = playerPanelY + panelH / 2; // 面板中心Y座標
+          const playerCenterX = playerPanelX + actualPanelW / 2; // 面板中心X座標
+          const playerCenterY = playerPanelY + actualPanelH / 2; // 面板中心Y座標
           
-          // 🎨 根據原始圖片尺寸設定顯示尺寸（假設所有角色UI尺寸一致）
-          const originalW = 324; // 基於1P.png的尺寸
-          const originalH = 166;
-          const displayW = originalW;
-          const displayH = originalH;
+          // 🎨 使用實際圖片尺寸
+          const displayW = actualPanelW;
+          const displayH = actualPanelH;
           
           // 創建角色底部面板覆蓋，精確對準該角色的原始面板位置
           this.bottomPanelOverlays[i] = this.add.image(playerCenterX, playerCenterY, resourceKey)
@@ -1669,7 +1683,7 @@ export class UIScene extends Phaser.Scene {
     }
     
     console.log('🔧 [多角色底部面板] 多角色底部面板替換系統初始化完成');
-    console.log(`📐 [多角色底部面板] 面板佈局參數: count=${count}, panelW=${panelW}, panelH=${panelH}, startX=${startX}, rowTopY=${rowTopY}`);
+    console.log(`📐 [多角色底部面板] 面板佈局參數: count=${count}, panelW=${actualPanelW}, panelH=${actualPanelH}, gap=${panelGap.toFixed(1)}, startX=${startX.toFixed(1)}, rowTopY=${rowTopY}`);
   }
 
   /**
