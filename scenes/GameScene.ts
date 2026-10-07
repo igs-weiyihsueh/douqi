@@ -2345,23 +2345,19 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * 問號關前的雙出口：從 左+右 / 左+上 / 右+上 隨機挑一組（不受 dirLock 限制）。
-   * 左右照常走邊界平移（並設定 dirLock），上方走出口閃黑（解除 dirLock）
+   * 問號關前的雙出口：從 左+右 / 左+上 / 右+上 中挑一組，排除回頭方向（dirLock='L' 時不出現右，反之亦然）。
+   * 左右照常走邊界平移（並設定 dirLock），上方走出口閃黑（解除 dirLock）；不顯示提示文字，只有箭頭與出口圖示
    */
   private openMysteryExits(): void {
-    const combos = GameConfig.stage.mysteryExitCombos;
+    const back = this.dirLock === 'L' ? 'R' : this.dirLock === 'R' ? 'L' : null;
+    const combos = GameConfig.stage.mysteryExitCombos.filter((c) => !back || !c.includes(back));
     const combo = combos[Phaser.Math.Between(0, combos.length - 1)];
     const L = combo.includes('L'), R = combo.includes('R'), up = combo.includes('U');
-    this.openCrossing({ L, R });
+    this.openCrossing({ L, R }, false);
     if (up) {
       this.progressPhase = 'exiting'; // 左右轉場仍在 crossingOpen 下偵測；exiting 另外偵測上方出口
       this.showExit(false);
     }
-    const parts = [L ? '← 左' : '', up ? '↑ 上' : '', R ? '右 →' : ''].filter(Boolean);
-    if (this.choiceHint) this.choiceHint.destroy();
-    this.choiceHint = this.add.text(this.zoneA.centerX, this.zoneA.top + 46, `問號關！選一條路：${parts.join('　或　')}`, {
-      fontFamily: 'monospace', fontSize: '24px', color: '#e9d5ff'
-    }).setOrigin(0.5).setDepth(21).setScrollFactor(1);
   }
 
   /** 收掉上方出口的圖（問號關前選了另一條路時用） */
@@ -2375,8 +2371,9 @@ export class GameScene extends Phaser.Scene {
    * - 玩家走到開放側的邊界 → updateCrossing → startCameraPanToB(side)
    *
    * @param allowed 開放的方向；省略時依 dirLock（走過一側後只開同側）
+   * @param withHint 是否顯示「走到邊界前往下一區」提示文字
    */
-  private openCrossing(allowed?: { L: boolean; R: boolean }): void {
+  private openCrossing(allowed?: { L: boolean; R: boolean }, withHint = true): void {
     this.crossingOpen = true;
     this.crossPhase = 'walk';
     this.crossAllowed = allowed ?? { L: this.dirLock !== 'R', R: this.dirLock !== 'L' };
@@ -2399,11 +2396,13 @@ export class GameScene extends Phaser.Scene {
     // 開放側的走廊(填滿不露黑)
     if (openR) this.drawCorridorScene('R');
     if (openL) this.drawCorridorScene('L');
-    const hint = openL && openR ? '← 走到左或右邊界前往下一區 →' : openL ? '← 走到左邊界前往下一區' : '走到右邊界前往下一區 →';
-    if (this.choiceHint) this.choiceHint.destroy();
-    this.choiceHint = this.add.text(this.zoneA.centerX, this.zoneA.top + 46, hint, {
-      fontFamily: 'monospace', fontSize: '24px', color: '#ffe98a'
-    }).setOrigin(0.5).setDepth(21).setScrollFactor(1);
+    if (this.choiceHint) { this.choiceHint.destroy(); this.choiceHint = null; }
+    if (withHint) {
+      const hint = openL && openR ? '← 走到左或右邊界前往下一區 →' : openL ? '← 走到左邊界前往下一區' : '走到右邊界前往下一區 →';
+      this.choiceHint = this.add.text(this.zoneA.centerX, this.zoneA.top + 46, hint, {
+        fontFamily: 'monospace', fontSize: '24px', color: '#ffe98a'
+      }).setOrigin(0.5).setDepth(21).setScrollFactor(1);
+    }
     // ★引導箭頭(純視覺提示往左/右可走;非碰箭頭觸發——玩家仍需走到 A 左/右緣才觸發過場)。
     this.drawCrossingArrows();
   }
@@ -2772,9 +2771,10 @@ export class GameScene extends Phaser.Scene {
     g.strokeCircle(x, y, s + 14);
   }
 
-  /** B 清完:上下出口(第一階段用下方出口),玩家走進 → 閃黑到下一關 A。 */
   /**
-   * @param withHint 是否顯示「走進上方出口」提示（問號關前與左右同時開放時由呼叫端給合併提示）
+   * 開上方出口：玩家走進 → 閃黑到新區域
+   *
+   * @param withHint 是否顯示「走進上方出口」提示文字（問號關前不顯示）
    */
   private showExit(withHint = true): void {
     if (this.exitGfx) this.exitGfx.destroy();

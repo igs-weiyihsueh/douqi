@@ -895,7 +895,7 @@ export const GameConfig = {
     mysteryHighChance: 0.4,
     /** 各寶箱階級的關卡擊殺數（問號依揭曉結果） */
     quotaByChest: { low: 25, high: 35 },
-    /** 問號關前的出口組合（隨機挑一組；L 左、R 右、U 上方），不受左右方向限制 */
+    /** 問號關前的出口組合（隨機挑一組；L 左、R 右、U 上方）；含回頭方向（與 dirLock 相反）的組合會被排除 */
     mysteryExitCombos: [['L', 'R'], ['L', 'U'], ['R', 'U']] as ReadonlyArray<ReadonlyArray<'L' | 'R' | 'U'>>,
     /** 寶箱獎勵：完成小關卡直接發給每位存活玩家的彩票張數 */
     chestTickets: { low: 5, high: 30 },
