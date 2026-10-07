@@ -262,46 +262,32 @@ export class GameScene extends Phaser.Scene {
     this.resetState();
 
     // 固定視角競技場
-    // 應用持久化的邊界設定
-    let pad, aW, aH, m;
-    if (GameConfig.borderEditor.useCustomSettings) {
-      const custom = GameConfig.borderEditor.customSettings;
-      pad = custom.padding;
-      aW = custom.arenaW;
-      aH = custom.arenaH;
-      m = custom.sceneMargin;
-      console.log('🎮 應用自定義邊界設定到遊戲場景:', custom);
-    } else {
-      pad = GameConfig.arena.padding;
-      aW = GameConfig.stage.arenaW;
-      aH = GameConfig.stage.arenaH;
-      m = GameConfig.stage.sceneMargin;
-      console.log('🎮 應用預設邊界設定到遊戲場景');
-    }
-    
+    const pad = GameConfig.arena.padding;
     const arenaX = pad;
     const arenaY = pad;
     const arenaW = GameConfig.width - pad * 2;
     const arenaH = GameConfig.height - pad * 2;
 
     // ★關卡制:A 子區【置中】,B 可能在 A 的左側或右側(依玩家選邊)。
-    //   世界佈局: [B-左候選][A-中央][B-右候選],世界寬 = 3×畫面 + 2×gap。
+    //   世界佈局: [B-左候選][A-中央][B-右候選],世界寬 = 3×slot + 2×gap。
     //   選左→鏡頭往左移、B 呈現在左;選右→鏡頭往右移、B 在右(方向對應直覺)。
     this.levelMode = GameConfig.stage.enabled;
     if (this.levelMode) {
-      const gap = GameConfig.stage.subGap;
-      const slotW = aW + m * 2, slotH = aH + m * 2;
+      const st = GameConfig.stage;
+      const gap = st.subGap;
+      const { width: slotW, height: slotH } = GameScene.stageSlotSize();
       const worldW = slotW * 3 + gap * 2;
       const worldH = slotH;
-      // 三個 slot 水平並排:[B-左][A-中][B-右];每 slot 內 arena 置中。
+      // 三個 slot 水平並排:[B-左][A-中][B-右]
       const slotBLeftX = 0, slotAX = slotW + gap, slotBRightX = (slotW + gap) * 2;
       this.slotBLeft = new Phaser.Geom.Rectangle(slotBLeftX, 0, slotW, slotH);
       this.slotA = new Phaser.Geom.Rectangle(slotAX, 0, slotW, slotH);
       this.slotBRight = new Phaser.Geom.Rectangle(slotBRightX, 0, slotW, slotH);
-      // 移動區(arena)= slot 內置中
-      this.zoneBLeft = new Phaser.Geom.Rectangle(slotBLeftX + m, m, aW, aH);
-      this.zoneA = new Phaser.Geom.Rectangle(slotAX + m, m, aW, aH);
-      this.zoneBRight = new Phaser.Geom.Rectangle(slotBRightX + m, m, aW, aH);
+      // 移動區(arena)= slot 扣掉左右/上下不可踏入邊距
+      const mx = st.sceneMarginX, mt = st.sceneMarginTop;
+      this.zoneBLeft = new Phaser.Geom.Rectangle(slotBLeftX + mx, mt, st.arenaW, st.arenaH);
+      this.zoneA = new Phaser.Geom.Rectangle(slotAX + mx, mt, st.arenaW, st.arenaH);
+      this.zoneBRight = new Phaser.Geom.Rectangle(slotBRightX + mx, mt, st.arenaW, st.arenaH);
       this.zoneB = this.zoneBRight;   // 佔位(選邊時重指)
       this.arena = this.zoneA;        // 當前移動區(切換時 reassign→108 處引用自動跟隨)
       // 物理世界 = arena(玩家只能在移動區內);camera bounds = 整個世界(可跟隨捲動露遠景)
@@ -3070,10 +3056,18 @@ export class GameScene extends Phaser.Scene {
   private disableFollow(): void {
     const cam = this.cameras.main;
     cam.stopFollow();
-    const st = GameConfig.stage;
-    const slotW = st.arenaW + st.sceneMargin * 2, slotH = st.arenaH + st.sceneMargin * 2;
+    const { width: slotW, height: slotH } = GameScene.stageSlotSize();
     const worldW = slotW * 3 + GameConfig.stage.subGap * 2;
     cam.setBounds(0, 0, worldW, slotH);
+  }
+
+  /** 關卡制單一 slot 尺寸 = 移動區 + 左右/上下不可踏入邊距(見 GameConfig.stage) */
+  private static stageSlotSize(): { width: number; height: number } {
+    const st = GameConfig.stage;
+    return {
+      width: st.arenaW + st.sceneMarginX * 2,
+      height: st.arenaH + st.sceneMarginTop + st.sceneMarginBottom
+    };
   }
 
   /**
@@ -3748,7 +3742,7 @@ export class GameScene extends Phaser.Scene {
     const s = GameConfig.boss.skills.b;
     const safeR = GameConfig.boss.skills.a.radius;
     const ox = boss.x, oy = boss.y;
-    const maxR = Math.hypot(GameConfig.width, GameConfig.height); // 覆蓋全場的外半徑
+    const maxR = Math.hypot(this.arena.width, this.arena.height); // 覆蓋全場的外半徑(移動區對角線:BOSS 在任何位置都能涵蓋到最遠角落)
     const g = this.add.graphics().setDepth(4);
     const fx: { owner: 'tower' | 'boss'; gfx: Phaser.GameObjects.Graphics; tween?: Phaser.Tweens.Tween; fired: boolean } =
       { owner: 'boss', gfx: g, fired: false };

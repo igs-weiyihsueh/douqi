@@ -54,19 +54,6 @@ export const GameConfig = {
     }
   },
 
-  /** ★邊界編輯器配置和持久化設定 */
-  borderEditor: {
-    /** 是否啟用自定義邊界設定 */
-    useCustomSettings: false,
-    /** 自定義邊界設定 */
-    customSettings: {
-      arenaW: 1560,
-      arenaH: 900,
-      sceneMargin: 285,
-      padding: 72
-    }
-  },
-
   /** ★波次進度 HUD(關卡制:節點序列 ●─●─◆);只純波次顯示,事件/BOSS 隱藏 */
   waveHud: {
     enabled: true,
@@ -882,11 +869,19 @@ export const GameConfig = {
     enabled: true,
     /** 總關卡數 ★第二輪:1-4 荒城→火山(第一輪),5-8 森林→洞窟(第二輪);關4=中場BOSS、關8=壓軸BOSS(真通關) */
     totalLevels: 8,
-    /** 移動區(arena)尺寸 = 一個畫面大小(1920×1080);鏡頭跟隨玩家,走向邊緣時露出四周遠景。 */
-    arenaW: 1920,
-    arenaH: 1080,
-    /** 移動區四周的遠景邊距(世界像素)。slot = arena + 2×margin = 2520×1680,鏡頭可在 slot 內上下左右各捲動 300。 */
-    sceneMargin: 300,
+    /**
+     * 移動區(arena)尺寸:左右貼齊 slot(=F4 背景圖寬),上下扣掉背景圖的熔岩斷崖/岩石禁區。
+     * slot = (arenaW + 2×sceneMarginX) × (arenaH + sceneMarginTop + sceneMarginBottom) = 2520×1680,
+     * 比畫面(1920×1080)大,鏡頭跟隨玩家在 slot 內捲動。
+     */
+    arenaW: 2520,
+    arenaH: 840,
+    /** 移動區左右兩側的不可踏入邊距(世界像素);0 = 左右貼齊 slot 邊緣 */
+    sceneMarginX: 0,
+    /** 移動區上方的不可踏入邊距(世界像素):背景圖上方熔岩斷崖帶 */
+    sceneMarginTop: 504,
+    /** 移動區下方的不可踏入邊距(世界像素):背景圖下方岩石帶 */
+    sceneMarginBottom: 336,
     /** 鏡頭跟隨的 deadzone(緩衝區)寬高——玩家在此框內鏡頭不動,超出才跟(約畫面 1/6,讓鏡頭隨移動即時捲動)。 */
     followDeadzoneW: 320,
     followDeadzoneH: 180,
