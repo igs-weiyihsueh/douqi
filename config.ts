@@ -287,21 +287,7 @@ export const GameConfig = {
     } as Record<string, number>,
     /** ★v58/v61:BOSS 命中(非擊殺)給能量的機率與量(max50下 amount 提到12)。 */
     bossHitChance: 0.15,
-    bossHitAmount: 12,
-    /** ★v59 階段2:擊殺掉落【能量球飛向P1】純視覺演出(不改加值時機)。 */
-    orb: {
-      /** ★開關:false=不生飛能量球(能量值仍擊殺當下正常加,只是無飛球視覺)。用戶暫關,保留 code 易復原。 */
-      enabled: false,
-      /** 場上能量球數量上限(輕量,避免多殺洗版) */
-      maxAlive: 24,
-      radius: 7,
-      color: 0x66ff9c,      // 亮綠(與金幣金色/道具區別=能量感)
-      glowColor: 0xd6ffe6,
-      /** 飛向P1的基礎時長(ms);距離遠略久。 */
-      flyMs: 420,
-      /** 生成時先小噴一下再飛(散射初速 px) */
-      scatter: 26
-    }
+    bossHitAmount: 12
   },
 
   /**

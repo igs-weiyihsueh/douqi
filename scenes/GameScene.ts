@@ -109,8 +109,6 @@ export class GameScene extends Phaser.Scene {
   private pendingEventComplete = false;
   /** ★最後一波打完最後一隻怪時場上還有寶箱怪→延後開啟場景切換,等寶箱怪死/離場才 onSubZoneComplete。 */
   private pendingSubZoneComplete = false;
-  /** ★v59 階段2:場上能量球(飛向P1的視覺演出)數量,做輕量上限。 */
-  private energyOrbCount = 0;
   /** ★進B鏡頭跳一下修:進B後暫不硬收 camera bounds,等鏡頭平滑捲進此 slot 範圍內才收(避免 clamp 跳)。null=無待收。 */
   private pendingCamSlot: Phaser.Geom.Rectangle | null = null;
   private zoneA!: Phaser.Geom.Rectangle;   // A 子區【移動區】矩形(世界座標,置中)
@@ -6611,7 +6609,6 @@ export class GameScene extends Phaser.Scene {
         const ecfg = GameConfig.energy;
         if (!this.player.empowered && Math.random() < ecfg.bossHitChance) {
           this.gainEnergy(this.player, ecfg.bossHitAmount);
-          this.spawnEnergyOrb(enemy.x, enemy.y); // ★v59:BOSS 給能量也掉能量球飛P1(回饋)
         }
       }
     }
@@ -6648,10 +6645,9 @@ export class GameScene extends Phaser.Scene {
         // ★v58→v61 修:能量改【隊伍任何人擊殺都給 P1 能量】(僅 P1 有能量系統)。
         //   根因:舊版 gate `actor===player` 只在 P1 親自最後一擊才給→有 BOT 隊友時多數怪被 BOT 殺→P1 幾乎集不到能量
         //   (實測團隊25殺 P1 只親殺7→能量僅24)。用戶「打死怪就獲得能量」的直覺=只要怪死就給 P1。
-        //   BOT 本身無能量系統,給 P1 不影響 BOT。能量球從怪死處飛向 P1(值已在此加好)。
+        //   BOT 本身無能量系統,給 P1 不影響 BOT。
         if (this.controlMode === 'slow') {
           this.grantKillEnergy(this.player, etype);
-          this.spawnEnergyOrb(dx, dy); // 一隻一顆飛球(簡潔,代表獲得能量)
         }
         if (Math.random() < GameConfig.items.dropChance) this.dropItemAt(dx, dy, time);
       }
@@ -6881,52 +6877,6 @@ export class GameScene extends Phaser.Scene {
     const ecfg = GameConfig.energy;
     const amount = ecfg.perKill[etype] ?? ecfg.perKill.default;
     this.gainEnergy(c, amount);
-  }
-
-  /**
-   * ★v59 階段2:在 (x,y) 生成【能量球】飛向 P1 的【純視覺演出】(不加值——值已在擊殺當下 grantKillEnergy 加好)。
-   * 輕量:場上上限 maxAlive;用 Graphics 小球(亮綠,與金幣區別)+ 先散射再 tween 追 P1、到達淡出。
-   */
-  private spawnEnergyOrb(x: number, y: number): void {
-    if (this.controlMode !== 'slow') return; // 只 slow 有能量系統
-    const cfg = GameConfig.energy.orb;
-    if (!cfg.enabled) return; // ★開關關閉:不生飛能量球(能量值仍照常加,只無視覺)
-    if (this.energyOrbCount >= cfg.maxAlive) return; // 輕量上限,避免多殺洗版
-    this.energyOrbCount++;
-    const orb = this.add.circle(x, y, cfg.radius, cfg.color, 1).setDepth(14);
-    orb.setStrokeStyle(2, cfg.glowColor, 0.9);
-    // 先小噴散射:短暫位移一下,再飛向 P1(有"掉出來再被吸走"的感覺)
-    const ang = Math.random() * Math.PI * 2;
-    const sx = x + Math.cos(ang) * cfg.scatter;
-    const sy = y + Math.sin(ang) * cfg.scatter;
-    const cleanup = () => { orb.destroy(); this.energyOrbCount = Math.max(0, this.energyOrbCount - 1); };
-    this.tweens.add({
-      targets: orb, x: sx, y: sy, duration: 120, ease: 'Quad.easeOut',
-      onComplete: () => {
-        if (!this.player || !this.player.active) { cleanup(); return; }
-        // 每幀追蹤 P1 目前位置飛過去(P1 會動),用 timer 逼近 + 尺寸淡出
-        const flyMs = cfg.flyMs;
-        const start = this.time.now;
-        const ev = this.time.addEvent({ delay: 16, loop: true, callback: () => {
-          if (!orb.active) { ev.remove(); return; }
-          if (!this.player || !this.player.active) { ev.remove(); cleanup(); return; }
-          const t = Phaser.Math.Clamp((this.time.now - start) / flyMs, 0, 1);
-          // 朝 P1 目前位置 lerp,尾段加速吸入
-          const k = 0.18 + 0.5 * t;
-          orb.x += (this.player.x - orb.x) * k;
-          orb.y += (this.player.y - orb.y) * k;
-          orb.setScale(1 - 0.4 * t);
-          const d = Phaser.Math.Distance.Between(orb.x, orb.y, this.player.x, this.player.y);
-          if (d <= this.player.displayWidth * 0.5 + 4 || t >= 1) {
-            ev.remove();
-            // 到達:小吸收閃光
-            const flash = this.add.circle(this.player.x, this.player.y, 10, cfg.glowColor, 0.9).setDepth(15);
-            this.tweens.add({ targets: flash, scale: { from: 0.6, to: 1.6 }, alpha: 0, duration: 200, onComplete: () => flash.destroy() });
-            cleanup();
-          }
-        }});
-      }
-    });
   }
 
   /** ★v58:按 Z 手動觸發強化(slow P1、能量滿 trigger、已解鎖、非強化中才可)。回傳是否觸發。 */
@@ -7238,7 +7188,6 @@ export class GameScene extends Phaser.Scene {
         const ecfg = GameConfig.energy;
         if (!this.player.empowered && Math.random() < ecfg.bossHitChance) {
           this.gainEnergy(this.player, ecfg.bossHitAmount);
-          this.spawnEnergyOrb(enemy.x, enemy.y);
         }
       }
     }
@@ -7272,10 +7221,9 @@ export class GameScene extends Phaser.Scene {
         this.spawnDeathBurst(dx, dy);
         // ★v61 修「能量每5隻才跳」根因:普攻(performMeleeArc→此 damageEnemy)擊殺【原本沒給能量】——
         //   只有連段技(circle/line/burst 走 damageEnemyFrom)擊殺才給→玩家一般攻擊殺怪不加,直到連段技觸發一次AOE殺多隻才批次跳(≈每幾隻)。
-        //   修:此處(隊伍任何人擊殺)同樣 grantKillEnergy(P1)+能量球→每殺一隻立即加、即時反饋。
+        //   修:此處(隊伍任何人擊殺)同樣 grantKillEnergy(P1)→每殺一隻立即加、即時反饋。
         if (this.controlMode === 'slow') {
           this.grantKillEnergy(this.player, etype);
-          this.spawnEnergyOrb(dx, dy);
         }
         // 掉落道具（機率）
         if (Math.random() < GameConfig.items.dropChance) {

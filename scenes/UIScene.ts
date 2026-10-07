@@ -37,6 +37,20 @@ interface CharStat {
   combo: ComboState;
 }
 
+/** 頭上能量條的 UI 元件組（由 createEnergyUI 建立、updateEnergyDisplay 更新） */
+interface EnergyUIElements {
+  /** 背景框（半透明黑底 + 金色外框） */
+  bg: Phaser.GameObjects.Rectangle;
+  /** 進度條（從左往右填充） */
+  bar: Phaser.GameObjects.Rectangle;
+  /** 集滿時在進度條上來回掃過的亮光 */
+  shine: Phaser.GameObjects.Rectangle;
+  /** 集滿時顯示在量條右方的操作提示 */
+  hint: Phaser.GameObjects.Text;
+  /** 進度條外發光（WebGL postFX；Canvas 渲染時為 null，僅少了光暈） */
+  glowFx: Phaser.FX.Glow | null;
+}
+
 interface StatsPayload {
   chars: CharStat[];
   teamKills: number;
@@ -181,14 +195,37 @@ export class UIScene extends Phaser.Scene {
     },
     // 能量條配置 - Credit正下方
     ENERGY: {
-      Y_OFFSET: 25,  // ★調整：減少間距，緊貼Credit下方
-      WIDTH: 100,
-      HEIGHT: 8,
-      BORDER_WIDTH: 1,
-      HINT_OFFSET_Y: -15,
-      HINT_FONT_SIZE: '14px',
-      PULSE_SCALE: 2.2,
-      PULSE_DURATION: 200
+      Y_OFFSET: 27,         // 量條中心距 Credit 中心的垂直距離（緊貼 Credit 下方）
+      WIDTH: 140,
+      HEIGHT: 14,
+      BORDER_WIDTH: 2,
+      /** 背景框底色透明度 */
+      BG_ALPHA: 0.6,
+      /** 進度條相對外框的內縮（=外框粗細），集滿時剛好填滿框內 */
+      BAR_INSET: 2,
+      /** 提示文字與量條右緣的水平間距 */
+      HINT_GAP_X: 8,
+      HINT_FONT_SIZE: '18px',
+      HINT_STROKE_WIDTH: 3,
+      HINT_TEXT: '按Z變身',
+      /** 提示文字脈動縮放幅度（1 ± 此值） */
+      HINT_PULSE_AMPLITUDE: 0.12,
+      /** 能量增加時進度條的縱向脈動倍率與時長 */
+      PULSE_SCALE: 1.6,
+      PULSE_DURATION: 200,
+      /** 集滿特效（光暈/外框/提示）的脈動週期 */
+      GLOW_CYCLE_MS: 600,
+      /** 外發光強度：集滿時在 MIN~MAX 間脈動，強化中（能量倒退）固定 EMPOWERED */
+      GLOW_STRENGTH_MIN: 2,
+      GLOW_STRENGTH_MAX: 10,
+      GLOW_STRENGTH_EMPOWERED: 2,
+      /** 外發光的取樣品質與擴散距離（postFX Glow 參數） */
+      GLOW_QUALITY: 0.1,
+      GLOW_DISTANCE: 16,
+      /** 掃光寬度、掃過一次的時間、透明度 */
+      SHINE_WIDTH: 20,
+      SHINE_CYCLE_MS: 900,
+      SHINE_ALPHA: 0.75
     },
     // ★階段三：COMBO獎勵系統配置 - 用戶要求調整
     COMBO: {
@@ -221,6 +258,9 @@ export class UIScene extends Phaser.Scene {
       ENERGY_NORMAL: 0xffd700 as const,
       ENERGY_EMPOWERED: 0xffef99 as const,
       ENERGY_FULL: 0xffe23a as const,
+      ENERGY_GLOW: 0xfff3a0 as const,
+      ENERGY_SHINE: 0xffffff as const,
+      ENERGY_BORDER_GLOW: 0xffffff as const,
       // ★階段三：COMBO系統顏色
       COMBO_NORMAL: 0x00ff00 as const,        // 正常綠色
       COMBO_WARNING: 0xff6600 as const,       // 警告橙色
@@ -946,20 +986,22 @@ export class UIScene extends Phaser.Scene {
     const { creditBg, swordIcon, creditText } = this.createCreditUI();
     
     // 創建能量條UI元素
-    const { energyBg, energyBar, energyHint } = this.createEnergyUI();
+    const energyUI = this.createEnergyUI();
     
     // ★階段三：創建COMBO獎勵系統UI元素
     const { comboText } = this.createComboUI();
     
     // 添加所有元素到容器（移除進度條元素）
-    container.add([badge, badgeText, creditBg, swordIcon, creditText, energyBg, energyBar, energyHint, comboText]);
+    container.add([
+      badge, badgeText, creditBg, swordIcon, creditText,
+      energyUI.bg, energyUI.bar, energyUI.shine, energyUI.hint,
+      comboText
+    ]);
     
     // 設置子元件引用，便於後續更新
     (container as any).creditText = creditText;
     (container as any).swordIcon = swordIcon;
-    (container as any).energyBar = energyBar;
-    (container as any).energyHint = energyHint;
-    (container as any).energyBg = energyBg;
+    (container as any).energyUI = energyUI;
     // ★階段三：COMBO元件引用（移除進度條引用）
     (container as any).comboText = comboText;
     
@@ -1050,55 +1092,50 @@ export class UIScene extends Phaser.Scene {
 
   /**
    * 創建能量條UI元素
-   * 
-   * 包含背景條、進度條和提示文字，僅在慢速模式對玩家顯示
-   * 
+   *
+   * 由下到上：背景框 → 進度條（含外發光）→ 掃光，提示文字在量條右方；僅在慢速模式對玩家顯示
+   *
    * @returns 能量條相關的UI元素
    */
-  private createEnergyUI(): { 
-    energyBg: Phaser.GameObjects.Rectangle; 
-    energyBar: Phaser.GameObjects.Rectangle; 
-    energyHint: Phaser.GameObjects.Text 
-  } {
+  private createEnergyUI(): EnergyUIElements {
     const config = this.OVERHEAD_UI_CONFIG;
+    const e = config.ENERGY;
+    const colors = config.COLORS;
     const energyX = config.CREDIT.X;
-    const energyY = config.CREDIT.Y + config.ENERGY.Y_OFFSET;
-    
+    const energyY = config.CREDIT.Y + e.Y_OFFSET;
+    const barLeft = energyX - e.WIDTH / 2 + e.BAR_INSET;
+    const barHeight = e.HEIGHT - e.BAR_INSET * 2;
+
     // 能量條背景框
-    const energyBg = this.add.rectangle(
-      energyX, 
-      energyY, 
-      config.ENERGY.WIDTH, 
-      config.ENERGY.HEIGHT, 
-      config.COLORS.BACKGROUND, 
-      0.6
-    ).setStrokeStyle(config.ENERGY.BORDER_WIDTH, config.COLORS.BORDER_GOLD);
-    
-    // 能量進度條（從左邊開始填充）
-    const energyBar = this.add.rectangle(
-      energyX - config.ENERGY.WIDTH / 2, 
-      energyY, 
-      0, 
-      config.ENERGY.HEIGHT - 2, 
-      config.COLORS.ENERGY_NORMAL
-    ).setOrigin(0, 0.5);
-    
-    // 滿能量時的操作提示
-    const energyHint = this.add.text(
-      energyX, 
-      energyY + config.ENERGY.HINT_OFFSET_Y, 
-      'Press Z', 
+    const bg = this.add.rectangle(energyX, energyY, e.WIDTH, e.HEIGHT, colors.BACKGROUND, e.BG_ALPHA)
+      .setStrokeStyle(e.BORDER_WIDTH, colors.BORDER_GOLD);
+
+    // 能量進度條（從框內左緣開始填充）
+    const bar = this.add.rectangle(barLeft, energyY, 0, barHeight, colors.ENERGY_NORMAL)
+      .setOrigin(0, 0.5);
+    // 外發光：強度 0 = 不發光，由 updateEnergyDisplay 依狀態調整（postFX 只在 WebGL 可用）
+    const glowFx = bar.postFX?.addGlow(colors.ENERGY_GLOW, 0, 0, false, e.GLOW_QUALITY, e.GLOW_DISTANCE) ?? null;
+
+    // 集滿掃光（ADD 混色，平時隱藏）
+    const shine = this.add.rectangle(barLeft, energyY, e.SHINE_WIDTH, barHeight, colors.ENERGY_SHINE, e.SHINE_ALPHA)
+      .setOrigin(0, 0.5).setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
+
+    // 滿能量時的操作提示（量條右方）
+    const hint = this.add.text(
+      energyX + e.WIDTH / 2 + e.HINT_GAP_X,
+      energyY,
+      e.HINT_TEXT,
       {
         fontFamily: 'monospace',
-        fontSize: config.ENERGY.HINT_FONT_SIZE,
-        color: config.COLORS.HINT_YELLOW,
-        stroke: config.COLORS.BLACK,
-        strokeThickness: 1,
+        fontSize: e.HINT_FONT_SIZE,
+        color: colors.HINT_YELLOW,
+        stroke: colors.BLACK,
+        strokeThickness: e.HINT_STROKE_WIDTH,
         fontStyle: 'bold'
       }
-    ).setOrigin(0.5, 0.5).setVisible(false);
-    
-    return { energyBg, energyBar, energyHint };
+    ).setOrigin(0, 0.5).setVisible(false);
+
+    return { bg, bar, shine, hint, glowFx };
   }
 
   /**
@@ -1207,18 +1244,16 @@ export class UIScene extends Phaser.Scene {
     // 獲取容器中的UI元件引用
     const creditText = (container as any).creditText as Phaser.GameObjects.Text;
     const swordIcon = (container as any).swordIcon as Phaser.GameObjects.Graphics;
-    const energyBar = (container as any).energyBar as Phaser.GameObjects.Rectangle;
-    const energyHint = (container as any).energyHint as Phaser.GameObjects.Text;
-    const energyBg = (container as any).energyBg as Phaser.GameObjects.Rectangle;
+    const energyUI = (container as any).energyUI as EnergyUIElements | undefined;
     
     // 安全性檢查：確保所有必要的UI元件存在
-    if (!creditText || !swordIcon || !energyBar) return;
+    if (!creditText || !swordIcon || !energyUI) return;
     
     // 更新Credit顯示系統
     this.updateCreditDisplay(character, creditText, swordIcon);
     
     // 更新能量條系統（僅慢速模式玩家）
-    this.updateEnergyDisplay(character, stats, energyBar, energyBg, energyHint, container);
+    this.updateEnergyDisplay(character, stats, energyUI, container);
     
     // ★階段三：更新COMBO獎勵系統
     this.updateComboDisplay(character, container);
@@ -1264,80 +1299,89 @@ export class UIScene extends Phaser.Scene {
 
   /**
    * 更新二段能量條顯示
-   * 
-   * 包含進度條寬度、狀態顏色、脈動動畫和操作提示
+   *
+   * 包含進度條寬度、狀態顏色、能量增加脈動，以及集滿時的光暈/掃光/外框發亮/操作提示；
    * 僅在慢速模式對玩家角色顯示
-   * 
+   *
    * @param character 角色數據
-   * @param stats 遊戲狀態數據  
-   * @param energyBar 能量進度條對象
-   * @param energyBg 能量條背景對象
-   * @param energyHint 操作提示文字對象
+   * @param stats 遊戲狀態數據
+   * @param ui 能量條 UI 元件組
    * @param container 容器對象（用於存儲上次能量值）
    */
   private updateEnergyDisplay(
     character: CharStat,
     stats: StatsPayload,
-    energyBar: Phaser.GameObjects.Rectangle,
-    energyBg: Phaser.GameObjects.Rectangle,
-    energyHint: Phaser.GameObjects.Text,
+    ui: EnergyUIElements,
     container: Phaser.GameObjects.Container
   ): void {
     const config = this.OVERHEAD_UI_CONFIG;
+    const e = config.ENERGY;
     const colors = config.COLORS;
-    
+
     // 僅對慢速模式的玩家顯示能量條
-    if (stats.controlMode === 'slow' && character.isPlayer) {
-      energyBg.setVisible(true);
-      energyBar.setVisible(true);
-      
-      const energy = stats.energy || 0;
-      const energyMax = stats.energyMax || 10;
-      const energyRatio = Math.max(0, Math.min(1, energy / energyMax));
-      
-      // 更新進度條寬度（96px = 100px容器 - 4px內邊距）
-      const maxBarWidth = config.ENERGY.WIDTH - 4;
-      energyBar.width = maxBarWidth * energyRatio;
-      
-      // 根據能量狀態選擇顏色
-      let energyColor: number = colors.ENERGY_NORMAL;
-      if (stats.empowered) {
-        // 強化中：淺金色
-        energyColor = colors.ENERGY_EMPOWERED;
-      } else if (energy >= energyMax) {
-        // 滿能量：閃爍效果
-        const blinkTime = this.time.now % 400;
-        energyColor = blinkTime < 200 ? colors.ENERGY_FULL : colors.ENERGY_NORMAL;
-      }
-      energyBar.setFillStyle(energyColor);
-      
-      // 能量增加時的脈動動畫效果
-      const lastEnergy = (container as any).lastEnergy || 0;
-      if (energy > lastEnergy) {
-        energyBar.setScale(1, config.ENERGY.PULSE_SCALE);
-        this.tweens.add({
-          targets: energyBar,
-          scaleY: 1,
-          duration: config.ENERGY.PULSE_DURATION,
-          ease: 'Power2'
-        });
-      }
-      (container as any).lastEnergy = energy;
-      
-      // 滿能量且未強化時顯示操作提示
-      if (energy >= energyMax && !stats.empowered) {
-        energyHint.setVisible(true);
-        energyHint.setText('Press Z');
-        energyHint.setColor(colors.HINT_YELLOW);
-      } else {
-        energyHint.setVisible(false);
-      }
-    } else {
-      // 非慢速模式或非玩家：隱藏能量條
-      energyBg.setVisible(false);
-      energyBar.setVisible(false);
-      energyHint.setVisible(false);
+    if (stats.controlMode !== 'slow' || !character.isPlayer) {
+      for (const obj of [ui.bg, ui.bar, ui.shine, ui.hint]) obj.setVisible(false);
+      return;
     }
+    ui.bg.setVisible(true);
+    ui.bar.setVisible(true);
+
+    const energy = stats.energy || 0;
+    const energyMax = stats.energyMax || 1;
+    const energyRatio = Phaser.Math.Clamp(energy / energyMax, 0, 1);
+    // 集滿（可按 Z 變身）：達觸發門檻且尚未強化
+    const ready = energy >= (stats.energyTrigger || energyMax) && !stats.empowered;
+
+    // 進度條寬度：框內寬度 × 比例（集滿時剛好填滿框內，不留黑邊）
+    const maxBarWidth = e.WIDTH - e.BAR_INSET * 2;
+    ui.bar.width = maxBarWidth * energyRatio;
+    ui.bar.setFillStyle(stats.empowered ? colors.ENERGY_EMPOWERED : ready ? colors.ENERGY_FULL : colors.ENERGY_NORMAL);
+
+    // 能量增加時的脈動動畫效果
+    const lastEnergy = (container as any).lastEnergy || 0;
+    if (energy > lastEnergy) {
+      ui.bar.setScale(1, e.PULSE_SCALE);
+      this.tweens.add({ targets: ui.bar, scaleY: 1, duration: e.PULSE_DURATION, ease: 'Power2' });
+    }
+    (container as any).lastEnergy = energy;
+
+    // 集滿特效：以時間驅動的正弦波（-1~1）同步光暈、外框、提示的脈動
+    const wave = Math.sin((this.time.now / e.GLOW_CYCLE_MS) * Math.PI * 2);
+    if (ready) {
+      const t = (wave + 1) / 2;
+      if (ui.glowFx) ui.glowFx.outerStrength = e.GLOW_STRENGTH_MIN + (e.GLOW_STRENGTH_MAX - e.GLOW_STRENGTH_MIN) * t;
+      ui.bg.setStrokeStyle(e.BORDER_WIDTH, wave > 0 ? colors.ENERGY_BORDER_GLOW : colors.BORDER_GOLD);
+      this.updateEnergyShine(ui.shine, ui.bar.x, maxBarWidth);
+      ui.hint.setVisible(true).setScale(1 + e.HINT_PULSE_AMPLITUDE * wave);
+    } else {
+      // 強化中保留微弱光暈表示能量正在消耗；其餘狀態關閉特效
+      if (ui.glowFx) ui.glowFx.outerStrength = stats.empowered ? e.GLOW_STRENGTH_EMPOWERED : 0;
+      ui.bg.setStrokeStyle(e.BORDER_WIDTH, colors.BORDER_GOLD);
+      ui.shine.setVisible(false);
+      ui.hint.setVisible(false);
+    }
+  }
+
+  /**
+   * 更新集滿掃光：亮光從進度條左緣掃到右緣後循環，超出進度條的部分裁掉
+   *
+   * @param shine 掃光矩形（origin 0, 0.5）
+   * @param barLeft 進度條左緣 x（容器座標）
+   * @param barWidth 進度條滿格寬度
+   */
+  private updateEnergyShine(shine: Phaser.GameObjects.Rectangle, barLeft: number, barWidth: number): void {
+    const e = this.OVERHEAD_UI_CONFIG.ENERGY;
+    const phase = (this.time.now % e.SHINE_CYCLE_MS) / e.SHINE_CYCLE_MS;
+    // 掃光左緣從 -SHINE_WIDTH 移動到 barWidth，讓亮光完整進場、出場
+    const x = -e.SHINE_WIDTH + (barWidth + e.SHINE_WIDTH) * phase;
+    const left = Math.max(0, x);
+    const right = Math.min(barWidth, x + e.SHINE_WIDTH);
+    if (right <= left) {
+      shine.setVisible(false);
+      return;
+    }
+    shine.setVisible(true).setPosition(barLeft + left, shine.y);
+    shine.width = right - left;
   }
 
   /**
