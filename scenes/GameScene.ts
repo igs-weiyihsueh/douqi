@@ -6950,13 +6950,16 @@ export class GameScene extends Phaser.Scene {
     this.spawnExpandingRing(tx, ty, radius, cfg.color, cfg.ringMs);
     this.spawnExpandingRing(tx, ty, radius * 0.6, 0xfff2a8, cfg.ringMs * 0.8);
     this.shakeOnce(GameConfig.juice.burstShakeDuration, GameConfig.juice.burstShakeIntensity * 0.5);
+    let hitAny = false;
     for (const child of this.enemies.getChildren()) {
       const enemy = child as Enemy;
       if (!enemy.isVulnerable()) continue;
       if (Phaser.Math.Distance.Between(tx, ty, enemy.x, enemy.y) <= radius) {
         this.damageEnemyFrom(c, enemy, dmg, cfg.knockback, tx, ty, time); // 以目標為爆心
+        hitAny = true;
       }
     }
+    if (hitAny) this.triggerComboHit(c); // COMBO 獎勵：變身 AOE 命中算 1 下
   }
 
   /** v31 連段①圓形範圍技（combo4, Lv3）：以角色為中心瞬發圓形 AOE + 擴張環（不鎖角色） */
@@ -6965,13 +6968,16 @@ export class GameScene extends Phaser.Scene {
     const radius = cfg.radius * this.curSkillRadiusScale();
     const dmg = cfg.damage * this.curSkillDamageScale() * (c.isEmpowered(time) ? GameConfig.combo.empower.damageMult : 1);
     this.spawnExpandingRing(c.x, c.y, radius, 0x00e5ff, 280);
+    let hitAny = false;
     for (const child of this.enemies.getChildren()) {
       const enemy = child as Enemy;
       if (!enemy.isVulnerable()) continue;
       if (Phaser.Math.Distance.Between(c.x, c.y, enemy.x, enemy.y) <= radius) {
         this.damageEnemyFrom(c, enemy, dmg, cfg.knockback, c.x, c.y, time);
+        hitAny = true;
       }
     }
+    if (hitAny) this.triggerComboHit(c); // COMBO 獎勵：連段技命中算 1 下
     this.breakBreakablesInCircle(c.x, c.y, radius, dmg, time); // v59：圓形斬掃到木箱也打破
     this.shakeOnce(80, 0.006);
     this.enterPerformance(c, GameConfig.performanceTime.circle, time); // ★表演時間:定身無敵
@@ -6994,13 +7000,16 @@ export class GameScene extends Phaser.Scene {
       .setDepth(20);
     band.setStrokeStyle(2, 0xffccd5, 0.7);
     this.tweens.add({ targets: band, alpha: 0, duration: 300, onComplete: () => band.destroy() });
+    let hitAny = false;
     for (const child of this.enemies.getChildren()) {
       const enemy = child as Enemy;
       if (!enemy.isVulnerable()) continue;
       if (this.pointInOrientedRect(enemy.x, enemy.y, ox, oy, dir, 0, length, width)) {
         this.damageEnemyFrom(c, enemy, dmg, cfg.knockback, ox, oy, time);
+        hitAny = true;
       }
     }
+    if (hitAny) this.triggerComboHit(c); // COMBO 獎勵：連段技命中算 1 下
     this.breakBreakablesInRect(ox, oy, dir, 0, length, width, dmg, time); // v59：直線氣波掃到木箱也打破
     this.shakeOnce(80, 0.006);
     this.enterPerformance(c, GameConfig.performanceTime.line, time); // ★表演時間:定身無敵
@@ -7070,11 +7079,15 @@ export class GameScene extends Phaser.Scene {
     );
 
     let hitCount = 0;
+    let comboCounted = false; // COMBO 獎勵：爆發整招只算 1 下（第一次有段命中時計入）
     const burstTimer = this.time.addEvent({
       delay: GameConfig.burst.intervalMs,
       repeat: GameConfig.burst.hits - 1,
       callback: () => {
-        this.burstTick(c);
+        if (this.burstTick(c) && !comboCounted) {
+          comboCounted = true;
+          this.triggerComboHit(c);
+        }
         hitCount++;
         if (hitCount >= GameConfig.burst.hits) this.endBurst(c);
       }
@@ -7091,8 +7104,9 @@ export class GameScene extends Phaser.Scene {
     );
   }
 
-  private burstTick(c: Character): void {
-    if (this.gameOver || !c.alive) return;
+  /** 爆發的單段攻擊。@returns 這段是否命中至少一隻敵人 */
+  private burstTick(c: Character): boolean {
+    if (this.gameOver || !c.alive) return false;
     const time = this.time.now;
     const radius = GameConfig.burst.radius;
     const children = this.enemies.getChildren();
@@ -7119,6 +7133,7 @@ export class GameScene extends Phaser.Scene {
     const ox = Phaser.Math.Between(-radius / 2, radius / 2);
     const oy = Phaser.Math.Between(-radius / 2, radius / 2);
     this.spawnSlashEffect(c.x + ox, c.y + oy);
+    return hitAny;
   }
 
   /**
@@ -7214,8 +7229,6 @@ export class GameScene extends Phaser.Scene {
         // v35/36：NPC/錨點為 anchor-like 位移點，玩家傷不到（isVulnerable=false）；此分支僅防呆，不處理
       } else {
         actor.kills++;
-        // ★階段三：觸發COMBO獎勵系統
-        this.triggerComboHit(actor);
         this.grantKillExp(etype);
         this.onWaveKill();
         this.spawnDeathBurst(dx, dy);
@@ -7789,10 +7802,9 @@ export class GameScene extends Phaser.Scene {
   /**
    * ★階段三：觸發COMBO命中獎勵系統
    * 
-   * **修改：從擊殺觸發改為命中觸發**
-   * - 每次攻擊命中敵人時COMBO +1
-   * - 更符合動作遊戲的連擊設計
-   * - 玩家獲得更頻繁的正反饋
+   * 計數規則：每一次「出手」命中至少一隻敵人 → COMBO +1（打中幾隻都只算 1，擊殺不另外加）
+   * - 普攻揮擊、衝刺撞擊、連段技（圓/直線）、變身 AOE 各算 1 下
+   * - 爆發整招算 1 下
    * 
    * @param actor 執行命中的角色
    */
@@ -7815,19 +7827,28 @@ export class GameScene extends Phaser.Scene {
    * 當角色連擊數達到配置的里程碑時自動發放票券獎勵
    * 
    * 獎勵計算邏輯：
-   * - 遍歷所有里程碑(5, 10, 20, 50連擊)
+   * - 遍歷所有里程碑(5, 10, 20, 50, 100連擊)
    * - 如果當前連擊數 === 里程碑值 → 觸發獎勵
-   * - 發放對應票券數量(1, 3, 10, 50張)
+   * - 發放對應票券數量(1, 3, 10, 50, 100張)
    * - 更新下個目標里程碑
    * - 播放獎勵特效和音效
    * 
    * 防重複機制：只在連擊數剛好等於里程碑時觸發一次
+   * 最後一階（上限，100 連擊）：立即發獎並歸零重新累積，不等中斷
    * 
    * @param actor 觸發獎勵的角色對象
    */
   private checkAndGrantComboReward(actor: any): void {
     const combo = actor.comboState;
     const config = GameConfig.comboReward;
+    const lastIndex = config.MILESTONES.length - 1;
+
+    // 達上限：立即發最高階獎勵並歸零（較低階的待發獎勵被最高階取代）
+    if (combo.currentStreak >= config.MILESTONES[lastIndex]) {
+      this.grantComboReward(actor, config.REWARDS[lastIndex], config.MILESTONES[lastIndex]);
+      this.resetComboStreak(combo);
+      return;
+    }
     
     // 檢查是否達到任何里程碑
     for (let i = 0; i < config.MILESTONES.length; i++) {
@@ -7848,60 +7869,36 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * ★階段三：播放COMBO獎勵視覺特效
-   * 
-   * 在角色位置創建票券獎勵彈出動畫，提供即時的視覺反饋
-   * 
-   * 特效設計：
-   * - 金色文字 "+票券數 🎫" 從角色位置彈出
-   * - Y軸向上移動80px，模擬票券飛出效果
-   * - 透明度漸變到0，營造消散效果  
-   * - 尺寸放大1.5倍，增強視覺衝擊力
-   * - 1.5秒動畫時間，給予充分展示時間
-   * - 高深度層(1000)確保在最上層顯示
-  /**
-   * ★階段三：彩票噴發特效系統
-   * 
-   * 當角色達到COMBO里程碑時播放華麗的彩票噴發動畫：
-   * - 8-20張彩票根據獎勵等級動態調整
-   * - 上方扇形噴發（-120°~-60°角度範圍）
-   * - 物理引擎：初速度 + 重力 + 自轉動畫
-   * - 持續3-4秒的動態掉落效果
-   * 
-   * **征騎Code Review修正**：
-   * - 消除硬編碼，統一使用GameConfig.ticketEffect配置
-   * - 完善JSDoc註解，詳細說明參數和算法
-   * - 優化記憶體管理，避免遞歸調用風險
-   * 
-   * @param actor 觸發角色
-   * @param _tickets 獲得票券數量（預留參數，暫未使用）
-   * @param milestone 達成的里程碑數值
+   * 發放 COMBO 獎勵：票券加到該角色的 Credit，並在下方面板播放彩票噴發與獲得文字
+   *
+   * @param actor 獲得獎勵的角色
+   * @param tickets 票券數量
+   * @param milestone 達成的里程碑（連擊數，影響彩票噴發數量/速度）
    */
-  private spawnTicketBurst(actor: any, _tickets: number, milestone: number): void {
-    // ★場景層級驗證：暫時停用GameScene的特效創建，改用UIScene
-    /*
-    // 彩票噴發的物理參數：完全從配置讀取，消除魔法數字
-    const burstConfig = {
-      minAngle: config.BURST_ANGLE.MIN,
-      maxAngle: config.BURST_ANGLE.MAX,
-      minVelocity: config.PHYSICS.MIN_VELOCITY + milestone * config.PHYSICS.VELOCITY_MILESTONE_BONUS,
-      maxVelocity: config.PHYSICS.MAX_VELOCITY + milestone * config.PHYSICS.VELOCITY_MAX_BONUS,
-      gravity: config.PHYSICS.GRAVITY,
-      rotationSpeed: config.PHYSICS.ROTATION_SPEED,
-      lifetime: config.TIMING.LIFETIME_BASE_MS + Math.random() * config.TIMING.LIFETIME_RANDOM_MS
-    };
-    */
-    
-    // ★正式版：改為華麗彩票特效，跟隨角色位置
-    
-    // 獲取UIScene引用並調用華麗特效創建
+  private grantComboReward(actor: any, tickets: number, milestone: number): void {
+    const combo = actor.comboState;
+    combo.ticketsEarned += tickets;
+    actor.credit += tickets; // 同步更新Credit顯示
     const uiScene = this.scene.get('UIScene') as any;
-    if (uiScene && uiScene.spawnTicketBurstInUI) {
-      // 傳遞角色的世界座標，由UIScene負責轉換為螢幕座標
-      uiScene.spawnTicketBurstInUI(actor.x, actor.y, milestone);
+    if (uiScene?.playComboRewardFx) {
+      uiScene.playComboRewardFx(actor.index, tickets, milestone);
     } else {
-      console.error(`❌ [正式版] UIScene或spawnTicketBurstInUI方法不存在`);
+      console.error('❌ UIScene.playComboRewardFx 不存在，COMBO 獎勵特效無法播放');
     }
+  }
+
+  /**
+   * COMBO 歸零：清除連擊數、警告狀態與待發獎勵，下個目標回到第一個里程碑
+   *
+   * @param combo 角色的 comboState
+   */
+  private resetComboStreak(combo: any): void {
+    combo.currentStreak = 0;
+    combo.isWarning = false;
+    combo.nextMilestone = GameConfig.comboReward.MILESTONES[0];
+    combo.pendingRewardIndex = undefined;
+    combo.pendingRewardTickets = undefined;
+    combo.pendingRewardMilestone = undefined;
   }
   
   /**
@@ -8063,26 +8060,10 @@ export class GameScene extends Phaser.Scene {
         if (timeSinceLastKill >= config.STREAK_TIMEOUT_MS) {
           // ★修復邏輯：COMBO中斷前先觸發待處理的獎勵
           if (combo.pendingRewardTickets !== undefined && combo.pendingRewardTickets > 0) {
-            // 發放票券獎勵
-            combo.ticketsEarned += combo.pendingRewardTickets;
-            character.credit += combo.pendingRewardTickets; // 同步更新Credit顯示
-            
-            // 觸發華麗彩票特效
-            this.spawnTicketBurst(character, combo.pendingRewardTickets, combo.pendingRewardMilestone!);
-            
-            // 觸發票券獲得提示
-            this.spawnTicketRewardText(character, combo.pendingRewardTickets);
-            
-            // 清除待處理獎勵
-            combo.pendingRewardIndex = undefined;
-            combo.pendingRewardTickets = undefined;
-            combo.pendingRewardMilestone = undefined;
+            this.grantComboReward(character, combo.pendingRewardTickets, combo.pendingRewardMilestone!);
           }
-          
           // 超時：重置COMBO到初始狀態
-          combo.currentStreak = 0;
-          combo.isWarning = false;
-          combo.nextMilestone = config.MILESTONES[0]; // 重置到第一個里程碑
+          this.resetComboStreak(combo);
         } else if (timeSinceLastKill >= config.WARNING_START_MS) {
           // 進入警告期：觸發UI閃爍提醒
           combo.isWarning = true;
@@ -8158,54 +8139,6 @@ export class GameScene extends Phaser.Scene {
       energyMax: GameConfig.energy.max,
       energyTrigger: GameConfig.energy.trigger,
       empowered: this.player.empowered
-    });
-  }
-
-  /**
-   * ★新增：票券獲得文字提示
-   * 
-   * 在角色頭上顯示"獲得X票券！"的金色文字提示
-   * 提供明確的獎勵反饋，讓用戶清楚知道獲得的票券數量
-   * 
-   * @param character 獲得票券的角色
-   * @param ticketAmount 獲得的票券數量
-   */
-  private spawnTicketRewardText(character: any, ticketAmount: number): void {
-    const rewardText = this.add.text(
-      character.x, 
-      character.y - 80, // 角色頭上80px
-      `獲得${ticketAmount}票券！`, 
-      {
-        fontSize: '28px',
-        fontFamily: 'Arial Black',
-        color: '#FFD700',        // 金色文字
-        stroke: '#FFFFFF',       // 白色描邊
-        strokeThickness: 3,      // 描邊厚度
-        shadow: {
-          offsetX: 2,
-          offsetY: 2,
-          color: '#000000',
-          blur: 4,
-          fill: true
-        }
-      }
-    )
-      .setOrigin(0.5, 0.5)       // 居中對齊
-      .setDepth(1500)            // 高深度確保可見
-      .setAlpha(1);              // 完全不透明
-
-    // 文字動畫：向上飛出 + 放大 + 漸變消失
-    this.tweens.add({
-      targets: rewardText,
-      y: rewardText.y - 60,      // 向上移動60px
-      scaleX: 1.3,               // 放大1.3倍
-      scaleY: 1.3,
-      alpha: 0,                  // 漸變透明
-      duration: 2000,            // 2秒動畫
-      ease: 'Power2',            // 自然曲線
-      onComplete: () => {
-        rewardText.destroy();
-      }
     });
   }
 

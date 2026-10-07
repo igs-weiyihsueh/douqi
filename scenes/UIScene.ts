@@ -169,7 +169,17 @@ export class UIScene extends Phaser.Scene {
     /** 高於 F4 面板圖（depth 1000+i） */
     DEPTH: 1010,
     /** 警告狀態橙紅交替閃爍週期 */
-    WARNING_BLINK_MS: GameConfig.comboReward.WARNING_BLINK_MS
+    WARNING_BLINK_MS: GameConfig.comboReward.WARNING_BLINK_MS,
+    /** 報獎特效（彩票噴發/閃光/獲得文字）相對 COMBO 文字錨點（面板右上角）的偏移：往左移到文字中央附近、往上一點 */
+    REWARD_FX_OFFSET_X: -60,
+    REWARD_FX_OFFSET_Y: -20,
+    /** 「獲得N票券！」文字樣式與動畫 */
+    REWARD_TEXT_FONT_SIZE: '28px',
+    REWARD_TEXT_STROKE_WIDTH: 3,
+    REWARD_TEXT_DEPTH: 1500,
+    REWARD_TEXT_RISE: 60,
+    REWARD_TEXT_SCALE_TO: 1.3,
+    REWARD_TEXT_DURATION_MS: 2000
   } as const;
   
   // ★頭上UI佈局常數：避免魔術數字
@@ -1382,41 +1392,62 @@ export class UIScene extends Phaser.Scene {
   }
 
   /**
-   * ★場景層級確認：在UIScene中創建華麗彩票特效
-   * 
-   * 場景層級問題已確認解決，現在實現正式版華麗特效
-   * 基於UIScene創建，但使用原始設計的視覺效果和物理模擬
-   * 
-   * @param worldX 角色世界座標X（需轉換為螢幕座標）
-   * @param worldY 角色世界座標Y（需轉換為螢幕座標）
-   * @param milestone 里程碑數值
+   * 在下方面板播放 COMBO 報獎特效：彩票噴發 + 閃光 + 「獲得N票券！」文字
+   *
+   * 位置以該角色的面板 COMBO 文字錨點（面板右上角，已隨 F4 面板模式定位）為基準
+   *
+   * @param index 角色索引（對應 panelComboTexts）
+   * @param tickets 獲得的票券數量
+   * @param milestone 達成的里程碑（連擊數，決定彩票數量與噴發速度）
    */
-  spawnTicketBurstInUI(worldX: number, worldY: number, milestone: number): void {
-    // 轉換世界座標為螢幕座標（考慮相機偏移）
-    const gameScene = this.scene.get('GameScene') as any;
-    const gcam = gameScene?.cameras?.main;
-    const screenX = worldX - (gcam?.scrollX || 0);
-    const screenY = worldY - (gcam?.scrollY || 0) - 130; // ★調整：與頭頂UI位置一致，角色頭上130px
-    
-    // 從配置讀取參數（恢復原始設計）
+  playComboRewardFx(index: number, tickets: number, milestone: number): void {
+    const anchor = this.panelComboTexts[index];
+    if (!anchor) return;
+    const cfg = this.PANEL_COMBO_CONFIG;
+    const x = anchor.x + cfg.REWARD_FX_OFFSET_X;
+    const y = anchor.y + cfg.REWARD_FX_OFFSET_Y;
+
     const config = GameConfig.ticketEffect;
-    
-    // 計算彩票數量
     const ticketCount = Math.max(
-      config.TIMING.TICKET_COUNT_BASE, 
+      config.TIMING.TICKET_COUNT_BASE,
       Math.min(
-        config.TIMING.TICKET_COUNT_MAX, 
+        config.TIMING.TICKET_COUNT_MAX,
         config.TIMING.TICKET_COUNT_BASE + milestone * config.TIMING.TICKET_COUNT_MULTIPLIER
       )
     );
-    
-    // 創建華麗彩票特效
     for (let i = 0; i < ticketCount; i++) {
-      this.createFinalTicketParticle(screenX, screenY, config, milestone);
+      this.createFinalTicketParticle(x, y, config, milestone);
     }
-    
-    // 創建華麗閃光特效
-    this.createFinalFlashEffect(screenX, screenY);
+    this.createFinalFlashEffect(x, y);
+    this.spawnRewardText(x, y, tickets);
+  }
+
+  /**
+   * 「獲得N票券！」金色文字：往上飄、放大、淡出後銷毀
+   *
+   * @param x 螢幕座標 X
+   * @param y 螢幕座標 Y
+   * @param tickets 票券數量
+   */
+  private spawnRewardText(x: number, y: number, tickets: number): void {
+    const cfg = this.PANEL_COMBO_CONFIG;
+    const rewardText = this.add.text(x, y, `獲得${tickets}票券！`, {
+      fontSize: cfg.REWARD_TEXT_FONT_SIZE,
+      fontFamily: 'Arial Black',
+      color: '#FFD700',
+      stroke: '#FFFFFF',
+      strokeThickness: cfg.REWARD_TEXT_STROKE_WIDTH,
+      shadow: { offsetX: 2, offsetY: 2, color: '#000000', blur: 4, fill: true }
+    }).setOrigin(0.5, 0.5).setDepth(cfg.REWARD_TEXT_DEPTH).setScrollFactor(0);
+    this.tweens.add({
+      targets: rewardText,
+      y: y - cfg.REWARD_TEXT_RISE,
+      scale: cfg.REWARD_TEXT_SCALE_TO,
+      alpha: 0,
+      duration: cfg.REWARD_TEXT_DURATION_MS,
+      ease: 'Power2',
+      onComplete: () => rewardText.destroy()
+    });
   }
 
   /**
