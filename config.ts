@@ -1064,6 +1064,23 @@ export const GameConfig = {
       /** c 扇形攻擊：朝目標方向 arcDeg 度、半徑 range 的扇形 */
       c: { range: 380, arcDeg: 90, damage: 30 }
     },
+    /**
+     * 變身 BOSS（只限慢速模式 P1）：亂入 BOSS 被打倒後留屍體 corpseMs，P1 走到 reachDist 內按 Z 變身 durationMs（期間無敵）。
+     * 攻擊鍵立即出招（冷卻 attackCooldownMs）：平常是以自己為中心的範圍普攻 normal，
+     * 普攻命中 fanEvery 次後下一擊自動變成朝面向的扇形攻擊 fan
+     */
+    transform: {
+      corpseMs: 10000,
+      reachDist: 160,
+      corpseTint: 0x777777,
+      corpseAlpha: 0.75,
+      durationMs: 10000,
+      attackCooldownMs: 450,
+      fanEvery: 4,
+      knockback: 260,
+      normal: { radius: 220, damage: 60 },
+      fan: { range: 380, arcDeg: 90, damage: 150 }
+    },
     /** BOSS 提示（取代血條）：畫面上方中央的大字；亂入 BOSS 顯示離場倒數，剩 urgentSec 秒內改色並脈動 */
     hud: { y: 104, fontSize: '40px', color: '#ffd166', urgentColor: '#ff4d6d', urgentSec: 10, pulseScale: 1.15, pulseMs: 250 },
     /** v36：BOSS 戰錨點（走位落點）——BOSS 外側上下左右 4 點 */
