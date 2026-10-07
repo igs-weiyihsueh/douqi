@@ -8,6 +8,8 @@ import { Bullet } from '../objects/Bullet';
 import { Breakable } from '../objects/Breakable';
 import { loadCharacterParams, type CharacterParams } from '../systems/characterParams';
 import { createStageQueue, nextStageNode, revealStageNode, displayKindOf, type StageNode } from '../systems/stageQueue';
+import type { TelegraphFx } from '../systems/telegraphFx';
+import { BossController, type BossHost } from '../controllers/BossController';
 
 /** F4 場景背景圖(Scene.png)的紋理 key */
 const SCENE_BG_TEXTURE_KEY = 'scene-background';
@@ -163,16 +165,8 @@ export class GameScene extends Phaser.Scene {
   private eventFocusTargetDepth = 0;                     // 目標原 depth(還原用)
   private sceneLayers: Phaser.GameObjects.GameObject[] = [];      // ★第二階段:場景繪製物件(重繪時清掉)
 
-  // v28 BOSS
-  private boss: Enemy | null = null;
-  private bossCount = 0;
-  private bossDamageAccum = 0; // v35：累積對 BOSS 的傷害，跨過 dropEveryDamage 就噴道具
-  /** 限時亂入 BOSS 的離場時間；0 = 場上的 BOSS 不是亂入（或沒有 BOSS） */
-  private bossIntruderLeaveAt = 0;
-  /** 亂入 BOSS 被打倒後留下的屍體：expireAt 前 P1 靠近按 Z 可變身 */
-  private bossCorpse: { img: Phaser.GameObjects.Image; hint: Phaser.GameObjects.Text; expireAt: number } | null = null;
-  /** P1 變身 BOSS 狀態：結束時間、目前累積的普攻命中次數、BOSS 外觀與剩餘秒數文字 */
-  private bossForm: { until: number; normalHits: number; img: Phaser.GameObjects.Image; timer: Phaser.GameObjects.Text } | null = null;
+  /** BOSS 系統（登場 / 招式 / 亂入離場 / 屍體 / 變身），每次 create() 重建 */
+  private bossCtl!: BossController;
 
   // v33 事件系統
   private eventKind: 'tower' | 'guard' | 'capture' | null = null;
@@ -254,12 +248,7 @@ export class GameScene extends Phaser.Scene {
    * · 時停時暫停其 tween/延後其 fire 計時、解除時續；
    * · owner 死亡(塔/BOSS)時強制清除 graphics + 取消 pending fire，避免殘留/誤發。
    */
-  private telegraphFx: Array<{
-    owner: 'tower' | 'boss';
-    gfx: Phaser.GameObjects.Graphics;
-    tween?: Phaser.Tweens.Tween;
-    fired: boolean;
-  }> = [];
+  private telegraphFx: TelegraphFx[] = [];
 
   /** v25 第8項：P1 普攻「命中動作」累計次數（一次攻擊命中≥1隻算1；只算 P1、不含 BOT/招式）。R復活/重開歸零。 */
   private p1AttackHits = 0;
@@ -338,6 +327,7 @@ export class GameScene extends Phaser.Scene {
       maxSize: GameConfig.spawn.maxAlive,
       runChildUpdate: false
     });
+    this.bossCtl = new BossController(this.createBossHost());
 
     // 道具群
     this.items = this.physics.add.group({
@@ -402,8 +392,8 @@ export class GameScene extends Phaser.Scene {
     // ★v58 Z 鍵:slow 能量滿 → 手動觸發強化(非自動)。fast 不用(fast 命中10自動觸發照舊)。
     // 靠近 BOSS 屍體時 Z 優先變身 BOSS；變身期間 Z 無作用
     this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.Z).on('down', () => {
-      if (this.bossForm) return;
-      if (!this.tryTransformBoss()) this.tryManualEmpower();
+      if (this.bossCtl.isTransformed) return;
+      if (!this.bossCtl.tryTransform()) this.tryManualEmpower();
     });
 
     // v16 R 鍵：P1 原地滿血復活（無限次）
@@ -549,11 +539,6 @@ export class GameScene extends Phaser.Scene {
     this.clearCrossArrows();
     if (this.choiceHint) { this.choiceHint.destroy(); this.choiceHint = null; }
     if (this.levelBanner) { this.levelBanner.destroy(); this.levelBanner = null; }
-    this.boss = null;
-    this.bossCount = 0;
-    this.bossIntruderLeaveAt = 0;
-    this.bossCorpse = null;
-    this.bossForm = null;
     this.eventKind = null;
     // ★事件開場宣告狀態重置(防殘留/鎖操作卡死)
     this.eventIntroActive = false;
@@ -780,7 +765,7 @@ export class GameScene extends Phaser.Scene {
         if (this.towerNextBlastAt > 0) this.towerNextBlastAt += frozenDur;
         if (this.towerNextSpawnAt > 0) this.towerNextSpawnAt += frozenDur;
         if (this.guardNextSpawnAt > 0) this.guardNextSpawnAt += frozenDur;
-        if (this.bossIntruderLeaveAt > 0) this.bossIntruderLeaveAt += frozenDur; // 亂入 BOSS 的離場倒數也凍結
+        this.bossCtl.onTimeStopEnd(frozenDur); // 亂入 BOSS 的離場倒數也凍結
         // ★④ 寶箱怪時間戳(跑點停頓/出生限時)也後移,凍結期間不流失(否則暫停後跑點/限時錯亂)
         const tr = this.treasureEnemy;
         if (tr && tr.active) {
@@ -827,9 +812,7 @@ export class GameScene extends Phaser.Scene {
 
     this.handleSpawning(delta);
     if (this.waveState === 'event') this.updateEvent(time);
-    this.updateIntruderBoss(time);
-    this.updateBossCorpse(time);
-    this.updateBossForm(time);
+    this.bossCtl.update(time);
     this.updateEnemies(time);
     this.updateTreasure(time); // ★寶箱怪:跑點移動/金光閃爍/限時跑走
     this.finishPendingSubZoneIfTreasureGone(); // ★延後的場景切換:寶箱怪死/離場後才開啟
@@ -854,7 +837,7 @@ export class GameScene extends Phaser.Scene {
     if (this.player.alive && this.playerAttackQueued) {
       this.playerAttackQueued = false;
       if (!this.player.isSkillLocked(time) && !this.isFrozenByTimestop(this.player)) {
-        if (this.bossForm) this.bossFormAttack(time); // 變身 BOSS：攻擊鍵改放 BOSS 招式
+        if (this.bossCtl.isTransformed) this.bossCtl.formAttack(time); // 變身 BOSS：攻擊鍵改放 BOSS 招式
         else this.tryAct(this.player, time);
       }
     }
@@ -2234,7 +2217,7 @@ export class GameScene extends Phaser.Scene {
       if (this.isBossWave(this.currentWave)) {
         // BOSS 波：小怪清完 → BOSS 登場（打倒才過關）
         this.waveState = 'boss';
-        this.spawnBoss();
+        this.bossCtl.spawn();
       } else if (this.isEventWave(this.currentWave)) {
         // v33 事件波：小怪清完 → 啟動事件（完成才過關）
         this.waveState = 'event';
@@ -2525,8 +2508,7 @@ export class GameScene extends Phaser.Scene {
     this.lastChoice = side;
     this.dirLock = side; // 走過這一側後只能繼續同方向，直到高階上方閃黑
     this.clearTreasure();
-    this.dismissIntruderBoss(false);
-    this.clearBossCorpse();
+    this.bossCtl.onZoneLeave();
     // ★保留走廊(不清 corridorGfx/L)→A↔B 銜接不變黑塊。
     if (this.choiceHint) { this.choiceHint.destroy(); this.choiceHint = null; }
     // 世界往該側延伸一格：抵達的區域成為新的中央（A），前方再生成下一個 slot、回收身後最遠的 slot
@@ -2652,7 +2634,7 @@ export class GameScene extends Phaser.Scene {
    */
   private clearAllEnemies(keepTreasure = false): void {
     const tr = this.treasureEnemy;
-    const intruder = this.bossIntruderLeaveAt > 0 ? this.boss : null;
+    const intruder = this.bossCtl.isIntruder ? this.bossCtl.current : null;
     for (const child of this.enemies.getChildren()) {
       const e = child as Enemy;
       if (!e.active) continue;
@@ -2774,8 +2756,7 @@ export class GameScene extends Phaser.Scene {
     const slotB = this.lastChoice === 'L' ? this.slotBLeft : this.slotBRight;
     // ★真正換場地(A→B 平移)→清掉 A 場上的寶箱怪(別帶到 B)
     this.clearTreasure();
-    this.dismissIntruderBoss(false);
-    this.clearBossCorpse();
+    this.bossCtl.onZoneLeave();
 
     // ★③ 順滑平移:先把玩家/物件放進 B、切 arena(遊戲凍結中,不影響畫面),
     //   再把 camera 從當前位置【一路 pan 到玩家在 B 的最終畫面位置】,pan 完才 enableFollow→無「先中央再彈回」。
@@ -2836,8 +2817,8 @@ export class GameScene extends Phaser.Scene {
     if (wasMystery && chest === 'high' && Math.random() < GameConfig.stage.bossIntrude.chance) {
       // 等揭曉橫幅播完再登場，避免兩個橫幅疊在一起
       this.time.delayedCall(GameConfig.stage.bossIntrude.entryDelayMs, () => {
-        if (this.gameOver || !this.stageInProgress || this.boss) return;
-        this.spawnBoss(true);
+        if (this.gameOver || !this.stageInProgress || this.bossCtl.current) return;
+        this.bossCtl.spawn(true);
       });
     }
     this.subWavesDone = 0;
@@ -2893,8 +2874,7 @@ export class GameScene extends Phaser.Scene {
     this.progressPhase = 'transition';
     if (this.choiceGfx) { this.choiceGfx.destroy(); this.choiceGfx = null; }
     this.closeTopExit();
-    this.dismissIntruderBoss(false);
-    this.clearBossCorpse();
+    this.bossCtl.onZoneLeave();
     // 問號關前若左右也同時開放：選了上方就收掉左右轉場狀態
     this.crossingOpen = false;
     this.crossSide = null;
@@ -3358,438 +3338,32 @@ export class GameScene extends Phaser.Scene {
 
 
   /**
-   * v28：生成 BOSS（HP 隨第幾隻 BOSS + 等級成長）+ 登場提示 + 血條啟用
-   *
-   * @param intruder true = 小關卡中的限時亂入 BOSS：固定 HP（stage.bossIntrude.hp）、不擋通關、時間到離場
+   * 建立 BossController 需要的場景能力（只開放 BOSS 系統用得到的部分）
    */
-  private spawnBoss(intruder = false): void {
-    const b = GameConfig.boss;
-    const intrude = GameConfig.stage.bossIntrude;
-    // HP 倍率：亂入 BOSS 換算成固定 HP；波次 BOSS 隨 boss 序號成長
-    let hpMult = intrude.hp / b.baseHp;
-    if (!intruder) {
-      this.bossCount++;
-      hpMult = 1 + (this.bossCount - 1) * b.hpGrowthPerBoss;
-    }
-    this.bossIntruderLeaveAt = intruder ? this.time.now + intrude.durationMs : 0;
-    // 從場地中央登場，之後慢慢追最近的玩家
-    const bx = this.arena.centerX;
-    const by = this.arena.centerY;
-    const boss = this.enemies.get(bx, by) as Enemy | null;
-    if (!boss) return;
-    boss.onAttackFire = this.onEnemyAttackFire;
-    boss.onShoot = this.onEnemyShoot;
-    boss.onLaserFire = this.onEnemyLaserFire;
-    boss.onBombThrow = this.onEnemyBombThrow;
-    boss.onBossSkill = this.onBossSkill; // 三招輪替
-    boss.spawn(bx, by, this.time.now, 'boss', hpMult);
-    boss.setScale(1);
-    this.boss = boss;
-    this.bossDamageAccum = 0; // v35
-    // 登場提示
-    const txt = this.add
-      .text(GameConfig.width / 2, GameConfig.height * 0.32, intruder ? 'BOSS 亂入！' : 'BOSS 出現！', {
-        fontFamily: 'monospace',
-        fontSize: '46px',
-        color: '#ff3355',
-        stroke: '#000000',
-        strokeThickness: 7,
-        fontStyle: 'bold'
-      })
-      .setOrigin(0.5)
-      .setScrollFactor(0) // 固定畫面:鏡頭捲動時仍置中
-      .setDepth(60)
-      .setAlpha(0);
-    this.tweens.add({ targets: txt, alpha: 1, scale: { from: 0.6, to: 1.1 }, duration: 400, yoyo: true, hold: 800, onComplete: () => txt.destroy() });
-    this.shakeOnce(200, 0.01);
-    this.emitBossHud();
-    this.emitStats();
-  }
-
-  /** 更新 BOSS 提示（不顯示血量）：亂入 BOSS 附上離場倒數秒數 */
-  private emitBossHud(): void {
-    const boss = this.boss;
-    if (!boss || !boss.active || boss.dead) return;
-    const secondsLeft = this.bossIntruderLeaveAt > 0
-      ? Math.ceil(Math.max(0, this.bossIntruderLeaveAt - this.time.now) / 1000)
-      : null;
-    this.game.events.emit('boss-hud', { active: true, secondsLeft });
-  }
-
-  /**
-   * 每幀檢查亂入 BOSS 的離場時間：時間到還沒被打倒就離場
-   *
-   * @param time 目前場景時間
-   */
-  private updateIntruderBoss(time: number): void {
-    if (this.bossIntruderLeaveAt > 0 && time >= this.bossIntruderLeaveAt) this.dismissIntruderBoss(true);
-  }
-
-  /**
-   * 亂入 BOSS 離場（淡出、無獎勵）：時間到或換區時呼叫；場上沒有亂入 BOSS 時不做事
-   *
-   * @param timeUp true = 時間到（顯示離場橫幅）；false = 換區時順便帶走
-   */
-  private dismissIntruderBoss(timeUp: boolean): void {
-    const boss = this.boss;
-    if (this.bossIntruderLeaveAt <= 0 || !boss) return;
-    this.bossIntruderLeaveAt = 0;
-    this.boss = null;
-    this.clearTelegraphsOf('boss');
-    this.game.events.emit('boss-hud', { active: false, secondsLeft: null });
-    boss.dead = true; // 立即不可再被命中，淡出後才關閉物理
-    this.tweens.add({
-      targets: boss, alpha: 0, duration: GameConfig.stage.bossIntrude.leaveFadeMs,
-      onComplete: () => { if (boss.dead) boss.disableBody(true, true); } // 淡出期間被物件池重用時不關閉
-    });
-    if (timeUp) this.showEventBanner('BOSS 離開了…');
-  }
-
-  /**
-   * 亂入 BOSS 被命中時，依機率掉彩票給命中的角色（BOSS 頭上飄出「+N 🎫」）
-   *
-   * @param actor 命中的角色
-   * @param boss 被命中的 BOSS
-   */
-  private rollIntruderHitTicket(actor: Character, boss: Enemy): void {
-    const cfg = GameConfig.stage.bossIntrude;
-    if (Math.random() >= cfg.hitTicketChance) return;
-    actor.credit += cfg.hitTickets;
-    const txt = this.add.text(boss.x, boss.y - boss.getBodyRadius(), `+${cfg.hitTickets} 🎫`, {
-      fontFamily: 'monospace', fontSize: '26px', color: '#ffd166', stroke: '#000000', strokeThickness: 5, fontStyle: 'bold'
-    }).setOrigin(0.5).setDepth(40);
-    this.tweens.add({ targets: txt, y: txt.y - 60, alpha: 0, duration: 800, onComplete: () => txt.destroy() });
-  }
-
-  /**
-   * 留下亂入 BOSS 的屍體（只限慢速模式）：灰色 BOSS 圖 + 上方「按 Z 變成 BOSS」提示，transform.corpseMs 後消失
-   *
-   * @param x 屍體位置 x
-   * @param y 屍體位置 y
-   */
-  private spawnBossCorpse(x: number, y: number): void {
-    if (this.controlMode !== 'slow') return;
-    this.clearBossCorpse();
-    const cfg = GameConfig.boss.transform;
-    const img = this.add.image(x, y, 'enemy-boss').setTint(cfg.corpseTint).setAlpha(cfg.corpseAlpha).setDepth(5);
-    const hint = this.add.text(x, y - GameConfig.boss.radius - 30, '按 Z 變成 BOSS', {
-      fontFamily: 'monospace', fontSize: '26px', color: '#ffd166', stroke: '#000000', strokeThickness: 5, fontStyle: 'bold'
-    }).setOrigin(0.5).setDepth(41);
-    this.tweens.add({ targets: hint, alpha: 0.35, duration: 450, yoyo: true, repeat: -1 });
-    this.bossCorpse = { img, hint, expireAt: this.time.now + cfg.corpseMs };
-  }
-
-  /** 移除 BOSS 屍體（逾時、變身或換區時） */
-  private clearBossCorpse(): void {
-    if (!this.bossCorpse) return;
-    this.tweens.killTweensOf(this.bossCorpse.hint);
-    this.bossCorpse.img.destroy();
-    this.bossCorpse.hint.destroy();
-    this.bossCorpse = null;
-  }
-
-  /**
-   * 每幀檢查 BOSS 屍體是否逾時
-   *
-   * @param time 目前場景時間
-   */
-  private updateBossCorpse(time: number): void {
-    if (this.bossCorpse && time >= this.bossCorpse.expireAt) this.clearBossCorpse();
-  }
-
-  /**
-   * P1 在 BOSS 屍體 reachDist 內時變身 BOSS
-   *
-   * @returns 是否變身成功（false 時 Z 照舊處理強化）
-   */
-  private tryTransformBoss(): boolean {
-    const corpse = this.bossCorpse;
-    const p = this.player;
-    if (!corpse || !p || !p.alive || this.bossForm) return false;
-    if (Phaser.Math.Distance.Between(p.x, p.y, corpse.img.x, corpse.img.y) > GameConfig.boss.transform.reachDist) return false;
-    this.startBossForm();
-    return true;
-  }
-
-  /** 開始變身 BOSS：P1 換成 BOSS 外觀、無敵 durationMs，頭上顯示剩餘秒數 */
-  private startBossForm(): void {
-    const cfg = GameConfig.boss.transform;
-    const p = this.player;
-    const now = this.time.now;
-    this.clearBossCorpse();
-    const until = now + cfg.durationMs;
-    p.invulnUntil = Math.max(p.invulnUntil, until);
-    p.setAlpha(0); // 原角色隱藏，由 BOSS 圖代替顯示（物理本體不變）
-    const img = this.add.image(p.x, p.y, 'enemy-boss').setDepth(p.depth + 1);
-    const timer = this.add.text(p.x, p.y - GameConfig.boss.radius - 22, '', {
-      fontFamily: 'monospace', fontSize: '22px', color: '#ffd166', stroke: '#000000', strokeThickness: 5, fontStyle: 'bold'
-    }).setOrigin(0.5).setDepth(41);
-    this.bossForm = { until, normalHits: 0, img, timer };
-    this.spawnExpandingRing(p.x, p.y, cfg.normal.radius, 0xffd700, 400);
-    this.showEventBanner('變身 BOSS！');
-  }
-
-  /**
-   * 每幀更新變身 BOSS：外觀與倒數跟著 P1，時間到或 P1 倒下時變回原角色
-   *
-   * @param time 目前場景時間
-   */
-  private updateBossForm(time: number): void {
-    const form = this.bossForm;
-    if (!form) return;
-    const p = this.player;
-    if (time >= form.until || !p.alive) {
-      this.endBossForm();
-      return;
-    }
-    form.img.setPosition(p.x, p.y);
-    form.timer.setPosition(p.x, p.y - GameConfig.boss.radius - 22).setText(`BOSS ${Math.ceil((form.until - time) / 1000)}s`);
-  }
-
-  /** 結束變身 BOSS，變回原角色 */
-  private endBossForm(): void {
-    const form = this.bossForm;
-    if (!form) return;
-    this.bossForm = null;
-    form.img.destroy();
-    form.timer.destroy();
-    const p = this.player;
-    if (p.alive) p.setAlpha(1);
-    this.spawnExpandingRing(p.x, p.y, GameConfig.boss.radius * 2, 0xffffff, 300);
-  }
-
-  /**
-   * 變身 BOSS 的攻擊（按下立即出招、有冷卻）：平常是以自己為中心的範圍普攻；
-   * 普攻累積命中 fanEvery 次後，下一擊自動變成朝面向的扇形攻擊，之後重新計數
-   *
-   * @param time 目前場景時間
-   */
-  private bossFormAttack(time: number): void {
-    const form = this.bossForm;
-    const p = this.player;
-    if (!form || time < p.nextAttackAllowedAt) return;
-    const cfg = GameConfig.boss.transform;
-    p.nextAttackAllowedAt = time + cfg.attackCooldownMs;
-    const useFan = form.normalHits >= cfg.fanEvery;
-    const half = Phaser.Math.DegToRad(cfg.fan.arcDeg) / 2;
-    const range = useFan ? cfg.fan.range : cfg.normal.radius;
-    const damage = useFan ? cfg.fan.damage : cfg.normal.damage;
-    let hitCount = 0;
-    for (const child of this.enemies.getChildren()) {
-      const enemy = child as Enemy;
-      if (!enemy.active || enemy.dead || !enemy.isVulnerable()) continue;
-      if (Phaser.Math.Distance.Between(p.x, p.y, enemy.x, enemy.y) > range + enemy.getBodyRadius()) continue;
-      if (useFan) {
-        const diff = Math.abs(Phaser.Math.Angle.Wrap(Phaser.Math.Angle.Between(p.x, p.y, enemy.x, enemy.y) - p.aimAngle));
-        if (diff > half) continue;
-      }
-      this.damageEnemy(p, enemy, damage, cfg.knockback, time);
-      hitCount++;
-    }
-    if (hitCount > 0) this.triggerComboHit(p); // COMBO 獎勵照常累積（命中觸發）
-    if (useFan) {
-      form.normalHits = 0;
-      this.spawnFanFlash(p.x, p.y, p.aimAngle, range, half, 0xffaa33);
-      this.shakeOnce(120, 0.008);
-    } else {
-      if (hitCount > 0) form.normalHits++;
-      this.spawnExpandingRing(p.x, p.y, range, 0xff3355, 260);
-    }
-  }
-
-  /**
-   * 扇形閃光特效（填滿後淡出）
-   *
-   * @param x 圓心 x
-   * @param y 圓心 y
-   * @param angle 扇形中心方向（弧度）
-   * @param range 半徑
-   * @param half 半角（弧度）
-   * @param color 顏色
-   */
-  private spawnFanFlash(x: number, y: number, angle: number, range: number, half: number, color: number): void {
-    const g = this.add.graphics().setDepth(4);
-    g.fillStyle(color, 0.45);
-    g.slice(x, y, range, angle - half, angle + half, false);
-    g.fillPath();
-    this.tweens.add({ targets: g, alpha: 0, duration: 300, onComplete: () => g.destroy() });
-  }
-
-  /**
-   * BOSS 三招輪替總入口（a 範圍普攻 → b 直線衝刺 → c 扇形攻擊）：蓄力期間與衝刺中 BOSS 不移動；
-   * 招式完全放完後才排下一招（gapMs 從放完起算，時停凍結蓄力時也跟著順延）
-   *
-   * @param boss 施放的 BOSS
-   * @param kind 招式
-   * @param tx 施放當下目標 x（b / c 瞄準用）
-   * @param ty 施放當下目標 y
-   */
-  private onBossSkill = (boss: Enemy, kind: BossSkillKind, tx: number, ty: number): void => {
-    if (this.gameOver || !boss.active) return;
-    boss.bossCasting = true;
-    const done = (): void => {
-      boss.bossCasting = false;
-      if (this.boss === boss && boss.active) boss.scheduleBossNextAttack(this.time.now + GameConfig.boss.skills.gapMs);
+  private createBossHost(): BossHost {
+    return {
+      scene: this,
+      enemies: this.enemies,
+      arena: () => this.arena,
+      characters: () => this.characters,
+      player: () => this.player,
+      isGameOver: () => this.gameOver,
+      isSlowMode: () => this.controlMode === 'slow',
+      wireEnemyCallbacks: (e) => this.wireEnemyCallbacks(e),
+      addTelegraph: (fx) => { this.telegraphFx.push(fx); },
+      removeTelegraph: (fx) => this.removeTelegraphFx(fx),
+      clearTelegraphsOf: (owner) => this.clearTelegraphsOf(owner),
+      damageCharacter: (c, amount, fromX, fromY, rootMs) => this.damageCharacterFrom(c, amount, fromX, fromY, rootMs),
+      damageEnemy: (actor, enemy, damage, knockback, time) => this.damageEnemy(actor, enemy, damage, knockback, time),
+      triggerComboHit: (actor) => this.triggerComboHit(actor),
+      dropItemAt: (x, y, time) => this.dropItemAt(x, y, time),
+      spawnExpandingRing: (x, y, radius, color, ms) => this.spawnExpandingRing(x, y, radius, color, ms),
+      shakeOnce: (duration, intensity) => this.shakeOnce(duration, intensity),
+      spawnDeathBurst: (x, y) => this.spawnDeathBurst(x, y),
+      showEventBanner: (text) => this.showEventBanner(text),
+      emitStats: () => this.emitStats(),
+      onWaveBossDefeated: () => this.onWaveBossDefeated()
     };
-    if (kind === 'a') this.bossSkillA(boss, done);
-    else if (kind === 'b') this.bossSkillB(boss, tx, ty, done);
-    else this.bossSkillC(boss, tx, ty, done);
-  };
-
-  /** 對「符合 pred(距離/角度) 的環境內存活角色」在 fill 完成後結算傷害；pred 回 true = 命中。
-   *  v45(5)：BOSS 招命中 → 扣血 + 定身 rootMs（預設 2000；無敵仍可擋傷）。 */
-  private bossReleaseDamage(pred: (c: Character) => boolean, dmg: number, rootMs = GameConfig.boss.skillRootMs): void {
-    const now = this.time.now;
-    for (const c of this.characters) {
-      if (!c.alive || c.isInvulnerable(now)) continue; // 無敵擋傷
-      if (pred(c)) this.damageCharacterFrom(c, dmg, c.x, c.y, rootMs);
-    }
-  }
-
-  /**
-   * 招 a 範圍普攻：以 BOSS 為中心的圓形，蓄力 chargeMs（由內而外填滿預警）→ 圓內角色扣血
-   *
-   * @param boss 施放的 BOSS
-   * @param onDone 招式放完時呼叫
-   */
-  private bossSkillA(boss: Enemy, onDone: () => void): void {
-    const s = GameConfig.boss.skills.a;
-    const chargeMs = GameConfig.boss.skills.chargeMs;
-    const ox = boss.x, oy = boss.y;
-    const g = this.add.graphics().setDepth(4);
-    const fx: { owner: 'tower' | 'boss'; gfx: Phaser.GameObjects.Graphics; tween?: Phaser.Tweens.Tween; fired: boolean } =
-      { owner: 'boss', gfx: g, fired: false };
-    this.telegraphFx.push(fx);
-    const p = { t: 0 };
-    fx.tween = this.tweens.add({
-      targets: p, t: 1, duration: chargeMs,
-      onUpdate: () => {
-        g.clear();
-        g.lineStyle(2, 0xff3355, 0.6); g.strokeCircle(ox, oy, s.radius);
-        g.fillStyle(0xff3355, 0.28);
-        g.fillCircle(ox, oy, s.radius * p.t); // 由內而外填滿實心圓
-      },
-      onComplete: () => {
-        fx.fired = true; this.removeTelegraphFx(fx);
-        g.destroy();
-        onDone();
-        if (this.gameOver || !boss.active) return;
-        this.spawnExpandingRing(ox, oy, s.radius, 0xff3355, 300);
-        this.shakeOnce(120, 0.008);
-        this.bossReleaseDamage(c => Phaser.Math.Distance.Between(c.x, c.y, ox, oy) <= s.radius, s.damage);
-      }
-    });
-  }
-
-  /**
-   * 招 b 直線衝刺：蓄力 chargeMs 期間顯示朝目標方向的直線預警（由起點往終點填滿），
-   * 放出時直線內角色扣血，BOSS 沿線衝到終點（衝刺 dashMs，終點夾在場內）
-   *
-   * @param boss 施放的 BOSS
-   * @param tx 瞄準點 x
-   * @param ty 瞄準點 y
-   * @param onDone 衝刺結束時呼叫
-   */
-  private bossSkillB(boss: Enemy, tx: number, ty: number, onDone: () => void): void {
-    const s = GameConfig.boss.skills.b;
-    const chargeMs = GameConfig.boss.skills.chargeMs;
-    const ox = boss.x, oy = boss.y;
-    const ang = Phaser.Math.Angle.Between(ox, oy, tx, ty);
-    const inset = GameConfig.boss.radius;
-    const ex = Phaser.Math.Clamp(ox + Math.cos(ang) * s.length, this.arena.left + inset, this.arena.right - inset);
-    const ey = Phaser.Math.Clamp(oy + Math.sin(ang) * s.length, this.arena.top + inset, this.arena.bottom - inset);
-    const len = Phaser.Math.Distance.Between(ox, oy, ex, ey);
-    const halfW = s.width / 2;
-    // 直線帶的四個角：起點與目前填滿位置，各沿垂直方向 ±halfW
-    const nx = -Math.sin(ang) * halfW, ny = Math.cos(ang) * halfW;
-    const strip = (t: number): Phaser.Math.Vector2[] => {
-      const px = ox + (ex - ox) * t, py = oy + (ey - oy) * t;
-      return [new Phaser.Math.Vector2(ox + nx, oy + ny), new Phaser.Math.Vector2(px + nx, py + ny),
-        new Phaser.Math.Vector2(px - nx, py - ny), new Phaser.Math.Vector2(ox - nx, oy - ny)];
-    };
-    const g = this.add.graphics().setDepth(4);
-    const fxB: { owner: 'tower' | 'boss'; gfx: Phaser.GameObjects.Graphics; tween?: Phaser.Tweens.Tween; fired: boolean } =
-      { owner: 'boss', gfx: g, fired: false };
-    this.telegraphFx.push(fxB);
-    const p = { t: 0 };
-    fxB.tween = this.tweens.add({
-      targets: p, t: 1, duration: chargeMs,
-      onUpdate: () => {
-        g.clear();
-        g.lineStyle(2, 0xff3355, 0.6); g.strokePoints(strip(1), true);
-        g.fillStyle(0xff3355, 0.28); g.fillPoints(strip(p.t), true);
-      },
-      onComplete: () => {
-        fxB.fired = true; this.removeTelegraphFx(fxB);
-        g.destroy();
-        if (this.gameOver || !boss.active) { onDone(); return; }
-        this.shakeOnce(120, 0.008);
-        const hitR = halfW + GameConfig.player.radius;
-        this.bossReleaseDamage(c => this.distanceToSegment(c.x, c.y, ox, oy, ex, ey) <= hitR, s.damage);
-        boss.startBossDash(ang, len / (s.dashMs / 1000), s.dashMs, this.time.now);
-        this.time.delayedCall(s.dashMs, onDone);
-      }
-    });
-  }
-
-  /**
-   * 點 (x, y) 到線段 (x1, y1)-(x2, y2) 的最短距離
-   */
-  private distanceToSegment(x: number, y: number, x1: number, y1: number, x2: number, y2: number): number {
-    const dx = x2 - x1, dy = y2 - y1;
-    const lenSq = dx * dx + dy * dy;
-    const t = lenSq > 0 ? Phaser.Math.Clamp(((x - x1) * dx + (y - y1) * dy) / lenSq, 0, 1) : 0;
-    return Phaser.Math.Distance.Between(x, y, x1 + dx * t, y1 + dy * t);
-  }
-
-  /**
-   * 招 c 扇形攻擊：朝施放當下目標方向的 arcDeg 扇形，蓄力 chargeMs（由內而外填滿）→ 扇形內角色扣血
-   *
-   * @param boss 施放的 BOSS
-   * @param tx 瞄準點 x
-   * @param ty 瞄準點 y
-   * @param onDone 招式放完時呼叫
-   */
-  private bossSkillC(boss: Enemy, tx: number, ty: number, onDone: () => void): void {
-    const s = GameConfig.boss.skills.c;
-    const chargeMs = GameConfig.boss.skills.chargeMs;
-    const ox = boss.x, oy = boss.y;
-    const center = Phaser.Math.Angle.Between(ox, oy, tx, ty); // 朝玩家
-    const half = Phaser.Math.DegToRad(s.arcDeg) / 2;
-    const g = this.add.graphics().setDepth(4);
-    const inArc = (c: Character): boolean => {
-      const d = Phaser.Math.Distance.Between(c.x, c.y, ox, oy);
-      if (d > s.range) return false;
-      const a = Phaser.Math.Angle.Between(ox, oy, c.x, c.y);
-      const diff = Math.abs(Phaser.Math.Angle.Wrap(a - center));
-      return diff <= half; // 在扇形內
-    };
-    const p = { t: 0 };
-    const fxC: { owner: 'tower' | 'boss'; gfx: Phaser.GameObjects.Graphics; tween?: Phaser.Tweens.Tween; fired: boolean } =
-      { owner: 'boss', gfx: g, fired: false };
-    this.telegraphFx.push(fxC);
-    fxC.tween = this.tweens.add({
-      targets: p, t: 1, duration: chargeMs,
-      onUpdate: () => {
-        g.clear();
-        g.lineStyle(2, 0xffaa33, 0.6);
-        // 扇形輪廓
-        g.beginPath(); g.arc(ox, oy, s.range, center - half, center + half, false); g.strokePath();
-        // 由內而外填滿的扇形
-        g.fillStyle(0xffaa33, 0.28);
-        g.slice(ox, oy, s.range * p.t, center - half, center + half, false);
-        g.fillPath();
-      },
-      onComplete: () => {
-        fxC.fired = true; this.removeTelegraphFx(fxC);
-        g.destroy();
-        onDone();
-        if (this.gameOver || !boss.active) return;
-        this.spawnExpandingRing(ox, oy, s.range, 0xffaa33, 260);
-        this.shakeOnce(120, 0.008);
-        this.bossReleaseDamage(inArc, s.damage);
-      }
-    });
   }
 
   /** v28：BOSS 召喚的小怪（不計 waveSpawned/quota） */
@@ -3807,53 +3381,8 @@ export class GameScene extends Phaser.Scene {
     if (forceChase) enemy.forceChase = true; // ★守護波怪:無視 alertRadius 生成即直衝目標(NPC)
   }
 
-  /**
-   * v35：打 BOSS 過程噴道具——累積傷害每跨過 dropEveryDamage 門檻，就在 BOSS 附近掉 1 個道具。
-   * 讓玩家打高血量 BOSS 時能撿道具續戰。
-   */
-  private accumBossDamageDrop(dmg: number, time: number): void {
-    const boss = this.boss;
-    if (!boss || !boss.active) return;
-    const per = GameConfig.boss.dropEveryDamage;
-    if (per <= 0) return;
-    this.bossDamageAccum += dmg;
-    while (this.bossDamageAccum >= per) {
-      this.bossDamageAccum -= per;
-      // v44：噴在 BOSS 外圈(距 dropDist±scatter，隨機方向)，不掉腳邊被身體擋住撿不到
-      const dd = GameConfig.boss.dropDist;
-      const sc = GameConfig.boss.dropScatter;
-      const ang = Phaser.Math.FloatBetween(0, Math.PI * 2);
-      const rad = dd + Phaser.Math.Between(-sc * 0.4, sc * 0.4);
-      const dx = Phaser.Math.Clamp(boss.x + Math.cos(ang) * rad, this.arena.left + 20, this.arena.right - 20);
-      const dy = Phaser.Math.Clamp(boss.y + Math.sin(ang) * rad, this.arena.top + 20, this.arena.bottom - 20);
-      this.dropItemAt(dx, dy, time);
-    }
-  }
-
-  /** v28：BOSS 被擊殺——大爆炸 + 掉多個道具 + 該波過關 */
-  private onBossKilled(bx: number, by: number): void {
-    const intruder = this.bossIntruderLeaveAt > 0;
-    this.bossIntruderLeaveAt = 0;
-    this.boss = null;
-    this.clearTelegraphsOf('boss'); // v45(4)：清掉 BOSS 蓄力中的招式預警特效 + 取消發射
-    this.game.events.emit('boss-hud', { active: false, secondsLeft: null });
-    // 大爆炸
-    this.spawnExpandingRing(bx, by, GameConfig.boss.skills.a.radius * 1.4, 0xffd700, 500);
-    this.shakeOnce(300, 0.014);
-    for (let i = 0; i < 12; i++) this.spawnDeathBurst(bx + Phaser.Math.Between(-40, 40), by + Phaser.Math.Between(-40, 40));
-    // 掉多個道具（v44：距 BOSS dropDist，避免掉腳邊被身體擋住撿不到）
-    for (let i = 0; i < GameConfig.boss.dropCount; i++) {
-      const ang = (i / GameConfig.boss.dropCount) * Math.PI * 2;
-      const dd = GameConfig.boss.dropDist;
-      const dx2 = Phaser.Math.Clamp(bx + Math.cos(ang) * dd, this.arena.left + 20, this.arena.right - 20);
-      const dy2 = Phaser.Math.Clamp(by + Math.sin(ang) * dd, this.arena.top + 20, this.arena.bottom - 20);
-      this.dropItemAt(dx2, dy2, this.time.now);
-    }
-    // 亂入 BOSS 不擋通關：打倒只有爆炸 + 掉落，小關卡照常進行
-    if (intruder) {
-      this.spawnBossCorpse(bx, by);
-      return;
-    }
+  /** 波次 BOSS 被打倒（BossController 回呼）：決定通關、轉場或該波過關 */
+  private onWaveBossDefeated(): void {
     // ★第二輪:壓軸 BOSS(最終關 totalLevels=8)或無限循環的波次 BOSS 打倒 → 通關勝利畫面。
     if ((this.levelMode && this.isFinalLevel(this.currentLevel)) || this.isBossWave(this.currentWave)) {
       this.triggerClear();
@@ -4210,7 +3739,6 @@ export class GameScene extends Phaser.Scene {
     e.onShoot = this.onEnemyShoot;
     e.onLaserFire = this.onEnemyLaserFire;
     e.onBombThrow = this.onEnemyBombThrow;
-    e.onBossSkill = this.onBossSkill; // v36
   }
 
   /** v33 事件登場提示（仿 BOSS 出現） */
@@ -4613,11 +4141,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
     // 若有 BOSS，一併清掉並收尾
-    if (this.boss) {
-      this.boss = null;
-      this.bossIntruderLeaveAt = 0;
-      this.game.events.emit('boss-hud', { active: false, secondsLeft: null });
-    }
+    this.bossCtl.forgetBoss();
     // 強制完成當前波次
     if (this.waveState !== 'intermission') {
       // ★關卡制:N 也要走【正常子區完成判定】(累計 subWavesDone→達 target 出箭頭/出口),不可繞過 onWaveKill。
@@ -5134,9 +4658,6 @@ export class GameScene extends Phaser.Scene {
       // ② 硬 de-overlap(補刀):推開殘留重疊,迭代收斂。
       this.resolveEnemyOverlap(separators);
     }
-
-    // v28：BOSS 血條更新（若存活）
-    this.emitBossHud();
   }
 
   /** v13 邊界反彈：敵人位置超出 arena 時夾回內側，並反向撞牆軸的速度 */
@@ -6492,8 +6013,7 @@ export class GameScene extends Phaser.Scene {
     enemy.aggroActive = true; // ★主動仇恨:被玩家攻擊命中→標記主動,不計入被動警戒上限、永遠可追
     const dead = enemy.takeDamage(dmg);
     if (enemy.isBoss) {
-      this.accumBossDamageDrop(dmg, time); // v35：打 BOSS 過程噴道具
-      if (this.bossIntruderLeaveAt > 0 && !enemy.dead) this.rollIntruderHitTicket(actor, enemy);
+      this.bossCtl.onBossHit(actor, enemy, dmg, time); // 噴道具 / 亂入 BOSS 掉彩票
       // ★v58→v61 修:BOSS 命中給能量也改【隊伍任何人命中 BOSS 都可能給 P1 能量】(同上,避免只 P1 命中才給)。
       if (this.controlMode === 'slow' && !enemy.dead) {
         const ecfg = GameConfig.energy;
@@ -6516,7 +6036,7 @@ export class GameScene extends Phaser.Scene {
         actor.kills++;
         // ★移除：COMBO改為命中觸發，不在擊殺時觸發
         // this.triggerComboHit(actor);  
-        this.onBossKilled(dx, dy); // v28：BOSS 擊殺 → 大爆炸+掉落+過關
+        this.bossCtl.onBossKilled(dx, dy); // BOSS 擊殺 → 大爆炸 + 掉落（波次 BOSS 再回呼 onWaveBossDefeated）
       } else if (etype === 'tower') {
         this.tower = null; // v33：打掉塔 → 事件完成
         this.clearTelegraphsOf('tower'); // v45(4)：清掉塔蓄力中的扇形預警特效 + 取消發射
@@ -7093,8 +6613,7 @@ export class GameScene extends Phaser.Scene {
     enemy.aggroActive = true; // ★主動仇恨:被玩家攻擊命中→標記主動,不計入被動警戒上限、永遠可追
     const dead = enemy.takeDamage(dmg);
     if (enemy.isBoss) {
-      this.accumBossDamageDrop(dmg, time); // v35：打 BOSS 過程噴道具
-      if (this.bossIntruderLeaveAt > 0 && !enemy.dead) this.rollIntruderHitTicket(actor, enemy);
+      this.bossCtl.onBossHit(actor, enemy, dmg, time); // 噴道具 / 亂入 BOSS 掉彩票
       // ★v61:BOSS 命中(非擊殺)機率給 P1 能量(與 damageEnemyFrom 一致;普攻/衝刺打BOSS也算)。
       if (this.controlMode === 'slow' && !enemy.dead) {
         const ecfg = GameConfig.energy;
@@ -7115,7 +6634,7 @@ export class GameScene extends Phaser.Scene {
       enemy.kill();
       if (wasBoss) {
         actor.kills++;
-        this.onBossKilled(dx, dy);
+        this.bossCtl.onBossKilled(dx, dy);
       } else if (etype === 'tower') {
         this.tower = null;
         this.clearTelegraphsOf('tower'); // v45(4)：清掉塔蓄力中的扇形預警特效 + 取消發射
@@ -7344,25 +6863,22 @@ export class GameScene extends Phaser.Scene {
   /** v28 除錯：直接生成一隻 BOSS（測 BOSS 戰/血條） */
   debugSpawnBoss(): void {
     this.waveState = 'boss';
-    this.spawnBoss();
+    this.bossCtl.spawn();
   }
 
   /** 除錯：直接生成一隻限時亂入 BOSS（測亂入計時 / 命中掉彩票 / 離場） */
   debugSpawnIntruderBoss(): void {
-    if (!this.boss) this.spawnBoss(true);
+    if (!this.bossCtl.current) this.bossCtl.spawn(true);
   }
 
-  /** v36 除錯：直接施放 BOSS 指定招式（a/b/c/d）——需先有 BOSS 在場 */
+  /** 除錯：直接施放 BOSS 指定招式（a/b/c）——需先有 BOSS 在場 */
   debugBossSkill(kind: BossSkillKind): void {
-    const boss = this.boss;
-    if (!boss || !boss.active) return;
-    const p = this.player;
-    this.onBossSkill(boss, kind, p.x, p.y);
+    this.bossCtl.debugCast(kind);
   }
 
-  /** v36 除錯：暫停/恢復 BOSS 自動輪替招式（隔離單招測試用） */
+  /** 除錯：暫停/恢復 BOSS 自動輪替招式（隔離單招測試用） */
   debugPauseBossSkills(v: boolean): void {
-    if (this.boss) this.boss.bossSkillsPaused = v;
+    this.bossCtl.debugPauseSkills(v);
   }
 
   /** v28 除錯：設定當前波次（測波次/BOSS 觸發） */
