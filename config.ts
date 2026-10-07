@@ -888,9 +888,9 @@ export const GameConfig = {
     totalLevels: 4,
     /**
      * 小關卡寶箱佇列（無限延續，見 systems/stageQueue.ts）：新節點依此機率抽高階 / 問號，其餘為低階；
-     * 任意連續 waveHud.visibleStages 個節點保證至少 1 個確定高階（不足時強制高階），問號不連續
+     * 任意連續 waveHud.visibleStages 個節點保證至少 1 個確定高階與 1 個問號（不足時強制補，高階優先），問號不連續
      */
-    chestOdds: { high: 0.2, mystery: 0.2 },
+    chestOdds: { high: 0.2, mystery: 0.3 },
     /** 問號寶箱在玩家進入該關時揭曉為高階的機率（其餘為低階） */
     mysteryHighChance: 0.4,
     /** 各寶箱階級的關卡擊殺數（問號依揭曉結果） */

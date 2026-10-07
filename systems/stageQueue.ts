@@ -4,7 +4,8 @@ import { GameConfig } from '../config';
  * 小關卡佇列（卷軸 HUD 右側的寶箱序列）的生成規則：純函式，不依賴場景狀態。
  *
  * - 每個節點是低階 / 高階 / 問號寶箱；問號在玩家進入該關時才揭曉為低階或高階
- * - 保證：任意連續 visibleStages(4) 個節點中至少有 1 個「確定的」高階（問號不算）
+ * - 保證：任意連續 visibleStages(4) 個節點中至少有 1 個「確定的」高階（問號不算），也至少有 1 個問號
+ *   （兩者同時需要補時高階優先，問號順延到下一格）
  * - 問號不連續出現
  */
 
@@ -27,8 +28,8 @@ export type RandomFn = () => number;
 /**
  * 產生接在 prev 後面的下一個節點
  *
- * 規則：前 visibleStages-1 個節點都沒有確定高階 → 強制高階；否則依 chestOdds 抽
- * （抽到問號但上一個也是問號時改為低階）
+ * 規則：前 visibleStages-1 個節點都沒有確定高階 → 強制高階；都沒有問號 → 強制問號；
+ * 否則依 chestOdds 抽（抽到問號但上一個也是問號時改為低階）
  *
  * @param prev 目前佇列（最後一個是最右邊的節點）
  * @param rand 隨機數來源
@@ -37,9 +38,10 @@ export type RandomFn = () => number;
 export function nextStageNode(prev: ReadonlyArray<StageNode>, rand: RandomFn = Math.random): StageNode {
   const windowSize = GameConfig.waveHud.visibleStages - 1;
   const window = prev.slice(-windowSize);
-  if (window.length === windowSize && !window.some((n) => n.kind === 'high')) {
-    return { kind: 'high', revealed: null };
-  }
+  const windowFull = window.length === windowSize;
+  if (windowFull && !window.some((n) => n.kind === 'high')) return { kind: 'high', revealed: null };
+  // 視窗內沒有問號時，上一格必定不是問號，可直接補問號（不違反不連續）
+  if (windowFull && !window.some((n) => n.kind === 'mystery')) return { kind: 'mystery', revealed: null };
   const odds = GameConfig.stage.chestOdds;
   const r = rand();
   if (r < odds.high) return { kind: 'high', revealed: null };
