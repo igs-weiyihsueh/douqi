@@ -50,7 +50,8 @@ export class GameScene extends Phaser.Scene {
   private characterUIOverlay: Phaser.GameObjects.Image | null = null;
 
   // ★敵人外觀切換系統 (F4切換骷髏戰士↔紅色圓形)
-  private useSkeletonWarrior = true; // true=骷髏戰士, false=紅色圓形
+  /** Normal 敵人是否使用骷髏戰士外觀;預設 false(紅色圓形),與 F4 新場景預設關閉一致,第一次按 F4 兩者同時切到新美術 */
+  private useSkeletonWarrior = false;
 
   private survivalMs = 0;
   private gameOver = false;
@@ -495,6 +496,7 @@ export class GameScene extends Phaser.Scene {
     // ★背景切換狀態重置 - 修復ESC回主菜單後F4失效問題
     this.sceneBackgrounds = [];
     this.isNewSceneActive = false;
+    this.useSkeletonWarrior = false; // 與 isNewSceneActive 同步回預設,避免重開場景後 F4 方向相反
     
     // ★角色皮膚狀態重置
     this.characterSkin = null;
@@ -8398,15 +8400,12 @@ export class GameScene extends Phaser.Scene {
         .setVisible(false)
         .setScrollFactor(1);  // 跟隨世界移動，不像背景固定
       
-      console.log(`🦍 角色皮膚覆蓋已創建：Goku皮膚在位置(${playerPos.x}, ${playerPos.y}) (depth=15, hidden)`);
     } else {
       console.warn('⚠️ Goku皮膚資源不存在：character-goku-skin');
     }
 
     // 檢查二段變身皮膚資源是否存在
-    if (this.textures.exists('character-goku-skin-2')) {
-      console.log('✨ Goku二段變身皮膚資源已就緒：character-goku-skin-2');
-    } else {
+    if (!this.textures.exists('character-goku-skin-2')) {
       console.warn('⚠️ Goku二段變身皮膚資源不存在：character-goku-skin-2');
     }
   }
@@ -8421,14 +8420,9 @@ export class GameScene extends Phaser.Scene {
    * - 定位在P1角色上方適當位置
    */
   private initCharacterUIOverlay(): void {
-    console.log('🔧 [調試] 開始初始化角色UI覆蓋系統');
-    console.log('🔧 [調試] character-ui-overlay紋理存在:', this.textures.exists('character-ui-overlay'));
-    
     if (this.textures.exists('character-ui-overlay')) {
       // ★調整：使用與頭頂UI系統一致的偏移值-130
       const playerPos = this.player ? { x: this.player.x, y: this.player.y - 130 } : { x: 0, y: -130 };
-      console.log('🔧 [調試] P1角色位置:', { x: this.player?.x, y: this.player?.y });
-      console.log('🔧 [調試] UI覆蓋目標位置:', playerPos);
       
       this.characterUIOverlay = this.add.image(playerPos.x, playerPos.y, 'character-ui-overlay')
         .setOrigin(0.5, 0.5)
@@ -8436,7 +8430,6 @@ export class GameScene extends Phaser.Scene {
         .setVisible(false)
         .setScrollFactor(1);  // 跟隨世界移動
       
-      console.log(`🎮 角色UI覆蓋已創建：1P UI在位置(${playerPos.x}, ${playerPos.y}) (depth=20, hidden)`);
     } else {
       console.warn('⚠️ 角色UI覆蓋資源不存在：character-ui-overlay');
     }
@@ -8470,7 +8463,6 @@ export class GameScene extends Phaser.Scene {
       if (this.characterSkin.texture.key !== targetTexture) {
         if (this.textures.exists(targetTexture)) {
           this.characterSkin.setTexture(targetTexture);
-          console.log(`✨ 角色皮膚已切換：${isEmpowered ? 'Goku_2 (強化金色光環)' : 'Goku_1 (普通)'}`);
         } else {
           console.warn(`⚠️ 皮膚材質不存在：${targetTexture}`);
         }
@@ -8491,11 +8483,6 @@ export class GameScene extends Phaser.Scene {
       const newX = this.player.x;
       const newY = this.player.y - 130;
       this.characterUIOverlay.setPosition(newX, newY);
-      
-      // 調試：每100幀輸出一次位置信息
-      if (this.time.now % 1000 < 16) { // 約每秒一次
-        console.log(`🔧 [調試] UI覆蓋位置更新: (${newX}, ${newY}), 可見: ${this.characterUIOverlay.visible}`);
-      }
     }
   }
 
@@ -8538,9 +8525,6 @@ export class GameScene extends Phaser.Scene {
     // 切換狀態
     this.useSkeletonWarrior = !this.useSkeletonWarrior;
     
-    const newAppearance = this.useSkeletonWarrior ? '骷髏戰士' : '紅色圓形';
-    console.log(`🎭 F4複合功能 - Normal敵人外觀切換 → ${newAppearance}`);
-    
     // 更新所有現存的Normal類型敵人
     this.enemies.children.entries.forEach((enemy) => {
       const enemyObj = enemy as Enemy;
@@ -8549,7 +8533,6 @@ export class GameScene extends Phaser.Scene {
       }
     });
     
-    console.log(`✅ Normal敵人外觀已切換至：${newAppearance}`);
   }
 
   /**
@@ -8606,30 +8589,22 @@ export class GameScene extends Phaser.Scene {
   private controlP1HeadUI(visible: boolean, retryCount = 0): void {
     const maxRetries = 5;
     
-    console.log(`🎯 [頭頂UI控制] 嘗試控制P1頭頂UI，visible=${visible}，重試=${retryCount}`);
-    
     const uiScene = this.scene.get('UIScene') as any;
-    console.log('🎯 [頭頂UI控制] UIScene獲取結果:', !!uiScene);
     
     if (!uiScene) {
       console.error('❌ [頭頂UI控制] 無法獲取UIScene引用');
       return;
     }
     
-    console.log('🎯 [頭頂UI控制] setP1HeadUIVisible存在:', typeof uiScene.setP1HeadUIVisible);
-    
     if (typeof uiScene.setP1HeadUIVisible === 'function') {
       // 檢查P1的頭頂UI是否已經創建
       const hasP1HeadUI = uiScene.overheadUIs && uiScene.overheadUIs.has(0);
-      console.log('🎯 [頭頂UI控制] P1頭頂UI已創建:', hasP1HeadUI);
       
       if (hasP1HeadUI) {
         // P1頭頂UI已創建，可以安全調用
-        console.log('✅ [頭頂UI控制] P1頭頂UI已準備就緒，執行控制操作');
         uiScene.setP1HeadUIVisible(visible);
       } else if (retryCount < maxRetries) {
         // P1頭頂UI尚未創建，延遲重試
-        console.log(`⏳ [頭頂UI控制] P1頭頂UI尚未創建，100ms後重試 (${retryCount + 1}/${maxRetries})`);
         this.time.delayedCall(100, () => {
           this.controlP1HeadUI(visible, retryCount + 1);
         });
@@ -8653,30 +8628,22 @@ export class GameScene extends Phaser.Scene {
   private controlBottomPanelOverlay(useOverlay: boolean, retryCount = 0): void {
     const maxRetries = 5;
     
-    console.log(`🔧 [底部面板控制] 嘗試控制底部面板替換，useOverlay=${useOverlay}，重試=${retryCount}`);
-    
     const uiScene = this.scene.get('UIScene') as any;
-    console.log('🔧 [底部面板控制] UIScene獲取結果:', !!uiScene);
     
     if (!uiScene) {
       console.error('❌ [底部面板控制] 無法獲取UIScene引用');
       return;
     }
     
-    console.log('🔧 [底部面板控制] setBottomPanelOverlay存在:', typeof uiScene.setBottomPanelOverlay);
-    
     if (typeof uiScene.setBottomPanelOverlay === 'function') {
       // 檢查底部面板是否已經創建
       const hasBottomPanel = uiScene.rows && uiScene.rows.length > 0;
-      console.log('🔧 [底部面板控制] 底部面板已創建:', hasBottomPanel);
       
       if (hasBottomPanel) {
         // 底部面板已創建，可以安全調用
-        console.log('✅ [底部面板控制] 底部面板已準備就緒，執行控制操作');
         uiScene.setBottomPanelOverlay(useOverlay);
       } else if (retryCount < maxRetries) {
         // 底部面板尚未創建，延遲重試
-        console.log(`⏳ [底部面板控制] 底部面板尚未創建，100ms後重試 (${retryCount + 1}/${maxRetries})`);
         this.time.delayedCall(100, () => {
           this.controlBottomPanelOverlay(useOverlay, retryCount + 1);
         });

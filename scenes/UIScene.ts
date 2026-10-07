@@ -139,7 +139,6 @@ export class UIScene extends Phaser.Scene {
   
   // ★多角色底部面板替換系統
   private bottomPanelOverlays: Array<Phaser.GameObjects.Image | null> = [null, null, null, null]; // [1P, 2P, 3P, 4P]
-  private isBottomPanelOverlayMode = false;
   
   // ★頭上UI佈局常數：避免魔術數字
   private readonly OVERHEAD_UI_CONFIG = {
@@ -269,6 +268,8 @@ export class UIScene extends Phaser.Scene {
       }
     });
     this.overheadUIs.clear();
+    // F4 覆蓋模式隨 GameScene 重開回到預設(關閉),否則重開後 P1 頭頂 UI 會維持隱藏
+    this.isP1HeadUIHidden = false;
     const w = GameConfig.width;
     const h = GameConfig.height;
 
@@ -655,7 +656,6 @@ export class UIScene extends Phaser.Scene {
         if (charIndex === 0 && this.isP1HeadUIHidden) {
           // P1頭頂UI處於覆蓋模式，跳過更新但保持位置同步
           this.updateOverheadUI(character, container, false); // 只更新位置，不強制顯示
-          console.log('🎯 [覆蓋模式] P1頭頂UI跳過顯示，僅更新位置');
         } else {
           // 正常模式：更新位置、內容並顯示
           this.updateOverheadUI(character, container);
@@ -1587,11 +1587,8 @@ export class UIScene extends Phaser.Scene {
    * @param visible - true顯示P1頭頂UI，false隱藏P1頭頂UI
    */
   setP1HeadUIVisible(visible: boolean): void {
-    console.log(`🎯 [頭頂UI控制] setP1HeadUIVisible被調用，visible=${visible}`);
-    
     // 設置覆蓋模式標誌，防止updateStats()和updateOverheadUI()干擾
     this.isP1HeadUIHidden = !visible;
-    console.log(`🎯 [頭頂UI控制] 覆蓋模式設為: ${this.isP1HeadUIHidden}`);
     
     // 獲取P1的頭頂UI容器 (P1索引為0)
     const p1Container = this.overheadUIs.get(0);
@@ -1599,11 +1596,8 @@ export class UIScene extends Phaser.Scene {
     if (p1Container) {
       // 直接設置可見性
       p1Container.setVisible(visible);
-      console.log(`✅ [頭頂UI控制] P1頭頂UI已設置為: ${visible ? '顯示' : '隱藏'}`);
-      console.log(`🎯 [頭頂UI控制] 實際可見性確認: ${p1Container.visible}`);
     } else {
       console.warn('⚠️ [頭頂UI控制] P1頭頂UI容器不存在，可能尚未創建');
-      console.log(`🎯 [頭頂UI控制] 當前overheadUIs大小: ${this.overheadUIs.size}`);
     }
   }
 
@@ -1616,8 +1610,6 @@ export class UIScene extends Phaser.Scene {
    * - 初始隱藏，由F4切換統一控制所有角色
    */
   private initMultiPlayerBottomPanelOverlays(): void {
-    console.log('🔧 [多角色底部面板] 開始初始化多角色底部面板替換系統');
-    
     const w = GameConfig.width;
     const h = GameConfig.height;
     
@@ -1635,8 +1627,6 @@ export class UIScene extends Phaser.Scene {
     const startX = (w - (count * actualPanelW + (count - 1) * panelGap)) / 2; // 居中排列
     const rowTopY = h - 150; // 向上調整：與原始狀態列保持協調，從h-120改為h-150
     
-    console.log(`📐 [多角色底部面板] 佈局計算: 螢幕寬度=${w}, 面板寬度=${actualPanelW}, 間距=${panelGap.toFixed(1)}, 起始X=${startX.toFixed(1)}`);
-    
     // 角色標籤和資源映射
     const playerLabels = ['1P', '2P', '3P', '4P'];
     const resourceKeys = ['bottom-panel-1P', 'bottom-panel-2P', 'bottom-panel-3P', 'bottom-panel-4P'];
@@ -1644,9 +1634,6 @@ export class UIScene extends Phaser.Scene {
     for (let i = 0; i < count; i++) {
       const playerLabel = playerLabels[i];
       const resourceKey = resourceKeys[i];
-      
-      console.log(`🔧 [多角色底部面板] 處理 ${playerLabel}, 資源key: ${resourceKey}`);
-      console.log(`🔧 [多角色底部面板] ${resourceKey}紋理存在:`, this.textures.exists(resourceKey));
       
       if (this.textures.exists(resourceKey)) {
         // 檢查紋理是否成功載入
@@ -1670,20 +1657,16 @@ export class UIScene extends Phaser.Scene {
             .setScrollFactor(0)  // 固定位置，不隨相機移動
             .setDisplaySize(displayW, displayH);  // 🎨 保持原始尺寸比例
           
-          console.log(`✅ [多角色底部面板] ${playerLabel}底部面板覆蓋已創建：位置(${playerCenterX}, ${playerCenterY}) 尺寸(${displayW}x${displayH}) (depth=${1000 + i}, hidden)`);
         } else {
           console.error(`❌ [多角色底部面板] ${playerLabel}紋理載入失敗或損壞`);
           this.bottomPanelOverlays[i] = null;
         }
       } else {
         console.warn(`⚠️ [多角色底部面板] ${playerLabel}底部面板覆蓋資源不存在：${playerLabel}.png`);
-        console.log(`💡 [多角色底部面板] 請將${playerLabel}.png文件放入public/assets/目錄`);
         this.bottomPanelOverlays[i] = null;
       }
     }
     
-    console.log('🔧 [多角色底部面板] 多角色底部面板替換系統初始化完成');
-    console.log(`📐 [多角色底部面板] 面板佈局參數: count=${count}, panelW=${actualPanelW}, panelH=${actualPanelH}, gap=${panelGap.toFixed(1)}, startX=${startX.toFixed(1)}, rowTopY=${rowTopY}`);
   }
 
   /**
@@ -1694,12 +1677,6 @@ export class UIScene extends Phaser.Scene {
    * @param useOverlay - true顯示所有覆蓋並隱藏原始面板，false恢復所有原始面板
    */
   setBottomPanelOverlay(useOverlay: boolean): void {
-    console.log(`🔧 [多角色底部面板] setBottomPanelOverlay被調用，useOverlay=${useOverlay}`);
-    
-    // 設置覆蓋模式標誌
-    this.isBottomPanelOverlayMode = useOverlay;
-    console.log(`🔧 [多角色底部面板] 覆蓋模式設為: ${this.isBottomPanelOverlayMode}`);
-    
     const playerLabels = ['1P', '2P', '3P', '4P'];
     const count = GameConfig.characters.count;
     
@@ -1711,13 +1688,11 @@ export class UIScene extends Phaser.Scene {
         
         if (playerOverlay) {
           playerOverlay.setVisible(true);
-          console.log(`✅ [多角色底部面板] ${playerLabel}覆蓋已顯示`);
           
           // 隱藏對應的原始面板
           if (this.rows && this.rows.length > i) {
             const playerPanel = this.rows[i];
             this.setRowPanelVisible(playerPanel, false);
-            console.log(`🔒 [多角色底部面板] 原始${playerLabel}底部面板已隱藏`);
           }
         } else {
           console.warn(`⚠️ [多角色底部面板] ${playerLabel}覆蓋不存在，保持原始面板顯示`);
@@ -1726,27 +1701,23 @@ export class UIScene extends Phaser.Scene {
           if (this.rows && this.rows.length > i) {
             const playerPanel = this.rows[i];
             this.setRowPanelVisible(playerPanel, true);
-            console.log(`✅ [多角色底部面板] 保持原始${playerLabel}底部面板顯示（覆蓋圖片不存在）`);
           }
         }
       }
     } else {
       // 關閉所有角色的底部面板覆蓋
       for (let i = 0; i < count; i++) {
-        const playerLabel = playerLabels[i];
         const playerOverlay = this.bottomPanelOverlays[i];
         
         // 隱藏覆蓋UI
         if (playerOverlay) {
           playerOverlay.setVisible(false);
-          console.log(`🔒 [多角色底部面板] ${playerLabel}覆蓋已隱藏`);
         }
         
         // 恢復原始底部面板
         if (this.rows && this.rows.length > i) {
           const playerPanel = this.rows[i];
           this.setRowPanelVisible(playerPanel, true);
-          console.log(`✅ [多角色底部面板] 原始${playerLabel}底部面板已恢復`);
         }
       }
     }
@@ -1774,10 +1745,9 @@ export class UIScene extends Phaser.Scene {
       panel.ticketBox      // 🎫彩票數小框
     ];
     
-    elements.forEach((element, index) => {
+    elements.forEach((element) => {
       if (element && typeof element.setVisible === 'function') {
         element.setVisible(visible);
-        console.log(`  [底部面板] 元素${index}設置為${visible ? '可見' : '隱藏'}`);
       }
     });
   }
