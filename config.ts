@@ -1082,12 +1082,7 @@ export const GameConfig = {
       fan: { range: 380, arcDeg: 90, damage: 150 }
     },
     /** BOSS 提示（取代血條）：畫面上方中央的大字；亂入 BOSS 顯示離場倒數，剩 urgentSec 秒內改色並脈動 */
-    hud: { y: 104, fontSize: '40px', color: '#ffd166', urgentColor: '#ff4d6d', urgentSec: 10, pulseScale: 1.15, pulseMs: 250 },
-    /** v36：BOSS 戰錨點（走位落點）——BOSS 外側上下左右 4 點 */
-    anchorDist: 320,
-    anchorCount: 4,
-    /** v41(3)：暫時關閉 BOSS 戰錨點（保留錨點程式碼，之後可開回；false=不生成） */
-    bossAnchorsEnabled: false
+    hud: { y: 104, fontSize: '40px', color: '#ffd166', urgentColor: '#ff4d6d', urgentSec: 10, pulseScale: 1.15, pulseMs: 250 }
   },
 
   /** v33 三種事件（塔/守護/佔領）：非 BOSS 的事件波觸發，完成給獎勵 */

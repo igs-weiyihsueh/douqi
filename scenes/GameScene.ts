@@ -167,7 +167,6 @@ export class GameScene extends Phaser.Scene {
   private boss: Enemy | null = null;
   private bossCount = 0;
   private bossDamageAccum = 0; // v35：累積對 BOSS 的傷害，跨過 dropEveryDamage 就噴道具
-  private bossAnchors: Enemy[] = []; // v36：BOSS 戰錨點（走位落點）
   /** 限時亂入 BOSS 的離場時間；0 = 場上的 BOSS 不是亂入（或沒有 BOSS） */
   private bossIntruderLeaveAt = 0;
   /** 亂入 BOSS 被打倒後留下的屍體：expireAt 前 P1 靠近按 Z 可變身 */
@@ -557,7 +556,6 @@ export class GameScene extends Phaser.Scene {
     this.bossIntruderLeaveAt = 0;
     this.bossCorpse = null;
     this.bossForm = null;
-    this.bossAnchors = []; // v36
     this.eventKind = null;
     // ★事件開場宣告狀態重置(防殘留/鎖操作卡死)
     this.eventIntroActive = false;
@@ -3448,7 +3446,6 @@ export class GameScene extends Phaser.Scene {
     boss.spawn(bx, by, this.time.now, 'boss', hpMult);
     boss.setScale(1);
     this.boss = boss;
-    this.spawnBossAnchors(); // v36：生成 4 個錨點
     this.bossDamageAccum = 0; // v35
     // 登場提示
     const txt = this.add
@@ -3500,7 +3497,6 @@ export class GameScene extends Phaser.Scene {
     this.bossIntruderLeaveAt = 0;
     this.boss = null;
     this.clearTelegraphsOf('boss');
-    this.clearBossAnchors();
     this.game.events.emit('boss-hud', { active: false, secondsLeft: null });
     boss.dead = true; // 立即不可再被命中，淡出後才關閉物理
     this.tweens.add({
@@ -3857,44 +3853,6 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  /**
-   * v36：BOSS 戰生成 4 個錨點（上/下/左/右，距 BOSS anchorDist，夾在場內）。
-   * 錨點 = anchor-like 位移點：可鎖定、可衝過去當走位落點、衝到不攻擊不傷害、不可被玩家傷。
-   */
-  private spawnBossAnchors(): void {
-    this.clearBossAnchors();
-    if (!GameConfig.boss.bossAnchorsEnabled) return; // v41(3)：暫時關閉錨點
-    const b = GameConfig.boss;
-    const boss = this.boss;
-    if (!boss) return;
-    const dirs = [
-      { dx: 0, dy: -1 }, { dx: 0, dy: 1 }, { dx: -1, dy: 0 }, { dx: 1, dy: 0 }
-    ];
-    const r = GameConfig.enemy.types.anchor.radius;
-    const now = this.time.now;
-    for (let i = 0; i < b.anchorCount && i < dirs.length; i++) {
-      const d = dirs[i];
-      const ax = Phaser.Math.Clamp(boss.x + d.dx * b.anchorDist, this.arena.left + r + 10, this.arena.right - r - 10);
-      const ay = Phaser.Math.Clamp(boss.y + d.dy * b.anchorDist, this.arena.top + r + 10, this.arena.bottom - r - 10);
-      const a = this.enemies.get(ax, ay) as Enemy | null;
-      if (!a) continue;
-      this.wireEnemyCallbacks(a);
-      a.spawn(ax, ay, now, 'anchor', 1);
-      (a as unknown as { telegraphing: boolean }).telegraphing = false;
-      (a.body as Phaser.Physics.Arcade.Body).enable = true;
-      a.setAlpha(1);
-      this.bossAnchors.push(a);
-    }
-  }
-
-  /** v36：清除所有 BOSS 戰錨點（BOSS 被打倒/戰鬥結束時） */
-  private clearBossAnchors(): void {
-    for (const a of this.bossAnchors) {
-      if (a && a.active) a.kill();
-    }
-    this.bossAnchors = [];
-  }
-
   /** v28：BOSS 召喚的小怪（不計 waveSpawned/quota） */
   private spawnSummonAt(x: number, y: number, time: number, forceType?: EnemyType, leashImmune = false, forceChase = false): void {
     const type = forceType ?? this.pickEnemyType();
@@ -3939,7 +3897,6 @@ export class GameScene extends Phaser.Scene {
     this.bossIntruderLeaveAt = 0;
     this.boss = null;
     this.clearTelegraphsOf('boss'); // v45(4)：清掉 BOSS 蓄力中的招式預警特效 + 取消發射
-    this.clearBossAnchors(); // v36：清除錨點
     this.game.events.emit('boss-hud', { active: false, secondsLeft: null });
     // 大爆炸
     this.spawnExpandingRing(bx, by, GameConfig.boss.skills.a.radius * 1.4, 0xffd700, 500);
@@ -4720,7 +4677,6 @@ export class GameScene extends Phaser.Scene {
     if (this.boss) {
       this.boss = null;
       this.bossIntruderLeaveAt = 0;
-      this.clearBossAnchors(); // v36
       this.game.events.emit('boss-hud', { active: false, secondsLeft: null });
     }
     // 強制完成當前波次
@@ -7468,13 +7424,6 @@ export class GameScene extends Phaser.Scene {
   /** v36 除錯：暫停/恢復 BOSS 自動輪替招式（隔離單招測試用） */
   debugPauseBossSkills(v: boolean): void {
     if (this.boss) this.boss.bossSkillsPaused = v;
-  }
-
-  /** v36 除錯：回報錨點狀態 */
-  debugBossAnchors(): Array<{ x: number; y: number; type: string; lockable: boolean }> {
-    return this.bossAnchors.filter(a => a && a.active).map(a => ({
-      x: Math.round(a.x), y: Math.round(a.y), type: a.enemyType, lockable: this.isLockableEnemy(a)
-    }));
   }
 
   /** v28 除錯：設定當前波次（測波次/BOSS 觸發） */
