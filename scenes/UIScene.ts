@@ -375,14 +375,14 @@ export class UIScene extends Phaser.Scene {
     const statusPanelGap = Math.max(20, totalGapWidth / (count + 1));
     
     const statusStartX = (w - (count * statusPanelW + (count - 1) * statusPanelGap)) / 2;
-    const rowTopY = h - 100; // 稍微向上調整，避免與覆蓋面板重疊
+    const rowTopY = h - 130; // 向上調整：從h-100改為h-130
     
-    // 🎨 整個狀態列表統一底圖
-    this.add
-      .rectangle(statusStartX - 8, rowTopY - 8, count * statusPanelW + (count - 1) * statusPanelGap + 16, statusPanelH + 16, 0x000000, 0.6)
-      .setOrigin(0, 0)
-      .setStrokeStyle(2, 0x444444, 0.8)
-      .setDepth(18); // 在所有元素下方
+    // 🎨 移除黑色統一底圖 - 根據用戶要求
+    // this.add
+    //   .rectangle(statusStartX - 8, rowTopY - 8, count * statusPanelW + (count - 1) * statusPanelGap + 16, statusPanelH + 16, 0x000000, 0.6)
+    //   .setOrigin(0, 0)
+    //   .setStrokeStyle(2, 0x444444, 0.8)
+    //   .setDepth(18); // 在所有元素下方
     
     for (let i = 0; i < count; i++) {
       const x = statusStartX + i * (statusPanelW + statusPanelGap);
@@ -1633,7 +1633,7 @@ export class UIScene extends Phaser.Scene {
     const panelGap = Math.max(20, totalGapWidth / (count + 1)); // 最小間距20px，或自動計算
     
     const startX = (w - (count * actualPanelW + (count - 1) * panelGap)) / 2; // 居中排列
-    const rowTopY = h - 120; // 稍微向上調整，給面板更多空間
+    const rowTopY = h - 150; // 向上調整：與原始狀態列保持協調，從h-120改為h-150
     
     console.log(`📐 [多角色底部面板] 佈局計算: 螢幕寬度=${w}, 面板寬度=${actualPanelW}, 間距=${panelGap.toFixed(1)}, 起始X=${startX.toFixed(1)}`);
     
