@@ -7,6 +7,7 @@ import { updateRefillLatch, shouldSpawnMore, type WaveSpawnState } from '../syst
 import { Bullet } from '../objects/Bullet';
 import { Breakable } from '../objects/Breakable';
 import { loadCharacterParams, type CharacterParams } from '../systems/characterParams';
+import { createStageQueue, nextStageNode, revealStageNode, displayKindOf, type StageNode } from '../systems/stageQueue';
 
 /** F4 場景背景圖(Scene.png)的紋理 key */
 const SCENE_BG_TEXTURE_KEY = 'scene-background';
@@ -82,8 +83,10 @@ export class GameScene extends Phaser.Scene {
   // ★關卡系統(第一階段骨架)
   private levelMode = false;               // 是否啟用關卡制
   private currentLevel = 1;                // 場景配色用的關卡 key（無限關卡固定為 stage.sceneLevel）
-  /** 目前小關卡編號（1 起算、無限遞增）；循環內位置與寶箱階級見 stageDef() */
+  /** 目前小關卡編號（1 起算、無限遞增） */
   private currentStage = 1;
+  /** 小關卡寶箱佇列：[0] = 目前關卡，長度 = waveHud.visibleStages（見 systems/stageQueue.ts） */
+  private stageQueue: StageNode[] = [];
   /** 目前小關卡是否進行中（startStage → completeStage 之間）；過場期間為 false，HUD 不採計殘留擊殺數 */
   private stageInProgress = false;
   /** 剛完成那關的寶箱階級：low → 左右出口平移；high → 上方出口閃黑 */
@@ -525,6 +528,7 @@ export class GameScene extends Phaser.Scene {
     this.currentStage = 1;
     this.stageInProgress = false;
     this.lastStageChest = 'low';
+    this.stageQueue = createStageQueue(GameConfig.waveHud.visibleStages);
     this.dirLock = null;
     this.areaVariant = 'A';
     this.slotLayers = new Map();
@@ -2821,21 +2825,17 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * 取得第 stage 關（1 起算）的小關卡設定：依 stage.stageCycle 循環
-   *
-   * @param stage 小關卡編號
-   * @returns 該關的擊殺數與寶箱階級
+   * 開始目前小關卡（stageQueue[0]）：清敵關卡，擊殺數依寶箱階級；問號寶箱在此揭曉並顯示橫幅。
+   * 小遊戲關卡尚未實作
    */
-  private stageDef(stage: number): { quota: number; chest: 'low' | 'high' } {
-    const cycle = GameConfig.stage.stageCycle;
-    return cycle[(stage - 1) % cycle.length];
-  }
-
-  /** 開始目前小關卡（currentStage）：清敵關卡，擊殺 quota 隻即完成；小遊戲關卡尚未實作 */
   private startStage(): void {
+    const node = this.stageQueue[0];
+    const wasMystery = node.kind === 'mystery' && !node.revealed;
+    const chest = revealStageNode(node);
+    if (wasMystery) this.showEventBanner(chest === 'high' ? '問號揭曉：高階寶箱！' : '問號揭曉：低階寶箱');
     this.subWavesDone = 0;
     this.subWavesTarget = 1;
-    this.waveQuota = this.stageDef(this.currentStage).quota;
+    this.waveQuota = GameConfig.stage.quotaByChest[chest];
     this.waveFormations = 0; // 首波隊形次數歸零（寶箱怪第 2 隊形起才可能出）
     this.waveState = 'spawning';
     this.stageInProgress = true;
@@ -2845,13 +2845,16 @@ export class GameScene extends Phaser.Scene {
    * 小關卡完成：依寶箱階級直接發彩票給每位存活玩家（面板播報獎特效），關卡編號 +1（卷軸 HUD 隨之遞補）
    */
   private completeStage(): void {
-    const chest = this.stageDef(this.currentStage).chest;
+    const chest = revealStageNode(this.stageQueue[0]);
     this.lastStageChest = chest;
     const tickets = GameConfig.stage.chestTickets[chest];
     for (const c of this.characters) {
       if (c.alive) this.grantStageReward(c, tickets);
     }
     this.currentStage++;
+    // 佇列往前推一格，最右邊依規則生成新節點
+    this.stageQueue.shift();
+    this.stageQueue.push(nextStageNode(this.stageQueue));
     this.stageInProgress = false;
   }
 
@@ -7819,7 +7822,7 @@ export class GameScene extends Phaser.Scene {
       stage: this.currentStage,
       stageKilled: this.stageInProgress ? this.waveKilled : 0,
       stageQuota: this.waveQuota,
-      stageChests: Array.from({ length: GameConfig.waveHud.visibleStages }, (_, i) => this.stageDef(this.currentStage + i).chest),
+      stageChests: this.stageQueue.map(displayKindOf),
       subWavesDone: this.subWavesDone,
       subWavesTarget: this.subWavesTarget,
       progressPhase: this.progressPhase,

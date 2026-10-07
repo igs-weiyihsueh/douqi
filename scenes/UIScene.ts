@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GameConfig } from '../config';
+import type { StageNodeKind } from '../systems/stageQueue';
 
 /** 卷軸 HUD 節點狀態類型 */
 type StageNodeState = 'current' | 'pending' | 'done';
@@ -78,7 +79,7 @@ interface StatsPayload {
   stage?: number;
   stageKilled?: number;
   stageQuota?: number;
-  stageChests?: Array<'low' | 'high'>;
+  stageChests?: StageNodeKind[];
   progressPhase?: string;
   crossingOpen?: boolean;
   /** v31/v55 連段(招式)系統 */
@@ -140,9 +141,14 @@ export class UIScene extends Phaser.Scene {
   private stageHudFill = 0;
   private stageHudFillTarget = 0;
   /** 位置標記右邊的寶箱階級：[0] = 本關獎勵（下一個要獲得的寶箱） */
-  private stageHudChests: Array<'low' | 'high'> = [];
+  private stageHudChests: StageNodeKind[] = [];
   /** 剛獲得的寶箱階級（遞補動畫中，該寶箱在位置標記處淡出、轉為新的位置標記） */
-  private stageHudPrevChest: 'low' | 'high' | null = null;
+  private stageHudPrevChest: StageNodeKind | null = null;
+  /** 問號揭曉動畫開始時間（目前關卡的「?」翻成寶箱）；動畫時長見 waveHud.revealMs */
+  private stageHudRevealAt = -Infinity;
+  /** 問號節點的「?」文字（Graphics 畫不了字，每幀依序取用、未用到的隱藏） */
+  private stageHudMysteryTexts: Phaser.GameObjects.Text[] = [];
+  private stageHudMysteryUsed = 0;
   /** 遞補動畫開始時間（scene time）；動畫時長見 waveHud.shiftMs */
   private stageHudShiftAt = -Infinity;
   /** v25 第8項：P1 普攻命中計數（左上角） */
@@ -351,6 +357,12 @@ export class UIScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(25)
       .setVisible(false);
+    // 「?」文字池：最多同時畫 visibleStages + 1 個（含揭曉動畫中的那一個）
+    this.stageHudMysteryTexts = Array.from({ length: GameConfig.waveHud.visibleStages + 1 }, () =>
+      this.add.text(0, 0, '?', {
+        fontFamily: 'monospace', fontSize: GameConfig.waveHud.mysteryFontSize, color: GameConfig.waveHud.mysteryTextColor, fontStyle: 'bold'
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(26).setVisible(false)
+    );
 
     // ★UI調整②:加入夥伴提示移到【畫面下方】(角色狀態列上方,置中) - 🚫 用戶要求關閉
     this.joinHintText = this.add
@@ -782,6 +794,7 @@ export class UIScene extends Phaser.Scene {
     this.stageHudShow = !!(GameConfig.waveHud.enabled && s.levelMode && s.stage && s.stageChests);
     if (!this.stageHudShow) {
       this.waveHudGfx.setVisible(false);
+      for (const t of this.stageHudMysteryTexts) t.setVisible(false);
       return;
     }
     const stage = s.stage!;
@@ -792,6 +805,10 @@ export class UIScene extends Phaser.Scene {
         this.stageHudShiftAt = this.time.now;
       }
       this.stageHudFill = 0;
+    }
+    else if (this.stageHudChests[0] === 'mystery' && s.stageChests![0] !== 'mystery') {
+      // 同一關內目前關卡的「?」變成寶箱 → 問號揭曉動畫
+      this.stageHudRevealAt = this.time.now;
     }
     this.stageHudStage = stage;
     this.stageHudChests = s.stageChests!;
@@ -811,6 +828,7 @@ export class UIScene extends Phaser.Scene {
     const cfg = GameConfig.waveHud;
     const g = this.waveHudGfx;
     g.clear();
+    this.stageHudMysteryUsed = 0;
     const chestCount = this.stageHudChests.length;
     const nodeCount = chestCount + 1; // 位置標記 + 寶箱
     const gap = cfg.nodeGap;
@@ -842,10 +860,22 @@ export class UIScene extends Phaser.Scene {
     if (animating && this.stageHudPrevChest) this.drawStageNode(xAt(0), y, this.stageHudPrevChest, 'done', 1 - e);
 
     // 3) 寶箱：第 1 個 = 本關獎勵（高亮），最右（新生成）淡入
+    const revealT = Phaser.Math.Clamp((this.time.now - this.stageHudRevealAt) / cfg.revealMs, 0, 1);
     for (let i = 0; i < chestCount; i++) {
       const alpha = i === chestCount - 1 ? e : 1;
-      this.drawStageNode(xAt(i + 1), y, this.stageHudChests[i], i === 0 ? 'current' : 'pending', alpha);
+      const state: StageNodeState = i === 0 ? 'current' : 'pending';
+      if (i === 0 && revealT < 1) {
+        // 問號揭曉：「?」淡出、寶箱淡入，並放出一圈擴散光環
+        this.drawStageNode(xAt(1), y, 'mystery', state, alpha * (1 - revealT));
+        this.drawStageNode(xAt(1), y, this.stageHudChests[0], state, alpha * revealT);
+        g.lineStyle(cfg.nodeStrokeWidth.current, cfg.mysteryColor, (1 - revealT) * alpha);
+        g.strokeCircle(xAt(1), y, cfg.nodeRadius * (1 + revealT * cfg.revealRingScale));
+        continue;
+      }
+      this.drawStageNode(xAt(i + 1), y, this.stageHudChests[i], state, alpha);
     }
+    // 本幀沒用到的「?」文字隱藏
+    for (let i = this.stageHudMysteryUsed; i < this.stageHudMysteryTexts.length; i++) this.stageHudMysteryTexts[i].setVisible(false);
   }
 
   /**
@@ -878,11 +908,15 @@ export class UIScene extends Phaser.Scene {
    * @param state 'current' 本關獎勵（脈動高亮）/ 'pending' 之後的關卡 / 'done' 剛獲得（轉為位置標記時淡出）
    * @param alpha 整體透明度（遞補動畫淡入淡出）
    */
-  private drawStageNode(x: number, y: number, chest: 'low' | 'high', state: StageNodeState, alpha: number): void {
+  private drawStageNode(x: number, y: number, chest: StageNodeKind, state: StageNodeState, alpha: number): void {
     if (alpha <= 0) return;
     const cfg = GameConfig.waveHud;
     const g = this.waveHudGfx;
     const r = cfg.nodeRadius;
+    if (chest === 'mystery') {
+      this.drawMysteryNode(x, y, state, alpha);
+      return;
+    }
     const high = chest === 'high';
     const pulse = cfg.pulse.base + cfg.pulse.amplitude * Math.abs(Math.sin(this.time.now / cfg.pulse.period));
     // 不透明底盤蓋住量條端點
@@ -916,6 +950,33 @@ export class UIScene extends Phaser.Scene {
     g.strokeRect(x - w / 2, y - h / 2, w, h);
     g.fillStyle(cfg.chestOutlineColor, alpha);
     g.fillRect(x - w * cfg.chestRatios.lockOffsetX, y - h * cfg.chestRatios.lockOffsetY, w * cfg.chestRatios.lockWidth, h * cfg.chestRatios.lockHeight);      // 鎖扣
+  }
+
+  /**
+   * 畫問號節點：紫色圓 + 「?」文字（揭曉前不知道是低階或高階）
+   *
+   * @param x 圓心 x（螢幕座標）
+   * @param y 圓心 y（螢幕座標）
+   * @param state 節點狀態（current 有脈動外框）
+   * @param alpha 整體透明度
+   */
+  private drawMysteryNode(x: number, y: number, state: StageNodeState, alpha: number): void {
+    const cfg = GameConfig.waveHud;
+    const g = this.waveHudGfx;
+    const r = cfg.nodeRadius;
+    const pulse = cfg.pulse.base + cfg.pulse.amplitude * Math.abs(Math.sin(this.time.now / cfg.pulse.period));
+    g.fillStyle(cfg.nodeBgColor, alpha);
+    g.fillCircle(x, y, r + cfg.nodePadding.base);
+    g.fillStyle(cfg.mysteryColor, alpha);
+    g.fillCircle(x, y, r);
+    g.lineStyle(cfg.nodeStrokeWidth.normal, cfg.mysteryRingColor, alpha);
+    g.strokeCircle(x, y, r);
+    if (state === 'current') {
+      g.lineStyle(cfg.nodeStrokeWidth.current, cfg.mysteryRingColor, pulse * alpha);
+      g.strokeCircle(x, y, r + cfg.nodePadding.currentPulse);
+    }
+    const text = this.stageHudMysteryTexts[this.stageHudMysteryUsed++];
+    if (text) text.setPosition(x, y).setAlpha(alpha).setVisible(true);
   }
 
   /** 依比例 t(0..1) 在兩色間線性混色(用於當前波節點脈動亮度,保持不透明填滿)。 */

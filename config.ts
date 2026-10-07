@@ -42,6 +42,14 @@ export const GameConfig = {
     /** 目前位置標記的顏色與中心亮點大小（相對節點半徑） */
     markerColor: 0x7affc0,
     markerDotScale: 0.45,
+    /** 問號節點：底色、外框色、「?」字型與顏色 */
+    mysteryColor: 0x6d28d9,
+    mysteryRingColor: 0xc4b5fd,
+    mysteryFontSize: '26px',
+    mysteryTextColor: '#f5f3ff',
+    /** 問號揭曉動畫：時長(毫秒)、擴散光環放大倍率（相對節點半徑） */
+    revealMs: 600,
+    revealRingScale: 1.5,
     /** 圓點不透明底盤色（蓋住量條端點） */
     nodeBgColor: 0x1a1408,
     /** 進入下一關時圓點左移遞補的動畫時長(毫秒) */
@@ -873,18 +881,17 @@ export const GameConfig = {
   stage: {
     /** 是否啟用關卡制(關掉=回退舊無限波次) */
     enabled: true,
-    /** 場景配色的關卡數（scene.levels 1~4，除錯熱鍵 [ ] 預覽範圍）；與小關卡循環 stageCycle 無關 */
+    /** 場景配色的關卡數（scene.levels 1~4，除錯熱鍵 [ ] 預覽範圍）；與小關卡寶箱佇列無關 */
     totalLevels: 4,
     /**
-     * 小關卡循環（無限延續）：每輪依序打這幾關，打完最後一關回到第一關。
-     * quota = 該關要擊殺的怪數；chest = 完成時的寶箱階級（每輪最後一關為高階 → 卷軸 HUD 的 4 格中永遠有一個高階）
+     * 小關卡寶箱佇列（無限延續，見 systems/stageQueue.ts）：新節點依此機率抽高階 / 問號，其餘為低階；
+     * 任意連續 waveHud.visibleStages 個節點保證至少 1 個確定高階（不足時強制高階），問號不連續
      */
-    stageCycle: [
-      { quota: 20, chest: 'low' },
-      { quota: 25, chest: 'low' },
-      { quota: 30, chest: 'low' },
-      { quota: 35, chest: 'high' }
-    ] as ReadonlyArray<{ quota: number; chest: 'low' | 'high' }>,
+    chestOdds: { high: 0.2, mystery: 0.2 },
+    /** 問號寶箱在玩家進入該關時揭曉為高階的機率（其餘為低階） */
+    mysteryHighChance: 0.4,
+    /** 各寶箱階級的關卡擊殺數（問號依揭曉結果） */
+    quotaByChest: { low: 25, high: 35 },
     /** 寶箱獎勵：完成小關卡直接發給每位存活玩家的彩票張數 */
     chestTickets: { low: 5, high: 30 },
     /** 無限關卡固定使用的場景配色（scene.levels 的 key；火山荒城主題） */
