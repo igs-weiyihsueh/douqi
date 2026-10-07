@@ -2395,17 +2395,6 @@ export class GameScene extends Phaser.Scene {
     const gy = this.zoneA.top, gh = this.zoneA.height;
     g.fillStyle(lv.groundBase ?? 0x6b5a3a, 1);
     g.fillRect(x0, gy, w, gh);
-    // ★走廊地面細節：荒城主題的碎石
-    for (let i = 0; i < 60; i++) {
-      const px = Phaser.Math.Between(x0 + 4, x0 + w - 4), py = Phaser.Math.Between(gy + 4, gy + gh - 4);
-      if (Math.random() < 0.6) { // 碎石
-        g.fillStyle(lv.pebble ?? 0x947963, 0.5); 
-        g.fillCircle(px, py, Phaser.Math.Between(2, 5));
-      } else { // 殘骸
-        g.fillStyle(lv.groundLight, 0.28); 
-        g.fillRect(px, py, Phaser.Math.Between(8, 20), Phaser.Math.Between(4, 12));
-      }
-    }
     g.lineStyle(3, lv.groundDark ?? 0x4a4030, 0.8);
     g.strokeRect(x0, gy, w, gh);
     if (side === 'R') this.corridorGfx = g; else this.corridorGfxL = g;
@@ -3161,7 +3150,6 @@ export class GameScene extends Phaser.Scene {
     const gt = this.make.graphics({ x: 0, y: 0 }, false);
     const w = Math.round(zone.width), h = Math.round(zone.height);
     gt.fillStyle(lv.groundBase, 1); gt.fillRect(0, 0, w, h);
-    
     // 不規則多邊斑塊(比柔和圓點更像乾裂土塊)
     for (let i = 0; i < 120; i++) {
       const bx = Phaser.Math.Between(0, w), by = Phaser.Math.Between(0, h);

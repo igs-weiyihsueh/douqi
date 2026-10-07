@@ -854,7 +854,7 @@ export const GameConfig = {
   stage: {
     /** 是否啟用關卡制(關掉=回退舊無限波次) */
     enabled: true,
-    /** 新 4 關流程的總關卡數（調試預覽關卡範圍控制） */
+    /** 場景配色的關卡數（scene.levels 1~4，除錯熱鍵 [ ] 預覽範圍）；與小關卡循環 stageCycle 無關 */
     totalLevels: 4,
     /**
      * 小關卡循環（無限延續）：每輪依序打這幾關，打完最後一關回到第一關。
