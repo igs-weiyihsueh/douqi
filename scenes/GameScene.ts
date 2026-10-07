@@ -11,6 +11,8 @@ import { createStageQueue, nextStageNode, revealStageNode, displayKindOf, type S
 import type { TelegraphFx } from '../systems/telegraphFx';
 import { BossController, type BossHost } from '../controllers/BossController';
 import { createCoverImage, drawCorridorScenery, drawZoneScenery } from '../systems/zoneScenery';
+import { SkillController, type SkillHost } from '../controllers/SkillController';
+import { pointInOrientedRect } from '../systems/geometry';
 
 /** F4 場景背景圖(Scene.png)的紋理 key */
 const SCENE_BG_TEXTURE_KEY = 'scene-background';
@@ -168,6 +170,8 @@ export class GameScene extends Phaser.Scene {
 
   /** BOSS 系統（登場 / 招式 / 亂入離場 / 屍體 / 變身），每次 create() 重建 */
   private bossCtl!: BossController;
+  /** 一次性招式（撿道具觸發），每次 create() 重建 */
+  private skillCtl!: SkillController;
 
   // v33 事件系統
   private eventKind: 'tower' | 'guard' | 'capture' | null = null;
@@ -329,6 +333,7 @@ export class GameScene extends Phaser.Scene {
       runChildUpdate: false
     });
     this.bossCtl = new BossController(this.createBossHost());
+    this.skillCtl = new SkillController(this.createSkillHost());
 
     // 道具群
     this.items = this.physics.add.group({
@@ -4663,13 +4668,13 @@ export class GameScene extends Phaser.Scene {
     for (const c of this.characters) {
       if (!c.alive) continue;
       if (c.isInvulnerable(now)) continue;
-      if (this.pointInOrientedRect(c.x, c.y, ox, oy, angle, 0, cfg.laserLength, cfg.laserWidth)) {
+      if (pointInOrientedRect(c.x, c.y, ox, oy, angle, 0, cfg.laserLength, cfg.laserWidth)) {
         this.damageCharacterFrom(c, cfg.laserDamage, ox, oy);
       }
     }
     // ★守護事件:雷射也對 guardNpc 判傷(per-enemy 冷卻,同近戰路徑)
     if (this.waveState === 'event' && this.eventKind === 'guard' && this.guardNpc && this.guardNpc.active && !this.guardNpc.dead) {
-      if (this.pointInOrientedRect(this.guardNpc.x, this.guardNpc.y, ox, oy, angle, 0, cfg.laserLength, cfg.laserWidth)) {
+      if (pointInOrientedRect(this.guardNpc.x, this.guardNpc.y, ox, oy, angle, 0, cfg.laserLength, cfg.laserWidth)) {
         if (now >= enemy.nextNpcHitAt) {
           enemy.nextNpcHitAt = now + GameConfig.event.guard.npcAttackCooldownMs;
           const gcfg = GameConfig.event.guard;
@@ -5002,7 +5007,7 @@ export class GameScene extends Phaser.Scene {
     for (const child of this.breakables.getChildren()) {
       const bk = child as Breakable;
       if (!bk.active || bk.dead) continue;
-      if (this.pointInOrientedRect(bk.x, bk.y, ox, oy, dir, back, length, width)) {
+      if (pointInOrientedRect(bk.x, bk.y, ox, oy, dir, back, length, width)) {
         if (bk.fusing) continue; // v62修:已在fuse倒數的爆炸桶跳過,不再設dead→避免殭屍
         bk.dead = true; // 秒碎
         const allowDrop = drops < GameConfig.breakable.maxDropPerBreak;
@@ -5202,7 +5207,7 @@ export class GameScene extends Phaser.Scene {
       if (!c.alive) continue;
       const skill = item.skill;
       // v45(1)：時停(T)若【spreadRadius 內無可傷敵人】→ 不觸發、不消耗道具（留在場上），避免對空氣空放大招。
-      if (skill === 'T' && !this.hasTimestopTarget(c)) {
+      if (skill === 'T' && !this.skillCtl.hasTimestopTarget(c)) {
         continue; // 不設 taken、不 despawn → 道具保留
       }
       item.taken = true; // 原子旗標：從此其他人碰到都跳過
@@ -5217,7 +5222,7 @@ export class GameScene extends Phaser.Scene {
       item.despawn();
       // v21：補血道具(H) → 只補撿到的角色，不走招式演出；其餘照觸發招式
       if (skill === 'H') this.applyHeal(c);
-      else this.triggerSkill(c, skill, time);
+      else this.skillCtl.cast(c, skill, time);
     }
     this.pendingPickups.clear();
   }
@@ -5262,520 +5267,45 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ---------------------------------------------------------------------------
-  // 一次性招式（吃道具觸發，P1 與 BOT 共用）
+  // 一次性招式（吃道具觸發，P1 與 BOT 共用；實作見 controllers/SkillController）
   // ---------------------------------------------------------------------------
-  private triggerSkill(c: Character, skill: SkillType, time: number): void {
-    switch (skill) {
-      case 'A':
-        this.skillWhirlwind(c, time);
-        break;
-      case 'B':
-        this.skillThunder(c, time);
-        break;
-      case 'C':
-        this.skillIaido(c, time);
-        break;
-      case 'E':
-        this.skillShockwave(c, time);
-        break;
-      case 'F':
-        this.skillFlame(c, time);
-        break;
-      case 'T':
-        this.skillTimestop(c, time);
-        break;
-    }
-  }
 
-  /** v13：進入招式演出鎖定（期間無敵 + 玩家不可操控）。回傳演出結束時間戳。 */
-  private lockSkill(c: Character, durationMs: number, time: number): number {
-    c.isDashing = false;
-    c.isBursting = false;
-    c.stopMoving();
-    c.skillLockUntil = time + durationMs;
-    return c.skillLockUntil;
-  }
-
-  /** A 旋風斬：原地旋轉演出，多段捲擊 + 強力外拋。期間無敵不可控。 */
-  private skillWhirlwind(c: Character, _time: number): void {
-    const cfg = GameConfig.skills.whirlwind;
-    // v27：放置式——不鎖角色、不原地轉；在施放座標放一個獨立地面旋風場，持續 durationMs DOT
-    const radius = cfg.radius;
-    const dmg = cfg.damagePerHit;
-    const ox = c.x; // 座標快照，固定不動
-    const oy = c.y;
-
-    // 旋風場視覺：兩個旋轉的旋風圈（獨立物件，自己轉，持續整個效期）
-    const ring1 = this.add.circle(ox, oy, radius, 0x00e5ff, 0.08).setDepth(3);
-    ring1.setStrokeStyle(3, 0x00e5ff, 0.5);
-    // 旋臂（graphics 畫幾條放射線，持續自轉）
-    const arms = this.add.graphics().setDepth(4);
-    const drawArms = (rot: number): void => {
-      arms.clear();
-      arms.lineStyle(4, 0x66f0ff, 0.55);
-      for (let k = 0; k < 4; k++) {
-        const a = rot + (k / 4) * Math.PI * 2;
-        arms.lineBetween(ox, oy, ox + Math.cos(a) * radius, oy + Math.sin(a) * radius);
-      }
-    };
-    const spinState = { rot: 0 };
-    const spinTween = this.tweens.add({
-      targets: spinState,
-      rot: Math.PI * 2 * (cfg.durationMs / 600), // 每 600ms 一圈
-      duration: cfg.durationMs,
-      ease: 'Linear',
-      onUpdate: () => drawArms(spinState.rot)
-    });
-    // 圈的輕微脈動
-    const pulse = this.tweens.add({ targets: ring1, alpha: 0.16, duration: 300, yoyo: true, repeat: -1 });
-    this.spawnExpandingRing(ox, oy, radius, 0x00e5ff);
-
-    // DOT：每 tickMs 對固定圓心 radius 內敵人造成傷害（不擊退）
-    const ticks = Math.max(1, Math.floor(cfg.durationMs / cfg.tickMs));
-    const dotEvent = this.time.addEvent({
-      delay: cfg.tickMs,
-      repeat: ticks - 1,
-      callback: () => {
-        if (this.gameOver) return;
-        const now = this.time.now;
-        for (const child of this.enemies.getChildren()) {
-          const enemy = child as Enemy;
-          if (!enemy.isVulnerable()) continue;
-          if (Phaser.Math.Distance.Between(ox, oy, enemy.x, enemy.y) <= radius) {
-            this.damageEnemyFrom(c, enemy, dmg, cfg.knockback, ox, oy, now);
-          }
-        }
-        this.breakBreakablesInCircle(ox, oy, radius, dmg, now); // v59：旋風場掃到木箱也打破
-      }
-    });
-
-    // 效期結束清理旋風場（角色不受影響，可繼續行動/再放）
-    this.time.delayedCall(cfg.durationMs, () => {
-      spinTween.remove();
-      pulse.remove();
-      dotEvent.remove();
-      arms.destroy();
-      ring1.destroy();
-    });
-  }
-
-  /** B 天降雷擊（v20）：在角色周圍以順時針依序打出環繞一圈的落雷。期間無敵不可控。 */
-  private skillThunder(c: Character, time: number): void {
-    const cfg = GameConfig.skills.thunder;
-    const total = cfg.chargeMs + cfg.strikes * cfg.strikeDelayMs + 300;
-    this.lockSkill(c, total, time);
-    // v14：爆炸半徑/傷害隨等級成長
-    const radius = cfg.radius;
-    const orbit = cfg.orbitRadius;
-    const dmg = cfg.damage;
-
-    // 演出：蓄力（放大亮起前搖）
-    this.tweens.add({ targets: c, scale: { from: 1, to: 1.3 }, duration: cfg.chargeMs, yoyo: true });
-    const chargeRing = this.add.circle(c.x, c.y, 10, 0xffd700, 0.4).setDepth(20);
-    this.tweens.add({ targets: chargeRing, radius: 46, alpha: 0, duration: cfg.chargeMs, onUpdate: () => chargeRing.setRadius(chargeRing.radius), onComplete: () => chargeRing.destroy() });
-
-    // 蓄力後：以角色為圓心，順時針依序在環繞一圈的等距落點打雷
-    const startAngle = -Math.PI / 2; // 從正上方開始
-    this.time.delayedCall(cfg.chargeMs, () => {
-      if (this.gameOver || !c.alive) return;
-      for (let i = 0; i < cfg.strikes; i++) {
-        // 順時針（角度遞增）
-        const a = startAngle + (i / cfg.strikes) * Math.PI * 2;
-        this.time.delayedCall(i * cfg.strikeDelayMs, () => {
-          if (this.gameOver || !c.alive) return;
-          const sx = Phaser.Math.Clamp(c.x + Math.cos(a) * orbit, this.arena.left, this.arena.right);
-          const sy = Phaser.Math.Clamp(c.y + Math.sin(a) * orbit, this.arena.top, this.arena.bottom);
-          this.spawnThunderStrike(sx, sy, radius);
-          const now = this.time.now;
-          for (const child of this.enemies.getChildren()) {
-            const enemy = child as Enemy;
-            if (!enemy.isVulnerable()) continue;
-            if (Phaser.Math.Distance.Between(sx, sy, enemy.x, enemy.y) <= radius) {
-              this.damageEnemyFrom(c, enemy, dmg, cfg.knockback, sx, sy, now);
-            }
-          }
-          this.breakBreakablesInCircle(sx, sy, radius, dmg, now); // v59：落雷點掃到木箱也打破
-        });
-      }
-    });
-    this.shakeOnce(GameConfig.juice.burstShakeDuration, GameConfig.juice.burstShakeIntensity);
-  }
-
-  /** C 居合貫穿：短暫預備 → 朝指定方向高速斬出，貫穿路徑上所有敵人。期間無敵不可控。 */
-  /** C 居合貫穿（v18：衝出去再衝回起點，來回兩趟貫穿）。期間無敵不可控。 */
   /**
-   * v25：居合選向——朝「有怪最多」的方向切。掃描存活敵人，
-   * 對每個敵人方向當候選，計算「以該方向為中心 ±halfCone 扇形內的敵人數（近的加權高）」，選最高分方向。
-   * 無敵人時退回 aimAngle。
+   * 建立 SkillController 需要的場景能力（只開放招式用得到的部分）
    */
-  private pickIaidoAngle(c: Character): number {
-    const enemies = this.enemies
-      .getChildren()
-      .map((e) => e as Enemy)
-      .filter((e) => e.active && e.isVulnerable());
-    if (enemies.length === 0) return c.aimAngle;
-    // v28：純粹瞄準「怪最多的方向」——放寬扇形至 45°、以「數量」為主，近距只給極小加權(不被單隻近怪帶走)
-    const halfCone = Phaser.Math.DegToRad(45);
-    let bestAngle = c.aimAngle;
-    let bestScore = -1;
-    for (const cand of enemies) {
-      const candAngle = Phaser.Math.Angle.Between(c.x, c.y, cand.x, cand.y);
-      let score = 0;
-      for (const e of enemies) {
-        const a = Phaser.Math.Angle.Between(c.x, c.y, e.x, e.y);
-        if (Math.abs(Phaser.Math.Angle.Wrap(a - candAngle)) <= halfCone) {
-          const d = Phaser.Math.Distance.Between(c.x, c.y, e.x, e.y);
-          score += 1 + 0.15 * (200 / (d + 200)); // 數量為主，近距加權大幅減弱
-        }
-      }
-      if (score > bestScore) {
-        bestScore = score;
-        bestAngle = candAngle;
-      }
-    }
-    return bestAngle;
-  }
-
-  private skillIaido(c: Character, time: number): void {
-    const cfg = GameConfig.skills.iaido;
-    // v25：主動挑「有怪的方向」——在多個候選方向中，選一個「前方扇形內敵人最多」的方向切
-    const angle = this.pickIaidoAngle(c);
-    const r = GameConfig.player.radius;
-    const startX = c.x;
-    const startY = c.y;
-    const destX = Phaser.Math.Clamp(startX + Math.cos(angle) * cfg.distance, this.arena.left + r, this.arena.right - r);
-    const destY = Phaser.Math.Clamp(startY + Math.sin(angle) * cfg.distance, this.arena.top + r, this.arena.bottom - r);
-    const travel = Phaser.Math.Distance.Between(startX, startY, destX, destY);
-    const legMs = Math.max(60, (travel / cfg.speed) * 1000);
-    // 演出總時長：預備 + 去程 + 回程 + 收尾
-    this.lockSkill(c, cfg.windupMs + legMs * 2 + 160, time);
-    // v14：貫穿判定半徑/傷害隨等級成長
-    const hitRadius = cfg.hitRadius;
-    const dmg = cfg.damage;
-
-    // 一趟突進：朝 (tx,ty) 高速斬過去，沿途貫穿（各趟獨立 hitSet，同隻每趟可各中一次）
-    const dashLeg = (tx: number, ty: number, faceAngle: number, onDone: () => void): void => {
-      if (this.gameOver || !c.alive) return;
-      c.setRotation(faceAngle);
-      // v21：畫「與判定一致的寬斬擊帶」（寬 ≈ hitRadius*2），去程/回程都畫
-      this.spawnSlashBand(c.x, c.y, tx, ty, hitRadius * 2, 0xff4d6d);
-      const hitSet = new Set<Enemy>();
-      this.tweens.add({
-        targets: c,
-        x: tx,
-        y: ty,
-        duration: legMs,
-        ease: 'Linear',
-        onUpdate: () => {
-          const now = this.time.now;
-          for (const child of this.enemies.getChildren()) {
-            const enemy = child as Enemy;
-            if (!enemy.isVulnerable() || hitSet.has(enemy)) continue;
-            if (Phaser.Math.Distance.Between(c.x, c.y, enemy.x, enemy.y) <= hitRadius) {
-              hitSet.add(enemy);
-              this.damageEnemy(c, enemy, dmg, cfg.knockback, now);
-            }
-          }
-          this.breakBreakablesInCircle(c.x, c.y, hitRadius, dmg, now); // v59：居合斬路徑掃到木箱也打破
-        },
-        onComplete: onDone
-      });
+  private createSkillHost(): SkillHost {
+    return {
+      scene: this,
+      enemies: this.enemies,
+      arena: () => this.arena,
+      isGameOver: () => this.gameOver,
+      damageEnemy: (actor, enemy, damage, knockback, time) => this.damageEnemy(actor, enemy, damage, knockback, time),
+      damageEnemyFrom: (actor, enemy, damage, knockback, fromX, fromY, time) =>
+        this.damageEnemyFrom(actor, enemy, damage, knockback, fromX, fromY, time),
+      breakBreakablesInCircle: (x, y, radius, damage, time) => this.breakBreakablesInCircle(x, y, radius, damage, time),
+      breakBreakablesInRect: (ox, oy, dir, nearOffset, length, width, damage, time) =>
+        this.breakBreakablesInRect(ox, oy, dir, nearOffset, length, width, damage, time),
+      spawnExpandingRing: (x, y, radius, color, ms) => this.spawnExpandingRing(x, y, radius, color, ms),
+      shakeOnce: (duration, intensity) => this.shakeOnce(duration, intensity),
+      beginTimeStop: (owner, time, durationMs) => this.beginTimeStop(owner, time, durationMs)
     };
-
-    // 演出：預備（面向）→ 去程斬出 → 回程斬回起點
-    c.setRotation(angle);
-    this.time.delayedCall(cfg.windupMs, () => {
-      dashLeg(destX, destY, angle, () => {
-        if (this.gameOver || !c.alive) {
-          c.stopMoving();
-          c.setRotation(0);
-          return;
-        }
-        // 回程：面向反方向斬回起點
-        dashLeg(startX, startY, angle + Math.PI, () => {
-          c.stopMoving();
-          c.setRotation(0);
-        });
-      });
-    });
-    this.shakeOnce(GameConfig.juice.burstShakeDuration, GameConfig.juice.burstShakeIntensity);
-  }
-
-  /** E 全屏震爆：角色跳起 → 往下砸 → 落地全屏衝擊波。期間無敵不可控。 */
-  private skillShockwave(c: Character, time: number): void {
-    const cfg = GameConfig.skills.shockwave;
-    this.lockSkill(c, cfg.jumpMs + cfg.slamMs + 200, time);
-    // v14：範圍/傷害隨等級成長
-    const radius = cfg.radius;
-    const dmg = cfg.damage;
-
-    const baseScale = 1;
-    // 跳起（放大表現騰空）→ 落下（縮回）
-    this.tweens.add({
-      targets: c,
-      scale: baseScale * 1.6,
-      duration: cfg.jumpMs,
-      ease: 'Sine.easeOut',
-      yoyo: false,
-      onComplete: () => {
-        this.tweens.add({
-          targets: c,
-          scale: baseScale,
-          duration: cfg.slamMs,
-          ease: 'Sine.easeIn',
-          onComplete: () => {
-            if (this.gameOver || !c.alive) return;
-            // 落地：全屏衝擊波
-            this.spawnExpandingRing(c.x, c.y, radius, 0xa855f7, cfg.visualMs);
-            this.shakeOnce(GameConfig.juice.burstShakeDuration, GameConfig.juice.burstShakeIntensity);
-            const now = this.time.now;
-            for (const child of this.enemies.getChildren()) {
-              const enemy = child as Enemy;
-              if (!enemy.isVulnerable()) continue;
-              if (Phaser.Math.Distance.Between(c.x, c.y, enemy.x, enemy.y) <= radius) {
-                this.damageEnemy(c, enemy, dmg, cfg.knockback, now);
-              }
-            }
-            this.breakBreakablesInCircle(c.x, c.y, radius, dmg, now); // v59：震爆掃到木箱也打破
-          }
-        });
-      }
-    });
-  }
-
-  /** F 噴火（v21：長方形火道 + 長方形燒灼區）：朝隨機有敵方向噴火(當下命中矩形)，地面留燒灼矩形持續傷害。期間無敵不可控。 */
-  private skillFlame(c: Character, time: number): void {
-    const cfg = GameConfig.skills.flame;
-    this.lockSkill(c, cfg.windupMs + cfg.sprayMs + 200, time);
-    // 範圍/傷害
-    const flameLength = cfg.flameLength;
-    const flameWidth = cfg.flameWidth;
-    const burnLength = cfg.burnLength;
-    const burnWidth = cfg.burnWidth;
-    const burstDmg = cfg.burstDamage;
-    const tickDmg = cfg.tickDamage;
-
-    // v25：以自身為中心，往四個方向（十字）各噴一條火道 + 燒灼區
-    const ox = c.x;
-    const oy = c.y;
-    const baseDir = c.aimAngle; // 以瞄準方向為基準，四方向 = base, base+90, +180, +270
-    const dirs = [0, Math.PI / 2, Math.PI, Math.PI * 1.5].map((d) => baseDir + d);
-    c.setRotation(baseDir);
-
-    this.time.delayedCall(cfg.windupMs, () => {
-      if (this.gameOver || !c.alive) return;
-      const now = this.time.now;
-      for (const dir of dirs) {
-        // 火道視覺（旋轉矩形，近端在角色）
-        const flame = this.add
-          .rectangle(ox + Math.cos(dir) * flameLength / 2, oy + Math.sin(dir) * flameLength / 2, flameLength, flameWidth, 0xff7a1a, 0.45)
-          .setRotation(dir)
-          .setDepth(20);
-        this.tweens.add({ targets: flame, alpha: 0, duration: cfg.sprayMs, onComplete: () => flame.destroy() });
-
-        // 噴出當下：此方向火道內敵人直接傷害
-        for (const child of this.enemies.getChildren()) {
-          const enemy = child as Enemy;
-          if (!enemy.isVulnerable()) continue;
-          if (this.pointInOrientedRect(enemy.x, enemy.y, ox, oy, dir, 0, flameLength, flameWidth)) {
-            this.damageEnemyFrom(c, enemy, burstDmg, cfg.knockback, ox, oy, now);
-          }
-        }
-        this.breakBreakablesInRect(ox, oy, dir, 0, flameLength, flameWidth, burstDmg, now); // v59：噴火火道掃到木箱也打破
-
-        // 此方向地面燒灼矩形
-        const bcx = ox + Math.cos(dir) * (cfg.burnStart + burnLength / 2);
-        const bcy = oy + Math.sin(dir) * (cfg.burnStart + burnLength / 2);
-        const burnGfx = this.add
-          .rectangle(bcx, bcy, burnLength, burnWidth, 0xff5a1a, 0.22)
-          .setRotation(dir)
-          .setStrokeStyle(2, 0xff7a1a, 0.6)
-          .setDepth(3);
-        this.tweens.add({ targets: burnGfx, alpha: 0.32, duration: 300, yoyo: true, repeat: -1 });
-        const ticks = Math.max(1, Math.floor(cfg.burnDurationMs / cfg.tickMs));
-        this.time.addEvent({
-          delay: cfg.tickMs,
-          repeat: ticks - 1,
-          callback: () => {
-            if (this.gameOver) return;
-            const t2 = this.time.now;
-            for (const child of this.enemies.getChildren()) {
-              const enemy = child as Enemy;
-              if (!enemy.isVulnerable()) continue;
-              if (this.pointInOrientedRect(enemy.x, enemy.y, ox, oy, dir, cfg.burnStart, burnLength, burnWidth)) {
-                this.damageEnemyFrom(c, enemy, tickDmg, 0, bcx, bcy, t2);
-              }
-            }
-          }
-        });
-        this.time.delayedCall(cfg.burnDurationMs, () => {
-          this.tweens.killTweensOf(burnGfx);
-          burnGfx.destroy();
-        });
-      }
-    });
-    this.shakeOnce(GameConfig.juice.burstShakeDuration, GameConfig.juice.burstShakeIntensity);
   }
 
   /**
-   * v21：判定點 (px,py) 是否在「以 (ox,oy) 為起點、沿 dir 方向」的長方形內。
-   * 矩形沿 dir 從 nearOffset 延伸 length（縱向），橫向總寬 width（左右各 width/2）。
+   * 開始全場時停（時停招式回呼）：owner 以外的角色與所有敵人凍結 durationMs，
+   * 敵人蓄力與場景層預警（塔 / BOSS）的 tween 一併暫停，解除時由 update() 補回凍結時間
+   *
+   * @param owner 施放者（時停期間唯一能行動的角色）
+   * @param time 目前場景時間
+   * @param durationMs 時停時長
    */
-  private pointInOrientedRect(
-    px: number, py: number,
-    ox: number, oy: number,
-    dir: number, nearOffset: number, length: number, width: number
-  ): boolean {
-    const dx = px - ox;
-    const dy = py - oy;
-    // 投影到 dir（縱向 along）與垂直方向（橫向 across）
-    const along = dx * Math.cos(dir) + dy * Math.sin(dir);
-    const across = -dx * Math.sin(dir) + dy * Math.cos(dir);
-    return along >= nearOffset && along <= nearOffset + length && Math.abs(across) <= width / 2;
-  }
-
-  /** T 時間暫停：全場凍結，角色連續穿梭衝撞散佈全場的敵人，結束統一結算高傷打飛。期間無敵不可控。 */
-  /** v45(1)：時停施展前檢查——spreadRadius 內是否有可傷敵人（無 → 不觸發、不消耗道具）。 */
-  private hasTimestopTarget(c: Character): boolean {
-    const cfg = GameConfig.skills.timestop;
-    for (const ch of this.enemies.getChildren()) {
-      const e = ch as Enemy;
-      if (e.active && e.isVulnerable() &&
-          Phaser.Math.Distance.Between(c.x, c.y, e.x, e.y) <= cfg.spreadRadius) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  private skillTimestop(c: Character, time: number): void {
-    const cfg = GameConfig.skills.timestop;
-    this.lockSkill(c, cfg.durationMs + 150, time);
-    // v59：時停穿梭期間旗標——瞬移位移經過道具不吃；時停結束清除(正常走過才撿)。
-    c.timestopping = true;
-    this.time.delayedCall(cfg.durationMs + 150, () => { c.timestopping = false; });
-
-    // 啟動全場凍結（施展者處於 skillLock，不受凍結影響）
+  private beginTimeStop(owner: Character, time: number, durationMs: number): void {
     this.timeStopped = true;
-    this.timeStopUntil = time + cfg.durationMs;
+    this.timeStopUntil = time + durationMs;
     this.timeStopStartedAt = time;
-    this.timeStopOwner = c; // ★v63:記錄撿到者→時停期間只 owner 能動,其他角色停
-    // v45(2)：時停開始——暫停所有敵人蓄力 tween + 場景層預警(塔/BOSS fill) tween，進度凍結不流失
+    this.timeStopOwner = owner;
     for (const ch of this.enemies.getChildren()) (ch as Enemy).pauseChargeTweens(true);
     for (const fx of this.telegraphFx) fx.tween?.pause();
-
-    // 全屏微暗覆蓋，強調時停氛圍
-    const overlay = this.add
-      .rectangle(0, 0, GameConfig.width, GameConfig.height, 0x2233aa, 0.12)
-      .setOrigin(0, 0)
-      .setScrollFactor(0) // 固定畫面:鏡頭捲動時仍蓋滿全螢幕
-      .setDepth(15);
-    this.time.delayedCall(cfg.durationMs, () => overlay.destroy());
-
-    // 挑要穿梭的敵人：在 spreadRadius 內的敵人，依距離排序後「均勻散佈」抽樣，
-    // 讓角色穿梭到更遠、更分散的目標（涵蓋範圍明顯更大），最多 dashes 隻。
-    const pool = this.enemies
-      .getChildren()
-      .map((ch) => ch as Enemy)
-      .filter(
-        (e) =>
-          e.active &&
-          e.isVulnerable() &&
-          Phaser.Math.Distance.Between(c.x, c.y, e.x, e.y) <= cfg.spreadRadius
-      )
-      .sort(
-        (a, b) =>
-          Phaser.Math.Distance.Between(c.x, c.y, a.x, a.y) -
-          Phaser.Math.Distance.Between(c.x, c.y, b.x, b.y)
-      );
-    // v45(1)：pool 為空理論上不會進來（resolvePickups 已擋），保險 return。
-    if (pool.length === 0) { this.timeStopped = false; return; }
-
-    // v45(1)：決定 dashes 次穿梭的目標序列。
-    // · pool 夠多(>=dashes)：均勻散佈抽 dashes 個（原行為）。
-    // · pool 不足(1..dashes-1)：仍做滿 dashes 次，循環重複現有目標（targets[i % pool.length]）
-    //   → 目標少(尤其只有1隻)時對牠【連續穿梭連斬多下】，大招不虧。
-    const targets: Enemy[] = [];
-    if (pool.length >= cfg.dashes) {
-      for (let i = 0; i < cfg.dashes; i++) {
-        const idx = Math.round((i / (cfg.dashes - 1)) * (pool.length - 1));
-        targets.push(pool[idx]);
-      }
-    } else {
-      for (let i = 0; i < cfg.dashes; i++) {
-        targets.push(pool[i % pool.length]);
-      }
-    }
-
-    // v45(1)：改用「命中次數」累計——每次穿梭把 hitRadius 內敵人的命中數 +1，
-    //          結束時傷害 = dmg × 命中次數 → 重複穿梭到同一敵人（單目標連斬）會多段累加。
-    const hitCount = new Map<Enemy, number>();
-    const hitRadius = cfg.hitRadius;
-    const dmg = cfg.damage;
-    const stepMs = cfg.durationMs / Math.max(1, targets.length + 1);
-    // v51(3)：單目標(或目標少)連斬時，落點改到【目標周圍環上來回點】而非目標正中心 → 角色在目標周圍
-    //   來回閃現連斬、不疊在目標身上。多目標時 offset 仍套用(各目標周圍小環、視覺更自然)。命中判定仍以目標為圓心。
-    const offsetR = GameConfig.skills.timestop.orbitOffset;
-    const arenaR = GameConfig.player.radius;
-    targets.forEach((target, i) => {
-      this.time.delayedCall(i * stepMs, () => {
-        if (this.gameOver || !c.alive || !target.active) return;
-        const fromX = c.x;
-        const fromY = c.y;
-        // v51(3)：落點 = 目標周圍環上、來回兩側交替的點(不落在目標中心，避免重疊)。
-        // 角度隨穿梭序列擺動：偶數在一側、奇數在對側，並小幅旋轉，做出「周圍來回」感。
-        const swing = (i % 2 === 0 ? 1 : -1) * (Math.PI * 0.55) + i * 0.7;
-        const lx = Phaser.Math.Clamp(target.x + Math.cos(swing) * offsetR, this.arena.left + arenaR, this.arena.right - arenaR);
-        const ly = Phaser.Math.Clamp(target.y + Math.sin(swing) * offsetR, this.arena.top + arenaR, this.arena.bottom - arenaR);
-        c.setPosition(lx, ly);
-        c.aimAngle = Phaser.Math.Angle.Between(lx, ly, target.x, target.y); // 面朝目標(揮擊感)
-        this.spawnTrailLine(fromX, fromY, lx, ly, 0xffffff);
-        // 記錄穿撞範圍內敵人（以【目標】為圓心 hitRadius；每次穿梭 +1，結束結算多段——連斬效果不變）
-        for (const child of this.enemies.getChildren()) {
-          const enemy = child as Enemy;
-          if (!enemy.isVulnerable()) continue;
-          if (Phaser.Math.Distance.Between(target.x, target.y, enemy.x, enemy.y) <= hitRadius) {
-            hitCount.set(enemy, (hitCount.get(enemy) ?? 0) + 1);
-          }
-        }
-        this.breakBreakablesInCircle(target.x, target.y, hitRadius, dmg, this.time.now); // v59：時停連斬掃到木箱也打破
-      });
-    });
-
-    // 時停結束：對記錄到的敵人結算高傷 + 打飛。
-    // v17.1 效能：改「分幀攤開」而非同幀全打——每幀處理一批(timestopSettlePerFrame)，
-    // 避免 hitSet 很大時單幀爆量傷害跳字/死亡粒子拖垮 render 造成卡死/當掉。
-    this.time.delayedCall(cfg.durationMs, () => {
-      const list = Array.from(hitCount.keys());
-      const perFrame = GameConfig.juice.timestopSettlePerFrame;
-      let idx = 0;
-      const settleBatch = (): void => {
-        if (this.gameOver) return;
-        const now = this.time.now;
-        const end = Math.min(idx + perFrame, list.length);
-        for (; idx < end; idx++) {
-          const enemy = list[idx];
-          if (!enemy.active || !enemy.isVulnerable()) continue;
-          // v45(1)：多段——傷害 = 單段 dmg × 該敵被穿梭命中的次數（單目標連斬會累加多下）
-          const times = hitCount.get(enemy) ?? 1;
-          this.damageEnemy(c, enemy, dmg * times, cfg.knockback, now);
-        }
-      };
-      // 第一批立即處理，其餘用逐幀 timer 分散
-      settleBatch();
-      if (idx < list.length) {
-        const ev = this.time.addEvent({
-          delay: 16, // 約每幀
-          loop: true,
-          callback: () => {
-            settleBatch();
-            if (idx >= list.length || this.gameOver) ev.remove();
-          }
-        });
-      }
-      this.shakeOnce(GameConfig.juice.burstShakeDuration, GameConfig.juice.burstShakeIntensity);
-      // 凍結解除交由 update() 依 timeStopUntil 處理
-    });
   }
 
   /** 傷害 + 以指定來源點擊退（雷擊落點用） */
@@ -5858,51 +5388,6 @@ export class GameScene extends Phaser.Scene {
       ease: 'Cubic.easeOut',
       onUpdate: () => ring.setRadius(ring.radius),
       onComplete: () => ring.destroy()
-    });
-  }
-
-  private spawnThunderStrike(x: number, y: number, radius: number): void {
-    const bolt = this.add.circle(x, y, radius, 0xffd700, 0.5).setDepth(20);
-    const core = this.add.circle(x, y, radius * 0.4, 0xffffff, 0.9).setDepth(21);
-    this.tweens.add({
-      targets: [bolt, core],
-      alpha: 0,
-      duration: 240,
-      onComplete: () => {
-        bolt.destroy();
-        core.destroy();
-      }
-    });
-  }
-
-  private spawnTrailLine(x1: number, y1: number, x2: number, y2: number, color: number): void {
-    const g = this.add.graphics().setDepth(20);
-    g.lineStyle(10, color, 0.7);
-    g.lineBetween(x1, y1, x2, y2);
-    this.tweens.add({
-      targets: g,
-      alpha: 0,
-      duration: 260,
-      onComplete: () => g.destroy()
-    });
-  }
-
-  /** v21：寬斬擊帶（半透明帶狀矩形，寬度與判定一致），供居合來回顯示 */
-  private spawnSlashBand(x1: number, y1: number, x2: number, y2: number, width: number, color: number): void {
-    const cx = (x1 + x2) / 2;
-    const cy = (y1 + y2) / 2;
-    const len = Phaser.Math.Distance.Between(x1, y1, x2, y2);
-    const ang = Phaser.Math.Angle.Between(x1, y1, x2, y2);
-    const band = this.add
-      .rectangle(cx, cy, len, width, color, 0.35)
-      .setRotation(ang)
-      .setDepth(20);
-    band.setStrokeStyle(2, color, 0.6);
-    this.tweens.add({
-      targets: band,
-      alpha: 0,
-      duration: 300,
-      onComplete: () => band.destroy()
     });
   }
 
@@ -6202,7 +5687,7 @@ export class GameScene extends Phaser.Scene {
     for (const child of this.enemies.getChildren()) {
       const enemy = child as Enemy;
       if (!enemy.isVulnerable()) continue;
-      if (this.pointInOrientedRect(enemy.x, enemy.y, ox, oy, dir, 0, length, width)) {
+      if (pointInOrientedRect(enemy.x, enemy.y, ox, oy, dir, 0, length, width)) {
         this.damageEnemyFrom(c, enemy, dmg, cfg.knockback, ox, oy, time);
         hitAny = true;
       }
@@ -6610,7 +6095,7 @@ export class GameScene extends Phaser.Scene {
   /** 除錯/自動化測試用：對 P1 觸發指定招式（不影響正常玩法） */
   debugTriggerSkill(skill: 'A' | 'B' | 'C' | 'E' | 'T'): void {
     if (this.gameOver || !this.player.alive) return;
-    this.triggerSkill(this.player, skill, this.time.now);
+    this.skillCtl.cast(this.player, skill, this.time.now);
   }
 
   /** 除錯：回傳目前關鍵狀態 */
@@ -6798,7 +6283,7 @@ export class GameScene extends Phaser.Scene {
   /** v18 除錯：施放居合並回傳起點；供測試比對結束後是否回到起點附近 */
   debugIaidoStart(): { x: number; y: number } {
     const p = this.player;
-    this.triggerSkill(p, 'C', this.time.now);
+    this.skillCtl.cast(p, 'C', this.time.now);
     return { x: Math.round(p.x), y: Math.round(p.y) };
   }
 

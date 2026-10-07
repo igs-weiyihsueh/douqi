@@ -3,6 +3,7 @@ import { GameConfig } from '../config';
 import type { Character } from '../objects/Character';
 import type { BossSkillKind, Enemy } from '../objects/Enemy';
 import type { TelegraphFx } from '../systems/telegraphFx';
+import { distanceToSegment } from '../systems/geometry';
 
 /**
  * BossController 需要場景提供的能力。由 GameScene 建立並傳入；控制器不直接存取場景私有成員。
@@ -638,14 +639,4 @@ export class BossController {
       this.releaseDamage(inArc, s.damage);
     });
   }
-}
-
-/**
- * 點 (x, y) 到線段 (x1, y1)-(x2, y2) 的最短距離
- */
-function distanceToSegment(x: number, y: number, x1: number, y1: number, x2: number, y2: number): number {
-  const dx = x2 - x1, dy = y2 - y1;
-  const lenSq = dx * dx + dy * dy;
-  const t = lenSq > 0 ? Phaser.Math.Clamp(((x - x1) * dx + (y - y1) * dy) / lenSq, 0, 1) : 0;
-  return Phaser.Math.Distance.Between(x, y, x1 + dx * t, y1 + dy * t);
 }
