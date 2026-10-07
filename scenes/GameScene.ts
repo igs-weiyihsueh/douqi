@@ -2494,6 +2494,7 @@ export class GameScene extends Phaser.Scene {
   private startCameraPanToB(side: 'L' | 'R'): void {
     this.crossPhase = 'panning';
     this.crossSide = side; // ★鎖定該側,不可反悔
+    this.resetCharacterMotion(); // 觸發邊界時可能正在衝刺，先清掉避免自動走位與衝刺互搶
     // ★觸發鎖定→隱藏引導箭頭(進 panning 後不再顯示,非碰箭頭觸發)。
     if (this.choiceGfx) { this.choiceGfx.destroy(); this.choiceGfx = null; }
     this.clearCrossArrows();
@@ -2548,7 +2549,8 @@ export class GameScene extends Phaser.Scene {
       Phaser.Math.Clamp(zoneB.centerY, slotB.top + halfH, slotB.bottom - halfH)
     );
     this.pendingCamSlot = null;
-    this.enableFollow(slotB); // 每個區域都跟隨玩家（移動區比畫面寬）
+    this.resetCharacterMotion();
+    this.enableFollow(slotB, true); // 每個區域都跟隨玩家（移動區比畫面寬）；維持到位時的鏡頭位置不跳
     this.clearAllBreakables();
     this.placeStaticBreakables(side);
     this.progressPhase = 'playing';
@@ -2912,7 +2914,8 @@ export class GameScene extends Phaser.Scene {
       c.aimAngle = -Math.PI / 2; // 面向場內(往上)
       (c.body as Phaser.Physics.Arcade.Body).reset(c.x, c.y);
     }
-    // ★重啟鏡頭跟隨到 A slot
+    // ★重啟鏡頭跟隨到 A slot（角色被搬到新位置，清掉轉場前的衝刺狀態）
+    this.resetCharacterMotion();
     this.enableFollow(this.slotA);
     this.currentWave++;
     this.waveKilled = 0;
@@ -3062,14 +3065,33 @@ export class GameScene extends Phaser.Scene {
     this.drawZoneScene(this.slotBRight, this.zoneBRight, this.currentLevel, side);
   }
 
-  /** ★方案e:啟用鏡頭跟隨玩家(限制在當前 slot 內、deadzone 緩衝)。playing 時用。 */
-  private enableFollow(slot: Phaser.Geom.Rectangle): void {
+  /**
+   * ★方案e:啟用鏡頭跟隨玩家(限制在當前 slot 內、deadzone 緩衝)。playing 時用。
+   *
+   * @param slot 跟隨範圍（鏡頭 bounds）
+   * @param keepScroll true = 維持目前鏡頭位置不跳（startFollow 預設會立即置中到玩家）；
+   *   玩家在 deadzone 內時鏡頭不動，離開後才平滑跟上。轉場到位後使用，避免鏡頭「再動一下」
+   */
+  private enableFollow(slot: Phaser.Geom.Rectangle, keepScroll = false): void {
     const cam = this.cameras.main;
     const st = GameConfig.stage;
+    const sx = cam.scrollX, sy = cam.scrollY;
     cam.setBounds(slot.x, slot.y, slot.width, slot.height); // 跟隨限制在當前 slot→不會露出隔壁子區
     // 📹 用戶要求：X/Y軸分別設定，Y軸跟隨更溫和
     cam.startFollow(this.player, true, st.followLerp, st.followLerpY);
     cam.setDeadzone(st.followDeadzoneW, st.followDeadzoneH);
+    if (keepScroll) cam.setScroll(sx, sy);
+  }
+
+  /**
+   * 清除所有角色殘留的移動狀態（衝刺中與速度）：轉場會直接搬動角色座標，
+   * 若保留轉場前的衝刺終點，恢復操控時角色會自己衝回舊終點（例如往右平移後自動往左跑到邊界）
+   */
+  private resetCharacterMotion(): void {
+    for (const c of this.characters) {
+      if (c.isDashing) this.endDashState(c);
+      else c.stopMoving();
+    }
   }
 
   /** 停止鏡頭跟隨(切區平移/閃黑轉場前用),並把 bounds 放大到整個世界(讓 pan 能跨 slot)。 */
