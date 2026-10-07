@@ -58,11 +58,6 @@ interface StatsPayload {
   playerBurstReady: boolean;
   count: number;
   maxCount: number;
-  /** v14 等級制 */
-  level: number;
-  levelCap: number;
-  levelExpInto: number;
-  levelExpNeed: number;
   /** v25 第8項：P1 普攻累計命中次數 */
   p1AttackHits: number;
   /** v27 波次制 */
@@ -83,7 +78,6 @@ interface StatsPayload {
   combo: number;
   comboMax: number;
   comboThresholds: { circle: number; line: number; burst: number; empower: number };
-  comboUnlocked: { circle: boolean; line: boolean; burst: boolean; empower: boolean };
   empowerRemainMs: number;
   /** v55 能量(強化)系統(slow 用) */
   energy: number;

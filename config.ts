@@ -202,8 +202,6 @@ export const GameConfig = {
     thresholds: { circle: 3, line: 6, burst: 9, empower: 10 },
     /** 慢速模式各階觸發門檻：4圓/8直（爆發不在 combo 循環內，改為變身專屬） */
     slowThresholds: { circle: 4, line: 8 },
-    /** 各階解鎖所需團隊等級（限時強化 Lv1、圓 Lv2、直 Lv4、爆發 Lv6） */
-    unlockLevel: { circle: 2, line: 4, burst: 6, empower: 1 },
     /** combo 上限（fast：達10歸零＝強化門檻） */
     max: 10,
     /** 圓形範圍技（瞬發，不鎖角色） */
@@ -239,7 +237,7 @@ export const GameConfig = {
         orbitDots: 4,            // 繞轉光點數
         particleFreq: 60         // 粒子發射頻率(ms);越小越密
       },
-      /** 慢速變身專屬爆發：變身期間 AOE 每命中(≥1隻)此次數就觸發一次爆發亂打，可重複；仍需達 unlockLevel.burst */
+      /** 慢速變身專屬爆發：變身期間 AOE 每命中(≥1隻)此次數就觸發一次爆發亂打，可重複 */
       burstEveryAoeHits: 4,
       /** ★v62/v63 階段4:強化期【唯一招】——鎖定角色周圍圓範圍內的怪→打過去→以【目標】為中心炸圓AOE。只 slow P1。 */
       aoe: {
@@ -276,8 +274,6 @@ export const GameConfig = {
     max: 150,
     /** 滿此值可觸發(手動按 Z);v58:自動→手動;v61:100→50;★用戶回報太易→50→80→150(normal10×15=150,約殺15隻才滿,大幅提高門檻)。 */
     trigger: 150,
-    /** 強化解鎖團隊等級 */
-    unlockLevel: 1,
     /** 強化期間能量每秒倒退量;★門檻 150 對應 150/7≈21.43/秒→維持強化持續約7秒不變(門檻提高持續不變)。 */
     drainPerSec: 150 / 7,
     /** ★v58/v61:擊殺各怪種獲得能量(值調高→打死怪明顯有感;normal10→滿50約5隻)。未列用 default。 */
@@ -1102,8 +1098,8 @@ export const GameConfig = {
         4: 2.5     // 4人=2.5倍
       } as Record<number, number>
     },
-    /** 完成獎勵：掉道具數 + 給經驗（多次 grantKillExp normal 等效） */
-    rewards: { dropCount: 4, expKills: 20 },
+    /** 完成獎勵：掉道具數 */
+    rewards: { dropCount: 4 },
     /** ★事件波開場宣告序列(階段1:雙段大字+右滑出+時序gate+鎖操作;階段2再加真pan/壓黑聚焦)。 */
     intro: {
       /** 第一段統一大字文字 */
@@ -1654,78 +1650,6 @@ export const GameConfig = {
   },
 
   /**
-   * 等級制（v14 核心新系統）：團隊共用一條經驗/等級。
-   * 任一角色（含 BOT）擊殺 → 團隊經驗增加；達門檻升級，有上限 cap。
-   *
-   * 成長設計：把「目前(v13)的敵人/角色/招式數值」當作「滿級 Lv{cap}」基準，
-   * Lv1 起始值約為滿級的 50~60%（各項 lv1Scale），中間等級線性內插：
-   *   scale(level) = lv1Scale + (1 - lv1Scale) * (level - 1) / (cap - 1)
-   * 升級效果：敵人越多越強（難度成長）、角色攻擊範圍越大、招式威力越強。
-   */
-  level: {
-    /** 等級上限（到頂不再升、經驗條停在滿） */
-    cap: 10,
-    /** 每擊殺一般怪的團隊經驗 */
-    expPerKill: 10,
-    /** 不同敵種額外經驗倍率（tank/shielder 更肥給更多） */
-    expMultiplierByType: {
-      normal: 1,
-      tank: 3,
-      shielder: 2,
-      shooter: 1.5,
-      charger: 2,
-      bomber: 1.8,
-      boss: 20,
-      tower: 0,
-      npc: 0,
-      anchor: 0,
-      treasure: 0
-    },
-    /**
-     * 升到「第 n 級」所需的「該級累積經驗門檻」；index i=從 Lv(i+1) 升到 Lv(i+2) 需要的量。
-     * v42：拉長到 10 關結構——約【第 7-8 關】達 Lv10（BOSS 第10關前練滿）。
-     * 估算(10關)：普通/preBoss 關 1,2,4,6,8 quota 10+18+34+50+90≈202 隻 × expPerKill10 × 平均倍率(~1.2) ≈ 2424
-     *           + 事件關 3,5,7 完成獎勵各 expKills20×10=200（累積 ~600）→ 第7-8關累積 ~2200+。
-     * 總量設 ~2200，讓第 7-8 關達 Lv10。
-     */
-    expToNext: [50, 100, 150, 200, 250, 290, 340, 380, 440],
-
-    /**
-     * 難度成長（等級越高越難）：各項 Lv{cap} 值 = 下方對應的「現用值」，
-     * Lv1 = 現用值 * lv1Scale。scale>1 表示 Lv1 較少/較弱、隨等級升到 Lv10=1x。
-     */
-    difficulty: {
-      /** 敵人生成量上限：Lv1 較少（現值 640 的 0.5=320）→ Lv10 = 640 */
-      maxAliveLv1Scale: 0.5,
-      /** 敵人 HP：Lv1 為現值的 0.35 → Lv10 = 現值（v24：0.55→0.35，前期更脆好打） */
-      enemyHpLv1Scale: 0.35,
-      /** 敵人攻擊/接觸傷害：Lv1 為現值的 0.55 → Lv10 = 現值 */
-      enemyDamageLv1Scale: 0.55,
-      /** 生成間隔倍率：Lv1 出怪較慢（間隔 ×1.6）→ Lv10 = ×1.0（現速） */
-      spawnIntervalLv1Mult: 1.6
-    },
-
-    /**
-     * 角色成長（等級越高攻擊範圍越大、招式越強）：
-     * 各項 Lv1 = 現用值 * lv1Scale → Lv10 = 現用值。
-     */
-    character: {
-      /** 扇形劍氣半徑 / 角度：Lv1 為現值的 0.6 */
-      meleeRadiusLv1Scale: 0.6,
-      meleeArcDegLv1Scale: 0.6,
-      /** 普攻命中半徑 / 衝撞命中半徑：Lv1 為現值的 0.6 */
-      attackHitRadiusLv1Scale: 0.6,
-      dashHitRadiusLv1Scale: 0.6,
-      /** v21：普攻傷害隨等級成長：Lv1 為現值(player.attackDamage)的 0.6 → Lv10 = 現值 */
-      attackDamageLv1Scale: 0.6,
-      /** 5 招傷害：Lv1 為現值的 0.55 */
-      skillDamageLv1Scale: 0.55,
-      /** 5 招範圍（半徑/距離）：Lv1 為現值的 0.6 */
-      skillRadiusLv1Scale: 0.6
-    }
-  },
-
-  /**
    * 小遊戲「收集競賽」數值（非戰鬥）。1 真人 + 3 BOT，60 秒收集告示指定形狀丟進自己箱子比分。
    */
   collectRace: {
@@ -1882,17 +1806,5 @@ export const GameConfig = {
     names: ['你 P1', 'BOT 1', 'BOT 2', 'BOT 3'] as const
   }
 } as const;
-
-/**
- * v14：依團隊等級把「Lv1 值 → Lv{cap} 值（=現用值 base）」線性內插。
- * lv1Scale 為 Lv1 佔 base 的比例（0.5~0.6）；level 會被夾在 [1, cap]。
- */
-export function levelLerp(base: number, lv1Scale: number, level: number): number {
-  const cap = GameConfig.level.cap;
-  const lv = Math.max(1, Math.min(cap, level));
-  const t = cap > 1 ? (lv - 1) / (cap - 1) : 1;
-  const lv1 = base * lv1Scale;
-  return lv1 + (base - lv1) * t;
-}
 
 export type GameConfigType = typeof GameConfig;

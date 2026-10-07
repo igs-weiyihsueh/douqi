@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GameConfig, levelLerp } from '../config';
+import { GameConfig } from '../config';
 import { Character } from '../objects/Character';
 import { Enemy, type EnemyType } from '../objects/Enemy';
 import { Item, type SkillType } from '../objects/Item';
@@ -239,12 +239,6 @@ export class GameScene extends Phaser.Scene {
     fired: boolean;
   }> = [];
 
-  /** v14 等級制（團隊共用） */
-  private teamLevel = GameConfig.level.cap; // ★拔等級:固定滿等(不再升級);levelLerp/cur* 自動回滿等 base
-  private teamExp = 0;
-  /** 已累積到「當前等級起點」的經驗（用來算當前等級內進度） */
-  private teamExpAtLevelStart = 0;
-
   /** v25 第8項：P1 普攻「命中動作」累計次數（一次攻擊命中≥1隻算1；只算 P1、不含 BOT/招式）。R復活/重開歸零。 */
   private p1AttackHits = 0;
 
@@ -419,11 +413,6 @@ export class GameScene extends Phaser.Scene {
       this.clearWaveAndTrigger();
     });
 
-    // ★除錯熱鍵 L(Level):團隊等級直接滿等→三招(圓/直/爆發)+強化立即解鎖。只在主戰鬥 GameScene 綁定(小遊戲/選單/編輯器不誤觸)。
-    this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.L).on('down', () => {
-      this.maxLevelCheat();
-    });
-
     // ★ESC 鍵：回主菜單 — 讓玩家可以隨時退出遊戲回到 TitleScene
     this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.ESC).on('down', () => {
       this.quitToTitle();
@@ -517,9 +506,6 @@ export class GameScene extends Phaser.Scene {
     this.timeStopOwner = null;
     this.timeStopStartedAt = 0;
     this.telegraphFx = [];
-    this.teamLevel = GameConfig.level.cap; // ★拔等級:重開也固定滿等
-    this.teamExp = 0;
-    this.teamExpAtLevelStart = 0;
     this.playerAttackQueued = false;
     // v27 波次制：重置回第 1 波
     this.currentWave = 1;
@@ -1457,8 +1443,8 @@ export class GameScene extends Phaser.Scene {
     // v14：扇形半徑/角度隨等級變大；v31：強化狀態範圍×rangeMult
     const emp = c.isEmpowered(time);
     const rangeMult = emp ? GameConfig.combo.empower.rangeMult : 1;
-    const radius = levelLerp(cfg.radius, GameConfig.level.character.meleeRadiusLv1Scale, this.teamLevel) * rangeMult;
-    const arcDeg = levelLerp(cfg.arcDeg, GameConfig.level.character.meleeArcDegLv1Scale, this.teamLevel);
+    const radius = cfg.radius * rangeMult;
+    const arcDeg = cfg.arcDeg;
     const half = Phaser.Math.DegToRad(arcDeg) / 2;
     // v21：普攻傷害隨等級；v31：強化狀態 ×damageMult
     const atk = this.curAttackDamage() * (emp ? GameConfig.combo.empower.damageMult : 1);
@@ -1659,22 +1645,14 @@ export class GameScene extends Phaser.Scene {
 
     // v57/v59：衝刺撞到可打破物件→【直接打破】(衝刺是攻擊、撞碎它，不被硬擋停)。只 P1；用衝撞半徑當圓形命中。
     if (c === this.player) {
-      const bkRadius = levelLerp(
-        GameConfig.aim.dashHitRadius,
-        GameConfig.level.character.dashHitRadiusLv1Scale,
-        this.teamLevel
-      );
+      const bkRadius = GameConfig.aim.dashHitRadius;
       this.hitBreakablesInRange(c, bkRadius + GameConfig.breakable.radius, 0, false, 99999, time); // 大量傷害=一撞即破，衝刺不卡
     }
 
     // v14.2：衝去撿道具的衝刺，途中不因撞到敵人而中止（確保能撿到）
     if (!c.dashToItem) {
       // v14：衝撞命中半徑隨等級變大
-      const hitRadius = levelLerp(
-        GameConfig.aim.dashHitRadius,
-        GameConfig.level.character.dashHitRadiusLv1Scale,
-        this.teamLevel
-      );
+      const hitRadius = GameConfig.aim.dashHitRadius;
       const hit = this.findFirstEnemyInRangeOf(c, hitRadius);
       if (hit) {
         c.stopMoving();
@@ -2215,7 +2193,7 @@ export class GameScene extends Phaser.Scene {
       GameConfig.spawn.initialIntervalMs - survivalSec * GameConfig.spawn.intervalDecayPerSec
     );
     // v14：等級越高出怪越快
-    this.currentSpawnInterval = baseInterval * this.curSpawnIntervalMult();
+    this.currentSpawnInterval = baseInterval;
 
     // drip 狀態:更新 latch(活怪+pending 跌破 threshold 開→補到 maxAlive 才關,防抖)
     const maxAlive = this.curMaxAlive();
@@ -3582,7 +3560,7 @@ export class GameScene extends Phaser.Scene {
     this.bossCount++;
     const b = GameConfig.boss;
     // HP 倍率：隨 boss 序號成長 × 等級 HP 縮放
-    const hpMult = (1 + (this.bossCount - 1) * b.hpGrowthPerBoss) * this.curEnemyHpScale();
+    const hpMult = (1 + (this.bossCount - 1) * b.hpGrowthPerBoss);
     // v35：BOSS 暫改固定在場地正中央不動
     const bx = this.arena.centerX;
     const by = b.stationary ? this.arena.centerY : this.arena.top + b.radius + 40;
@@ -3914,7 +3892,7 @@ export class GameScene extends Phaser.Scene {
     enemy.onShoot = this.onEnemyShoot;
     enemy.onLaserFire = this.onEnemyLaserFire;
     enemy.onBombThrow = this.onEnemyBombThrow;
-    enemy.spawn(x, y, time, type, this.curEnemyHpScale());
+    enemy.spawn(x, y, time, type, 1);
     enemy.targetSeat = this.nearestSeat(x, y); // ★黏著:召喚怪也綁最近角色(守護波 resolveEnemyTarget 會覆寫成 guardNpc)
     if (leashImmune) { enemy.leashRadius = Infinity; enemy.leashTravelDist = Infinity; } // ★守護波怪免疫 leash(一直衝 NPC)
     if (forceChase) enemy.forceChase = true; // ★守護波怪:無視 alertRadius 生成即直衝目標(NPC)
@@ -4013,7 +3991,7 @@ export class GameScene extends Phaser.Scene {
     if (kind === 'tower') {
       const cfg = GameConfig.event.tower;
       // ★塔血量根據人數調整
-      const baseHpMult = (1 + (this.currentWave - 1) * cfg.hpGrowthPerWave) * this.curEnemyHpScale();
+      const baseHpMult = (1 + (this.currentWave - 1) * cfg.hpGrowthPerWave);
       const adjustedHpMult = baseHpMult * this.eventDifficultyMultiplier;
       const tx = this.arena.centerX;
       const ty = this.arena.centerY;
@@ -4525,7 +4503,7 @@ export class GameScene extends Phaser.Scene {
         // v37fix(A)：每隻怪對 NPC 的接觸傷害有攻擊冷卻，不再每幀扣血（配合 npcHp 能撐時間）
         if (time < e.nextNpcHitAt) continue;
         e.nextNpcHitAt = time + cfg.npcAttackCooldownMs;
-        const dead = npc.takeDamage(Math.max(1, Math.round(cfg.npcContactDamage * this.curEnemyDamageScale())));
+        const dead = npc.takeDamage(Math.max(1, Math.round(cfg.npcContactDamage)));
         this.flashEnemy(npc);
         if (dead) { npc.kill(); this.guardNpc = null; this.completeEvent(false); return; }
       }
@@ -4667,7 +4645,6 @@ export class GameScene extends Phaser.Scene {
         const ang = (i / rw.dropCount) * Math.PI * 2;
         this.dropItemAt(cx + Math.cos(ang) * 60, cy + Math.sin(ang) * 60, this.time.now);
       }
-      for (let i = 0; i < rw.expKills; i++) this.grantKillExp('normal');
       this.showEventBanner(`${kind === 'tower' ? '塔' : kind === 'guard' ? '守護' : '佔領'} 成功！獎勵發放`);
     } else {
       this.showEventBanner('事件失敗…');
@@ -5053,7 +5030,7 @@ export class GameScene extends Phaser.Scene {
     enemy.onShoot = this.onEnemyShoot;
     enemy.onLaserFire = this.onEnemyLaserFire;
     enemy.onBombThrow = this.onEnemyBombThrow;
-    enemy.spawn(cx, cy, time, type, this.curEnemyHpScale());
+    enemy.spawn(cx, cy, time, type, 1);
     // ★黏著目標(階段1):BOSS 綁 P1(seat0);近身組綁指定 seat;其餘生成點就近綁。之後黏著不亂換。
     enemy.targetSeat = enemy.isBoss ? 0 : (assignSeat >= 0 ? assignSeat : this.nearestSeat(cx, cy));
     enemy.stickyOutOfRangeSince = 0;
@@ -5393,7 +5370,7 @@ export class GameScene extends Phaser.Scene {
       const dist = Phaser.Math.Distance.Between(enemy.x, enemy.y, c.x, c.y);
       if (dist > GameConfig.enemy.attackRadius) continue;
       // v14：敵人傷害隨等級成長（Lv1 較低 → Lv10 = 現值）
-      const dmg = Math.max(1, Math.round(GameConfig.enemy.attackDamage * this.curEnemyDamageScale()));
+      const dmg = Math.max(1, Math.round(GameConfig.enemy.attackDamage));
       const applied = c.takeDamage(dmg, time);
       if (applied) {
         this.flashHurt(c);
@@ -5481,7 +5458,7 @@ export class GameScene extends Phaser.Scene {
         if (now >= enemy.nextNpcHitAt) {
           enemy.nextNpcHitAt = now + GameConfig.event.guard.npcAttackCooldownMs;
           const gcfg = GameConfig.event.guard;
-          const dead = this.guardNpc.takeDamage(Math.max(1, Math.round(gcfg.npcContactDamage * this.curEnemyDamageScale())));
+          const dead = this.guardNpc.takeDamage(Math.max(1, Math.round(gcfg.npcContactDamage)));
           this.flashEnemy(this.guardNpc);
           if (dead) { this.guardNpc.kill(); this.guardNpc = null; this.completeEvent(false); }
         }
@@ -5550,7 +5527,7 @@ export class GameScene extends Phaser.Scene {
             if (now >= enemy.nextNpcHitAt) {
               enemy.nextNpcHitAt = now + GameConfig.event.guard.npcAttackCooldownMs;
               const gcfg = GameConfig.event.guard;
-              const dead = this.guardNpc.takeDamage(Math.max(1, Math.round(gcfg.npcContactDamage * this.curEnemyDamageScale())));
+              const dead = this.guardNpc.takeDamage(Math.max(1, Math.round(gcfg.npcContactDamage)));
               this.flashEnemy(this.guardNpc);
               if (dead) { this.guardNpc.kill(); this.guardNpc = null; this.completeEvent(false); }
             }
@@ -5581,7 +5558,7 @@ export class GameScene extends Phaser.Scene {
           if (time >= this.guardNpc.bulletNpcHitAt) {
             const gcfg = GameConfig.event.guard;
             this.guardNpc.bulletNpcHitAt = time + gcfg.npcAttackCooldownMs;
-            const dead = this.guardNpc.takeDamage(Math.max(1, Math.round(gcfg.npcContactDamage * this.curEnemyDamageScale())));
+            const dead = this.guardNpc.takeDamage(Math.max(1, Math.round(gcfg.npcContactDamage)));
             this.flashEnemy(this.guardNpc);
             if (dead) { this.guardNpc.kill(); this.guardNpc = null; this.completeEvent(false); }
           }
@@ -5601,7 +5578,7 @@ export class GameScene extends Phaser.Scene {
     if (!c.alive || !bullet.active) return;
     bullet.recycle();
     const applied = c.takeDamage(
-      Math.max(1, Math.round(GameConfig.enemy.shooter.bulletDamage * this.curEnemyDamageScale())),
+      Math.max(1, Math.round(GameConfig.enemy.shooter.bulletDamage)),
       this.time.now
     );
     if (applied) {
@@ -5615,7 +5592,7 @@ export class GameScene extends Phaser.Scene {
   private damageCharacterFrom(c: Character, amount: number, _fromX: number, _fromY: number, rootMs = 0): void {
     if (!c.alive) return;
     const applied = c.takeDamage(
-      Math.max(1, Math.round(amount * this.curEnemyDamageScale())),
+      Math.max(1, Math.round(amount)),
       this.time.now
     );
     if (applied) {
@@ -5638,7 +5615,7 @@ export class GameScene extends Phaser.Scene {
         if (!c.alive) continue;
         if (Phaser.Math.Distance.Between(enemy.x, enemy.y, c.x, c.y) <= hitR) {
           const applied = c.takeDamage(
-            Math.max(1, Math.round(GameConfig.enemy.charger.dashDamage * this.curEnemyDamageScale())),
+            Math.max(1, Math.round(GameConfig.enemy.charger.dashDamage)),
             time
           );
           if (applied) {
@@ -6108,8 +6085,8 @@ export class GameScene extends Phaser.Scene {
   private skillWhirlwind(c: Character, _time: number): void {
     const cfg = GameConfig.skills.whirlwind;
     // v27：放置式——不鎖角色、不原地轉；在施放座標放一個獨立地面旋風場，持續 durationMs DOT
-    const radius = cfg.radius * this.curSkillRadiusScale();
-    const dmg = cfg.damagePerHit * this.curSkillDamageScale();
+    const radius = cfg.radius;
+    const dmg = cfg.damagePerHit;
     const ox = c.x; // 座標快照，固定不動
     const oy = c.y;
 
@@ -6173,9 +6150,9 @@ export class GameScene extends Phaser.Scene {
     const total = cfg.chargeMs + cfg.strikes * cfg.strikeDelayMs + 300;
     this.lockSkill(c, total, time);
     // v14：爆炸半徑/傷害隨等級成長
-    const radius = cfg.radius * this.curSkillRadiusScale();
-    const orbit = cfg.orbitRadius * this.curSkillRadiusScale();
-    const dmg = cfg.damage * this.curSkillDamageScale();
+    const radius = cfg.radius;
+    const orbit = cfg.orbitRadius;
+    const dmg = cfg.damage;
 
     // 演出：蓄力（放大亮起前搖）
     this.tweens.add({ targets: c, scale: { from: 1, to: 1.3 }, duration: cfg.chargeMs, yoyo: true });
@@ -6258,8 +6235,8 @@ export class GameScene extends Phaser.Scene {
     // 演出總時長：預備 + 去程 + 回程 + 收尾
     this.lockSkill(c, cfg.windupMs + legMs * 2 + 160, time);
     // v14：貫穿判定半徑/傷害隨等級成長
-    const hitRadius = cfg.hitRadius * this.curSkillRadiusScale();
-    const dmg = cfg.damage * this.curSkillDamageScale();
+    const hitRadius = cfg.hitRadius;
+    const dmg = cfg.damage;
 
     // 一趟突進：朝 (tx,ty) 高速斬過去，沿途貫穿（各趟獨立 hitSet，同隻每趟可各中一次）
     const dashLeg = (tx: number, ty: number, faceAngle: number, onDone: () => void): void => {
@@ -6314,8 +6291,8 @@ export class GameScene extends Phaser.Scene {
     const cfg = GameConfig.skills.shockwave;
     this.lockSkill(c, cfg.jumpMs + cfg.slamMs + 200, time);
     // v14：範圍/傷害隨等級成長
-    const radius = cfg.radius * this.curSkillRadiusScale();
-    const dmg = cfg.damage * this.curSkillDamageScale();
+    const radius = cfg.radius;
+    const dmg = cfg.damage;
 
     const baseScale = 1;
     // 跳起（放大表現騰空）→ 落下（縮回）
@@ -6355,14 +6332,13 @@ export class GameScene extends Phaser.Scene {
   private skillFlame(c: Character, time: number): void {
     const cfg = GameConfig.skills.flame;
     this.lockSkill(c, cfg.windupMs + cfg.sprayMs + 200, time);
-    // 範圍/傷害隨等級成長
-    const rs = this.curSkillRadiusScale();
-    const flameLength = cfg.flameLength * rs;
-    const flameWidth = cfg.flameWidth * rs;
-    const burnLength = cfg.burnLength * rs;
-    const burnWidth = cfg.burnWidth * rs;
-    const burstDmg = cfg.burstDamage * this.curSkillDamageScale();
-    const tickDmg = cfg.tickDamage * this.curSkillDamageScale();
+    // 範圍/傷害
+    const flameLength = cfg.flameLength;
+    const flameWidth = cfg.flameWidth;
+    const burnLength = cfg.burnLength;
+    const burnWidth = cfg.burnWidth;
+    const burstDmg = cfg.burstDamage;
+    const tickDmg = cfg.tickDamage;
 
     // v25：以自身為中心，往四個方向（十字）各噴一條火道 + 燒灼區
     const ox = c.x;
@@ -6519,8 +6495,8 @@ export class GameScene extends Phaser.Scene {
     // v45(1)：改用「命中次數」累計——每次穿梭把 hitRadius 內敵人的命中數 +1，
     //          結束時傷害 = dmg × 命中次數 → 重複穿梭到同一敵人（單目標連斬）會多段累加。
     const hitCount = new Map<Enemy, number>();
-    const hitRadius = cfg.hitRadius * this.curSkillRadiusScale();
-    const dmg = cfg.damage * this.curSkillDamageScale();
+    const hitRadius = cfg.hitRadius;
+    const dmg = cfg.damage;
     const stepMs = cfg.durationMs / Math.max(1, targets.length + 1);
     // v51(3)：單目標(或目標少)連斬時，落點改到【目標周圍環上來回點】而非目標正中心 → 角色在目標周圍
     //   來回閃現連斬、不疊在目標身上。多目標時 offset 仍套用(各目標周圍小環、視覺更自然)。命中判定仍以目標為圓心。
@@ -6723,11 +6699,7 @@ export class GameScene extends Phaser.Scene {
   private performAttackOn(actor: Character, primary: Enemy, time: number): void {
     // v14：普攻命中半徑隨等級變大；v31：強化狀態 ×rangeMult
     const emp = actor.isEmpowered(time);
-    const hitRadius = levelLerp(
-      GameConfig.player.attackHitRadius,
-      GameConfig.level.character.attackHitRadiusLv1Scale,
-      this.teamLevel
-    ) * (emp ? GameConfig.combo.empower.rangeMult : 1);
+    const hitRadius = GameConfig.player.attackHitRadius * (emp ? GameConfig.combo.empower.rangeMult : 1);
     const children = this.enemies.getChildren();
     const atk = this.curAttackDamage() * (emp ? GameConfig.combo.empower.damageMult : 1); // v21 隨等級 + v31 強化加成
     for (const child of children) {
@@ -6803,11 +6775,10 @@ export class GameScene extends Phaser.Scene {
    * P1：走連段系統（combo++、達 4/8/12 觸發已解鎖的圓形/直線/強化爆發、到 12 歸零）+ p1AttackHits 統計。
    * BOT：維持舊鬥氣（gainSpiritHit，滿了在 tryAct 觸發舊爆發）。
    */
-  /** v56 slow：combo 歸零門檻/上限 = 目前已解鎖最高階招門檻(爆發9 / 氣波6 / 圓形3)。 */
+  /** v56 slow：combo 歸零門檻/上限 = 直線招式門檻。 */
   private slowComboCap(): number {
     const cfg = GameConfig.combo;
-    if (this.teamLevel >= cfg.unlockLevel.line) return cfg.slowThresholds.line; // 8
-    return cfg.slowThresholds.circle;                                            // 4
+    return cfg.slowThresholds.line; // 8
   }
 
   private onComboHit(c: Character, time: number): void {
@@ -6815,7 +6786,6 @@ export class GameScene extends Phaser.Scene {
     const isP1 = c === this.player;
     if (isP1) this.p1AttackHits++;
     const cfg = GameConfig.combo;
-    const lvl = this.teamLevel;
 
     // ── 慢速模式(v55/v56)：COMBO 與能量【兩套獨立系統】，同一次命中兩條各 +1 ──
     if (this.controlMode === 'slow') {
@@ -6823,9 +6793,9 @@ export class GameScene extends Phaser.Scene {
       const cap = this.slowComboCap();
       c.spirit = Math.min(cap, c.spirit + 1);
       const combo = c.spirit;
-      // 各招在自身門檻觸發(需解鎖)：4圓/8氣波（爆發改為變身專屬，見 registerEmpowerAoeHit）
-      if (combo === cfg.slowThresholds.circle && lvl >= cfg.unlockLevel.circle) this.comboCircle(c, time);
-      if (combo === cfg.slowThresholds.line && lvl >= cfg.unlockLevel.line) this.comboLine(c, time);
+      // 各招在自身門檻觸發：4圓/8氣波（爆發改為變身專屬，見 registerEmpowerAoeHit）
+      if (combo === cfg.slowThresholds.circle) this.comboCircle(c, time);
+      if (combo === cfg.slowThresholds.line) this.comboLine(c, time);
       // 達已解鎖最高招門檻(cap) → 該輪最高招已在上面觸發 → 歸零重來
       if (combo >= cap) c.spirit = 0;
       // 【B. 能量(強化)】v58:能量改【擊殺獲得】(見 grantKillEnergy),此處【不再命中+1】。
@@ -6837,17 +6807,17 @@ export class GameScene extends Phaser.Scene {
     // ── 快速模式(原樣，v55 不動)：一條 combo，3圓/6直/9爆發/10強化，到10歸零 ──
     c.spirit = Math.min(cfg.max, c.spirit + 1);
     const combo = c.spirit;
-    if (combo === cfg.thresholds.circle && lvl >= cfg.unlockLevel.circle) {
+    if (combo === cfg.thresholds.circle) {
       this.comboCircle(c, time);
     }
-    if (combo === cfg.thresholds.line && lvl >= cfg.unlockLevel.line) {
+    if (combo === cfg.thresholds.line) {
       this.comboLine(c, time);
     }
-    if (combo === cfg.thresholds.burst && lvl >= cfg.unlockLevel.burst) {
+    if (combo === cfg.thresholds.burst) {
       this.triggerBurst(c, time);
     }
     if (combo >= cfg.thresholds.empower) {
-      if (lvl >= cfg.unlockLevel.empower) this.comboEmpower(c, time);
+      this.comboEmpower(c, time);
       c.spirit = 0;
     }
     if (isP1) this.emitStats();
@@ -6878,13 +6848,13 @@ export class GameScene extends Phaser.Scene {
     this.gainEnergy(c, amount);
   }
 
-  /** ★v58:按 Z 手動觸發強化(slow P1、能量滿 trigger、已解鎖、非強化中才可)。回傳是否觸發。 */
+  /** ★v58:按 Z 手動觸發強化(slow P1、能量滿 trigger、非強化中才可)。回傳是否觸發。 */
   private tryManualEmpower(): boolean {
     if (this.controlMode !== 'slow') return false;
     const c = this.player;
     const ecfg = GameConfig.energy;
     if (!c || !c.alive || c.empowered) return false;
-    if (c.energy < ecfg.trigger || this.teamLevel < ecfg.unlockLevel) return false;
+    if (c.energy < ecfg.trigger) return false;
     this.comboEmpower(c, this.time.now);
     return true;
   }
@@ -6944,8 +6914,8 @@ export class GameScene extends Phaser.Scene {
   /** ★v63:以(tx,ty)【目標位置】為中心炸圓 AOE——傷該圓內所有可傷敵人 + 擴張圈視覺 + 輕震。 */
   private empowerAoeBurst(c: Character, tx: number, ty: number, time: number): void {
     const cfg = GameConfig.combo.empower.aoe;
-    const radius = cfg.radius * this.curSkillRadiusScale();
-    const dmg = cfg.damage * this.curSkillDamageScale() * GameConfig.combo.empower.damageMult;
+    const radius = cfg.radius;
+    const dmg = cfg.damage * GameConfig.combo.empower.damageMult;
     this.spawnExpandingRing(tx, ty, radius, cfg.color, cfg.ringMs);
     this.spawnExpandingRing(tx, ty, radius * 0.6, 0xfff2a8, cfg.ringMs * 0.8);
     this.shakeOnce(GameConfig.juice.burstShakeDuration, GameConfig.juice.burstShakeIntensity * 0.5);
@@ -6966,7 +6936,6 @@ export class GameScene extends Phaser.Scene {
 
   /**
    * 慢速變身專屬爆發：記一次 AOE 命中，每滿 burstEveryAoeHits 次觸發一次爆發亂打（可重複）。
-   * 爆發仍需達解鎖等級；未解鎖時照常計數但不觸發。
    *
    * @param c 施放 AOE 的角色
    * @param time 目前時間
@@ -6975,15 +6944,15 @@ export class GameScene extends Phaser.Scene {
     const cfg = GameConfig.combo;
     c.empowerAoeHits++;
     if (c.empowerAoeHits % cfg.empower.burstEveryAoeHits !== 0) return;
-    if (this.teamLevel < cfg.unlockLevel.burst || c.isBursting) return;
+    if (c.isBursting) return;
     this.triggerBurst(c, time);
   }
 
   /** v31 連段①圓形範圍技（combo4, Lv3）：以角色為中心瞬發圓形 AOE + 擴張環（不鎖角色） */
   private comboCircle(c: Character, time: number): void {
     const cfg = GameConfig.combo.circle;
-    const radius = cfg.radius * this.curSkillRadiusScale();
-    const dmg = cfg.damage * this.curSkillDamageScale() * (c.isEmpowered(time) ? GameConfig.combo.empower.damageMult : 1);
+    const radius = cfg.radius;
+    const dmg = cfg.damage * (c.isEmpowered(time) ? GameConfig.combo.empower.damageMult : 1);
     this.spawnExpandingRing(c.x, c.y, radius, 0x00e5ff, 280);
     let hitAny = false;
     for (const child of this.enemies.getChildren()) {
@@ -7003,10 +6972,9 @@ export class GameScene extends Phaser.Scene {
   /** v31 連段②直線範圍技（combo8, Lv6）：朝 aimAngle 瞬發直線矩形貫穿 */
   private comboLine(c: Character, time: number): void {
     const cfg = GameConfig.combo.line;
-    const rs = this.curSkillRadiusScale();
-    const length = cfg.length * rs;
-    const width = cfg.width * rs;
-    const dmg = cfg.damage * this.curSkillDamageScale() * (c.isEmpowered(time) ? GameConfig.combo.empower.damageMult : 1);
+    const length = cfg.length;
+    const width = cfg.width;
+    const dmg = cfg.damage * (c.isEmpowered(time) ? GameConfig.combo.empower.damageMult : 1);
     const dir = c.aimAngle;
     const ox = c.x;
     const oy = c.y;
@@ -7396,24 +7364,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ---------------------------------------------------------------------------
-  // v14 等級制（團隊共用經驗/等級 + 各項成長內插）
-  // ---------------------------------------------------------------------------
-  /** 從 Lv n 升到 Lv n+1 所需經驗（n 為 1-based 當前等級）；已達 cap 回傳 Infinity */
-  private expToNext(level: number): number {
-    const arr = GameConfig.level.expToNext;
-    if (level >= GameConfig.level.cap) return Infinity;
-    return arr[level - 1] ?? arr[arr.length - 1];
-  }
 
   /** ★拔等級:擊殺不再給經驗/不升級(固定滿等)。保留空實作,呼叫點不動。 */
   private grantKillExp(_type: EnemyType): void {
     // no-op(等級系統已移除;數值固定滿等,難度改由波次/怪種控制)
-  }
-
-  /** v17：升級特效——所有存活角色身上金色擴張光環 + 畫面上方「LEVEL UP Lv.N」放大淡出 */
-  /** ★拔等級:L 鍵除錯滿等已無意義(數值固定滿等、招式全開)→ no-op。 */
-  private maxLevelCheat(): void {
-    // no-op(等級系統已移除;開局即滿等/全招)
   }
 
   /** 難度成長：目前等級對應的敵人生成量上限 */
@@ -7425,47 +7379,16 @@ export class GameScene extends Phaser.Scene {
   }
 
   private curMaxAlive(): number {
-    // v20：先算等級成長的上限，再乘上「存活角色數縮放」
-    const byLevel = levelLerp(GameConfig.spawn.maxAlive, GameConfig.level.difficulty.maxAliveLv1Scale, this.teamLevel);
-    let cap = Math.max(1, Math.round(byLevel * this.curAliveScale()));
+    // v20：aliveScale 縮放，移除等級成長
+    let cap = Math.max(1, Math.round(GameConfig.spawn.maxAlive * this.curAliveScale()));
     // v23：單人存活時再套硬上限（多人不受影響）
     if (this.aliveCount() === 1) cap = Math.min(cap, GameConfig.spawn.soloMaxAliveCap);
     return cap;
   }
 
-  /** 難度成長：目前等級對應的生成間隔倍率（Lv1 較慢 → Lv10 = 1x） */
-  private curSpawnIntervalMult(): number {
-    // Lv1 = spawnIntervalLv1Mult，Lv10 = 1；用 base=1、lv1Scale=該倍率 反向內插
-    return levelLerp(1, GameConfig.level.difficulty.spawnIntervalLv1Mult, this.teamLevel);
-  }
-
-  /** 難度成長：敵人 HP 倍率 */
-  private curEnemyHpScale(): number {
-    return levelLerp(1, GameConfig.level.difficulty.enemyHpLv1Scale, this.teamLevel);
-  }
-
-  /** 難度成長：敵人攻擊/接觸傷害倍率 */
-  private curEnemyDamageScale(): number {
-    return levelLerp(1, GameConfig.level.difficulty.enemyDamageLv1Scale, this.teamLevel);
-  }
-
-  /** 角色成長：招式傷害倍率 */
-  private curSkillDamageScale(): number {
-    return levelLerp(1, GameConfig.level.character.skillDamageLv1Scale, this.teamLevel);
-  }
-
-  /** 角色成長：招式範圍倍率 */
-  private curSkillRadiusScale(): number {
-    return levelLerp(1, GameConfig.level.character.skillRadiusLv1Scale, this.teamLevel);
-  }
-
-  /** v21 角色成長：普攻傷害隨等級（Lv1 = 現值×0.6 → Lv10 = 現值） */
+  /** 角色普攻傷害 */
   private curAttackDamage(): number {
-    return levelLerp(
-      GameConfig.player.attackDamage,
-      GameConfig.level.character.attackDamageLv1Scale,
-      this.teamLevel
-    );
+    return GameConfig.player.attackDamage;
   }
 
   /** 除錯/自動化測試用：立即讓所有角色陣亡以觸發結算（不影響正常玩法） */
@@ -7492,13 +7415,7 @@ export class GameScene extends Phaser.Scene {
       p1SkillLocked: this.player ? this.player.isSkillLocked(this.time.now) : null,
       p1Invuln: this.player ? this.player.isInvulnerable(this.time.now) : null,
       enemyCount: this.enemies ? this.enemies.countActive(true) : null,
-      level: this.teamLevel,
-      exp: this.teamExp,
       maxAlive: this.curMaxAlive(),
-      spawnMult: this.curSpawnIntervalMult(),
-      enemyHpScale: this.curEnemyHpScale(),
-      enemyDmgScale: this.curEnemyDamageScale(),
-      skillDmgScale: this.curSkillDamageScale(),
       activeFxCount: this.activeFxCount,
       attackDamage: Math.round(this.curAttackDamage()),
       p1AttackHits: this.p1AttackHits,
@@ -7594,8 +7511,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** 除錯：直接灌經驗（測升級/成長用） */
-  debugGrantExp(kills: number, type: EnemyType = 'normal'): void {
-    for (let i = 0; i < kills; i++) this.grantKillExp(type);
+  debugGrantExp(_kills: number, _type: EnemyType = 'normal'): void {
     this.emitStats();
   }
 
@@ -8118,11 +8034,6 @@ export class GameScene extends Phaser.Scene {
       playerBurstReady: this.player.alive && this.player.spiritFull,
       count: this.characters.length,
       maxCount: GameConfig.characters.count,
-      // v14 等級制
-      level: this.teamLevel,
-      levelCap: GameConfig.level.cap,
-      levelExpInto: this.teamExp - this.teamExpAtLevelStart,
-      levelExpNeed: this.teamLevel >= GameConfig.level.cap ? 0 : this.expToNext(this.teamLevel),
       // v25 第8項：P1 普攻累計命中次數
       p1AttackHits: this.p1AttackHits,
       // v27 波次制
@@ -8144,12 +8055,6 @@ export class GameScene extends Phaser.Scene {
       // slow：combo 上限=已解鎖最高招門檻(3/6/9)；fast=10
       comboMax: this.controlMode === 'slow' ? this.slowComboCap() : GameConfig.combo.max,
       comboThresholds: GameConfig.combo.thresholds,
-      comboUnlocked: {
-        circle: this.teamLevel >= GameConfig.combo.unlockLevel.circle,
-        line: this.teamLevel >= GameConfig.combo.unlockLevel.line,
-        burst: this.teamLevel >= GameConfig.combo.unlockLevel.burst,
-        empower: this.teamLevel >= GameConfig.combo.unlockLevel.empower
-      },
       // fast 強化倒數(slow 不用)
       empowerRemainMs: Math.max(0, this.player.empowerUntil - this.time.now),
       // v55 能量系統(slow 用)
