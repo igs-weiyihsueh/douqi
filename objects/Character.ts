@@ -248,13 +248,12 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
       this.hpBar.fillColor = hpRatio > 0.5 ? 0x4ade80 : hpRatio > 0.25 ? 0xfacc15 : 0xef4444;
     }
     const spRatio = Phaser.Math.Clamp(this.spirit / GameConfig.spirit.hitsToBurst, 0, 1);
-    const isSpiritFull = spRatio >= 1;
     
     // 更新鬥氣條背景位置
     this.spiritBarBg.setPosition(this.x, footY + 5);
     this.spiritBar.setPosition(this.x - bw / 2 + 1, footY + 5);
     
-    if (isSpiritFull) {
+    if (this.spiritFull) {
       // 集滿狀態：整條填滿黃色並發光
       this.spiritBar.width = bw - 2; // 填滿整條
       this.spiritBar.fillColor = 0xffd700; // 黃色
@@ -270,7 +269,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
       // 正常狀態：顯示背景和比例填充
       this.spiritBarBg.setVisible(true);
       this.spiritBar.width = (bw - 2) * spRatio;
-      this.spiritBar.fillColor = 0x60a5fa; // 藍色
+      this.spiritBar.fillColor = 0xff0000; // 測試：改成紅色以確認代碼執行
       this.spiritBar.setStrokeStyle(0, 0x000000, 0); // 移除發光邊框
       this.spiritBar.setAlpha(1); // 恢復正常透明度
     }
