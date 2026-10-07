@@ -363,9 +363,9 @@ export const GameConfig = {
     /** 視覺外觀參數 - 增大尺寸提高可見性 */
     VISUAL: {
       /** 彩票寬度 (px) - 增大為更明顯 */
-      WIDTH: 20,
+      WIDTH: 30,
       /** 彩票高度 (px) - 增大為更明顯 */
-      HEIGHT: 12,
+      HEIGHT: 18,
       /** 金色填充色值 */
       COLOR: 0xFFD700,
       /** 白色邊框色值 */

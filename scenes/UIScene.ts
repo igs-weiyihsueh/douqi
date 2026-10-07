@@ -158,8 +158,8 @@ export class UIScene extends Phaser.Scene {
   private panelComboTexts: Phaser.GameObjects.Text[] = [];
   /** 下方面板 COMBO 顯示設定：文字右下角對齊面板右上角（加偏移），原版色塊面板與 F4 面板圖各有一組偏移 */
   private readonly PANEL_COMBO_CONFIG = {
-    FONT_SIZE: '24px',
-    STROKE_WIDTH: 3,
+    FONT_SIZE: '36px',
+    STROKE_WIDTH: 4,
     /** 原版色塊面板：相對面板右上角的偏移（貼在面板右上方） */
     CLASSIC_OFFSET_X: 0,
     CLASSIC_OFFSET_Y: -2,
@@ -174,12 +174,17 @@ export class UIScene extends Phaser.Scene {
     REWARD_FX_OFFSET_X: -60,
     REWARD_FX_OFFSET_Y: -20,
     /** 「獲得N票券！」文字樣式與動畫 */
-    REWARD_TEXT_FONT_SIZE: '28px',
-    REWARD_TEXT_STROKE_WIDTH: 3,
+    REWARD_TEXT_FONT_SIZE: '42px',
+    REWARD_TEXT_STROKE_WIDTH: 4,
     REWARD_TEXT_DEPTH: 1500,
-    REWARD_TEXT_RISE: 60,
+    REWARD_TEXT_RISE: 90,
     REWARD_TEXT_SCALE_TO: 1.3,
-    REWARD_TEXT_DURATION_MS: 2000
+    REWARD_TEXT_DURATION_MS: 2000,
+    /** 報獎閃光特效常數 */
+    /** 閃光起始半徑（像素） */
+    REWARD_FLASH_START_RADIUS: 12,
+    /** 閃光擴張最大半徑（像素） */  
+    REWARD_FLASH_END_RADIUS: 90
   } as const;
   
   // ★頭上UI佈局常數：避免魔術數字
@@ -1531,8 +1536,9 @@ export class UIScene extends Phaser.Scene {
    * 創建正式版華麗閃光特效
    */
   private createFinalFlashEffect(x: number, y: number): void {
+    const cfg = this.PANEL_COMBO_CONFIG;
     // 正式版閃光：金色，快速擴張
-    const flash = this.add.circle(x, y, 8, 0xFFD700, 0.8)
+    const flash = this.add.circle(x, y, cfg.REWARD_FLASH_START_RADIUS, 0xFFD700, 0.8)
       .setDepth(2001)
       .setStrokeStyle(3, 0xFFFFFF, 1)
       .setVisible(true)
@@ -1541,7 +1547,7 @@ export class UIScene extends Phaser.Scene {
     // 正式版動畫：快速擴張，華麗效果
     this.tweens.add({
       targets: flash,
-      radius: 60,        // 擴張到60px
+      radius: cfg.REWARD_FLASH_END_RADIUS,        // 擴張到90px
       alpha: 0,          // 漸變透明
       duration: 400,     // 400ms快速動畫
       ease: 'Power2',    // 自然曲線
