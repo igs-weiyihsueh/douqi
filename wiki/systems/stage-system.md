@@ -147,17 +147,104 @@ drawStageNode(x: number, y: number, chest: 'low' | 'high',
     this.hudGraphics.lineStyle(3, 0xffffff, alpha * pulse);
     this.hudGraphics.strokeCircle(x, y, cfg.nodeRadius + 2);
   }
+### 視覺渲染系統 (05dafae地圖式改版)
+
+#### HUD設計理念：地圖式進度  
+- **位置標記**：最左邊綠色標記，表示當前位置（不畫寶箱）
+- **4個寶箱**：右邊依序排列，代表接下來4關的獎勵  
+- **進度量條**：從位置標記→第1個寶箱，填滿即獲得該寶箱
+- **動態遞補**：獲得後全體左移一格，新寶箱從右邊淡入
+
+#### 核心渲染邏輯
+```typescript
+// UIScene.ts:809-853 - 地圖式HUD繪製
+drawStageHud(): void {
+  const cfg = GameConfig.waveHud;
+  const state = this.stageHudState;
   
-  // 高階寶箱金色光暈
-  if (chest === 'high') {
-    this.hudGraphics.fillStyle(0xffd700, alpha * 0.3);
-    this.hudGraphics.fillCircle(x, y, cfg.nodeRadius + 8);
+  // 量條平滑逼近目標進度
+  const fillSpeed = 1000 / cfg.lineFillMs;
+  this.stageHudFill += (this.stageHudFillTarget - this.stageHudFill) * fillSpeed * this.scene.game.loop.delta;
+  
+  // 遞補動畫進度計算
+  const shiftProgress = Math.min(1, (this.time.now - this.stageHudShiftAt) / cfg.shiftMs);
+  const ease = Phaser.Math.Easing.Cubic.Out(shiftProgress);
+  const animating = shiftProgress < 1;
+  
+  // x軸位置計算函數
+  const xAt = (i: number) => cfg.x + i * cfg.nodeGap - ease * cfg.nodeGap;
+  
+  // 繪製位置標記（最左邊）
+  if (animating) this.drawStageMarker(xAt(-1), cfg.y, 1 - ease); // 舊標記淡出
+  this.drawStageMarker(xAt(0), cfg.y, animating ? ease : 1);      // 新標記淡入
+  
+  // 繪製4個寶箱圓點
+  for (let i = 0; i < cfg.visibleStages; i++) {
+    const x = xAt(i + 1);                    // 位置標記右邊排列
+    const chest = state.stageChests[i];
+    const isCurrentReward = i === 0;         // 第1個=本關獎勵
+    const nodeState = isCurrentReward ? 'current' : 'future';
+    const alpha = (i === cfg.visibleStages - 1) ? ease : 1; // 最右新寶箱淡入
+    
+    this.drawStageNode(x, cfg.y, chest, nodeState, alpha);
   }
   
-  // 寶箱圖示 (箱體+箱蓋+鎖扣)
-  const chestColor = chest === 'high' ? 0xffd700 : 0x8b4513;
-  // ... 寶箱繪製細節
+  // 進度量條：位置標記→第1個寶箱
+  const lineStartX = xAt(0) + cfg.nodeRadius;
+  const lineEndX = xAt(1) - cfg.nodeRadius;
+  const lineWidth = lineEndX - lineStartX;
+  const fillWidth = lineWidth * Math.min(1, this.stageHudFill);
+  
+  // 底線(未填滿)
+  this.waveHudGfx.lineStyle(4, cfg.lineColor, 1);
+  this.waveHudGfx.lineBetween(lineStartX, cfg.y, lineEndX, cfg.y);
+  
+  // 進度線(已填滿)
+  if (fillWidth > 0) {
+    this.waveHudGfx.lineStyle(4, cfg.lineFillColor, 1);
+    this.waveHudGfx.lineBetween(lineStartX, cfg.y, lineStartX + fillWidth, cfg.y);
+  }
 }
+
+// UIScene.ts:858-870 - 位置標記繪製
+private drawStageMarker(x: number, y: number, alpha: number): void {
+  if (alpha <= 0) return;
+  const cfg = GameConfig.waveHud;
+  const g = this.waveHudGfx;
+  const r = cfg.nodeRadius;
+  
+  // 脈動外框計算
+  const pulse = cfg.pulse.base + cfg.pulse.amplitude * Math.abs(Math.sin(this.time.now / cfg.pulse.period));
+  
+  // 不透明底盤
+  g.fillStyle(cfg.nodeBgColor, alpha);
+  g.fillCircle(x, y, r + cfg.nodePadding.base);
+  
+  // 實心亮點（綠色）
+  g.fillStyle(cfg.markerColor, alpha);          // 0x7affc0
+  g.fillCircle(x, y, r * cfg.markerDotScale);  // 0.45倍縮放
+  
+  // 脈動外環
+  g.lineStyle(cfg.nodeStrokeWidth.current, cfg.markerColor, pulse * alpha);
+  g.strokeCircle(x, y, r);
+}
+```
+
+#### 寶箱圓點繪製
+```typescript
+// UIScene.ts:854-890 - 圓點詳細繪製
+drawStageNode(x: number, y: number, chest: 'low' | 'high', 
+              state: StageNodeState, alpha: number): void {
+  // 底盤圓形
+  this.hudGraphics.fillStyle(0x444444, alpha);
+  this.hudGraphics.fillCircle(x, y, cfg.nodeRadius);
+  
+  // current狀態脈動外框
+  if (state === 'current') {
+    const pulse = 0.8 + 0.2 * Math.sin(this.time.now * 0.005);
+    this.hudGraphics.lineStyle(3, 0xffffff, alpha * pulse);
+    this.hudGraphics.strokeCircle(x, y, cfg.nodeRadius + 2);
+  }
 ```
 
 ## 🔄 轉場系統
@@ -328,19 +415,37 @@ drawZoneScene(slotKey: 'L' | 'C' | 'R'): void {
 
 ## 🔧 配置參數
 
-### HUD配置
-```typescript
-// config.ts:58-80 (49b634d常數化，待上線)  
+### HUD配置 (05dafae地圖式更新)
+```typescript  
+// config.ts:58-95 - waveHud配置
 waveHud: {
-  x: 960, y: 100,                                  // HUD位置
-  nodeRadius: 22,                                  // 圓點半徑
-  nodeGap: 150,                                    // 圓點間距
-  visibleStages: 4,                                // 顯示關卡數
-  shiftMs: 450,                                    // 遞補動畫時長
+  x: 960, y: 100,                    // HUD中心位置
+  nodeRadius: 22,                    // 圓點半徑
+  nodeGap: 150,                      // 圓點間距  
+  visibleStages: 4,                  // 顯示寶箱數(位置標記右邊排列)
   
-  // 寶箱顏色與尺寸
+  // 動畫時長配置
+  shiftMs: 450,                      // 遞補動畫時長
+  lineFillMs: 500,                   // 進度條填充時長
+  
+  // 位置標記配置 (05dafae新增)
+  markerColor: 0x7affc0,             // 位置標記顏色(綠色)
+  markerDotScale: 0.45,              // 位置標記中心亮點大小(相對nodeRadius)
+  
+  // 進度量條配置
+  lineColor: 0x6a5a34,               // 連線色(未填滿暗底)
+  lineFillColor: 0xffe08a,           // 已填滿連線色(進度推進)
+  
+  // 寶箱視覺配置
+  nodeBgColor: 0x1a1408,             // 圓點不透明底盤色(蓋住量條端點)
   chestColors: { low: 0x8b4513, high: 0xffd700 },
-  chestRatios: { width: 0.6, height: 0.4, lock: 0.2 }
+  chestRatios: { width: 0.6, height: 0.4, lock: 0.2 },
+  
+  // 脈動配置
+  pulse: { 
+    base: 0.8, amplitude: 0.2,       // 脈動範圍
+    period: 1200                     // 脈動週期(毫秒)
+  }
 }
 ```
 

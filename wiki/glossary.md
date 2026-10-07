@@ -67,6 +67,9 @@
 | **GameConfig** | 遊戲主配置物件 | `config.ts:5` | [效能配置](./systems/performance-config.md) |
 | **levelLerp** | 等級化數值計算函數 | `config.ts` | [效能配置](./systems/performance-config.md) |
 | **arena** | 場地配置 (經典模式) | `config.ts:107-115` | [UI/UX設計](./design/ui-ux-decisions.md) |
+| **markerColor** | HUD位置標記顏色(綠色) (05dafae新增) | `config.ts:84` | [關卡系統](./systems/stage-system.md) |
+| **markerDotScale** | 位置標記中心亮點縮放 (05dafae新增) | `config.ts:85` | [關卡系統](./systems/stage-system.md) |
+| **drawStageMarker** | HUD位置標記繪製函式 (05dafae新增) | `UIScene.ts:858` | [關卡系統](./systems/stage-system.md) |
 | **stageCycle** | 無限關卡循環配置 (874b8f9新增) | `config.ts:920` | [關卡系統](./systems/stage-system.md) |
 | **chestTickets** | 關卡寶箱彩票獎勵配置 (874b8f9新增) | `config.ts:927` | [關卡系統](./systems/stage-system.md) |
 | **areaVariant** | 場景變體標識('A'荒城/'B'火山) (874b8f9新增) | `GameScene.ts:91` | [關卡系統](./systems/stage-system.md) |
