@@ -1,6 +1,9 @@
 import Phaser from 'phaser';
 import { GameConfig } from '../config';
 
+/** BOSS 招式：a 範圍普攻 / b 直線衝刺 / c 扇形攻擊 */
+export type BossSkillKind = 'a' | 'b' | 'c';
+
 export type EnemyType = 'normal' | 'tank' | 'shielder' | 'shooter' | 'charger' | 'bomber' | 'boss' | 'tower' | 'npc' | 'anchor' | 'treasure';
 
 /**
@@ -128,17 +131,15 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   onLaserFire?: (enemy: Enemy, angle: number) => void;
   /** v26 回呼：bomber 投出炸彈到落點(tx,ty)，場景做飛行/預警/落地爆炸 */
   onBombThrow?: (enemy: Enemy, tx: number, ty: number) => void;
-  /** v28 BOSS 攻擊回呼（場景實作演出/判定）；v36 保留舊三招型別但改用 onBossSkill 輪替 */
-  onBossSweep?: (enemy: Enemy) => void;
-  onBossSummon?: (enemy: Enemy) => void;
-  onBossBomb?: (enemy: Enemy, tx: number, ty: number) => void;
-  /** v36：四招輪替（a/b/c/d），tx/ty=施放當下鎖定的玩家位置（招 c 用） */
-  onBossSkill?: (enemy: Enemy, kind: 'a' | 'b' | 'c' | 'd', tx: number, ty: number) => void;
+  /** BOSS 三招輪替回呼（場景實作預警/判定），tx/ty = 施放當下的目標位置（b / c 瞄準用） */
+  onBossSkill?: (enemy: Enemy, kind: BossSkillKind, tx: number, ty: number) => void;
 
   /** v28：是否 BOSS */
   isBoss = false;
   /** v36：暫停 BOSS 自動輪替招式（除錯用，隔離單招測試） */
   bossSkillsPaused = false;
+  /** BOSS 是否正在蓄力 / 施放招式（由場景設定）；期間不移動、不排下一招 */
+  bossCasting = false;
   /** v37fix(A)：對守護 NPC 的接觸攻擊冷卻（每隻怪每 npcAttackCooldownMs 才扣一次 NPC 血，避免每幀扣） */
   nextNpcHitAt = 0;
   /** ★守護 NPC 被子彈命中的全域冷卻(NPC 側,避免連發子彈每幀瞬秒);放在 NPC enemy 物件上。 */
@@ -146,6 +147,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   /** v28 BOSS 攻擊輪替狀態 */
   private bossNextAttackAt = 0;
   private bossAttackIndex = 0;
+  /** BOSS 直線衝刺結束時間；衝刺中維持衝刺速度 */
+  private bossDashUntil = 0;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'enemy-normal');
@@ -166,6 +169,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.bodyRadius = b.radius;
       this.bossNextAttackAt = time + b.skills.gapMs;
       this.bossAttackIndex = 0;
+      this.bossCasting = false;
+      this.bossDashUntil = 0;
     } else if (type === 'tower') {
       // v33 塔：stats 來自 GameConfig.event.tower；hpScale=最終 HP 倍率
       const tw = GameConfig.event.tower;
@@ -596,31 +601,41 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
   }
 
-  // --- BOSS：慢速逼近 + 三招輪替（近身橫掃 / 召喚小怪 / 投彈）---
+  /**
+   * BOSS：慢慢追目標（到 chaseStopDist 內停下），蓄力 / 施放期間站定，衝刺中維持衝刺速度；
+   * 招式 a → b → c 輪替，觸發後暫停排程，由場景在該招放完後呼叫 scheduleBossNextAttack
+   */
   private updateBoss(targetX: number, targetY: number, time: number): void {
     const b = GameConfig.boss;
     const body = this.body as Phaser.Physics.Arcade.Body;
-    // v35：BOSS 暫改固定中央不動（招式/錨點第8-9點重做前的暫定行為）
-    if (b.stationary) {
+    if (time < this.bossDashUntil) return; // 衝刺中：速度由 startBossDash 設定
+    const dist = Phaser.Math.Distance.Between(this.x, this.y, targetX, targetY);
+    if (this.bossCasting || dist <= b.chaseStopDist) {
       body.setVelocity(0, 0);
     } else {
-      const dist = Phaser.Math.Distance.Between(this.x, this.y, targetX, targetY);
-      if (dist > b.sweepRadius * 0.6) {
-        body.setVelocity(Math.cos(this.facing) * this.moveSpeed, Math.sin(this.facing) * this.moveSpeed);
-      } else {
-        body.setVelocity(0, 0);
-      }
+      body.setVelocity(Math.cos(this.facing) * this.moveSpeed, Math.sin(this.facing) * this.moveSpeed);
     }
-    if (!this.bossSkillsPaused && time >= this.bossNextAttackAt) {
-      // v39(7)：三招輪替 a→c→d→a（移除招 b 全場炸）。
-      // v39(1)：觸發後把 bossNextAttackAt 設 Infinity「暫停」——由 GameScene 在該招【完全釋放完】後
-      //         呼叫 scheduleBossNextAttack(釋放完時間 + gapMs) 重新排程，確保 gap 從炸完才起算。
-      const kinds: Array<'a' | 'c' | 'd'> = ['a', 'c', 'd'];
-      const kind = kinds[this.bossAttackIndex % 3];
+    if (!this.bossSkillsPaused && !this.bossCasting && time >= this.bossNextAttackAt) {
+      const kinds: BossSkillKind[] = ['a', 'b', 'c'];
+      const kind = kinds[this.bossAttackIndex % kinds.length];
       this.bossAttackIndex++;
       this.bossNextAttackAt = Number.MAX_SAFE_INTEGER;
+      body.setVelocity(0, 0);
       this.onBossSkill?.(this, kind, targetX, targetY);
     }
+  }
+
+  /**
+   * BOSS 直線衝刺：以固定速度朝 angle 方向移動 durationMs
+   *
+   * @param angle 衝刺方向（弧度）
+   * @param speed 衝刺速度（像素 / 秒）
+   * @param durationMs 衝刺時間
+   * @param time 目前場景時間
+   */
+  startBossDash(angle: number, speed: number, durationMs: number, time: number): void {
+    this.bossDashUntil = time + durationMs;
+    (this.body as Phaser.Physics.Arcade.Body).setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
   }
 
   /** v39(1)：由 GameScene 在招式釋放完後呼叫，重新排程下一招（gap 從釋放完起算） */
@@ -801,6 +816,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.nextBombAt = shift(this.nextBombAt);
     this.nextNpcHitAt = shift(this.nextNpcHitAt);
     this.bossNextAttackAt = shift(this.bossNextAttackAt);
+    this.bossDashUntil = shift(this.bossDashUntil);
   }
 
   /** v45(2)：時停開始/結束——暫停/續 蓄力/預警 tween（進度不流失）。 */

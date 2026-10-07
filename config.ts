@@ -1034,28 +1034,12 @@ export const GameConfig = {
     hpGrowthPerBoss: 0.6,
     /** 體型半徑（大） */
     radius: 42,
-    /** 移動速度（慢）；v35：BOSS 暫改固定中央不動（stationary），此值保留給日後招式重做 */
+    /** 移動速度（慢）：追目標角色，蓄力 / 施放期間不動 */
     speed: 46,
-    /** v35：BOSS 站中央不動（第8-9點招式/錨點重做前的暫定行為） */
-    stationary: true,
-    /** v35：BOSS 戰期間不召喚小怪（暫停 summon 招） */
-    disableSummon: true,
-    /** 接觸/攻擊對玩家的傷害基準 */
+    /** 離目標多近就停下不再靠近（像素） */
+    chaseStopDist: 140,
     color: 0xff3355,
     stroke: 0x3a0010,
-    /** 攻擊模式輪替冷卻（毫秒）：每隔此時間換一招 */
-    attackCycleMs: 2600,
-    /** (a) 近身大範圍橫掃 */
-    sweepRadius: 180,
-    sweepDamage: 34,
-    sweepWindupMs: 700,
-    /** (b) 週期召喚小怪數量 */
-    summonCount: 4,
-    /** (c) 蓄力朝玩家投彈：落點爆炸 */
-    bombChargeMs: 1000,
-    bombRadius: 110,
-    bombDamage: 30,
-    bombFlightMs: 700,
     /** 擊殺掉落道具數 */
     dropCount: 4,
     /** v44：BOSS 掉落道具距 BOSS 中心的距離（拉遠，避免掉腳邊被身體擋住撿不到）；原40→170 */
@@ -1067,23 +1051,21 @@ export const GameConfig = {
     /** v35：噴道具離 BOSS 中心的散布半徑 */
     dropScatter: 90,
     /**
-     * v36：BOSS 四招輪替（a→b→c→d→a）。都用「填滿式預警」，傷害走 damageCharacterFrom（無敵擋傷）。
-     * 每招之間間隔 skillGapMs；招 b 緊接 a（safeRadius = a 的 radiusA，逼玩家躲進中心）。
+     * BOSS 三招輪替（a → b → c → a…）：每招蓄力 chargeMs（填滿式預警），放完隔 gapMs 才蓄下一招；
+     * 傷害走 damageCharacterFrom（無敵擋傷），命中定身 skillRootMs
      */
     skills: {
-      /** 招間間隔（毫秒）；v37→v38：1800→3000（出完一招隔 3 秒才蓄下一招，放慢節奏） */
-      gapMs: 3000,
-      /** a：以 BOSS 為中心的實心大圓轟炸；v38 fillMs→4000（蓄力 4 秒） */
-      a: { radius: 260, fillMs: 4000, damage: 30 },
-      /** b：全場轟炸、只有 BOSS 周圍 safeRadius(=a.radius) 圓形安全區；v38 fillMs→4000 */
-      b: { fillMs: 4000, damage: 34 },
-      /** c：瞄玩家方向的 250° 大扇形（留 110° 缺口）；v38 fillMs→4000 */
-      c: { range: 500, arcDeg: 250, fillMs: 4000, damage: 30 },
-      /** d：左右半場接力轟炸（左半 fill 到 halfOverlap 時右半開始 fill）；v38 fillMs→4000 */
-      d: { fillMs: 4000, damage: 30, halfOverlap: 0.5 }
+      gapMs: 1500,
+      chargeMs: 2000,
+      /** a 範圍普攻：以 BOSS 為中心的圓形 */
+      a: { radius: 220, damage: 30 },
+      /** b 直線衝刺：朝目標方向衝 length（終點夾在場內），寬 width 的直線帶內受傷；衝刺耗時 dashMs */
+      b: { length: 520, width: 120, dashMs: 280, damage: 30 },
+      /** c 扇形攻擊：朝目標方向 arcDeg 度、半徑 range 的扇形 */
+      c: { range: 380, arcDeg: 90, damage: 30 }
     },
-    /** v38(F)：出招間隔(gap 空檔)週期性朝玩家丟球狀飛行投射物，填補空檔小威脅 */
-    gapBall: { intervalMs: 900, speed: 320, radius: 12, damage: 15, color: 0xff66aa },
+    /** BOSS 提示（取代血條）：畫面上方中央的大字；亂入 BOSS 顯示離場倒數，剩 urgentSec 秒內改色並脈動 */
+    hud: { y: 104, fontSize: '40px', color: '#ffd166', urgentColor: '#ff4d6d', urgentSec: 10, pulseScale: 1.15, pulseMs: 250 },
     /** v36：BOSS 戰錨點（走位落點）——BOSS 外側上下左右 4 點 */
     anchorDist: 320,
     anchorCount: 4,

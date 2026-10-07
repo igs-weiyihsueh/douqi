@@ -297,10 +297,7 @@ export class UIScene extends Phaser.Scene {
   /** v27 波次顯示（上方中央） */
   private waveText!: Phaser.GameObjects.Text;
   /** v28 BOSS 血條 */
-  private bossBarBg!: Phaser.GameObjects.Rectangle;
-  private bossBar!: Phaser.GameObjects.Rectangle;
   private bossLabel!: Phaser.GameObjects.Text;
-  private readonly bossBarWidth = 460;
   /** v33 事件 HUD（進度/倒數條） */
   private eventBarBg!: Phaser.GameObjects.Rectangle;
   private eventBar!: Phaser.GameObjects.Rectangle;
@@ -559,28 +556,18 @@ export class UIScene extends Phaser.Scene {
 
     this.aimGraphics = this.add.graphics().setDepth(-1); // 圓盤在角色下方
 
-    // v28 BOSS 血條（上方中央，預設隱藏）
-    const bossBarY = 116;
+    // BOSS 提示大字（上方中央，預設隱藏）：不顯示血量，亂入 BOSS 顯示離場倒數
+    const bossHud = GameConfig.boss.hud;
     this.bossLabel = this.add
-      .text(w / 2, bossBarY - 16, 'BOSS', {
+      .text(w / 2, bossHud.y, 'BOSS', {
         fontFamily: 'monospace',
-        fontSize: '15px',
-        color: '#ff5a6e',
+        fontSize: bossHud.fontSize,
+        color: bossHud.color,
         stroke: '#000000',
-        strokeThickness: 3
+        strokeThickness: 7,
+        fontStyle: 'bold'
       })
-      .setOrigin(0.5, 0)
-      .setDepth(40)
-      .setVisible(false);
-    this.bossBarBg = this.add
-      .rectangle(w / 2 - this.bossBarWidth / 2, bossBarY, this.bossBarWidth, 14, 0x000000, 0.6)
-      .setOrigin(0, 0)
-      .setStrokeStyle(2, 0xff3355, 0.8)
-      .setDepth(40)
-      .setVisible(false);
-    this.bossBar = this.add
-      .rectangle(w / 2 - this.bossBarWidth / 2 + 2, bossBarY + 2, this.bossBarWidth - 4, 10, 0xff3355)
-      .setOrigin(0, 0)
+      .setOrigin(0.5)
       .setDepth(40)
       .setVisible(false);
 
@@ -629,14 +616,14 @@ export class UIScene extends Phaser.Scene {
 
     this.game.events.on('stats', this.updateStats, this);
     this.game.events.on('aim', this.updateAim, this);
-    this.game.events.on('boss-hp', this.updateBossHp, this);
+    this.game.events.on('boss-hud', this.updateBossHud, this);
     this.game.events.on('event-hud', this.updateEventHud, this);
     this.game.events.on('items-state', this.updateItemToggleBtn, this);
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.game.events.off('stats', this.updateStats, this);
       this.game.events.off('aim', this.updateAim, this);
-      this.game.events.off('boss-hp', this.updateBossHp, this);
+      this.game.events.off('boss-hud', this.updateBossHud, this);
       this.game.events.off('event-hud', this.updateEventHud, this);
       this.game.events.off('items-state', this.updateItemToggleBtn, this);
     });
@@ -663,14 +650,22 @@ export class UIScene extends Phaser.Scene {
   };
 
   /** v28：BOSS 血條更新 */
-  private updateBossHp = (d: { active: boolean; ratio: number; label?: string }): void => {
-    const show = d.active;
-    this.bossLabel.setVisible(show);
-    if (show) this.bossLabel.setText(d.label ?? 'BOSS');
-    this.bossBarBg.setVisible(show);
-    this.bossBar.setVisible(show);
-    if (show) {
-      this.bossBar.width = (this.bossBarWidth - 4) * Phaser.Math.Clamp(d.ratio, 0, 1);
+  /**
+   * 更新 BOSS 提示大字：亂入 BOSS 顯示「BOSS 亂入 XXs」，剩 urgentSec 秒內改警示色並每秒脈動一次
+   *
+   * @param d active = 是否有 BOSS；secondsLeft = 亂入 BOSS 的剩餘秒數（非亂入為 null）
+   */
+  private updateBossHud = (d: { active: boolean; secondsLeft: number | null }): void => {
+    const cfg = GameConfig.boss.hud;
+    this.bossLabel.setVisible(d.active);
+    if (!d.active) return;
+    const text = d.secondsLeft === null ? 'BOSS' : `BOSS 亂入　${d.secondsLeft}s`;
+    if (this.bossLabel.text === text) return;
+    this.bossLabel.setText(text);
+    const urgent = d.secondsLeft !== null && d.secondsLeft <= cfg.urgentSec;
+    this.bossLabel.setColor(urgent ? cfg.urgentColor : cfg.color);
+    if (urgent) {
+      this.tweens.add({ targets: this.bossLabel, scale: { from: cfg.pulseScale, to: 1 }, duration: cfg.pulseMs });
     }
   };
 
