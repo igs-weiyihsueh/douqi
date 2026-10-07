@@ -663,9 +663,10 @@ export class UIScene extends Phaser.Scene {
   };
 
   /** v28：BOSS 血條更新 */
-  private updateBossHp = (d: { active: boolean; ratio: number }): void => {
+  private updateBossHp = (d: { active: boolean; ratio: number; label?: string }): void => {
     const show = d.active;
     this.bossLabel.setVisible(show);
+    if (show) this.bossLabel.setText(d.label ?? 'BOSS');
     this.bossBarBg.setVisible(show);
     this.bossBar.setVisible(show);
     if (show) {

@@ -899,6 +899,12 @@ export const GameConfig = {
     mysteryExitCombos: [['L', 'R'], ['L', 'U'], ['R', 'U']] as ReadonlyArray<ReadonlyArray<'L' | 'R' | 'U'>>,
     /** 寶箱獎勵：完成小關卡直接發給每位存活玩家的彩票張數 */
     chestTickets: { low: 5, high: 30 },
+    /**
+     * BOSS 限時亂入：問號揭曉為高階時以 chance 機率登場（揭曉橫幅後 entryDelayMs）；不擋通關（不計擊殺數），
+     * durationMs 內沒打倒就淡出離場（leaveFadeMs），換區時也一併離場；
+     * 每次命中有 hitTicketChance 機率掉 hitTickets 張彩票給命中的角色
+     */
+    bossIntrude: { chance: 0.3, entryDelayMs: 1700, durationMs: 60000, hp: 1000, hitTicketChance: 0.3, hitTickets: 1, leaveFadeMs: 500 },
     /** 無限關卡固定使用的場景配色（scene.levels 的 key；火山荒城主題） */
     sceneLevel: 1,
     /**
