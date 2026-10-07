@@ -172,8 +172,6 @@ export const GameConfig = {
     radius: 16,
     /** 一般移動速度（目前操作只有攻擊，移動主要靠衝刺，這裡保留備用） */
     speed: 0,
-    /** 攻擊範圍：衝刺到距離目標多近就停下並揮擊 */
-    attackReach: 44,
     /** 單次普攻傷害（v32：25→36，+44%；連段技/普攻皆受益） */
     attackDamage: 36,
     /** 衝刺速度（像素/秒） */
@@ -184,8 +182,6 @@ export const GameConfig = {
     attackCooldownMs: 300,
     /** 受擊後的無敵時間（毫秒） */
     invulnMs: 600,
-    /** v40(3)：舊「推角色」分離力道。v56(B方案)改成推怪、此值已不使用(保留避免其他引用/相容)。 */
-    separatePush: 0.35,
     /** 攻擊命中判定的額外半徑（普攻掃擊範圍）（v5：60→42，縮約 30%，更易被包圍） */
     attackHitRadius: 42,
     /** v11：遠距衝撞衝刺期間的護盾（無敵）；近戰扇形不給 */
@@ -349,15 +345,6 @@ export const GameConfig = {
     REWARDS: [1, 3, 10, 50, 100] as const,
     /** UI閃爍週期（毫秒）：警告狀態下的閃爍頻率 */
     WARNING_BLINK_MS: 300,
-    /** 進度計算：里程碑間進度條填充的權重配置 */
-    progressWeights: {
-      /** 第一階段(1-5連擊)權重 */
-      early: 0.3,
-      /** 中期階段(6-20連擊)權重 */
-      mid: 0.5,
-      /** 後期階段(21+連擊)權重 */
-      late: 0.8
-    }
   },
 
   /**
@@ -476,8 +463,6 @@ export const GameConfig = {
     targetSearchRadius: 520,
     /** 找不到近敵時，朝敵群中心移動的游走速度（像素/秒） */
     wanderSpeed: 160,
-    /** 鬥氣滿時自動觸發爆發的機率檢查（每次出手判定，1=一定放） */
-    burstUseChance: 1,
 
     /**
      * v15：BOT 搶道具行為（積極度中等，不為遠道具送死）。
@@ -774,8 +759,6 @@ export const GameConfig = {
     maxAlive: 416,
     /** v23：單人存活（僅剩 1 名角色）時的場上敵人硬上限（v26：50→35，單人更少） */
     soloMaxAliveCap: 35,
-    /** 生成方陣隊形的機率（其餘為環形包圍圈） */
-    matrixChance: 0.5,
     /** 開場立即先丟一組隊形（不必等第一個間隔） */
     spawnOnStart: true,
     /** 登場提示時間（毫秒）：這段期間敵人半透明閃爍，不能傷害玩家、也不能被打 */
@@ -950,17 +933,8 @@ export const GameConfig = {
     triggerDist: 46,
     /** ★階段2:crossing 開放後短暫緩衝(毫秒)內不觸發邊界過場——讓玩家看引導箭頭、不貼邊秒觸發。 */
     crossGraceMs: 700,
-    /** 選邊(L/R)影響 B 靜態物件:各配置木箱/桶座標(相對子區左上角比例 0~1) */
-    layoutLeft: {
-      crates: [[0.28, 0.34], [0.34, 0.42], [0.3, 0.5], [0.7, 0.66], [0.76, 0.58]],
-      barrels: [[0.5, 0.3], [0.62, 0.72]]
-    },
-    layoutRight: {
-      crates: [[0.7, 0.34], [0.64, 0.44], [0.72, 0.52], [0.3, 0.68], [0.24, 0.6]],
-      barrels: [[0.5, 0.72], [0.38, 0.3]]
-    },
     /**
-     * ★每區【隨機布置】可破壞物件(取代固定 layoutLeft/Right 座標):每次進子區隨機數量+位置。
+     * ★每區【隨機布置】可破壞物件:每次進子區隨機數量+位置。
      * 保留選邊 L/R 基調:R 側多桶(barrelBias),L 側多木箱。避開中心(出入/事件目標)與邊緣。
      */
     breakablesRandom: {
@@ -980,8 +954,6 @@ export const GameConfig = {
    * 先實作關卡1;關2/3/4 palette 先放好、方向確認後再啟用繪製細節。
    */
   scene: {
-    /** 遠景帶(移動區外圍到畫面邊緣)高度佔畫面比例 */
-    farBandRatio: 0.28,
     /** 餘燼粒子數量(適量,別拖累效能);0=關 */
     emberCount: 14,
     /** 各關移動區地貌 + 基礎配色 */
@@ -1224,56 +1196,6 @@ export const GameConfig = {
 
   /** 隊形設定（v3：整組直接在場內定位） */
   formation: {
-    /**
-     * v25：隊形加權隨機挑選（spawnFormation 用）。新增 line/wedge/doubleRing/scatter。
-     * 各隊形沿用 farFromAllCharacters 避免貼臉、curAliveScale 縮放數量。
-     */
-    typeWeights: {
-      matrix: 20,
-      ring: 24,
-      line: 16,
-      wedge: 14,
-      doubleRing: 12,
-      scatter: 14
-    },
-    /** 方陣：行列數範圍（會隨機取 NxN，N 介於 min~max）（v18：4~6→3~5，每波量降約 35%） */
-    matrix: {
-      minSize: 3,
-      maxSize: 5,
-      /** 方陣內單位間距（像素） */
-      spacing: 46
-    },
-    /** 環形包圍圈：在角色周圍等距排一圈 */
-    ring: {
-      /** 一圈的敵人數量範圍（v18：10~18→6~12，每波量降約 35%） */
-      minCount: 6,
-      maxCount: 12,
-      /** 生成時圓圈半徑範圍（場內，圍住角色） */
-      minRadius: 180,
-      maxRadius: 300
-    },
-    /** v25 橫/縱列：一整排壓進來 */
-    line: {
-      minCount: 6,
-      maxCount: 11,
-      /** 單位間距 */
-      spacing: 52
-    },
-    /** v25 V字/楔形：以尖端朝角色的楔形 */
-    wedge: {
-      /** 每側排數（總數約 2*rows+1） */
-      minRows: 3,
-      maxRows: 5,
-      spacing: 50
-    },
-    /** v25 雙環：內外兩圈同心 */
-    doubleRing: {
-      innerMinCount: 5,
-      innerMaxCount: 8,
-      outerExtra: 4,
-      innerRadius: 170,
-      ringGap: 120
-    },
     /** v25 隨機散點：一個區域內隨機灑一叢 */
     scatter: {
       minCount: 6,
@@ -1306,10 +1228,6 @@ export const GameConfig = {
     ringColor: 0x8be9fd,
     /** 圓環透明度 */
     ringAlpha: 0.7,
-    /** 箭頭大小（三角形邊長） */
-    arrowSize: 16,
-    /** 箭頭顏色 */
-    arrowColor: 0xffe66d,
     /** 方向衝刺的最大距離（像素，路徑無敵人時衝完此距離停下） */
     dashDistance: 320,
     /** 衝刺途中判定「撞到敵人」的半徑（碰到就停在其旁攻擊）（v5：46→32，縮約30%） */
@@ -1395,9 +1313,6 @@ export const GameConfig = {
 
   /** 打擊感表現 */
   juice: {
-    /** 普攻螢幕震動 */
-    hitShakeDuration: 90,
-    hitShakeIntensity: 0.006,
     /** 爆發螢幕震動（v9：強度 0.02→0.009 明顯調小，時間 400→300 略縮） */
     burstShakeDuration: 300,
     burstShakeIntensity: 0.009,
@@ -1435,8 +1350,6 @@ export const GameConfig = {
     maxAlive: 5,
     /** 逾時前開始閃爍提示的剩餘時間（毫秒） */
     blinkBeforeMs: 2500,
-    /** v9：道具護盾 HP（需被角色攻擊打幾下才破，破後才可拾取） */
-    shieldHp: 3,
     /** 6 種道具的顏色（對應 skill A/B/C/E/F/H/T） */
     colors: {
       A: 0x00e5ff, // 旋風斬 - 青
@@ -1654,7 +1567,6 @@ export const GameConfig = {
     /** 4 種形狀 key（貼圖 collect-<shape>） */
     shapes: ['diamond', 'star', 'heart', 'gem'] as const,
     shapeNames: { diamond: '鑽石', star: '星星', heart: '心形', gem: '寶石' } as const,
-    shapeIcons: { diamond: '◆', star: '★', heart: '♥', gem: '⬢' } as const,
     /** 每種形狀在中心區維持的目標數量（撿掉會補到此數）★v5:9→11 場上更充足、較不會找不到 */
     perShapeTarget: 11,
     /** 物件散佈的中心區半徑（離場地中心） */
@@ -1669,8 +1581,6 @@ export const GameConfig = {
     pickRadius: 40,
     /** 箱子半徑（放入判定 + 顯示） */
     binRadius: 40,
-    /** 換告示的最短間隔（毫秒，避免搶太快狂閃）——v2 改固定定時換,此值保留但不再用於「丟對就換」 */
-    signMinIntervalMs: 900,
     /** ★v2：告示定時換——v5 改【每次 9~12 秒隨機】(非固定,不規律)。保留 signIntervalMs 供參考不再用。 */
     signIntervalMs: 10000,
     /** ★v5：告示換間隔隨機範圍(毫秒),每次換完重算 nextSignAt = now + Between(min,max) */
@@ -1707,10 +1617,6 @@ export const GameConfig = {
     /** ★v7:推人改「位移撞人」——按空白角色朝面向【短衝】一段(dash)去撞人,撞到才推飛。衝距離/衝時長(→衝速=dist/time)。 */
     dashDist: 110,
     dashDurationMs: 160,
-    /** 被推飛的位移速度(px/s,pushStunMs 內帶著跑;約 pushDistance/stun) */
-    pushKnockSpeed: 550,
-    /** 被推慣性摩擦 */
-    pushFriction: 5,
     /** ★預警圈難度遞增:間隔(出現頻率)ms 由 start→end 線性(越後越密);半徑;填滿時間(越後越短越難閃) */
     ringIntervalStartMs: 1500,
     ringIntervalEndMs: 500,
