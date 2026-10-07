@@ -858,11 +858,9 @@ export class UIScene extends Phaser.Scene {
     const r = cfg.nodeRadius;
     const high = chest === 'high';
     const pulse = cfg.pulse.base + cfg.pulse.amplitude * Math.abs(Math.sin(this.time.now / cfg.pulse.period));
-    
     // 不透明底盤蓋住量條端點
     g.fillStyle(cfg.nodeBgColor, alpha);
     g.fillCircle(x, y, r + cfg.nodePadding.base);
-    
     if (state === 'current') {
       g.fillStyle(this.mixColor(cfg.nodeBgColor, cfg.currentColor, pulse * cfg.pulse.currentMix), alpha);
       g.fillCircle(x, y, r);
@@ -874,18 +872,15 @@ export class UIScene extends Phaser.Scene {
       g.lineStyle(cfg.nodeStrokeWidth.normal, state === 'done' ? cfg.doneColor : cfg.pendingColor, alpha);
       g.strokeCircle(x, y, r);
     }
-    
     // 高階寶箱：外圈金色光暈（脈動）
     if (high) {
       g.lineStyle(cfg.nodeStrokeWidth.normal, cfg.highChestColor, (cfg.pulse.haloAlphaBase + cfg.pulse.haloAlphaAmplitude * pulse) * alpha);
       g.strokeCircle(x, y, r + cfg.nodePadding.highHalo);
     }
-    
     // 寶箱圖示：箱體 + 箱蓋 + 鎖扣
     const size = r * (high ? cfg.highChestScale : cfg.lowChestScale);
     const w = size * cfg.chestRatios.aspectRatio, h = size;
     const bodyColor = high ? cfg.highChestColor : cfg.lowChestColor;
-    
     g.fillStyle(bodyColor, alpha);
     g.fillRect(x - w / 2, y - h / 2 + h * cfg.chestRatios.bodyStart, w, h * cfg.chestRatios.bodyHeight);      // 箱體
     g.fillStyle(this.mixColor(bodyColor, 0xffffff, cfg.chestRatios.lidBrighten), alpha);
