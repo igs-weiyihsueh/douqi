@@ -5,6 +5,21 @@
 
 ---
 
+## [2026-10-07 16:27] 開發完成 | 二段能量條強化 + 移除能量球
+**變更摘要**：翼騎完成UIScene頭上UI能量條二段強化（尺寸擴大、特效增強、bug修正）+ 移除擊殺能量球演出系統
+**影響頁面**：wiki/systems/ui-implementation.md（頭上UI能量條段落需更新尺寸、提示文字、特效、EnergyUIElements型別；若有能量球orb相關內容需刪除）
+**代碼位置**：commit 2f54bbf (deploy-refactor分支)
+**銳騎審查**：97/100分通過
+**開發詳情**：
+- 能量條尺寸100×8→140×14，外框2px，提示改為「按Z變身」移到右方
+- 修正bug：集滿時右側殘留黑格（進度條起點和寬度計算問題）
+- 新增集滿特效：外發光脈動、掃光、外框金白交替
+- 集滿判定改用energyTrigger門檻（150）
+- 程式結構：能量條元件收斂為EnergyUIElements型別，版面特效數值集中在OVERHEAD_UI_CONFIG.ENERGY
+- 完全移除能量球系統：config.energy.orb、spawnEnergyOrb、energyOrbCount等4處呼叫
+**查重結果**：無重複內容，為新功能開發
+**下次提醒**：威騎需更新wiki/systems/ui-implementation.md對應段落；用戶需實玩確認能量條尺寸、光暈強度、掃光速度
+
 ## [2026-10-07 16:16] 開發完成 | 翼騎完成3項重大功能改進
 **變更摘要**：鏡頭跟隨空間擴大、關卡模式地圖邊界重定義、F4美術模式修正
 **影響頁面**：[systems/camera-system.md] (需新建), [systems/scene-boundaries.md] (需更新), [design/visual-modes.md] (需更新)
