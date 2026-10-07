@@ -1,0 +1,15 @@
+{
+  "name": "3C團隊-翼騎開發專案",
+  "description": "《變身大亂鬥》H5遊戲開發 - 翼騎主程式開發",
+  "instructions": "file:.claude_instructions.md",
+  "preferredModel": "claude-3-5-sonnet-20241022",
+  "settings": {
+    "codeStyle": "typescript-strict",
+    "reviewRequired": true,
+    "workflowIntegration": true
+  },
+  "tags": ["h5", "phaser", "typescript", "game-dev", "3c-team"],
+  "collaborators": ["異靈", "征騎", "銳騎"],
+  "workingDirectory": "/mnt/d/3C/douqi",
+  "branch": "deploy-refactor"
+}
