@@ -3560,7 +3560,7 @@ export class GameScene extends Phaser.Scene {
     this.bossCount++;
     const b = GameConfig.boss;
     // HP 倍率：隨 boss 序號成長 × 等級 HP 縮放
-    const hpMult = (1 + (this.bossCount - 1) * b.hpGrowthPerBoss);
+    const hpMult = 1 + (this.bossCount - 1) * b.hpGrowthPerBoss;
     // v35：BOSS 暫改固定在場地正中央不動
     const bx = this.arena.centerX;
     const by = b.stationary ? this.arena.centerY : this.arena.top + b.radius + 40;
@@ -3892,7 +3892,7 @@ export class GameScene extends Phaser.Scene {
     enemy.onShoot = this.onEnemyShoot;
     enemy.onLaserFire = this.onEnemyLaserFire;
     enemy.onBombThrow = this.onEnemyBombThrow;
-    enemy.spawn(x, y, time, type, 1);
+    enemy.spawn(x, y, time, type);
     enemy.targetSeat = this.nearestSeat(x, y); // ★黏著:召喚怪也綁最近角色(守護波 resolveEnemyTarget 會覆寫成 guardNpc)
     if (leashImmune) { enemy.leashRadius = Infinity; enemy.leashTravelDist = Infinity; } // ★守護波怪免疫 leash(一直衝 NPC)
     if (forceChase) enemy.forceChase = true; // ★守護波怪:無視 alertRadius 生成即直衝目標(NPC)
@@ -3991,7 +3991,7 @@ export class GameScene extends Phaser.Scene {
     if (kind === 'tower') {
       const cfg = GameConfig.event.tower;
       // ★塔血量根據人數調整
-      const baseHpMult = (1 + (this.currentWave - 1) * cfg.hpGrowthPerWave);
+      const baseHpMult = 1 + (this.currentWave - 1) * cfg.hpGrowthPerWave;
       const adjustedHpMult = baseHpMult * this.eventDifficultyMultiplier;
       const tx = this.arena.centerX;
       const ty = this.arena.centerY;
@@ -5030,7 +5030,7 @@ export class GameScene extends Phaser.Scene {
     enemy.onShoot = this.onEnemyShoot;
     enemy.onLaserFire = this.onEnemyLaserFire;
     enemy.onBombThrow = this.onEnemyBombThrow;
-    enemy.spawn(cx, cy, time, type, 1);
+    enemy.spawn(cx, cy, time, type);
     // ★黏著目標(階段1):BOSS 綁 P1(seat0);近身組綁指定 seat;其餘生成點就近綁。之後黏著不亂換。
     enemy.targetSeat = enemy.isBoss ? 0 : (assignSeat >= 0 ? assignSeat : this.nearestSeat(cx, cy));
     enemy.stickyOutOfRangeSince = 0;
@@ -6604,7 +6604,6 @@ export class GameScene extends Phaser.Scene {
         actor.kills++;
         // ★移除：COMBO改為命中觸發，不在擊殺時觸發
         // this.triggerComboHit(actor);  
-        this.grantKillExp(etype);
         this.onBossKilled(dx, dy); // v28：BOSS 擊殺 → 大爆炸+掉落+過關
       } else if (etype === 'tower') {
         this.tower = null; // v33：打掉塔 → 事件完成
@@ -6617,7 +6616,6 @@ export class GameScene extends Phaser.Scene {
         actor.kills++;
         // ★移除：COMBO改為命中觸發，不在擊殺時觸發
         // this.triggerComboHit(actor);
-        this.grantKillExp(etype);
         this.onWaveKill();
         this.spawnDeathBurst(dx, dy);
         // ★v58→v61 修:能量改【隊伍任何人擊殺都給 P1 能量】(僅 P1 有能量系統)。
@@ -7204,7 +7202,6 @@ export class GameScene extends Phaser.Scene {
       enemy.kill();
       if (wasBoss) {
         actor.kills++;
-        this.grantKillExp(etype);
         this.onBossKilled(dx, dy);
       } else if (etype === 'tower') {
         this.tower = null;
@@ -7215,7 +7212,6 @@ export class GameScene extends Phaser.Scene {
         // v35/36：NPC/錨點為 anchor-like 位移點，玩家傷不到（isVulnerable=false）；此分支僅防呆，不處理
       } else {
         actor.kills++;
-        this.grantKillExp(etype);
         this.onWaveKill();
         this.spawnDeathBurst(dx, dy);
         // ★v61 修「能量每5隻才跳」根因:普攻(performMeleeArc→此 damageEnemy)擊殺【原本沒給能量】——
@@ -7365,11 +7361,6 @@ export class GameScene extends Phaser.Scene {
 
   // ---------------------------------------------------------------------------
 
-  /** ★拔等級:擊殺不再給經驗/不升級(固定滿等)。保留空實作,呼叫點不動。 */
-  private grantKillExp(_type: EnemyType): void {
-    // no-op(等級系統已移除;數值固定滿等,難度改由波次/怪種控制)
-  }
-
   /** 難度成長：目前等級對應的敵人生成量上限 */
   /** v20：怪量隨場上存活角色數縮放（1人0.4 → 4人1.0） */
   private curAliveScale(): number {
@@ -7508,11 +7499,6 @@ export class GameScene extends Phaser.Scene {
       guardRemainMs: this.guardNpc ? Math.max(0, this.guardEndsAt - this.time.now) : null,
       captureProgress: Math.round(this.captureProgress)
     };
-  }
-
-  /** 除錯：直接灌經驗（測升級/成長用） */
-  debugGrantExp(_kills: number, _type: EnemyType = 'normal'): void {
-    this.emitStats();
   }
 
   /** 除錯：壓力測試——在 P1 周圍密集生成 n 隻已實體化(可傷)的一般怪 */

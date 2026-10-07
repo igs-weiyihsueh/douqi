@@ -185,10 +185,10 @@ export const GameConfig = {
   },
 
   /**
-   * v31 連段技系統（僅 P1）：普攻命中累積 combo，達門檻觸發「已解鎖」的連段技。
-   * v32 最終架構：一條 combo 累積，四技各自門檻+隨等級解鎖：
-   *   命中3→圓形(Lv2)、6→直線(Lv4)、9→爆發原地亂打(Lv6)、10→限時強化(Lv1)，到 10 歸零。
-   * 未達解鎖等級的階不觸發。與道具 6 招是不同系統。
+   * v31 連段技系統：普攻命中累積 combo，達門檻觸發連段技。
+   * v32 最終架構：一條 combo 累積，四技各自門檻：
+   *   命中3→圓形、6→直線、9→爆發原地亂打、10→限時強化，到 10 歸零（快速模式；慢速見下）。
+   * 與道具 6 招是不同系統。
    */
   /**
    * v31 連段技系統（僅 P1）。
@@ -242,7 +242,7 @@ export const GameConfig = {
       /** ★v62/v63 階段4:強化期【唯一招】——鎖定角色周圍圓範圍內的怪→打過去→以【目標】為中心炸圓AOE。只 slow P1。 */
       aoe: {
         radius: 160,             // ★③④炸裂 AOE 半徑(以【目標】為中心)——縮小(260→160)
-        damage: 60,              // AOE 圓內每隻敵人傷害(隨等級/curSkillDamageScale)
+        damage: 60,              // AOE 圓內每隻敵人傷害
         knockback: 180,          // 輕擊退
         cooldownMs: 650,         // 每次放的冷卻(避免狂放)
         projSpeed: 900,          // 攻擊飛向目標的投射速度(px/s)
@@ -566,7 +566,7 @@ export const GameConfig = {
 
     /**
      * 各類型定義（含出現權重 spawnWeight，用於隊形內混編）。
-     * v25：spawnWeight 為「該怪種解鎖後」的加權；是否納入抽選由 enemy.unlockByLevel + teamLevel gating（見 pickEnemyType）。
+     * spawnWeight 為「該怪種解鎖後」的加權；是否納入抽選依波次解鎖（見 unlockByWave / pickEnemyType）。
      */
     types: {
       /** 一般近戰蓄力小怪（v32：spawnWeight 52→75，雜兵佔比提高、更多好清） */
@@ -605,7 +605,7 @@ export const GameConfig = {
         stroke: 0x0a2a12,
         spawnWeight: 10
       },
-      /** 衝鋒怪：蓄力後高速直線衝撞（暫不解鎖，spawnWeight 0、不列 unlockByLevel） */
+      /** 衝鋒怪：蓄力後高速直線衝撞（暫不解鎖，spawnWeight 0、不列 unlockByWave） */
       charger: {
         maxHp: 110,
         speed: 66,
@@ -691,18 +691,6 @@ export const GameConfig = {
     },
 
     /**
-     * v25：怪種隨團隊等級解鎖。pickEnemyType() 只在「teamLevel >= 對應門檻」的怪種間做加權隨機。
-     * 未列於此表者（如 charger）永不解鎖。normal 門檻 1（一開始就有）。
-     */
-    unlockByLevel: {
-      normal: 1,
-      tank: 3,
-      shielder: 5,
-      bomber: 6,
-      shooter: 7
-    },
-
-    /**
      * v27：怪種改「依波次」解鎖（pickEnemyType 依 currentWave gating）。越後面波次怪種越多。
      * 未列者（charger）永不解鎖。
      */
@@ -730,7 +718,7 @@ export const GameConfig = {
       bombFlightMs: 650,
       /** 爆炸半徑（落點此半徑內存活角色受傷） */
       bombRadius: 90,
-      /** 爆炸傷害（套 curEnemyDamageScale） */
+      /** 爆炸傷害 */
       bombDamage: 30
     }
   },
@@ -765,7 +753,7 @@ export const GameConfig = {
     /**
      * v20：怪量隨場上「存活角色數」縮放。effectiveScale = base + (aliveCount-1)*perAlive，夾在 [base,1]。
      * 1 人 = 0.4（現況 40%）、每多 1 人 +0.2、湊滿 4 人 = 1.0（現況量）。
-     * 此縮放乘在 maxAlive 與每波生成量上；等級成長曲線再疊加其上。
+     * 此縮放乘在 maxAlive 與每波生成量上。
      */
     aliveScale: {
       base: 0.4,
@@ -810,7 +798,6 @@ export const GameConfig = {
 
   /**
    * v27 波次制：每波要清掉固定數量的怪才過關，越後面波次量越多、怪種越多。
-   * 等級(擊殺經驗)=強度與角色成長；波次=量與怪種解鎖。兩者並存。
    */
   wave: {
     /** 第 1 關怪數 */
@@ -1020,7 +1007,7 @@ export const GameConfig = {
 
   /** v28 波次 BOSS 設定 */
   boss: {
-    /** 基礎 HP（會隨「第幾隻 BOSS」與等級成長）；v35：3000→8000 更耐打 */
+    /** 基礎 HP（會隨「第幾隻 BOSS」成長）；v35：3000→8000 更耐打 */
     baseHp: 8000,
     /** 每多一隻 BOSS（每個 BOSS 波）HP 成長倍率累加 */
     hpGrowthPerBoss: 0.6,
@@ -1032,7 +1019,7 @@ export const GameConfig = {
     stationary: true,
     /** v35：BOSS 戰期間不召喚小怪（暫停 summon 招） */
     disableSummon: true,
-    /** 接觸/攻擊對玩家的傷害基準（套 curEnemyDamageScale） */
+    /** 接觸/攻擊對玩家的傷害基準 */
     color: 0xff3355,
     stroke: 0x3a0010,
     /** 攻擊模式輪替冷卻（毫秒）：每隔此時間換一招 */
