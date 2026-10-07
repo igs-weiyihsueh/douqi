@@ -5,6 +5,36 @@
 
 ---
 
+## [2026-10-07 21:15] 開發完成 | 主選單角色編輯器系統 (c4882c3+5740cfc)
+**變更摘要**：主選單重大改版 - 移除Zoom系統，新增完整角色編輯器功能，支援慢速模式4項參數自訂
+**影響頁面**：
+- [systems/character-editor.md] (新建) - 完整角色編輯器系統技術文檔
+- [design/ui-ux-decisions.md] (更新) - 除錯界面章節：移除Zoom+新增角色編輯器
+- [systems/ui-implementation.md] (更新) - 新增角色編輯器面板UI系統
+- [design/gameplay-evolution.md] (更新) - 角色成長系統：參數系統升級
+- [glossary.md] (更新) - 新增characterParams、CharacterEditorPanel、attackCooldownMs術語
+**代碼位置**：commits c4882c3 (Zoom移除), 5740cfc (角色編輯器)
+**系統架構**：
+1. **移除Zoom系統** (c4882c3): 按鈕、Z鍵、編輯面板、config.zoomEditor、GameScene套用 (-401行)
+2. **角色編輯器** (5740cfc): 
+   - 入口：「🛠 角色編輯 (C)」取代原Zoom按鈕位置
+   - 4項參數：攻擊間隔(100-800ms)/移動速度(100-500)/衝刺速度(200-1500)/衝刺距離(60-400px)
+   - 適用範圍：慢速模式，P1和BOT統一套用
+   - 操作方式：滑桿/±微調/鍵盤控制(↑↓←→Enter/Esc)/三功能鍵(儲存/恢復預設/取消)
+   - 資料管理：localStorage永久保存(douqi.characterParams.v1)，防損壞降級
+   - 防誤觸：編輯時壓暗背景，暫停主選單其他功能
+**新增檔案**：
+- systems/characterParams.ts (+116行): 參數定義與存讀檔系統
+- objects/CharacterEditorPanel.ts (+275行): 完整編輯面板UI與操作邏輯
+**技術特色**：
+- 滑桿點擊跳值+拖拽把手+微調按鈍
+- 鍵盤完整支援：↑↓選擇、←→調整、Enter儲存、Esc取消
+- 參數夾範圍保護，localStorage異常時自動回預設值
+- P1與BOT參數統一(原慢速衝刺僅P1，現在統一套用)
+**評分審查**：97/100分，已部署上線
+**查重結果**：主選單UI與遊戲參數系統重大升級，全新編輯器架構
+**下次提醒**：威騎已完成WIKI文檔建立，零式可評估新參數範圍的遊戲平衡
+
 ## [2026-10-07 19:30] 開發完成 | HUD地圖式進度改版 (05dafae)
 **變更摘要**：卷軸HUD改為地圖式進度設計 - 最左位置標記+右側4寶箱，量條往下一個寶箱前進
 **影響頁面**：

@@ -228,6 +228,32 @@ playComboRewardFx(char: Character, text: string): void {
   });
 }
 ```
+
+### 角色編輯器面板 (5740cfc新增)
+```typescript
+// objects/CharacterEditorPanel.ts - 主選單角色參數編輯
+class CharacterEditorPanel {
+  private container: Phaser.GameObjects.Container | null = null;
+  private rows: ParamRow[] = [];              // 4個參數滑桿列
+  private values: CharacterParams;            // 當前參數值
+  private selected = 0;                      // 鍵盤選中參數
+  
+  // 4項可調參數：攻擊間隔/移動速度/衝刺速度/衝刺距離
+  open(): void {
+    this.values = loadCharacterParams();     // 載入localStorage保存值
+    this.createParamRows();                  // 建立滑桿界面
+    this.createButtons();                    // 儲存/恢復預設/取消按鈕
+  }
+  
+  // 操作方式：
+  // 1. 滑鼠：點擊滑桿跳值、拖拽把手、±微調按鈕
+  // 2. 鍵盤：↑↓選擇參數、←→調整數值、Enter儲存、Esc取消
+  // 3. 防誤觸：開啟時壓暗背景並暫停主選單其他功能
+}
+
+// 適用範圍：慢速模式，P1和BOT統一套用
+// 資料管理：localStorage永久保存 (douqi.characterParams.v1)
+```
 ```
 
 ### 關卡進度HUD系統 (874b8f9新增)

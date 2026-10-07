@@ -30,11 +30,14 @@ const slowMode = {
 
 ## 角色成長系統
 
-### 多角色協作設計
+### 角色成長系統 (5740cfc參數系統升級)
+
+#### 多角色協作設計
 ```typescript
 // Character系統 - 最多4人本地協作
 class GameScene {
   private characters: Character[] = [];  // P1 + 3 BOT
+  private characterParams: CharacterParams; // 慢速模式自訂參數
 
   // P1玩家控制
   private get player(): Character {
@@ -48,6 +51,42 @@ class Character {
   spirit: number;          // 個別連段
   energy: number;          // 個別能量 
   credit: number;          // 個別貨幣
+  
+  // 動態參數系統 (5740cfc)
+  moveSpeed: number;       // 移動速度 (慢速模式可自訂100-500)
+  dashSpeed: number;       // 衝刺速度 (慢速模式可自訂200-1500)
+  dashDistance: number;    // 衝刺距離 (慢速模式可自訂60-400px)
+  attackCooldown: number;  // 攻擊間隔 (慢速模式可自訂100-800ms)
+}
+```
+
+#### 參數載入與套用
+```typescript
+// GameScene.ts - 遊戲開始時載入自訂參數
+create(data: { mode: 'fast' | 'slow' }): void {
+  this.mode = data.mode;
+  
+  if (this.mode === 'slow') {
+    // 載入角色編輯器保存的參數
+    this.characterParams = loadCharacterParams();
+    
+    // P1與BOT統一套用 (5740cfc改進)
+    this.characters.forEach(char => {
+      char.moveSpeed = this.characterParams.moveSpeed;
+      char.dashSpeed = this.characterParams.dashSpeed;  
+      char.dashDistance = this.characterParams.dashDistance;
+      char.attackCooldown = this.characterParams.attackCooldownMs;
+    });
+  }
+}
+
+// 攻擊冷卻動態計算
+private attackCooldownMs(): number {
+  return this.mode === 'slow' 
+    ? this.characterParams.attackCooldownMs 
+    : GameConfig.player.attackCooldownMs;
+}
+```
   kills: number;           // 個別擊殺
   alive: boolean;          // 個別存活狀態
 }

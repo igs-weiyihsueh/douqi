@@ -178,26 +178,60 @@ class PushSurvivalScene {
 
 ## 除錯與開發界面
 
-### 慢速模式調參面板
+### 角色編輯器系統 (5740cfc取代Zoom)
 ```typescript
-// debug配置
-debug: {
-  showSlowTuningPanel: false,     // 慢速模式調參面板
-  showZoomEditor: false           // zoom編輯器
+// TitleScene - 角色編輯器入口 (取代原Zoom按鈕位置)
+private characterEditorBtn?: Phaser.GameObjects.Text;
+private characterEditor?: CharacterEditorPanel;
+
+private createCharacterEditorButton(): void {
+  this.characterEditorBtn = this.add.text(cx - 200, cy + 80, '🛠 角色編輯 (C)', {
+    fontSize: '24px',
+    fill: '#ffffff',
+    backgroundColor: '#374151',
+    padding: { x: 16, y: 8 }
+  }).setOrigin(0.5).setInteractive();
 }
 
-// 調參面板位置
-zoomEditor: {
-  panelX: 1580,                   // 右上角位置
-  panelY: 50,
-  panelWidth: 320,
-  panelHeight: 180,
-  
-  slider: {
-    width: 200, height: 20,
-    trackColor: 0x444444,
-    handleColor: 0x00ff00,
-    handleRadius: 10
+// 防誤觸保護：編輯時暫停主選單其他功能
+get isCharacterEditorOpen(): boolean {
+  return this.characterEditor?.isOpen ?? false;
+}
+```
+
+### 慢速模式參數系統 (5740cfc升級)
+```typescript
+// systems/characterParams.ts - 動態參數載入
+export type CharacterParamKey = 'attackCooldownMs' | 'moveSpeed' | 'dashSpeed' | 'dashDistance';
+
+const CHARACTER_PARAM_DEFS = [
+  { key: 'attackCooldownMs', min: 100, max: 800, step: 20 },  // 攻擊間隔
+  { key: 'moveSpeed', min: 100, max: 500, step: 10 },         // 移動速度  
+  { key: 'dashSpeed', min: 200, max: 1500, step: 20 },        // 衝刺速度
+  { key: 'dashDistance', min: 60, max: 400, step: 10 }        // 衝刺距離
+];
+
+// localStorage永久保存 (douqi.characterParams.v1)
+export function saveCharacterParams(params: CharacterParams): void;
+export function loadCharacterParams(): CharacterParams;
+```
+
+### ~~Zoom編輯器系統~~ (c4882c3已移除)
+```typescript
+// ❌ 已移除的Zoom系統 (c4882c3)
+// - TitleScene Zoom按鈕和Z鍵綁定
+// - openZoomEditor、createZoomEditorPanel方法
+// - zoomEditorActive、zoomSliders狀態  
+// - GameScene zoom設定應用
+// - config.showZoomEditor、zoomEditor配置區塊
+// 總移除: 401行代碼，為角色編輯器騰出UI位置
+
+// debug配置 (更新)
+debug: {
+  showSlowTuningPanel: false,     // 慢速模式調參面板 (保留)
+  // showZoomEditor: false        // ❌ 已移除
+}
+```
   }
 }
 ```

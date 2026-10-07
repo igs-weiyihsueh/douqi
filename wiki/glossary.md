@@ -67,6 +67,9 @@
 | **GameConfig** | 遊戲主配置物件 | `config.ts:5` | [效能配置](./systems/performance-config.md) |
 | **levelLerp** | 等級化數值計算函數 | `config.ts` | [效能配置](./systems/performance-config.md) |
 | **arena** | 場地配置 (經典模式) | `config.ts:107-115` | [UI/UX設計](./design/ui-ux-decisions.md) |
+| **characterParams** | 角色參數存讀檔系統 (5740cfc新增) | `systems/characterParams.ts:1` | [角色編輯器](./systems/character-editor.md) |
+| **CharacterEditorPanel** | 角色編輯器面板類別 (5740cfc新增) | `objects/CharacterEditorPanel.ts:70` | [角色編輯器](./systems/character-editor.md) |
+| **attackCooldownMs** | 攻擊冷卻間隔參數 (5740cfc可調) | `GameScene.ts:xxx` | [角色編輯器](./systems/character-editor.md) |
 | **markerColor** | HUD位置標記顏色(綠色) (05dafae新增) | `config.ts:84` | [關卡系統](./systems/stage-system.md) |
 | **markerDotScale** | 位置標記中心亮點縮放 (05dafae新增) | `config.ts:85` | [關卡系統](./systems/stage-system.md) |
 | **drawStageMarker** | HUD位置標記繪製函式 (05dafae新增) | `UIScene.ts:858` | [關卡系統](./systems/stage-system.md) |
