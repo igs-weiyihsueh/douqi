@@ -153,6 +153,24 @@ export class UIScene extends Phaser.Scene {
   
   // ★多角色底部面板替換系統
   private bottomPanelOverlays: Array<Phaser.GameObjects.Image | null> = [null, null, null, null]; // [1P, 2P, 3P, 4P]
+
+  /** 下方面板 COMBO 文字（HIT xN），每個角色一個，索引對應 rows */
+  private panelComboTexts: Phaser.GameObjects.Text[] = [];
+  /** 下方面板 COMBO 顯示設定：文字右下角對齊面板右上角（加偏移），原版色塊面板與 F4 面板圖各有一組偏移 */
+  private readonly PANEL_COMBO_CONFIG = {
+    FONT_SIZE: '24px',
+    STROKE_WIDTH: 3,
+    /** 原版色塊面板：相對面板右上角的偏移（貼在面板右上方） */
+    CLASSIC_OFFSET_X: 0,
+    CLASSIC_OFFSET_Y: -2,
+    /** F4 面板圖：相對面板圖右上角的偏移（面板圖上緣有透明留白，文字落在寶箱上方） */
+    OVERLAY_OFFSET_X: -8,
+    OVERLAY_OFFSET_Y: 30,
+    /** 高於 F4 面板圖（depth 1000+i） */
+    DEPTH: 1010,
+    /** 警告狀態橙紅交替閃爍週期 */
+    WARNING_BLINK_MS: GameConfig.comboReward.WARNING_BLINK_MS
+  } as const;
   
   // ★頭上UI佈局常數：避免魔術數字
   private readonly OVERHEAD_UI_CONFIG = {
@@ -547,6 +565,9 @@ export class UIScene extends Phaser.Scene {
       });
     }
 
+    // 下方面板 COMBO 文字（需在 rows 與 F4 面板圖建立後，才能對齊兩種面板）
+    this.createPanelComboTexts();
+
     this.aimGraphics = this.add.graphics().setDepth(-1); // 圓盤在角色下方
 
     // v28 BOSS 血條（上方中央，預設隱藏）
@@ -754,6 +775,7 @@ export class UIScene extends Phaser.Scene {
     // 🔄 NEW UI：角色狀態列更新 - 圓形標籤 + 雙欄位系統，完全移除血條系統
     for (let i = 0; i < this.rows.length; i++) {
       const row = this.rows[i];
+      this.updatePanelCombo(i, s.chars[i]);
       
       if (i >= s.chars.length) {
         // 未加入狀態：透明度0.3，灰色標籤
@@ -1714,6 +1736,74 @@ export class UIScene extends Phaser.Scene {
   }
 
   /**
+   * 建立下方面板的 COMBO 文字（每個角色一個，預設隱藏），先對齊原版色塊面板；
+   * F4 切換時由 setBottomPanelOverlay → positionPanelComboTexts 重新定位
+   */
+  private createPanelComboTexts(): void {
+    const cfg = this.PANEL_COMBO_CONFIG;
+    const colors = this.OVERHEAD_UI_CONFIG.COLORS;
+    this.panelComboTexts = this.rows.map(() =>
+      this.add.text(0, 0, '', {
+        fontFamily: 'monospace',
+        fontSize: cfg.FONT_SIZE,
+        color: colors.COMBO_TEXT_NORMAL,
+        stroke: colors.BLACK,
+        strokeThickness: cfg.STROKE_WIDTH,
+        fontStyle: 'bold'
+      }).setOrigin(1, 1).setDepth(cfg.DEPTH).setScrollFactor(0).setVisible(false)
+    );
+    this.positionPanelComboTexts(false);
+  }
+
+  /**
+   * 依面板模式把 COMBO 文字移到對應面板的右上角
+   *
+   * @param useOverlay - true = F4 面板圖；false = 原版色塊面板（該角色沒有面板圖時也退回原版位置）
+   */
+  private positionPanelComboTexts(useOverlay: boolean): void {
+    const cfg = this.PANEL_COMBO_CONFIG;
+    this.panelComboTexts.forEach((text, i) => {
+      const overlay = this.bottomPanelOverlays[i];
+      if (useOverlay && overlay) {
+        // 面板圖 origin 為中心 → 右上角 = 中心 + (寬/2, -高/2)
+        text.setPosition(
+          overlay.x + overlay.displayWidth / 2 + cfg.OVERLAY_OFFSET_X,
+          overlay.y - overlay.displayHeight / 2 + cfg.OVERLAY_OFFSET_Y
+        );
+        return;
+      }
+      // 原版色塊面板 origin 為左上 → 右上角 = (x + 寬, y)
+      const panelBg = this.rows[i]?.panelBg;
+      if (panelBg) text.setPosition(panelBg.x + panelBg.width + cfg.CLASSIC_OFFSET_X, panelBg.y + cfg.CLASSIC_OFFSET_Y);
+    });
+  }
+
+  /**
+   * 更新下方面板的 COMBO 顯示：HIT xN；警告狀態橙紅交替閃爍；
+   * 連擊為 0、角色未加入或陣亡時隱藏
+   *
+   * @param index 角色索引（對應 rows / panelComboTexts）
+   * @param character 角色數據（未加入時為 undefined）
+   */
+  private updatePanelCombo(index: number, character: CharStat | undefined): void {
+    const text = this.panelComboTexts[index];
+    if (!text) return;
+    const combo = character?.alive ? character.combo : undefined;
+    if (!combo || combo.currentStreak === 0) {
+      text.setVisible(false);
+      return;
+    }
+    const cfg = this.PANEL_COMBO_CONFIG;
+    const colors = this.OVERHEAD_UI_CONFIG.COLORS;
+    let color: string = colors.COMBO_TEXT_NORMAL;
+    if (combo.isWarning) {
+      const blinkOn = this.time.now % cfg.WARNING_BLINK_MS < cfg.WARNING_BLINK_MS / 2;
+      color = blinkOn ? colors.COMBO_TEXT_CRITICAL : colors.COMBO_TEXT_WARNING;
+    }
+    text.setText(`HIT x${combo.currentStreak}`).setColor(color).setVisible(true);
+  }
+
+  /**
    * ★多角色底部面板替換控制方法
    * 
    * 控制所有角色底部狀態面板的顯示/隱藏，並切換多角色覆蓋UI
@@ -1721,6 +1811,7 @@ export class UIScene extends Phaser.Scene {
    * @param useOverlay - true顯示所有覆蓋並隱藏原始面板，false恢復所有原始面板
    */
   setBottomPanelOverlay(useOverlay: boolean): void {
+    this.positionPanelComboTexts(useOverlay);
     const playerLabels = ['1P', '2P', '3P', '4P'];
     const count = GameConfig.characters.count;
     
