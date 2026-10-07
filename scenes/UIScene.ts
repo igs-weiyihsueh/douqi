@@ -864,12 +864,8 @@ export class UIScene extends Phaser.Scene {
     for (let i = 0; i < chestCount; i++) {
       const alpha = i === chestCount - 1 ? e : 1;
       const state: StageNodeState = i === 0 ? 'current' : 'pending';
-      if (i === 0 && revealT < 1) {
-        // 問號揭曉：「?」淡出、寶箱淡入，並放出一圈擴散光環
-        this.drawStageNode(xAt(1), y, 'mystery', state, alpha * (1 - revealT));
-        this.drawStageNode(xAt(1), y, this.stageHudChests[0], state, alpha * revealT);
-        g.lineStyle(cfg.nodeStrokeWidth.current, cfg.mysteryColor, (1 - revealT) * alpha);
-        g.strokeCircle(xAt(1), y, cfg.nodeRadius * (1 + revealT * cfg.revealRingScale));
+      if (i === 0 && revealT < 1 && this.stageHudChests[0] !== 'mystery') {
+        this.drawRevealNode(xAt(1), y, this.stageHudChests[0], revealT, alpha);
         continue;
       }
       this.drawStageNode(xAt(i + 1), y, this.stageHudChests[i], state, alpha);
@@ -938,9 +934,24 @@ export class UIScene extends Phaser.Scene {
       g.lineStyle(cfg.nodeStrokeWidth.normal, cfg.highChestColor, (cfg.pulse.haloAlphaBase + cfg.pulse.haloAlphaAmplitude * pulse) * alpha);
       g.strokeCircle(x, y, r + cfg.nodePadding.highHalo);
     }
-    // 寶箱圖示：箱體 + 箱蓋 + 鎖扣
-    const size = r * (high ? cfg.highChestScale : cfg.lowChestScale);
-    const w = size * cfg.chestRatios.aspectRatio, h = size;
+    this.drawChestIcon(x, y, chest, alpha);
+  }
+
+  /**
+   * 畫寶箱圖示：箱體 + 箱蓋 + 鎖扣（高階較大、金色）
+   *
+   * @param x 中心 x（螢幕座標）
+   * @param y 中心 y（螢幕座標）
+   * @param tier 寶箱階級
+   * @param alpha 透明度
+   * @param scaleX 水平縮放（揭曉翻轉動畫用；1 = 原寬）
+   */
+  private drawChestIcon(x: number, y: number, tier: 'low' | 'high', alpha: number, scaleX = 1): void {
+    const cfg = GameConfig.waveHud;
+    const g = this.waveHudGfx;
+    const high = tier === 'high';
+    const size = cfg.nodeRadius * (high ? cfg.highChestScale : cfg.lowChestScale);
+    const w = size * cfg.chestRatios.aspectRatio * scaleX, h = size;
     const bodyColor = high ? cfg.highChestColor : cfg.lowChestColor;
     g.fillStyle(bodyColor, alpha);
     g.fillRect(x - w / 2, y - h / 2 + h * cfg.chestRatios.bodyStart, w, h * cfg.chestRatios.bodyHeight);      // 箱體
@@ -950,6 +961,56 @@ export class UIScene extends Phaser.Scene {
     g.strokeRect(x - w / 2, y - h / 2, w, h);
     g.fillStyle(cfg.chestOutlineColor, alpha);
     g.fillRect(x - w * cfg.chestRatios.lockOffsetX, y - h * cfg.chestRatios.lockOffsetY, w * cfg.chestRatios.lockWidth, h * cfg.chestRatios.lockHeight);      // 鎖扣
+  }
+
+  /**
+   * 問號揭曉動畫：先「圓圈亮起來」（白光漲滿 + 外環擴散），再水平翻轉——「?」壓扁消失、寶箱從中間展開；
+   * 揭曉為高階時翻開後多一圈金色光環
+   *
+   * @param x 圓心 x（螢幕座標）
+   * @param y 圓心 y（螢幕座標）
+   * @param tier 揭曉結果
+   * @param t 動畫進度 0..1（revealMs 內）
+   * @param alpha 整體透明度
+   */
+  private drawRevealNode(x: number, y: number, tier: StageNodeKind, t: number, alpha: number): void {
+    if (tier === 'mystery') return;
+    const cfg = GameConfig.waveHud;
+    const g = this.waveHudGfx;
+    const r = cfg.nodeRadius;
+    const glowEnd = cfg.revealGlowPortion;
+    g.fillStyle(cfg.nodeBgColor, alpha);
+    g.fillCircle(x, y, r + cfg.nodePadding.base);
+    if (t < glowEnd) {
+      // 1) 亮起來：問號圓 + 白光由弱到強、外環擴散
+      const p = t / glowEnd;
+      this.drawMysteryNode(x, y, 'current', alpha);
+      g.fillStyle(0xffffff, alpha * p * cfg.revealGlowAlpha);
+      g.fillCircle(x, y, r);
+      g.lineStyle(cfg.nodeStrokeWidth.current, cfg.mysteryRingColor, alpha * (1 - p));
+      g.strokeCircle(x, y, r * (1 + p * cfg.revealRingScale));
+      return;
+    }
+    // 2) 翻轉：寬度依 |cos| 收縮再展開，前半段是「?」、後半段是寶箱
+    const u = (t - glowEnd) / (1 - glowEnd);
+    const sx = Math.max(0.02, Math.abs(Math.cos(u * Math.PI)));
+    if (u < 0.5) {
+      g.fillStyle(cfg.mysteryColor, alpha);
+      g.fillEllipse(x, y, r * 2 * sx, r * 2);
+      g.fillStyle(0xffffff, alpha * cfg.revealGlowAlpha);
+      g.fillEllipse(x, y, r * 2 * sx, r * 2);
+      const text = this.stageHudMysteryTexts[this.stageHudMysteryUsed++];
+      if (text) text.setPosition(x, y).setAlpha(alpha).setScale(sx, 1).setVisible(true);
+      return;
+    }
+    const pulse = cfg.pulse.base + cfg.pulse.amplitude * Math.abs(Math.sin(this.time.now / cfg.pulse.period));
+    g.fillStyle(this.mixColor(cfg.nodeBgColor, cfg.currentColor, pulse * cfg.pulse.currentMix), alpha);
+    g.fillEllipse(x, y, r * 2 * sx, r * 2);
+    this.drawChestIcon(x, y, tier, alpha, sx);
+    if (tier === 'high') {
+      g.lineStyle(cfg.nodeStrokeWidth.current, cfg.highChestColor, alpha * (u - 0.5) * 2);
+      g.strokeCircle(x, y, r + cfg.nodePadding.highHalo);
+    }
   }
 
   /**
@@ -976,7 +1037,7 @@ export class UIScene extends Phaser.Scene {
       g.strokeCircle(x, y, r + cfg.nodePadding.currentPulse);
     }
     const text = this.stageHudMysteryTexts[this.stageHudMysteryUsed++];
-    if (text) text.setPosition(x, y).setAlpha(alpha).setVisible(true);
+    if (text) text.setPosition(x, y).setAlpha(alpha).setScale(1).setVisible(true);
   }
 
   /** 依比例 t(0..1) 在兩色間線性混色(用於當前波節點脈動亮度,保持不透明填滿)。 */

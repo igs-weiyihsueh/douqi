@@ -48,8 +48,11 @@ export const GameConfig = {
     mysteryFontSize: '26px',
     mysteryTextColor: '#f5f3ff',
     /** 問號揭曉動畫：時長(毫秒)、擴散光環放大倍率（相對節點半徑） */
-    revealMs: 600,
+    revealMs: 900,
     revealRingScale: 1.5,
+    /** 揭曉動畫前段「亮起來」所佔比例（其餘為翻轉），與白光最大透明度 */
+    revealGlowPortion: 0.4,
+    revealGlowAlpha: 0.85,
     /** 圓點不透明底盤色（蓋住量條端點） */
     nodeBgColor: 0x1a1408,
     /** 進入下一關時圓點左移遞補的動畫時長(毫秒) */
