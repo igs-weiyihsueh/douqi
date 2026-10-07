@@ -1,6 +1,9 @@
 import Phaser from 'phaser';
 import { GameConfig } from '../config';
 
+/** 卷軸 HUD 節點狀態類型 */
+type StageNodeState = 'current' | 'pending' | 'done';
+
 /**
  * COMBO獎勵系統狀態
  * Hit streak (連擊數) → 票券獎勵轉換機制
@@ -821,7 +824,7 @@ export class UIScene extends Phaser.Scene {
       if (i === -1 && e >= 1) continue;
       const alpha = i === -1 ? 1 - e : i === count - 2 ? e : 1;
       const x1 = xAt(i), x2 = xAt(i + 1);
-      g.lineStyle(cfg.lineThickness, cfg.lineColor, 0.9 * alpha);
+      g.lineStyle(cfg.lineThickness, cfg.lineColor, cfg.pulse.lineAlpha * alpha);
       g.lineBetween(x1, y, x2, y);
       // 剛完成段 = 滿；第一段 = 本關進度；其餘未開始
       const fill = i === -1 ? 1 : i === 0 ? this.stageHudFill : 0;
@@ -848,44 +851,49 @@ export class UIScene extends Phaser.Scene {
    * @param state 'current' 目前關卡（脈動高亮）/ 'pending' 未到 / 'done' 剛完成
    * @param alpha 整體透明度（遞補動畫淡入淡出）
    */
-  private drawStageNode(x: number, y: number, chest: 'low' | 'high', state: 'current' | 'pending' | 'done', alpha: number): void {
+  private drawStageNode(x: number, y: number, chest: 'low' | 'high', state: StageNodeState, alpha: number): void {
     if (alpha <= 0) return;
     const cfg = GameConfig.waveHud;
     const g = this.waveHudGfx;
     const r = cfg.nodeRadius;
     const high = chest === 'high';
-    const pulse = 0.6 + 0.4 * Math.abs(Math.sin(this.time.now / 260));
+    const pulse = cfg.pulse.base + cfg.pulse.amplitude * Math.abs(Math.sin(this.time.now / cfg.pulse.period));
+    
     // 不透明底盤蓋住量條端點
     g.fillStyle(cfg.nodeBgColor, alpha);
-    g.fillCircle(x, y, r + 3);
+    g.fillCircle(x, y, r + cfg.nodePadding.base);
+    
     if (state === 'current') {
-      g.fillStyle(this.mixColor(cfg.nodeBgColor, cfg.currentColor, pulse * 0.5), alpha);
+      g.fillStyle(this.mixColor(cfg.nodeBgColor, cfg.currentColor, pulse * cfg.pulse.currentMix), alpha);
       g.fillCircle(x, y, r);
-      g.lineStyle(4, cfg.currentColor, (0.5 + 0.5 * pulse) * alpha);
-      g.strokeCircle(x, y, r + 6);
+      g.lineStyle(cfg.nodeStrokeWidth.current, cfg.currentColor, (0.5 + 0.5 * pulse) * alpha);
+      g.strokeCircle(x, y, r + cfg.nodePadding.currentPulse);
     } else {
       g.fillStyle(0x000000, alpha);
       g.fillCircle(x, y, r);
-      g.lineStyle(3, state === 'done' ? cfg.doneColor : cfg.pendingColor, alpha);
+      g.lineStyle(cfg.nodeStrokeWidth.normal, state === 'done' ? cfg.doneColor : cfg.pendingColor, alpha);
       g.strokeCircle(x, y, r);
     }
+    
     // 高階寶箱：外圈金色光暈（脈動）
     if (high) {
-      g.lineStyle(3, cfg.highChestColor, (0.35 + 0.35 * pulse) * alpha);
-      g.strokeCircle(x, y, r + 10);
+      g.lineStyle(cfg.nodeStrokeWidth.normal, cfg.highChestColor, (cfg.pulse.haloAlphaBase + cfg.pulse.haloAlphaAmplitude * pulse) * alpha);
+      g.strokeCircle(x, y, r + cfg.nodePadding.highHalo);
     }
+    
     // 寶箱圖示：箱體 + 箱蓋 + 鎖扣
     const size = r * (high ? cfg.highChestScale : cfg.lowChestScale);
-    const w = size * 1.4, h = size;
+    const w = size * cfg.chestRatios.aspectRatio, h = size;
     const bodyColor = high ? cfg.highChestColor : cfg.lowChestColor;
+    
     g.fillStyle(bodyColor, alpha);
-    g.fillRect(x - w / 2, y - h / 2 + h * 0.35, w, h * 0.65);      // 箱體
-    g.fillStyle(this.mixColor(bodyColor, 0xffffff, 0.25), alpha);
-    g.fillRect(x - w / 2, y - h / 2, w, h * 0.4);                   // 箱蓋（略亮）
-    g.lineStyle(2, cfg.chestOutlineColor, alpha);
+    g.fillRect(x - w / 2, y - h / 2 + h * cfg.chestRatios.bodyStart, w, h * cfg.chestRatios.bodyHeight);      // 箱體
+    g.fillStyle(this.mixColor(bodyColor, 0xffffff, cfg.chestRatios.lidBrighten), alpha);
+    g.fillRect(x - w / 2, y - h / 2, w, h * cfg.chestRatios.lidHeight);                   // 箱蓋（略亮）
+    g.lineStyle(cfg.nodeStrokeWidth.chest, cfg.chestOutlineColor, alpha);
     g.strokeRect(x - w / 2, y - h / 2, w, h);
     g.fillStyle(cfg.chestOutlineColor, alpha);
-    g.fillRect(x - w * 0.08, y - h * 0.05, w * 0.16, h * 0.25);      // 鎖扣
+    g.fillRect(x - w * cfg.chestRatios.lockOffsetX, y - h * cfg.chestRatios.lockOffsetY, w * cfg.chestRatios.lockWidth, h * cfg.chestRatios.lockHeight);      // 鎖扣
   }
 
   /** 依比例 t(0..1) 在兩色間線性混色(用於當前波節點脈動亮度,保持不透明填滿)。 */

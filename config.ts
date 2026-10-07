@@ -89,7 +89,64 @@ export const GameConfig = {
     highChestColor: 0xffd23f,
     chestOutlineColor: 0x2a1a08,
     lowChestScale: 0.7,
-    highChestScale: 0.95
+    highChestScale: 0.95,
+
+    /** 節點外框線寬度 */
+    nodeStrokeWidth: {
+      /** 寶箱外框線寬 */
+      chest: 2,
+      /** 一般節點外框線寬 */
+      normal: 3,
+      /** 當前節點外框線寬 */
+      current: 4
+    },
+
+    /** 節點外框距離 */
+    nodePadding: {
+      /** 底盤外擴距離（相對於節點半徑） */
+      base: 3,
+      /** 當前節點脈動外框距離（相對於節點半徑） */
+      currentPulse: 6,
+      /** 高階光暈外框距離（相對於節點半徑） */
+      highHalo: 10
+    },
+
+    /** 寶箱比例設定 */
+    chestRatios: {
+      /** 寶箱寬高比 */
+      aspectRatio: 1.4,
+      /** 箱體起點（相對於寶箱高度） */
+      bodyStart: 0.35,
+      /** 箱體高度（相對於寶箱高度） */
+      bodyHeight: 0.65,
+      /** 箱蓋高度（相對於寶箱高度） */
+      lidHeight: 0.4,
+      /** 箱蓋提亮混色比例 */
+      lidBrighten: 0.25,
+      /** 鎖扣尺寸（相對於寶箱寬度/高度） */
+      lockWidth: 0.16,
+      lockHeight: 0.25,
+      lockOffsetX: 0.08,
+      lockOffsetY: 0.05
+    },
+
+    /** 脈動效果設定 */
+    pulse: {
+      /** 脈動週期（毫秒） */
+      period: 260,
+      /** 脈動基準值 */
+      base: 0.6,
+      /** 脈動振幅 */
+      amplitude: 0.4,
+      /** 當前節點底色混色強度 */
+      currentMix: 0.5,
+      /** 高階光暈透明度基準值 */
+      haloAlphaBase: 0.35,
+      /** 高階光暈透明度振幅 */
+      haloAlphaAmplitude: 0.35,
+      /** 量條底線透明度 */
+      lineAlpha: 0.9
+    }
   },
 
   /**
