@@ -2340,13 +2340,6 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * ★階段2:A 清波→【左右邊界都開放】,玩家走到 A 左緣→左過場、右緣→右過場。
-   * - crossingOpen=true、crossPhase='walk'、crossSide=null(尚未鎖定);progressPhase 維持 'playing'。
-   * - physics.world.bounds 放寬到【左右都能走】的大聯集(zoneBLeft.left → zoneBRight.right)。
-   * - camera bounds 放寬到【slotBLeft.x → slotBRight.right】整段(垂直 slot 高)。
-   * - 左右走廊都畫(不露黑)。玩家走到哪邊邊界→updateCrossing 鎖定該側 startCameraPanToB(side)。
-   */
-  /**
    * 問號關前的雙出口：從 左+右 / 左+上 / 右+上 隨機挑一組（不受 dirLock 限制）。
    * 左右照常走邊界平移（並設定 dirLock），上方走出口閃黑（解除 dirLock）
    */
@@ -2366,12 +2359,16 @@ export class GameScene extends Phaser.Scene {
     }).setOrigin(0.5).setDepth(21).setScrollFactor(1);
   }
 
-  /** 收掉上方出口（圖與 exiting 狀態） */
+  /** 收掉上方出口的圖（問號關前選了另一條路時用） */
   private closeTopExit(): void {
     if (this.exitGfx) { this.exitGfx.destroy(); this.exitGfx = null; }
   }
 
   /**
+   * 開放左右轉場：玩家走到 A 左緣 → 左過場、右緣 → 右過場（progressPhase 維持 'playing'）。
+   * - 物理範圍、鏡頭範圍放寬到 A + 開放的側邊；開放側畫走廊；只開一側時預先鎖定 crossSide
+   * - 玩家走到開放側的邊界 → updateCrossing → startCameraPanToB(side)
+   *
    * @param allowed 開放的方向；省略時依 dirLock（走過一側後只開同側）
    */
   private openCrossing(allowed?: { L: boolean; R: boolean }): void {
