@@ -10,7 +10,8 @@ import { loadCharacterParams, type CharacterParams } from '../systems/characterP
 import { createStageQueue, nextStageNode, revealStageNode, displayKindOf, type StageNode } from '../systems/stageQueue';
 import type { TelegraphFx } from '../systems/telegraphFx';
 import { BossController, type BossHost } from '../controllers/BossController';
-import { createCoverImage, drawCorridorScenery, drawZoneScenery } from '../systems/zoneScenery';
+import { drawCorridorScenery, drawZoneScenery } from '../systems/zoneScenery';
+import { ArtStyleController } from '../controllers/ArtStyleController';
 import { SkillController, type SkillHost } from '../controllers/SkillController';
 import { pointInOrientedRect } from '../systems/geometry';
 import {
@@ -19,13 +20,6 @@ import {
   pushEnemiesOutOfNpc, pushEnemyOutOfStructures, resolveEnemyOverlap, standCharacterOutside, updateBreakableMotion
 } from '../systems/bodySeparation';
 import { drawEnemyChargeWarnings } from '../systems/enemyWarnings';
-
-/** F4 場景背景圖(Scene.png)的紋理 key */
-const SCENE_BG_TEXTURE_KEY = 'scene-background';
-/** F2 強制重載 Scene.png 的路徑(會加 timestamp 防快取) */
-const SCENE_BG_RELOAD_URL = 'assets/Scene.png';
-/** 場景背景圖深度:高於程式繪製地面(0)、低於圍欄(1)與場景粒子(2) */
-const SCENE_BG_DEPTH = 0.5;
 
 /**
  * GameScene（v6：本地單機模擬 4 人共玩）：
@@ -49,22 +43,8 @@ export class GameScene extends Phaser.Scene {
   /** 鎖定標記繪圖層（P1 當前鎖定目標） */
   private lockGfx!: Phaser.GameObjects.Graphics;
 
-  // ★場景切換系統(F4)
-  /**
-   * F4 場景背景圖(Scene.png)。貼在世界上、隨鏡頭捲動:
-   * 關卡制為 [B-左, A-中, B-右] 三個 slot 各一張;經典模式只有一張。由 createSceneBackgrounds 建立。
-   */
-  private sceneBackgrounds: Phaser.GameObjects.Image[] = [];
-  private isNewSceneActive = false;
-
-  // ★角色皮膚覆蓋系統
-  private characterSkin: Phaser.GameObjects.Image | null = null;
-  // ★角色上方UI覆蓋系統  
-  private characterUIOverlay: Phaser.GameObjects.Image | null = null;
-
-  // ★敵人外觀切換系統 (F4切換骷髏戰士↔紅色圓形)
-  /** Normal 敵人是否使用骷髏戰士外觀;預設 false(紅色圓形),與 F4 新場景預設關閉一致,第一次按 F4 兩者同時切到新美術 */
-  private useSkeletonWarrior = false;
+  /** F4 新舊美術切換（背景圖、P1 皮膚與覆蓋 UI、一般怪外觀），每次 create() 重建 */
+  private artStyle!: ArtStyleController;
 
   private survivalMs = 0;
   private gameOver = false;
@@ -329,8 +309,16 @@ export class GameScene extends Phaser.Scene {
       border.strokeRect(arenaX, arenaY, arenaW, arenaH);
     }
 
-    // ★場景圖熱切換系統初始化(需在 slot 佈局建立後,背景圖才能對齊各 slot)
-    this.initSceneBackground();
+    // F4 新舊美術切換：需在 slot 佈局建立後，背景圖才能對齊各 slot
+    this.artStyle = new ArtStyleController({
+      scene: this,
+      enemies: () => this.enemies, // 敵人群在之後才建立，用時才取
+      player: () => this.player,
+      backgroundRects: () => this.levelMode
+        ? [this.slotBLeft, this.slotA, this.slotBRight]
+        : [new Phaser.Geom.Rectangle(0, 0, GameConfig.width, GameConfig.height)]
+    });
+    this.artStyle.createBackgrounds();
 
     // 敵群
     this.enemies = this.physics.add.group({
@@ -365,11 +353,8 @@ export class GameScene extends Phaser.Scene {
     // v8 追加：開場只有 P1 一人。BOT 由按 B 逐一加入（見 tryAddBot）。
     this.createCharacter(0, false);
 
-    // ★角色皮膚覆蓋系統初始化 - 在P1角色創建後執行
-    this.initCharacterSkin();
-
-    // ★角色上方UI覆蓋系統初始化 - 在P1角色創建後執行
-    this.initCharacterUIOverlay();
+    // F4 用的 P1 皮膚與頭上覆蓋圖（需在 P1 建立後）
+    this.artStyle.createPlayerOverlays();
 
     // ★方案e:玩家建立後啟用鏡頭跟隨(限制在 A slot 內、deadzone 緩衝)。
     if (this.levelMode) this.enableFollow(this.slotA);
@@ -495,17 +480,6 @@ export class GameScene extends Phaser.Scene {
     this.charParams = loadCharacterParams();
     this.slowTuning.dashDistance = this.charParams.dashDistance;
     this.slowTuning.dashSpeed = this.charParams.dashSpeed;
-    // ★背景切換狀態重置 - 修復ESC回主菜單後F4失效問題
-    this.sceneBackgrounds = [];
-    this.isNewSceneActive = false;
-    this.useSkeletonWarrior = false; // 與 isNewSceneActive 同步回預設,避免重開場景後 F4 方向相反
-    
-    // ★角色皮膚狀態重置
-    this.characterSkin = null;
-    
-    // ★角色UI覆蓋狀態重置
-    this.characterUIOverlay = null;
-    
     this.characters = [];
     this.survivalMs = 0;
     this.gameOver = false;
@@ -698,9 +672,7 @@ export class GameScene extends Phaser.Scene {
 
     this.survivalMs += delta;
 
-    // ★更新角色皮膚覆蓋位置，跟隨P1角色
-    this.updateCharacterSkin();
-    this.updateCharacterUIOverlay();
+    this.artStyle.update(time);
 
     // ★階段三：更新COMBO計時系統
     this.updateComboTimers();
@@ -2366,13 +2338,8 @@ export class GameScene extends Phaser.Scene {
     // 新中央的變體 = 原側邊的變體（與原中央相反）；前方新 slot 再交替
     this.areaVariant = this.otherVariant(this.areaVariant);
     this.drawZoneScene(newAheadSlot, newAheadZone, this.currentLevel, this.otherVariant(this.areaVariant));
-    // F4 背景圖：身後那張搬到前方新 slot（陣列順序維持 [左, 中, 右]）
-    if (this.sceneBackgrounds.length === 3) {
-      const [bgL, bgA, bgR] = this.sceneBackgrounds;
-      const recycled = side === 'R' ? bgL : bgR;
-      recycled.setPosition(newAheadSlot.centerX, newAheadSlot.centerY);
-      this.sceneBackgrounds = side === 'R' ? [bgA, bgR, recycled] : [recycled, bgL, bgA];
-    }
+    // F4 背景圖：身後那張搬到前方新 slot
+    this.artStyle.recycleBackground(side, newAheadSlot);
   }
 
   /** 另一種場景變體（荒城 ↔ 火山） */
@@ -6218,308 +6185,8 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  /**
-   * ★場景圖熱切換系統初始化
-   *
-   * - 建立 F4 場景背景圖（Scene.png，預設隱藏），貼在世界上、隨鏡頭捲動
-   * - 註冊熱鍵：F4（背景/UI 切換 + 敵人外觀切換）、F6（僅背景切換）、F2（強制重載 Scene.png）
-   */
-  private initSceneBackground(): void {
-    this.createSceneBackgrounds();
-
-    // F4熱鍵監聽 - 複合功能：UI系統切換 + Normal敵人外觀切換
-    this.input.keyboard?.on('keydown-F4', () => {
-      this.toggleSceneBackground();
-      this.toggleNormalEnemyAppearance();
-    });
-    // F6熱鍵監聽 - 僅場景背景切換（備用功能）
-    this.input.keyboard?.on('keydown-F6', () => this.toggleSceneBackground());
-    // F2熱鍵監聽 - 強制重載Scene.png
-    this.input.keyboard?.on('keydown-F2', () => this.forceReloadSceneBackground());
-  }
-
-  /**
-   * 建立場景背景圖（顯示狀態沿用 isNewSceneActive）
-   *
-   * - 關卡制：三個 slot 各一張，蓋滿整個 slot（含四周遠景邊距），鏡頭捲動時背景跟著世界移動
-   * - 經典模式：一張蓋滿畫面（鏡頭不捲動）
-   */
-  private createSceneBackgrounds(): void {
-    if (!this.textures.exists(SCENE_BG_TEXTURE_KEY)) {
-      console.warn(`⚠️ 場景背景圖片不存在：${SCENE_BG_TEXTURE_KEY}`);
-      return;
-    }
-    const rects = this.levelMode
-      ? [this.slotBLeft, this.slotA, this.slotBRight]
-      : [new Phaser.Geom.Rectangle(0, 0, GameConfig.width, GameConfig.height)];
-    this.sceneBackgrounds = rects.map((rect) => createCoverImage(this, SCENE_BG_TEXTURE_KEY, rect, SCENE_BG_DEPTH, this.isNewSceneActive));
-  }
-
-  /**
-   * ★角色皮膚覆蓋系統初始化
-   */
-  private initCharacterSkin(): void {
-    if (this.textures.exists('character-goku-skin')) {
-      // 在P1角色位置創建普通皮膚覆蓋
-      const playerPos = this.player ? { x: this.player.x, y: this.player.y } : { x: 0, y: 0 };
-      this.characterSkin = this.add.image(playerPos.x, playerPos.y, 'character-goku-skin')
-        .setOrigin(0.5, 0.5)
-        .setDepth(15)  // 設置比角色(depth=10)更高，確保覆蓋在角色上
-        .setVisible(false)
-        .setScrollFactor(1);  // 跟隨世界移動，不像背景固定
-      
-    } else {
-      console.warn('⚠️ Goku皮膚資源不存在：character-goku-skin');
-    }
-
-    // 檢查二段變身皮膚資源是否存在
-    if (!this.textures.exists('character-goku-skin-2')) {
-      console.warn('⚠️ Goku二段變身皮膚資源不存在：character-goku-skin-2');
-    }
-  }
-
-  /**
-   * ★初始化角色上方UI覆蓋系統
-   * 
-   * 功能：
-   * - 創建UI覆蓋圖片（MG_1P_Player_all.png），顯示"1P"和積分信息
-   * - 設置在UI層深度（depth=20），高於角色皮膚(depth=15)和角色本體(depth=10)
-   * - 初始隱藏，由F4切換控制顯示
-   * - 定位在P1角色上方適當位置
-   */
-  private initCharacterUIOverlay(): void {
-    if (this.textures.exists('character-ui-overlay')) {
-      // ★調整：使用與頭頂UI系統一致的偏移值-130
-      const playerPos = this.player ? { x: this.player.x, y: this.player.y - 130 } : { x: 0, y: -130 };
-      
-      this.characterUIOverlay = this.add.image(playerPos.x, playerPos.y, 'character-ui-overlay')
-        .setOrigin(0.5, 0.5)
-        .setDepth(20)  // UI層：比角色皮膚(depth=15)和角色本體(depth=10)更高
-        .setVisible(false)
-        .setScrollFactor(1);  // 跟隨世界移動
-      
-    } else {
-      console.warn('⚠️ 角色UI覆蓋資源不存在：character-ui-overlay');
-    }
-  }
-
-  /**
-   * ★更新角色皮膚覆蓋位置，跟隨P1角色
-   */
-  /**
-   * ★更新角色皮膚覆蓋位置和類型
-   * 
-   * 功能：
-   * - 同步皮膚覆蓋位置到P1角色位置  
-   * - 根據P1強化狀態動態切換皮膚材質：
-   *   · 普通狀態：使用Goku_1.png (character-goku-skin)
-   *   · 強化狀態：使用Goku_2.png (character-goku-skin-2) 金色光環版本
-   */
-  private updateCharacterSkin(): void {
-    if (this.characterSkin && this.player.alive) {
-      // 同步位置到P1角色
-      this.characterSkin.setPosition(this.player.x, this.player.y);
-      
-      // 根據P1強化狀態動態切換皮膚材質
-      const now = this.time.now;
-      const isEmpowered = this.player.isEmpowered(now);
-      
-      // 決定應該使用的材質key
-      const targetTexture = isEmpowered ? 'character-goku-skin-2' : 'character-goku-skin';
-      
-      // 只有在需要切換時才更改材質，避免每幀都設定
-      if (this.characterSkin.texture.key !== targetTexture) {
-        if (this.textures.exists(targetTexture)) {
-          this.characterSkin.setTexture(targetTexture);
-        } else {
-          console.warn(`⚠️ 皮膚材質不存在：${targetTexture}`);
-        }
-      }
-    }
-  }
-
-  /**
-   * ★更新角色上方UI覆蓋位置
-   * 
-   * 功能：
-   * - 同步UI覆蓋位置到P1角色上方（Y偏移-40像素）
-   * - 保持UI元素始終顯示在角色頭頂附近
-   */
-  private updateCharacterUIOverlay(): void {
-    if (this.characterUIOverlay && this.player.alive) {
-      // ★調整：同步位置到P1角色上方，使用與頭頂UI系統一致的偏移值-130
-      const newX = this.player.x;
-      const newY = this.player.y - 130;
-      this.characterUIOverlay.setPosition(newX, newY);
-    }
-  }
-
-  /**
-   * ★場景背景熱切換功能（F4 / F6）
-   *
-   * 在新舊場景間切換：
-   * - 新場景：顯示 Scene.png 背景、角色皮膚與角色 UI 覆蓋；隱藏原 P1 頭頂 UI、啟用底部面板替換
-   * - 舊場景：全部還原為程式繪製場景與原 UI
-   *
-   * 深度層級：
-   * - 原場景天空/遠景/外圍/地面：depth -3 ~ 0
-   * - Scene.png 背景：depth 0.5（蓋住程式繪製地面）
-   * - 圍欄：depth 1、場景粒子：depth 2（疊在背景圖上）
-   * - 遊戲物件與 UI：更高層，不被遮擋
-   */
-  private toggleSceneBackground(): void {
-    // 背景圖缺失時（例如紋理晚到）先嘗試補建
-    if (this.sceneBackgrounds.length === 0) this.createSceneBackgrounds();
-    if (this.sceneBackgrounds.length === 0) {
-      console.warn('⚠️ 場景背景圖片不可用，無法切換');
-      return;
-    }
-
-    this.isNewSceneActive = !this.isNewSceneActive;
-    const active = this.isNewSceneActive;
-    for (const bg of this.sceneBackgrounds) bg.setVisible(active);
-    this.characterSkin?.setVisible(active);
-    this.characterUIOverlay?.setVisible(active);
-    // 新場景改用覆蓋圖 UI → 隱藏原 P1 頭頂 UI、啟用底部面板替換；舊場景反之
-    this.controlP1HeadUI(!active);
-    this.controlBottomPanelOverlay(active);
-  }
-
-  /**
-   * ★F4切換Normal敵人外觀 (骷髏戰士↔紅色圓形)
-   * 作為F4複合功能的一部分：UI切換 + 敵人外觀切換
-   */
-  private toggleNormalEnemyAppearance(): void {
-    // 切換狀態
-    this.useSkeletonWarrior = !this.useSkeletonWarrior;
-    
-    // 更新所有現存的Normal類型敵人
-    this.enemies.children.entries.forEach((enemy) => {
-      const enemyObj = enemy as Enemy;
-      if (enemyObj && enemyObj.enemyType === 'normal') {
-        this.updateEnemyTexture(enemyObj);
-      }
-    });
-    
-  }
-
-  /**
-   * 更新單個敵人的紋理
-   */
-  private updateEnemyTexture(enemy: Enemy): void {
-    if (enemy.enemyType === 'normal') {
-      if (this.useSkeletonWarrior) {
-        enemy.setTexture('skeleton-warrior');
-        enemy.setScale(0.8);
-      } else {
-        enemy.setTexture('enemy-normal');
-        enemy.setScale(1.0);
-      }
-    }
-  }
-
-  /**
-   * 獲取Normal敵人當前應該使用的紋理設定
-   * 供Enemy類在spawn時調用
-   */
+  /** 一般怪生成時應使用的外觀（Enemy.spawn 查詢；隨 F4 切換） */
   public getNormalEnemyTextureConfig(): { texture: string; scale: number } {
-    if (this.useSkeletonWarrior) {
-      return { texture: 'skeleton-warrior', scale: 0.8 };
-    } else {
-      return { texture: 'enemy-normal', scale: 1.0 };
-    }
-  }
-
-  /**
-   * ★F2強制重載Scene.png紋理
-   *
-   * 排除瀏覽器快取或紋理載入問題：銷毀背景圖並移除舊紋理，加 timestamp 重新載入後重建（保留目前顯示狀態）
-   */
-  private forceReloadSceneBackground(): void {
-    for (const bg of this.sceneBackgrounds) bg.destroy();
-    this.sceneBackgrounds = [];
-    if (this.textures.exists(SCENE_BG_TEXTURE_KEY)) this.textures.remove(SCENE_BG_TEXTURE_KEY);
-
-    this.load.image(SCENE_BG_TEXTURE_KEY, `${SCENE_BG_RELOAD_URL}?t=${Date.now()}`);
-    this.load.once(Phaser.Loader.Events.COMPLETE, () => this.createSceneBackgrounds());
-    this.load.start();
-  }
-
-  /**
-   * ★P1頭頂UI控制方法
-   * 
-   * 控制UIScene中P1角色頭頂的overheadUI系統
-   * 包含時序安全檢查，確保UIScene和頭頂UI已準備就緒
-   * 
-   * @param visible - 目標可見性狀態
-   * @param retryCount - 重試計數，避免無限重試
-   */
-  private controlP1HeadUI(visible: boolean, retryCount = 0): void {
-    const maxRetries = 5;
-    
-    const uiScene = this.scene.get('UIScene') as any;
-    
-    if (!uiScene) {
-      console.error('❌ [頭頂UI控制] 無法獲取UIScene引用');
-      return;
-    }
-    
-    if (typeof uiScene.setP1HeadUIVisible === 'function') {
-      // 檢查P1的頭頂UI是否已經創建
-      const hasP1HeadUI = uiScene.overheadUIs && uiScene.overheadUIs.has(0);
-      
-      if (hasP1HeadUI) {
-        // P1頭頂UI已創建，可以安全調用
-        uiScene.setP1HeadUIVisible(visible);
-      } else if (retryCount < maxRetries) {
-        // P1頭頂UI尚未創建，延遲重試
-        this.time.delayedCall(100, () => {
-          this.controlP1HeadUI(visible, retryCount + 1);
-        });
-      } else {
-        console.error('❌ [頭頂UI控制] 重試次數已達上限，P1頭頂UI控制失敗');
-      }
-    } else {
-      console.error('❌ [頭頂UI控制] setP1HeadUIVisible方法不存在');
-    }
-  }
-
-  /**
-   * ★底部面板替換控制方法
-   * 
-   * 控制UIScene中的底部面板替換系統
-   * 包含時序安全檢查，確保UIScene已準備就緒
-   * 
-   * @param useOverlay - 是否使用1P.png覆蓋
-   * @param retryCount - 重試計數，避免無限重試
-   */
-  private controlBottomPanelOverlay(useOverlay: boolean, retryCount = 0): void {
-    const maxRetries = 5;
-    
-    const uiScene = this.scene.get('UIScene') as any;
-    
-    if (!uiScene) {
-      console.error('❌ [底部面板控制] 無法獲取UIScene引用');
-      return;
-    }
-    
-    if (typeof uiScene.setBottomPanelOverlay === 'function') {
-      // 檢查底部面板是否已經創建
-      const hasBottomPanel = uiScene.rows && uiScene.rows.length > 0;
-      
-      if (hasBottomPanel) {
-        // 底部面板已創建，可以安全調用
-        uiScene.setBottomPanelOverlay(useOverlay);
-      } else if (retryCount < maxRetries) {
-        // 底部面板尚未創建，延遲重試
-        this.time.delayedCall(100, () => {
-          this.controlBottomPanelOverlay(useOverlay, retryCount + 1);
-        });
-      } else {
-        console.error('❌ [底部面板控制] 重試次數已達上限，底部面板控制失敗');
-      }
-    } else {
-      console.error('❌ [底部面板控制] setBottomPanelOverlay方法不存在');
-    }
+    return this.artStyle.normalEnemyLook();
   }
 }
