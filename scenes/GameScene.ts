@@ -7878,17 +7878,6 @@ export class GameScene extends Phaser.Scene {
    * @param milestone 達成的里程碑數值
    */
   private spawnTicketBurst(actor: any, _tickets: number, milestone: number): void {
-    const config = GameConfig.ticketEffect;
-    
-    // 根據獎勵等級計算彩票數量：使用配置常數而非硬編碼
-    const ticketCount = Math.max(
-      config.TIMING.TICKET_COUNT_BASE, 
-      Math.min(
-        config.TIMING.TICKET_COUNT_MAX, 
-        config.TIMING.TICKET_COUNT_BASE + milestone * config.TIMING.TICKET_COUNT_MULTIPLIER
-      )
-    );
-    
     // ★場景層級驗證：暫時停用GameScene的特效創建，改用UIScene
     /*
     // 彩票噴發的物理參數：完全從配置讀取，消除魔法數字
@@ -7913,6 +7902,7 @@ export class GameScene extends Phaser.Scene {
     } else {
       console.error(`❌ [正式版] UIScene或spawnTicketBurstInUI方法不存在`);
     }
+  }
   
   /**
    * ★階段三：創建單個彩票粒子（征騎Code Review修正版）
