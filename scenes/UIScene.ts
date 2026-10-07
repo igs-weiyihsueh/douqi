@@ -180,10 +180,9 @@ export class UIScene extends Phaser.Scene {
     REWARD_TEXT_RISE: 90,
     REWARD_TEXT_SCALE_TO: 1.3,
     REWARD_TEXT_DURATION_MS: 2000,
-    /** 報獎閃光特效常數 */
-    /** 閃光起始半徑（像素） */
+    /** 報獎閃光起始半徑（像素） */
     REWARD_FLASH_START_RADIUS: 12,
-    /** 閃光擴張最大半徑（像素） */  
+    /** 報獎閃光擴張最大半徑（像素） */
     REWARD_FLASH_END_RADIUS: 90
   } as const;
   
@@ -1547,7 +1546,7 @@ export class UIScene extends Phaser.Scene {
     // 正式版動畫：快速擴張，華麗效果
     this.tweens.add({
       targets: flash,
-      radius: cfg.REWARD_FLASH_END_RADIUS,        // 擴張到90px
+      radius: cfg.REWARD_FLASH_END_RADIUS,
       alpha: 0,          // 漸變透明
       duration: 400,     // 400ms快速動畫
       ease: 'Power2',    // 自然曲線
