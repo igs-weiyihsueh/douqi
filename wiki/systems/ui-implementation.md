@@ -343,12 +343,13 @@ updateOrbitEffect() {
 }
 ```
 
-## 調參面板系統
+## 調參面板系統 (2decdde更新)
 
 ### 開發工具UI
 ```typescript
-// TitleScene - 邊界編輯器
-private borderSliders: Array<{
+// TitleScene - zoom編輯器 (保留)  
+private zoomEditorActive = false;
+private zoomSliders: Array<{
   name: string;
   value: number; 
   min: number; max: number; step: number;
@@ -358,7 +359,13 @@ private borderSliders: Array<{
   valueText: Phaser.GameObjects.Text;
 }> = [];
 
-// 滑桿互動
+// 注意: 邊界編輯器已在commit 2decdde中完全移除
+// - 🔧邊界設定按鈕已刪除
+// - B鍵邊界編輯器已移除  
+// - borderEditorActive等相關變數已清理
+// - config.borderEditor配置已刪除
+
+// 滑桿互動 (zoom編輯器)
 updateSliderValue(slider: SliderConfig, delta: number) {
   slider.value = Phaser.Math.Clamp(
     slider.value + delta * slider.step,
@@ -373,9 +380,10 @@ updateSliderValue(slider: SliderConfig, delta: number) {
   // 更新數值顯示
   slider.valueText.setText(slider.value.toFixed(2));
   
-  // 應用到遊戲配置
-  this.applySliderConfig(slider.name, slider.value);
+  // 應用到zoom配置
+  this.applyZoomConfig(slider.name, slider.value);
 }
+```
 ```
 
 **參考檔案**: `scenes/UIScene.ts`, `objects/Character.ts`, `scenes/TitleScene.ts`

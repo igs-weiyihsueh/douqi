@@ -261,26 +261,25 @@ findFirstEnemyInRangeOf(x: number, y: number, radius: number) {
 
 ## 視覺切換系統
 
-### F4複合功能
+### F4複合功能 (7975cc9更新)
 ```typescript
-// 場景背景 + 敵人外觀同時切換
-class GameScene {
-  private sceneBackgrounds: Phaser.GameObjects.Image[] = [];
-  private isNewSceneActive = false;      // 場景狀態
-  private useSkeletonWarrior = true;     // 敵人外觀(骷髏戰士 vs 紅圓形)
-  
-  // F4複合切換
-  toggleVisualMode() {
-    this.isNewSceneActive = !this.isNewSceneActive;
-    this.useSkeletonWarrior = !this.useSkeletonWarrior;
-    
-    // 更新場景背景
-    this.updateSceneBackgrounds();
-    
-    // 更新敵人外觀
-    this.updateEnemyAppearance();
-  }
-}
+// F4複合切換：場景背景 + 敵人外觀
+// 實際實作：F4 listener依序呼叫兩個函數
+this.input.keyboard.on('keydown-F4', () => {
+  this.toggleSceneBackground();        // 切換場景背景
+  this.toggleNormalEnemyAppearance();  // 切換敵人外觀
+});
+
+// F6: 僅切換背景
+this.input.keyboard.on('keydown-F6', () => {
+  this.toggleSceneBackground();
+});
+
+// F2: 強制重載背景 (同一紋理key重載)
+this.input.keyboard.on('keydown-F2', () => {
+  this.forceReloadSceneBackground();
+});
+```
 ```
 
 ### 角色皮膚系統

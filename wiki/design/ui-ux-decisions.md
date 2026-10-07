@@ -117,21 +117,21 @@ class TitleScene {
 }
 ```
 
-### 即時調參系統
+### 鏡頭跟隨系統 (7975cc9更新)
 ```typescript
-// 開發工具 - 邊界編輯器
-private borderEditorActive = false;
-private borderSliders: Array<{
-  name: string;
-  value: number; 
-  min: number; max: number; step: number;
-  slider: Phaser.GameObjects.Rectangle;
-  handle: Phaser.GameObjects.Rectangle;
-  label: Phaser.GameObjects.Text;
-  valueText: Phaser.GameObjects.Text;
-}> = [];
+// 鏡頭跟隨配置
+const cameraConfig = {
+  followTarget: 'player',           // 跟隨玩家
+  lerpX: 0.08,                     // 水平跟隨速度
+  lerpY: 0.04,                     // 垂直跟隨速度
+  deadzone: {
+    width: 320,                     // 死區寬度 (原540→320)
+    height: 180                     // 死區高度 (原600→180)
+  },
+  bounds: 'currentSlot'             // 鏡頭範圍限制在當前slot
+};
 
-// zoom編輯器
+// zoom編輯器 (保留)
 zoomEditor: {
   defaultZoom: 1.0,
   minZoom: 0.3, maxZoom: 3.0,
@@ -267,17 +267,39 @@ class GameScene {
 }
 ```
 
-### 分層渲染設計
+### 場景背景系統 (7975cc9更新)
 ```typescript
-// 場景深度層級
-const SCENE_BG_DEPTH = 0.5;            // 背景圖深度
-// 0: 程式繪製地面
-// 0.5: 場景背景圖 
-// 1: 圍欄
-// 2: 場景粒子
-
-// 確保正確的視覺層次
-this.sceneBackground.setDepth(SCENE_BG_DEPTH);
+// F4場景背景切換 - 新架構
+class GameScene {
+  /**
+   * F4 場景背景圖陣列。關卡制為 [B-左, A-中, B-右] 三個 slot 各一張;
+   * 經典模式只有一張。由 createCoverImage 建立，貼在世界上隨鏡頭捲動。
+   */
+  private sceneBackgrounds: Phaser.GameObjects.Image[] = [];
+  private isNewSceneActive = false;      // 場景狀態切換
+  
+  // createCoverImage(): cover等比放大 + setCrop置中裁切
+  createCoverImage(key: string, x: number, y: number, targetW: number, targetH: number) {
+    const image = this.add.image(x, y, key);
+    const scaleX = targetW / image.width;
+    const scaleY = targetH / image.height;
+    const scale = Math.max(scaleX, scaleY); // 取較大倍率確保覆蓋
+    
+    image.setScale(scale);
+    image.setDepth(SCENE_BG_DEPTH); // 0.5: 地面0 < 背景0.5 < 圍欄1 < 粒子2
+    
+    // 裁切多餘部分
+    const cropW = targetW / scale;
+    const cropH = targetH / scale;
+    image.setCrop(
+      (image.width - cropW) / 2,
+      (image.height - cropH) / 2,
+      cropW, cropH
+    );
+    
+    return image;
+  }
+}
 ```
 
 ## 響應式與適配

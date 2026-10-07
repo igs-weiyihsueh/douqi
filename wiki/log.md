@@ -108,3 +108,24 @@
 - 隨程式碼更新同步維護術語表
 - 考慮建立術語表的自動化檢查機制  
 - 新增術語時要同時更新相關文檔的交叉引用
+
+---
+
+## [2026-10-07 16:08] WIKI同步更新 | 鏡頭跟隨與地圖邊界重新定義
+**變更摘要**：翼騎通知三個commit (7975cc9, b62d292, 2decdde) 已合併，WIKI需要同步更新以反映最新架構變更
+**影響頁面**：
+- [design/ui-ux-decisions.md] (更新) - 移除邊界編輯器，新增鏡頭跟隨系統說明
+- [systems/ui-implementation.md] (更新) - 移除邊界編輯器實作，保留zoom編輯器
+- [systems/combat-system.md] (更新) - 修正F4切換實際方法名稱
+- [design/gameplay-evolution.md] (更新) - 更新鏡頭系統和關卡制架構
+- [decisions/architecture-evolution.md] (新建) - 鏡頭跟隨空間擴大與地圖邊界重新定義ADR
+- [glossary.md] (更新) - 新增stage配置、鏡頭相關術語
+**代碼位置**：
+- commit 7975cc9: 鏡頭跟隨 (deadzone 540×600→320×180, lerp X:0.08/Y:0.04)
+- commit 2decdde: 地圖邊界 (arenaW/H 1920×1080→2520×840, 移除邊界編輯器)
+- commit b62d292: sceneBackgrounds JSDoc註解
+**查重結果**：所有更新都基於翼騎提供的實際commit內容，確保與最新程式碼一致
+**下次提醒**：
+- 定期檢查是否有新commit需要同步到WIKI
+- 建立commit訊息與WIKI更新的流程機制
+- 考慮自動化detect程式碼變更影響文檔的工具

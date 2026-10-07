@@ -66,7 +66,9 @@
 |------|------|----------|----------|
 | **GameConfig** | 遊戲主配置物件 | `config.ts:5` | [效能配置](./systems/performance-config.md) |
 | **levelLerp** | 等級化數值計算函數 | `config.ts` | [效能配置](./systems/performance-config.md) |
-| **arena** | 場地配置 | `config.ts:107-115` | [UI/UX設計](./design/ui-ux-decisions.md) |
+| **arena** | 場地配置 (經典模式) | `config.ts:107-115` | [UI/UX設計](./design/ui-ux-decisions.md) |
+| **stage** | 關卡模式配置 (2decdde更新) | `config.ts` | [架構決策演進](./decisions/architecture-evolution.md) |
+| **followDeadzoneW/H** | 鏡頭跟隨死區 (7975cc9新增) | `config.ts` | [架構決策演進](./decisions/architecture-evolution.md) |
 | **enemySeparation** | 敵人分離系統配置 | `config.ts:123-142` | [效能配置](./systems/performance-config.md) |
 | **enemySticky** | 敵人黏著目標配置 | `config.ts:151-158` | [戰鬥系統](./systems/combat-system.md) |
 | **debug** | 除錯開關配置 | `config.ts:17-22` | [技術選擇](./decisions/technical-choices.md) |

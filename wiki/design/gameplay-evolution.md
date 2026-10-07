@@ -220,26 +220,45 @@ class GameScene {
 }
 ```
 
-### 鏡頭系統
+### 鏡頭系統 (7975cc9更新)
 ```typescript
-// 動態鏡頭控制
-updateCameraSystem() {
-  switch(this.crossPhase) {
-    case 'walk':
-      // 玩家走向邊界，鏡頭跟隨
-      this.cameras.main.startFollow(this.player);
-      break;
-      
-    case 'panning':  
-      // 鏡頭平移到新區域
-      this.cameras.main.stopFollow();
-      this.cameras.main.pan(newX, newY, duration);
-      break;
-      
-    case 'enter':
-      // 鏡頭固定，玩家進入新區域
-      this.cameras.main.setScroll(fixedX, fixedY);
-      break;
+// 鏡頭跟隨玩家系統
+setupCamera() {
+  // 啟用鏡頭跟隨
+  this.cameras.main.startFollow(this.player, true, 0.08, 0.04);
+  
+  // 死區配置: 320×180 (原540×600→320×180)
+  this.cameras.main.setDeadzone(320, 180);
+  
+  // 鏡頭邊界: 限制在當前slot內
+  const slot = GameScene.stageSlotSize(); // 2520×1680
+  this.cameras.main.setBounds(slotX, slotY, slot.width, slot.height);
+}
+
+// slot與deadzone設計理念
+const cameraDesign = {
+  slot: '2520×1680 - 比畫面大，鏡頭可在slot內捲動',
+  deadzone: '320×180 - 縮小死區讓鏡頭更即時跟隨',
+  bounds: '鏡頭鎖在當前slot，防止看到其他區域'
+};
+```
+
+### 關卡制架構 (2decdde更新)
+```typescript
+// 地圖邊界重新定義
+class GameScene {
+  // 可移動區: 2520×840 (左右貼齊背景圖)
+  private arenaW = 2520;  // 原1920→2520
+  private arenaH = 840;   // 原1080→840
+  
+  // 禁區配置 (對應背景圖地形)
+  private sceneMarginX = 0;      // 左右無邊距
+  private sceneMarginTop = 504;  // 上方熔岩斷崖
+  private sceneMarginBottom = 336; // 下方岩石帶
+  
+  // 統一slot計算
+  static stageSlotSize() {
+    return { width: 2520, height: 1680 };
   }
 }
 ```
