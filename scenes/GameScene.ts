@@ -10,6 +10,7 @@ import { loadCharacterParams, type CharacterParams } from '../systems/characterP
 import { createStageQueue, nextStageNode, revealStageNode, displayKindOf, type StageNode } from '../systems/stageQueue';
 import type { TelegraphFx } from '../systems/telegraphFx';
 import { BossController, type BossHost } from '../controllers/BossController';
+import { createCoverImage, drawCorridorScenery, drawZoneScenery } from '../systems/zoneScenery';
 
 /** F4 場景背景圖(Scene.png)的紋理 key */
 const SCENE_BG_TEXTURE_KEY = 'scene-background';
@@ -2353,26 +2354,17 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * ★②③ 走廊場景(側別):填滿 A 該側緣 → 該側 B 之間【整個 slot 垂直範圍】,避免露黑塊。多個走廊各存一份 gfx。
+   * 畫一側的走廊場景：填滿 A 該側邊緣到該側 B 之間、整個 slot 高度，避免轉場時露出黑塊（左右各存一份）
+   *
+   * @param side 走廊在 A 的哪一側
    */
   private drawCorridorScene(side: 'L' | 'R'): void {
     // 同側已有走廊（上一區留下或重複開放）→ 先清掉再畫，避免重疊殘留
     const old = side === 'R' ? this.corridorGfx : this.corridorGfxL;
     if (old) old.destroy();
-    const sc = GameConfig.scene;
-    const lv = (sc.levels as Record<number, any>)[this.currentLevel] ?? (sc.levels as Record<number, any>)[1];
-    // 走廊水平範圍:右=A右緣→右B左緣;左=左B右緣→A左緣。
     const x0 = side === 'R' ? this.zoneA.right : this.zoneBLeft.right;
     const x1 = side === 'R' ? this.zoneBRight.left : this.zoneA.left;
-    const yTop = this.slotA.y, hFull = this.slotA.height, w = x1 - x0;
-    const g = this.add.graphics().setDepth(-3);
-    g.fillGradientStyle(lv.skyTop, lv.skyTop, lv.skyBottom, lv.skyBottom, 1);
-    g.fillRect(x0, yTop, w, hFull);
-    const gy = this.zoneA.top, gh = this.zoneA.height;
-    g.fillStyle(lv.groundBase ?? 0x6b5a3a, 1);
-    g.fillRect(x0, gy, w, gh);
-    g.lineStyle(3, lv.groundDark ?? 0x4a4030, 0.8);
-    g.strokeRect(x0, gy, w, gh);
+    const g = drawCorridorScenery(this, x0, x1, this.slotA, this.zoneA, this.currentLevel);
     if (side === 'R') this.corridorGfx = g; else this.corridorGfxL = g;
   }
 
@@ -3114,228 +3106,19 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * 程式繪製一個子區的場景:遠景(畫滿整個 slot=移動區+四周遠景邊距)→移動區地貌(arena)→餘燼粒子。
-   * ★方案e:slot 比畫面大,camera 跟隨玩家走到邊緣時露出 slot 邊緣的遠景(荒城/火山)。
-   * 靜態底圖用 graphics 一次畫好(depth 0/1),粒子適量,不拖累割草。
+   * 繪製一個子區的場景（見 systems/zoneScenery），並登記到 sceneLayers 與該 slot 的 slotLayers，
+   * 往左右延伸世界時可單獨回收這個 slot 的物件
+   *
+   * @param slot 子區所在的整格
+   * @param zone 移動區
+   * @param level 場景配色關卡
+   * @param variant 子區變體
    */
   private drawZoneScene(slot: Phaser.Geom.Rectangle, zone: Phaser.Geom.Rectangle, level: number, variant: 'A' | 'B'): void {
-    const layerStart = this.sceneLayers.length;
-    this.drawZoneSceneLayers(slot, zone, level, variant);
-    // 登記此 slot 新增的場景物件，往左右延伸時可單獨回收
-    this.slotLayers.set(slot, this.sceneLayers.slice(layerStart));
+    const objects = drawZoneScenery(this, slot, zone, level, variant);
+    this.sceneLayers.push(...objects);
+    this.slotLayers.set(slot, objects);
   }
-
-  /** 實際繪製一個 slot 的場景（遠景、外圍、地面、圍欄、粒子），物件推入 sceneLayers */
-  private drawZoneSceneLayers(slot: Phaser.Geom.Rectangle, zone: Phaser.Geom.Rectangle, level: number, variant: 'A' | 'B'): void {
-    const sc = GameConfig.scene;
-    const lv = (sc.levels as Record<number, any>)[level] ?? (sc.levels as Record<number, any>)[1];
-
-    // ---- 1) 遠景天空漸層(畫滿整個 slot) ----
-    const sky = this.add.graphics().setDepth(-3);
-    sky.fillGradientStyle(lv.skyTop, lv.skyTop, lv.skyBottom, lv.skyBottom, 1);
-    sky.fillRect(slot.x, slot.y, slot.width, slot.height);
-    this.sceneLayers.push(sky);
-
-    // ---- 2) 遠景剪影(上方天際線帶) ----
-    const far = this.add.graphics().setDepth(-2);
-    const bandH = Math.round((zone.top - slot.top) * 1.15);
-    const bandTop = slot.top + Math.max(16, (zone.top - slot.top) * 0.1);
-    if (variant === 'A') this.drawFarRuinedCity(far, slot.x + 16, bandTop, slot.width - 32, bandH);
-    else this.drawFarVolcano(far, slot.x + 16, bandTop, slot.width - 32, bandH);
-    this.sceneLayers.push(far);
-
-    // ---- 2b) 移動區外圍荒地(slot 內、arena 外)——鋪暗荒地 + 【散布細節填滿空蕩】(碎石堆/斷牆殘骸/熔岩窪) ----
-    const outer = this.add.graphics().setDepth(-1);
-    outer.fillStyle(lv.groundDark, 0.7);
-    outer.fillRect(slot.x, zone.bottom, slot.width, slot.bottom - zone.bottom); // 下方
-    outer.fillRect(slot.x, zone.top, zone.left - slot.left, zone.height);       // 左
-    outer.fillRect(zone.right, zone.top, slot.right - zone.right, zone.height); // 右
-    // 外圍散布細節:在 slot 內、arena 外的區域灑碎石/殘骸/(火山)熔岩窪,別留大片空
-    const inArena = (x: number, y: number) => x > zone.left - 10 && x < zone.right + 10 && y > zone.top - 10 && y < zone.bottom + 10;
-    for (let i = 0; i < 140; i++) {
-      const x = Phaser.Math.Between(slot.left + 6, slot.right - 6);
-      const y = Phaser.Math.Between(slot.top + bandH, slot.bottom - 6); // band 以下
-      if (inArena(x, y)) continue;
-      const roll = Math.random();
-      if (roll < 0.5) { // 碎石
-        outer.fillStyle(lv.pebble, 0.5); outer.fillCircle(x, y, Phaser.Math.Between(2, 5));
-      } else if (roll < 0.82) { // 斷牆/岩塊殘骸(暗矩形)
-        outer.fillStyle(lv.groundLight, 0.28); outer.fillRect(x, y, Phaser.Math.Between(10, 28), Phaser.Math.Between(6, 16));
-      } else if (variant === 'B' || lv.glow) { // 火山/熔岩關:熔岩窪(橘紅發光)
-        outer.fillStyle((GameConfig.scene.farB.lava as number), 0.35); outer.fillCircle(x, y, Phaser.Math.Between(4, 10));
-      } else { // 荒城關:更多土斑
-        outer.fillStyle(lv.groundBase, 0.4); outer.fillCircle(x, y, Phaser.Math.Between(8, 20));
-      }
-    }
-    this.sceneLayers.push(outer);
-
-    // ---- 3) 移動區地貌(場地地面):generateTexture 一次性靜態底圖(質感調更乾裂:不規則多邊斑塊) ----
-    const key = `zone-ground-L${level}-${variant}-${Math.round(zone.x)}`;
-    if (this.textures.exists(key)) this.textures.remove(key);
-    const gt = this.make.graphics({ x: 0, y: 0 }, false);
-    const w = Math.round(zone.width), h = Math.round(zone.height);
-    gt.fillStyle(lv.groundBase, 1); gt.fillRect(0, 0, w, h);
-    // 不規則多邊斑塊(比柔和圓點更像乾裂土塊)
-    for (let i = 0; i < 120; i++) {
-      const bx = Phaser.Math.Between(0, w), by = Phaser.Math.Between(0, h);
-      const rr = Phaser.Math.Between(10, 34);
-      gt.fillStyle(Math.random() < 0.5 ? lv.groundDark : lv.groundLight, 0.14);
-      const pts: Phaser.Geom.Point[] = [];
-      const sides = Phaser.Math.Between(4, 6);
-      for (let s = 0; s < sides; s++) {
-        const a = (s / sides) * Math.PI * 2;
-        const rad = rr * (0.6 + Math.random() * 0.5);
-        pts.push(new Phaser.Geom.Point(bx + Math.cos(a) * rad, by + Math.sin(a) * rad));
-      }
-      gt.fillPoints(pts, true);
-    }
-    // 龜裂縫線(較密的多邊折線,像龜裂紋)
-    gt.lineStyle(2, lv.crackColor, 0.85);
-    for (let c = 0; c < 16; c++) {
-      let cx = Phaser.Math.Between(0, w), cy = Phaser.Math.Between(0, h);
-      gt.beginPath(); gt.moveTo(cx, cy);
-      const segs = Phaser.Math.Between(3, 6);
-      for (let s = 0; s < segs; s++) { cx += Phaser.Math.Between(-70, 70); cy += Phaser.Math.Between(-55, 55); gt.lineTo(cx, cy); }
-      gt.strokePath();
-    }
-    if (lv.glow) {
-      gt.lineStyle(4, lv.glow, 0.5);
-      for (let c = 0; c < 5; c++) {
-        let cx = Phaser.Math.Between(0, w), cy = Phaser.Math.Between(0, h);
-        gt.beginPath(); gt.moveTo(cx, cy);
-        for (let s = 0; s < 4; s++) { cx += Phaser.Math.Between(-50, 50); cy += Phaser.Math.Between(-40, 40); gt.lineTo(cx, cy); }
-        gt.strokePath();
-      }
-    }
-    for (let i = 0; i < 70; i++) {
-      gt.fillStyle(lv.pebble, 0.8);
-      gt.fillCircle(Phaser.Math.Between(4, w - 4), Phaser.Math.Between(4, h - 4), Phaser.Math.Between(1, 3));
-    }
-    // 關3【焦黑廢墟】:斷裂城磚散落(灰石磚塊,帶暗縫,像斷牆碎塊)
-    if (level === 3) {
-      for (let i = 0; i < 30; i++) {
-        const bx = Phaser.Math.Between(6, w - 26), by = Phaser.Math.Between(6, h - 16);
-        const bw = Phaser.Math.Between(14, 28), bh = Phaser.Math.Between(8, 16);
-        const stone = [0x6a6058, 0x554b44, 0x736658][Phaser.Math.Between(0, 2)];
-        gt.fillStyle(stone, 0.9); gt.fillRect(bx, by, bw, bh);
-        gt.fillStyle(0x1a1512, 0.6); gt.fillRect(bx, by + bh / 2 - 1, bw, 2); // 磚縫
-        gt.lineStyle(1, 0x2a241f, 0.7); gt.strokeRect(bx, by, bw, bh);
-      }
-      gt.lineStyle(0, 0, 0);
-    }
-    // 關4【火山岩盤】:深岩多邊裂塊(暗色岩板拼接感)
-    if (level === 4) {
-      for (let i = 0; i < 18; i++) {
-        const bx = Phaser.Math.Between(10, w - 10), by = Phaser.Math.Between(10, h - 10);
-        gt.fillStyle(0x1a1211, 0.5);
-        const pts: Phaser.Geom.Point[] = [];
-        const sides = Phaser.Math.Between(5, 6), rr = Phaser.Math.Between(18, 40);
-        for (let s = 0; s < sides; s++) { const a = (s / sides) * Math.PI * 2; const rad = rr * (0.7 + Math.random() * 0.4); pts.push(new Phaser.Geom.Point(bx + Math.cos(a) * rad, by + Math.sin(a) * rad)); }
-        gt.fillPoints(pts, true);
-      }
-    }
-    gt.generateTexture(key, w, h); gt.destroy();
-    const ground = this.add.image(zone.x, zone.y, key).setOrigin(0, 0).setDepth(0);
-    this.sceneLayers.push(ground);
-
-    // ---- 4) 圍欄(區隔移動區,讓玩家清楚可走範圍) ----
-    const border = this.add.graphics().setDepth(1);
-    border.lineStyle(GameConfig.arena.borderThickness, GameConfig.arena.borderColor, 1);
-    border.strokeRect(zone.x, zone.y, zone.width, zone.height);
-    this.sceneLayers.push(border);
-
-    // ---- 5) 餘燼火點粒子(畫在整個 slot;火山關4/熔岩關2 更多、B 變體更多) ----
-    if (sc.emberCount > 0) {
-      const glowColor = variant === 'B' ? (sc.farB.lava as number) : (lv.glow || 0xff8a3a);
-      // 關4(火山岩盤)餘燼最多、關2(熔岩)次之;B 變體(火山遠景)加成。
-      const levelMult = level === 4 ? 1.8 : level === 2 ? 1.3 : 1.0;
-      const base = variant === 'B' ? sc.emberCount : Math.round(sc.emberCount * 0.6);
-      const count = Math.max(4, Math.round(base * levelMult));
-      const emitter = this.add.particles(0, 0, 'spark', {
-        x: { min: slot.x, max: slot.right },
-        y: { min: slot.y, max: slot.bottom },
-        lifespan: 2600, speedY: { min: -18, max: -42 }, speedX: { min: -8, max: 8 },
-        scale: { start: 0.5, end: 0 }, alpha: { start: 0.9, end: 0 },
-        tint: glowColor, frequency: Math.max(45, 1800 / count), quantity: 1, blendMode: 'ADD'
-      }).setDepth(2);
-      this.sceneLayers.push(emitter);
-    }
-  }
-
-  /** 遠景:荒城天際線(傾頹城牆 + 破塔剪影)——元素縮小、更密,填滿帶狀不空蕩。 */
-  private drawFarRuinedCity(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number): void {
-    const f = GameConfig.scene.farA;
-    g.fillStyle(f.hazeTop, 0.5); g.fillRect(x, y, w, h);
-    const base = y + h;
-    // 遠層小剪影(更遠更小更淡,墊背景層次)
-    g.fillStyle(f.tower, 0.5);
-    for (let bx = x; bx < x + w; bx += Phaser.Math.Between(30, 55)) {
-      const bh = Phaser.Math.Between(14, Math.max(20, h * 0.4));
-      g.fillRect(bx, base - bh, Phaser.Math.Between(14, 26), bh);
-    }
-    // 城牆(縮小高度、更密,少缺口)
-    g.fillStyle(f.wall, 0.95);
-    let wx = x;
-    const wallMax = Math.max(24, h * 0.55);
-    while (wx < x + w) {
-      const seg = Phaser.Math.Between(30, 60);
-      const wh = Phaser.Math.Between(Math.round(wallMax * 0.4), Math.round(wallMax)) * (Math.random() < 0.12 ? 0 : 1);
-      g.fillRect(wx, base - wh, seg, wh);
-      if (wh > 0) for (let m = wx; m < wx + seg; m += 14) g.fillRect(m, base - wh - 6, 7, 6);
-      wx += seg + Phaser.Math.Between(2, 8);
-    }
-    // 破塔(縮小,分散更多根)
-    g.fillStyle(f.tower, 0.95);
-    const towers = Math.max(4, Math.round(w / 220));
-    for (let t = 0; t < towers; t++) {
-      const tx = x + 20 + (t + 0.5) * (w / towers) + Phaser.Math.Between(-30, 30);
-      const tw = Phaser.Math.Between(18, 28), th = Phaser.Math.Between(Math.round(wallMax * 0.8), Math.round(wallMax * 1.4));
-      g.fillRect(tx, base - th, tw, th);
-      g.fillTriangle(tx, base - th, tx + tw, base - th, tx + tw * 0.5, base - th - Phaser.Math.Between(5, 14));
-    }
-  }
-
-  /** 遠景:火山噴發(紅天 + 噴煙 + 熔岩流下山)——山體縮小、多座填滿。 */
-  private drawFarVolcano(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number): void {
-    const f = GameConfig.scene.farB;
-    g.fillStyle(f.glowSky, 0.4); g.fillRect(x, y, w, h);
-    const base = y + h;
-    // 遠層低矮山巒(填滿底線,墊背景)
-    g.fillStyle(f.smoke, 0.55);
-    for (let mx = x; mx < x + w; mx += Phaser.Math.Between(70, 120)) {
-      const mw = Phaser.Math.Between(70, 130), mh = Phaser.Math.Between(Math.round(h * 0.3), Math.round(h * 0.55));
-      g.fillTriangle(mx - mw / 2, base, mx + mw / 2, base, mx, base - mh);
-    }
-    // 主火山(縮小,2 座)分散
-    const peaks = 2;
-    for (let p = 0; p < peaks; p++) {
-      const mx = x + (p + 0.5) * (w / peaks) + Phaser.Math.Between(-40, 40);
-      const mw = Phaser.Math.Between(Math.round(w * 0.18), Math.round(w * 0.26));
-      const mh = Math.max(30, h * 0.7);
-      const mtop = base - mh;
-      g.fillStyle(f.smoke, 0.98);
-      g.fillTriangle(mx - mw / 2, base, mx + mw / 2, base, mx, mtop);
-      // 熔岩流
-      g.lineStyle(2, f.lava, 0.85);
-      for (let l = 0; l < 2; l++) {
-        let lx = mx + Phaser.Math.Between(-10, 10), ly = mtop + 4;
-        g.beginPath(); g.moveTo(lx, ly);
-        for (let s = 0; s < 4; s++) { lx += Phaser.Math.Between(-12, 12); ly += Phaser.Math.Between(10, 18); g.lineTo(lx, ly); }
-        g.strokePath();
-      }
-      // 噴煙 + 山口亮點
-      for (let s = 0; s < 4; s++) { g.fillStyle(f.smoke, 0.35); g.fillCircle(mx + Phaser.Math.Between(-20, 20), mtop - Phaser.Math.Between(2, 26), Phaser.Math.Between(10, 20)); }
-      g.fillStyle(f.lava, 0.9); g.fillCircle(mx, mtop + 3, 6);
-    }
-  }
-
-
-
-
-
-
-
-
 
   /**
    * 建立 BossController 需要的場景能力（只開放 BOSS 系統用得到的部分）
@@ -7387,29 +7170,7 @@ export class GameScene extends Phaser.Scene {
     const rects = this.levelMode
       ? [this.slotBLeft, this.slotA, this.slotBRight]
       : [new Phaser.Geom.Rectangle(0, 0, GameConfig.width, GameConfig.height)];
-    this.sceneBackgrounds = rects.map((rect) => this.createCoverImage(SCENE_BG_TEXTURE_KEY, rect));
-  }
-
-  /**
-   * 建立一張蓋滿指定矩形的背景圖：等比放大（cover）後裁掉超出部分，保持原圖比例不變形
-   *
-   * @param textureKey - 紋理 key
-   * @param rect - 要蓋滿的世界座標矩形
-   * @returns 建立好的背景圖（深度 SCENE_BG_DEPTH）
-   */
-  private createCoverImage(textureKey: string, rect: Phaser.Geom.Rectangle): Phaser.GameObjects.Image {
-    const img = this.add.image(rect.centerX, rect.centerY, textureKey)
-      .setOrigin(0.5, 0.5)
-      .setDepth(SCENE_BG_DEPTH)
-      .setVisible(this.isNewSceneActive);
-    // cover：取寬、高放大倍率中較大者，確保整個矩形都被蓋滿
-    const scale = Math.max(rect.width / img.width, rect.height / img.height);
-    img.setScale(scale);
-    // 裁切（紋理座標）：只保留置中、對應 rect 大小的區域，避免溢出到相鄰 slot
-    const cropW = rect.width / scale;
-    const cropH = rect.height / scale;
-    img.setCrop((img.width - cropW) / 2, (img.height - cropH) / 2, cropW, cropH);
-    return img;
+    this.sceneBackgrounds = rects.map((rect) => createCoverImage(this, SCENE_BG_TEXTURE_KEY, rect, SCENE_BG_DEPTH, this.isNewSceneActive));
   }
 
   /**
