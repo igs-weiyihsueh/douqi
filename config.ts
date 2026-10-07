@@ -10,48 +10,7 @@ export const GameConfig = {
   /** 除錯開關 */
   debug: {
     /** 顯示慢速模式即時調參面板(藍圈/衝刺距離/速度)——用戶要求預設關 */
-    showSlowTuningPanel: false,
-    /** zoom編輯器現在移到主菜單中 */
-    showZoomEditor: false
-  },
-
-  /** ★相機zoom編輯器配置 */
-  zoomEditor: {
-    /** 預設zoom級別 */
-    defaultZoom: 1.0,
-    /** zoom調整範圍 */
-    minZoom: 0.3,
-    maxZoom: 3.0,
-    /** 按鈕微調步進 */
-    fineStep: 0.05,
-    /** 滑桿大步進 */
-    coarseStep: 0.1,
-    /** 鍵盤快調步進 */
-    keyboardStep: 0.2,
-    /** 編輯器UI位置 - 移到右上角避免與遊戲元素重疊 */
-    panelX: 1580,
-    panelY: 50,
-    /** 編輯器面板寬高 */
-    panelWidth: 320,
-    panelHeight: 180,
-    /** 滑桿控制 */
-    slider: {
-      width: 200,
-      height: 20,
-      trackColor: 0x444444,
-      handleColor: 0x00ff00,
-      handleRadius: 10
-    },
-    /** 快捷鍵功能：現在用於快速調整而非固定值 */
-    shortcuts: {
-      zoomIn: ['PLUS', 'NUMPAD_ADD'],      // 放大快捷鍵
-      zoomOut: ['MINUS', 'NUMPAD_SUBTRACT'], // 縮小快捷鍵
-      reset: ['R'],                         // 重置快捷鍵
-      preset: {                            // 預設值快捷鍵
-        '1': 0.5,  '2': 0.75, '3': 1.0, 
-        '4': 1.5,  '5': 2.0,  '0': 3.0   // 0鍵=最大zoom
-      }
-    }
+    showSlowTuningPanel: false
   },
 
   /** ★波次進度 HUD(關卡制:節點序列 ●─●─◆);只純波次顯示,事件/BOSS 隱藏 */

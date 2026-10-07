@@ -469,13 +469,6 @@ export class GameScene extends Phaser.Scene {
 
     this.emitStats();
 
-    // 應用已保存的zoom設定
-    const savedZoom = GameConfig.zoomEditor.defaultZoom as number;
-    if (savedZoom && savedZoom !== 1.0) {
-      this.cameras.main.setZoom(savedZoom);
-      console.log(`🔍 應用已保存的zoom設定: ${savedZoom.toFixed(2)}x`);
-    }
-
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.game.events.off('ui-attack', this.queuePlayerAttack, this);
       this.game.events.off('ui-toggle-items', this.toggleItems, this);
