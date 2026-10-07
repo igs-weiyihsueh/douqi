@@ -194,11 +194,14 @@ export const GameConfig = {
    * v31 連段技系統（僅 P1）。
    * v55：COMBO 與能量拆成兩套【只在慢速模式(controlMode==='slow')】生效；快速模式維持原樣(一條 combo 3/6/9/10)。
    *   · 快速(fast)：一條 combo，命中+1，3圓/6直/9爆發/10強化(durationMs)，到10歸零。thresholds/max/durationMs 為 fast 用。
-   *   · 慢速(slow)：COMBO(combo 區塊，只到9爆發後歸零) + 能量(energy 區塊，滿10自動強化、倒退解除)兩套獨立。
+   *   · 慢速(slow)：COMBO(combo 區塊，slowThresholds 4圓/8直，到已解鎖最高招後歸零) + 能量(energy 區塊，滿門檻按 Z 變身、倒退解除)兩套獨立。
+   *     爆發亂打在慢速改為【變身專屬】：變身期間 AOE 每命中 empower.burstEveryAoeHits 次觸發一次(見 empower)。
    */
   combo: {
-    /** 各階觸發門檻（累積命中次數）。fast 用到 empower(10)；slow 只用 circle/line/burst(爆發後歸零)。 */
+    /** 快速模式各階觸發門檻（累積命中次數）：3圓/6直/9爆發/10強化 */
     thresholds: { circle: 3, line: 6, burst: 9, empower: 10 },
+    /** 慢速模式各階觸發門檻：4圓/8直（爆發不在 combo 循環內，改為變身專屬） */
+    slowThresholds: { circle: 4, line: 8 },
     /** 各階解鎖所需團隊等級（限時強化 Lv1、圓 Lv2、直 Lv4、爆發 Lv6） */
     unlockLevel: { circle: 2, line: 4, burst: 6, empower: 1 },
     /** combo 上限（fast：達10歸零＝強化門檻） */
@@ -236,6 +239,8 @@ export const GameConfig = {
         orbitDots: 4,            // 繞轉光點數
         particleFreq: 60         // 粒子發射頻率(ms);越小越密
       },
+      /** 慢速變身專屬爆發：變身期間 AOE 每命中(≥1隻)此次數就觸發一次爆發亂打，可重複；仍需達 unlockLevel.burst */
+      burstEveryAoeHits: 4,
       /** ★v62/v63 階段4:強化期【唯一招】——鎖定角色周圍圓範圍內的怪→打過去→以【目標】為中心炸圓AOE。只 slow P1。 */
       aoe: {
         radius: 160,             // ★③④炸裂 AOE 半徑(以【目標】為中心)——縮小(260→160)

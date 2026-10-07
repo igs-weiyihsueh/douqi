@@ -797,6 +797,8 @@ export class GameScene extends Phaser.Scene {
     if (!drainPaused) {
       for (const ch of this.characters) {
         if (!ch.alive || !ch.empowered) continue;
+        // 爆發亂打演出中（含表演定身時間）不扣能量：等同把變身時間延長爆發演出的長度
+        if (ch.isBursting || time < ch.skillLockUntil) continue;
         ch.energy = Math.max(0, ch.energy - GameConfig.energy.drainPerSec * (delta / 1000));
         if (ch.energy <= 0) {
           ch.energy = 0;
@@ -6804,10 +6806,8 @@ export class GameScene extends Phaser.Scene {
   /** v56 slow：combo 歸零門檻/上限 = 目前已解鎖最高階招門檻(爆發9 / 氣波6 / 圓形3)。 */
   private slowComboCap(): number {
     const cfg = GameConfig.combo;
-    const lvl = this.teamLevel;
-    if (lvl >= cfg.unlockLevel.burst) return cfg.thresholds.burst; // 9
-    if (lvl >= cfg.unlockLevel.line) return cfg.thresholds.line;   // 6
-    return cfg.thresholds.circle;                                  // 3
+    if (this.teamLevel >= cfg.unlockLevel.line) return cfg.slowThresholds.line; // 8
+    return cfg.slowThresholds.circle;                                            // 4
   }
 
   private onComboHit(c: Character, time: number): void {
@@ -6823,10 +6823,9 @@ export class GameScene extends Phaser.Scene {
       const cap = this.slowComboCap();
       c.spirit = Math.min(cap, c.spirit + 1);
       const combo = c.spirit;
-      // 各招在自身門檻觸發(需解鎖)：3圓/6氣波/9爆發
-      if (combo === cfg.thresholds.circle && lvl >= cfg.unlockLevel.circle) this.comboCircle(c, time);
-      if (combo === cfg.thresholds.line && lvl >= cfg.unlockLevel.line) this.comboLine(c, time);
-      if (combo === cfg.thresholds.burst && lvl >= cfg.unlockLevel.burst) this.triggerBurst(c, time);
+      // 各招在自身門檻觸發(需解鎖)：4圓/8氣波（爆發改為變身專屬，見 registerEmpowerAoeHit）
+      if (combo === cfg.slowThresholds.circle && lvl >= cfg.unlockLevel.circle) this.comboCircle(c, time);
+      if (combo === cfg.slowThresholds.line && lvl >= cfg.unlockLevel.line) this.comboLine(c, time);
       // 達已解鎖最高招門檻(cap) → 該輪最高招已在上面觸發 → 歸零重來
       if (combo >= cap) c.spirit = 0;
       // 【B. 能量(強化)】v58:能量改【擊殺獲得】(見 grantKillEnergy),此處【不再命中+1】。
@@ -6959,7 +6958,25 @@ export class GameScene extends Phaser.Scene {
         hitAny = true;
       }
     }
-    if (hitAny) this.triggerComboHit(c); // COMBO 獎勵：變身 AOE 命中算 1 下
+    if (hitAny) {
+      this.triggerComboHit(c); // COMBO 獎勵：變身 AOE 命中算 1 下
+      this.registerEmpowerAoeHit(c, time);
+    }
+  }
+
+  /**
+   * 慢速變身專屬爆發：記一次 AOE 命中，每滿 burstEveryAoeHits 次觸發一次爆發亂打（可重複）。
+   * 爆發仍需達解鎖等級；未解鎖時照常計數但不觸發。
+   *
+   * @param c 施放 AOE 的角色
+   * @param time 目前時間
+   */
+  private registerEmpowerAoeHit(c: Character, time: number): void {
+    const cfg = GameConfig.combo;
+    c.empowerAoeHits++;
+    if (c.empowerAoeHits % cfg.empower.burstEveryAoeHits !== 0) return;
+    if (this.teamLevel < cfg.unlockLevel.burst || c.isBursting) return;
+    this.triggerBurst(c, time);
   }
 
   /** v31 連段①圓形範圍技（combo4, Lv3）：以角色為中心瞬發圓形 AOE + 擴張環（不鎖角色） */
@@ -7025,6 +7042,7 @@ export class GameScene extends Phaser.Scene {
     if (slow) {
       if (c.empowered) return;
       c.empowered = true;
+      c.empowerAoeHits = 0; // 變身專屬爆發計數：每次變身重新累積
     } else {
       c.empowerUntil = time + GameConfig.combo.empower.durationMs;
     }

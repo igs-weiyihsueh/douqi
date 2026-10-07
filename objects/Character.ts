@@ -14,6 +14,8 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
   spirit = 0;
   /** v55：能量值(僅 P1 用)——獨立於 combo/spirit。命中+1、被打-1、滿10自動強化、強化期間倒退到0解除。 */
   energy = 0;
+  /** 慢速變身期間 AOE 命中次數（每 combo.empower.burstEveryAoeHits 次觸發一次爆發）；每次變身開始歸零 */
+  empowerAoeHits = 0;
   /** ★階段二：Credit點數 - 每個角色獨立的貨幣點數 */
   credit = 0;
   /** ★階段三：COMBO獎勵系統狀態 */
