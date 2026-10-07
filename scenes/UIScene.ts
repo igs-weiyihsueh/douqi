@@ -245,26 +245,6 @@ export class UIScene extends Phaser.Scene {
       SHINE_CYCLE_MS: 900,
       SHINE_ALPHA: 0.75
     },
-    // ★階段三：COMBO獎勵系統配置 - 用戶要求調整
-    COMBO: {
-      X_OFFSET: 0,    // Credit正上方，無水平偏移
-      Y: -45,         // ★用戶要求：往上移動，從-30上移到-45
-      WIDTH: 120,     // 與Credit同寬，視覺對齊
-      HEIGHT: 28,     // ★調整：增加高度容納更大字體
-      FONT_SIZE: '24px', // ★用戶要求：字體放大，從18px增加到24px
-      PROGRESS_WIDTH: 100,   // 進度條寬度
-      PROGRESS_HEIGHT: 3,    // 精緻進度條高度
-      PROGRESS_Y_OFFSET: 12, // 進度條與文字間距
-      // ★使用配置常數，消除硬編碼
-      WARNING_BLINK_MS: GameConfig.comboReward.WARNING_BLINK_MS,
-      STREAK_TIMEOUT_MS: GameConfig.comboReward.STREAK_TIMEOUT_MS,
-      WARNING_START_MS: GameConfig.comboReward.WARNING_START_MS
-    },
-    // ★COMBO獎勵里程碑配置：使用GameConfig統一配置
-    COMBO_REWARDS: {
-      MILESTONES: GameConfig.comboReward.MILESTONES,
-      TICKETS: GameConfig.comboReward.REWARDS
-    },
     // 顏色配置
     COLORS: {
       BACKGROUND: 0x000000 as const,
@@ -280,11 +260,6 @@ export class UIScene extends Phaser.Scene {
       ENERGY_SHINE: 0xffffff as const,
       ENERGY_BORDER_GLOW: 0xffffff as const,
       // ★階段三：COMBO系統顏色
-      COMBO_NORMAL: 0x00ff00 as const,        // 正常綠色
-      COMBO_WARNING: 0xff6600 as const,       // 警告橙色
-      COMBO_CRITICAL: 0xff0000 as const,      // 危險紅色
-      COMBO_PROGRESS: 0x00ccff as const,      // 進度條藍色
-      TICKET_REWARD: 0xffd700 as const,       // 票券獎勵金色
       WHITE: '#ffffff',
       BLACK: '#000000',
       TEXT_FLASH: '#ff3b30',
@@ -988,7 +963,7 @@ export class UIScene extends Phaser.Scene {
   /**
    * 創建單個角色的頭上UI容器
    * 
-   * 包含三層UI元素（從上到下）：
+   * 包含兩層UI元素（從上到下）：
    * 1. 編號牌：彩色圓形 + 角色標籤（P1/BOT1/BOT2/BOT3）
    * 2. Credit顯示：劍形圖標 + 五位數Credit數字
    * 3. 能量條：金色進度條（僅慢速模式玩家顯示）
@@ -1010,22 +985,16 @@ export class UIScene extends Phaser.Scene {
     // 創建能量條UI元素
     const energyUI = this.createEnergyUI();
     
-    // ★階段三：創建COMBO獎勵系統UI元素
-    const { comboText } = this.createComboUI();
-    
-    // 添加所有元素到容器（移除進度條元素）
+    // 添加所有元素到容器
     container.add([
       badge, badgeText, creditBg, swordIcon, creditText,
-      energyUI.bg, energyUI.bar, energyUI.shine, energyUI.hint,
-      comboText
+      energyUI.bg, energyUI.bar, energyUI.shine, energyUI.hint
     ]);
     
     // 設置子元件引用，便於後續更新
     (container as any).creditText = creditText;
     (container as any).swordIcon = swordIcon;
     (container as any).energyUI = energyUI;
-    // ★階段三：COMBO元件引用（移除進度條引用）
-    (container as any).comboText = comboText;
     
     return container;
   }
@@ -1160,37 +1129,7 @@ export class UIScene extends Phaser.Scene {
     return { bg, bar, shine, hint, glowFx };
   }
 
-  /**
-   * 創建COMBO獎勵系統UI元素
-   * 
-   * 包含連擊數文字和進度條，顯示Hit streak和距離下個獎勵的進度
-   * 位於Credit顯示右側，實現水平擴展佈局
-   * 
-   * @returns COMBO系統相關的UI元素
-   */
-  private createComboUI(): {
-    comboText: Phaser.GameObjects.Text;
-  } {
-    const config = this.OVERHEAD_UI_CONFIG;
-    // ★修復位置：Credit正上方，使用Credit的X座標
-    const comboX = config.CREDIT.X + config.COMBO.X_OFFSET;
-    const comboY = config.COMBO.Y;
-    
-    // ★修復文字：顯示"HIT x0"格式，增大字體
-    const comboText = this.add.text(comboX, comboY, 'HIT x0', {
-      fontFamily: 'monospace',
-      fontSize: config.COMBO.FONT_SIZE,
-      color: config.COLORS.COMBO_TEXT_NORMAL,
-      stroke: config.COLORS.BLACK,
-      strokeThickness: 2,  // ★增加描邊厚度，提高可見性
-      fontStyle: 'bold'
-    }).setOrigin(0.5, 0.5);
-    
-    // ★用戶反饋修復：完全移除COMBO進度條創建
-    // 不再創建任何進度條元素，避免視覺干擾
-    
-    return { comboText };
-  }
+
 
   /**
    * 繪製劍形圖標
@@ -1276,9 +1215,6 @@ export class UIScene extends Phaser.Scene {
     
     // 更新能量條系統（僅慢速模式玩家）
     this.updateEnergyDisplay(character, stats, energyUI, container);
-    
-    // ★階段三：更新COMBO獎勵系統
-    this.updateComboDisplay(character, container);
   }
 
   /**
@@ -1406,54 +1342,7 @@ export class UIScene extends Phaser.Scene {
     shine.width = right - left;
   }
 
-  /**
-   * ★階段三：更新角色頭頂的COMBO顯示（用戶反饋修復版）
-   * 
-   * **用戶反饋修復**：完全移除進度條邏輯，只保留COMBO數字顯示
-   * 
-   * 功能簡化：
-   * - 顯示當前連擊數（HIT x數字格式）
-   * - 警告狀態時文字顏色變化（橙色/紅色閃爍）
-   * - 移除所有進度條相關邏輯，避免視覺干擾
-   * 
-   * @param character 角色數據，包含COMBO狀態
-   * @param container 容器對象，包含COMBO UI元件引用
-   */
-  private updateComboDisplay(
-    character: CharStat,
-    container: Phaser.GameObjects.Container
-  ): void {
-    const comboText = (container as any).comboText as Phaser.GameObjects.Text;
-    
-    // 安全性檢查：只需檢查文字元件
-    if (!comboText) return;
-    
-    const combo = character.combo;
-    const config = this.OVERHEAD_UI_CONFIG;
-    const colors = config.COLORS;
-    
-    // ★修復文字格式：使用"HIT x數字"格式
-    comboText.setText(`HIT x${combo.currentStreak}`);
-    
-    // 根據警告狀態設置文字顏色
-    if (combo.isWarning) {
-      // 警告狀態：橙色和紅色交替閃爍
-      const blinkTime = this.time.now % config.COMBO.WARNING_BLINK_MS;
-      const isBlinking = blinkTime < (config.COMBO.WARNING_BLINK_MS / 2);
-      const warningColor = isBlinking ? colors.COMBO_TEXT_CRITICAL : colors.COMBO_TEXT_WARNING;
-      comboText.setColor(warningColor);
-    } else if (combo.currentStreak === 0) {
-      // 無連擊：隱藏COMBO文字，減少視覺混亂
-      comboText.setVisible(false);
-      return;
-    } else {
-      // 正常狀態：綠色文字
-      comboText.setColor(colors.COMBO_TEXT_NORMAL);
-    }
-    
-    // 確保文字可見
-    comboText.setVisible(true);
-  }
+
 
   /**
    * 更新頭上UI的螢幕位置
@@ -1503,8 +1392,6 @@ export class UIScene extends Phaser.Scene {
    * @param milestone 里程碑數值
    */
   spawnTicketBurstInUI(worldX: number, worldY: number, milestone: number): void {
-    console.log(`🎯 [UIScene正式版] 華麗彩票特效 at world(${worldX}, ${worldY}), milestone: ${milestone}`);
-    
     // 轉換世界座標為螢幕座標（考慮相機偏移）
     const gameScene = this.scene.get('GameScene') as any;
     const gcam = gameScene?.cameras?.main;
@@ -1522,8 +1409,6 @@ export class UIScene extends Phaser.Scene {
         config.TIMING.TICKET_COUNT_BASE + milestone * config.TIMING.TICKET_COUNT_MULTIPLIER
       )
     );
-    
-    console.log(`💸 [UIScene正式版] ${ticketCount} 華麗彩票 at screen(${screenX}, ${screenY})`);
     
     // 創建華麗彩票特效
     for (let i = 0; i < ticketCount; i++) {
@@ -1554,8 +1439,6 @@ export class UIScene extends Phaser.Scene {
       .setVisible(true)
       .setAlpha(1);
     
-    console.log(`🎫 [UIScene正式版] 金色彩票 ${config.VISUAL.WIDTH}×${config.VISUAL.HEIGHT}px at (${x}, ${y}) depth=${config.VISUAL.DEPTH}`);
-    
     // 正式版物理：扇形噴發角度
     const angleRange = config.BURST_ANGLE.MAX - config.BURST_ANGLE.MIN;
     const angle = config.BURST_ANGLE.MIN + Math.random() * angleRange;
@@ -1569,8 +1452,6 @@ export class UIScene extends Phaser.Scene {
     
     const vx = Math.cos(angleRad) * velocity;
     const vy = Math.sin(angleRad) * velocity;
-    
-    console.log(`🚀 [UIScene正式版] 物理參數: angle=${Math.round(angle)}°, velocity=${Math.round(velocity)}, vx=${Math.round(vx)}, vy=${Math.round(vy)}`);
     
     // 正式版生命週期
     const lifetime = config.TIMING.LIFETIME_BASE_MS + Math.random() * config.TIMING.LIFETIME_RANDOM_MS;
@@ -1586,7 +1467,6 @@ export class UIScene extends Phaser.Scene {
       // 生命週期檢查
       if (elapsed >= lifetime || !ticket.scene) {
         ticket.destroy();
-        console.log(`🎫 [UIScene正式版] 彩票完成生命週期 ${elapsed}ms`);
         return;
       }
       
@@ -1606,7 +1486,6 @@ export class UIScene extends Phaser.Scene {
           ticket.x > GameConfig.width + config.BOUNDARIES.MARGIN_X || 
           ticket.y > GameConfig.height + config.BOUNDARIES.MARGIN_Y) {
         ticket.destroy();
-        console.log(`🎫 [UIScene正式版] 彩票飛出邊界銷毀`);
         return;
       }
       
@@ -1628,8 +1507,6 @@ export class UIScene extends Phaser.Scene {
       .setVisible(true)
       .setAlpha(0.8);
     
-    console.log(`✨ [UIScene正式版] 金色閃光 at (${x}, ${y}) depth=2001`);
-    
     // 正式版動畫：快速擴張，華麗效果
     this.tweens.add({
       targets: flash,
@@ -1639,7 +1516,6 @@ export class UIScene extends Phaser.Scene {
       ease: 'Power2',    // 自然曲線
       onComplete: () => {
         flash.destroy();
-        console.log(`✨ [UIScene正式版] 閃光動畫完成`);
       }
     });
   }

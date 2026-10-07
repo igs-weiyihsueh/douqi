@@ -7807,8 +7807,6 @@ export class GameScene extends Phaser.Scene {
     
     // 檢查是否達到獎勵里程碑
     this.checkAndGrantComboReward(actor);
-    
-    console.log(`COMBO Hit! ${actor.index === 0 ? 'P1' : `BOT${actor.index}`}: ${combo.currentStreak}x streak`);
   }
 
   /**
@@ -7844,7 +7842,6 @@ export class GameScene extends Phaser.Scene {
           config.MILESTONES[i + 1] : 
           config.MILESTONES[config.MILESTONES.length - 1];
         
-        console.log(`🎯 COMBO里程碑達成！${combo.currentStreak}x - 等待中斷觸發 ${config.REWARDS[i]} 票券獎勵`);
         break;
       }
     }
@@ -7906,64 +7903,16 @@ export class GameScene extends Phaser.Scene {
     };
     */
     
-    console.log(`💸 [場景驗證] 極簡測試：${ticketCount} tickets via UIScene`);
-    /*
-    // ★GameScene特效暫時停用，改用UIScene測試
-    for (let i = 0; i < ticketCount; i++) {
-      // 極簡彩票：固定螢幕中心，超大尺寸，紅色，最高深度
-      const ticket = this.add.rectangle(
-        400 + i * 10,  // 固定X=400，稍微錯開
-        300,           // 固定Y=300螢幕中心
-        50,            // 極大寬度50px
-        30,            // 極大高度30px
-        0xFF0000       // 紅色更明顯
-      )
-        .setStrokeStyle(3, 0xFFFFFF)  // 白色粗邊框
-        .setDepth(1000);              // 最高深度
-      
-      console.log(`🎫 [方案A] TEST ticket ${i}: 50×30px RED at (${400 + i*10}, 300) depth=1000`);
-      
-      // 極簡運動：只向上或向右，超慢20px/s
-      const moveX = (i % 2 === 0) ? 20 : 0;  // 偶數向右
-      const moveY = (i % 2 === 1) ? -20 : 0; // 奇數向上
-      
-      // 使用Tween確保可見的運動
-      this.tweens.add({
-        targets: ticket,
-        x: ticket.x + moveX * 10,  // 10秒後移動200px
-        y: ticket.y + moveY * 10,
-        duration: 10000,           // 10秒超長時間
-        ease: 'Linear',
-        onComplete: () => {
-          console.log(`🎫 [方案A] TEST ticket ${i} movement completed`);
-          ticket.destroy();
-        }
-      });
-    }
-    
-    // 超明顯閃光：固定中心位置
-    const flash = this.add.circle(400, 300, 10, 0xFF0000, 1)
-      .setDepth(1001)
-      .setStrokeStyle(5, 0xFFFFFF, 1);
-    
-    console.log(`✨ [方案A] MASSIVE RED flash at (400, 300) depth=1001`);
-    */
-    
     // ★正式版：改為華麗彩票特效，跟隨角色位置
-    console.log(`🔄 [正式版] UIScene創建華麗特效，跟隨角色位置`);
     
     // 獲取UIScene引用並調用華麗特效創建
     const uiScene = this.scene.get('UIScene') as any;
     if (uiScene && uiScene.spawnTicketBurstInUI) {
       // 傳遞角色的世界座標，由UIScene負責轉換為螢幕座標
-      console.log(`🎯 [正式版] 調用UIScene華麗特效 at world(${actor.x}, ${actor.y})`);
       uiScene.spawnTicketBurstInUI(actor.x, actor.y, milestone);
     } else {
       console.error(`❌ [正式版] UIScene或spawnTicketBurstInUI方法不存在`);
     }
-    
-    console.log(`💸 Ticket Burst! ${ticketCount} tickets via UIScene from ${actor.index === 0 ? 'P1' : `BOT${actor.index}`}`);
-  }
   
   /**
    * ★階段三：創建單個彩票粒子（征騎Code Review修正版）
@@ -8078,7 +8027,7 @@ export class GameScene extends Phaser.Scene {
       .setDepth(300)  // 比彩票更高的深度
       .setStrokeStyle(3, 0xFFFFFF, 1);  // 白色邊框增加對比度
     
-    console.log(`✨ Creating flash effect at (${x}, ${y}) with depth 300`);
+
     
     // 閃光擴張動畫：快速且明顯
     this.tweens.add({
@@ -8089,7 +8038,7 @@ export class GameScene extends Phaser.Scene {
       ease: 'Power2',  // 自然的擴張曲線
       onComplete: () => {
         flash.destroy();
-        console.log(`✨ Flash effect completed and destroyed`);
+
       }
     });
   }
@@ -8124,8 +8073,6 @@ export class GameScene extends Phaser.Scene {
         if (timeSinceLastKill >= config.STREAK_TIMEOUT_MS) {
           // ★修復邏輯：COMBO中斷前先觸發待處理的獎勵
           if (combo.pendingRewardTickets !== undefined && combo.pendingRewardTickets > 0) {
-            console.log(`🎉 COMBO中斷觸發獎勵！${combo.pendingRewardMilestone}x = ${combo.pendingRewardTickets} 票券`);
-            
             // 發放票券獎勵
             combo.ticketsEarned += combo.pendingRewardTickets;
             character.credit += combo.pendingRewardTickets; // 同步更新Credit顯示
@@ -8143,7 +8090,6 @@ export class GameScene extends Phaser.Scene {
           }
           
           // 超時：重置COMBO到初始狀態
-          console.log(`COMBO Reset! ${character.index === 0 ? 'P1' : `BOT${character.index}`} streak lost`);
           combo.currentStreak = 0;
           combo.isWarning = false;
           combo.nextMilestone = config.MILESTONES[0]; // 重置到第一個里程碑
@@ -8258,8 +8204,6 @@ export class GameScene extends Phaser.Scene {
       .setDepth(1500)            // 高深度確保可見
       .setAlpha(1);              // 完全不透明
 
-    console.log(`💰 票券提示文字："獲得${ticketAmount}票券！" at (${character.x}, ${character.y - 80})`);
-    
     // 文字動畫：向上飛出 + 放大 + 漸變消失
     this.tweens.add({
       targets: rewardText,
@@ -8271,7 +8215,6 @@ export class GameScene extends Phaser.Scene {
       ease: 'Power2',            // 自然曲線
       onComplete: () => {
         rewardText.destroy();
-        console.log(`💰 票券提示文字動畫完成`);
       }
     });
   }
