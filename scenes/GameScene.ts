@@ -15,6 +15,7 @@ import { GoIndicator } from '../controllers/GoIndicator';
 import { HiddenGateController } from '../controllers/HiddenGateController';
 import { TreasureRoomController } from '../controllers/TreasureRoomController';
 import { TreasureEnemyController, type TreasureEnemyHost } from '../controllers/TreasureEnemyController';
+import { BreakableController, type BreakableHost } from '../controllers/BreakableController';
 import { SlotWorldController, type AreaTransition, type Side, type SlotWorldHost } from '../controllers/SlotWorldController';
 import { PerfOverlay } from '../controllers/PerfOverlay';
 import { GameDebugApi, type GameDebugHost } from '../controllers/GameDebugApi';
@@ -52,6 +53,8 @@ export class GameScene extends Phaser.Scene {
   private enemies!: Phaser.Physics.Arcade.Group;  private items!: Phaser.Physics.Arcade.Group;
   private bullets!: Phaser.Physics.Arcade.Group;
   private breakables!: Phaser.GameObjects.Group;
+  /** 可破壞物件的布置、打破與爆炸桶，每次 create() 重建 */
+  private breakableCtl!: BreakableController;
   private chargeWarnGfx!: Phaser.GameObjects.Graphics;
 
   /** F4 新舊美術切換（背景圖、P1 皮膚與覆蓋 UI、一般怪外觀），每次 create() 重建 */
@@ -263,6 +266,7 @@ export class GameScene extends Phaser.Scene {
       maxSize: GameConfig.breakable.maxAlive,
       runChildUpdate: false
     });
+    this.breakableCtl = new BreakableController(this.createBreakableHost());
     this.chargeWarnGfx = this.add.graphics().setDepth(2);
     this.targeting = new TargetingController(this.createTargetingHost());
     this.actions = new CharacterActionController(this.createActionHost());
@@ -381,11 +385,11 @@ export class GameScene extends Phaser.Scene {
     this.game.events.emit('items-state', this.itemsEnabled);
 
     // 開場第一波灑幾個可打破物件
-    this.spawnBreakablesForWave();
+    this.breakableCtl.spawnForWave();
 
     // 關卡制:關卡 1-A 開場——靜態布置 A 物件 + A 子區隨機(純波次 或 事件),顯示關卡標題。
     if (this.levelMode) {
-      this.placeStaticBreakables('L'); // 1-A 用預設一套布置
+      this.breakableCtl.placeStatic('L'); // 1-A 用預設一套布置
       this.startStage();
       if (GameConfig.spawn.spawnOnStart) this.spawnFormation();
     } else if (GameConfig.spawn.spawnOnStart) {
@@ -840,7 +844,7 @@ export class GameScene extends Phaser.Scene {
         this.waveFormations = 0; // 新波:隊形次數歸零(寶箱怪第2隊形起才可能出)
         this.waveState = 'spawning';
         // 每波開始灑幾個可打破物件(清掉的下一波再補)
-        this.spawnBreakablesForWave();
+        this.breakableCtl.spawnForWave();
         // 開波首批怪立刻湧出，不冷場——直接生一組 + 歸零 accumulator（後續維持原節奏）
         this.spawnAccumulator = 0;
         // 階段2a:開波用 drip 補到 maxAlive(spawnFormation 內每隻 spawnBlocked 精準封頂,不超 target)
@@ -1009,14 +1013,6 @@ export class GameScene extends Phaser.Scene {
     if (!keepTreasure) this.treasures.forget();
   }
 
-  /** 清掉場上所有可破壞物件(切子區/轉場時用,避免上一子區的物件殘留)。 */
-  private clearAllBreakables(): void {
-    for (const child of this.breakables.getChildren()) {
-      const bk = child as Breakable;
-      if (bk.active) bk.despawn();
-    }
-  }
-
   /**
    * 開始目前小關卡（stageQueue[0]）：清敵關卡，擊殺數依寶箱階級；問號寶箱在此揭曉並顯示橫幅。
    * 小遊戲關卡尚未實作
@@ -1072,46 +1068,6 @@ export class GameScene extends Phaser.Scene {
     uiScene?.playComboRewardFx?.(c.index, tickets, tickets);
   }
 
-  /** 靜態布置可破壞物件(木箱/桶),依選邊配置,座標為子區內比例。不進 spawn 循環=不重生。 */
-  private placeStaticBreakables(choice: 'L' | 'R'): void {
-    // 每區隨機布置:數量+位置隨機,不再每區都一樣。保留選邊基調(R 側多桶)。避開中心與邊緣、彼此不重疊。
-    const cfg = GameConfig.stage.breakablesRandom;
-    const a = this.arena;
-    const minWH = Math.min(a.width, a.height);
-    const placed: Array<{ x: number; y: number }> = [];
-    const spacing = cfg.minSpacingR * minWH;
-    const centerAvoid = cfg.centerAvoidR * minWH;
-    const cx = a.centerX, cy = a.centerY;
-    const pick = (): { x: number; y: number } | null => {
-      for (let attempt = 0; attempt < 30; attempt++) {
-        const x = a.left + Phaser.Math.FloatBetween(cfg.marginX, 1 - cfg.marginX) * a.width;
-        const y = a.top + Phaser.Math.FloatBetween(cfg.marginY, 1 - cfg.marginY) * a.height;
-        if (Phaser.Math.Distance.Between(x, y, cx, cy) < centerAvoid) continue;      // 避開中心
-        if (Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y) < 90) continue; // 避開玩家
-        let ok = true;
-        for (const p of placed) { if (Phaser.Math.Distance.Between(x, y, p.x, p.y) < spacing) { ok = false; break; } }
-        if (ok) return { x, y };
-      }
-      return null;
-    };
-    const crateN = Phaser.Math.Between(cfg.crateMin, cfg.crateMax);
-    // 基調:R 側桶上限 +barrelBiasExtra(某側多桶);L 側維持
-    const barrelMax = cfg.barrelMax + (choice === 'R' ? cfg.barrelBiasExtra : 0);
-    const barrelN = Phaser.Math.Between(cfg.barrelMin, barrelMax);
-    for (let i = 0; i < crateN; i++) {
-      const pt = pick(); if (!pt) break;
-      placed.push(pt);
-      const bk = this.breakables.get(pt.x, pt.y) as Breakable | null;
-      if (bk) bk.spawnBreakable(pt.x, pt.y, 'crate');
-    }
-    for (let i = 0; i < barrelN; i++) {
-      const pt = pick(); if (!pt) break;
-      placed.push(pt);
-      const bk = this.breakables.get(pt.x, pt.y) as Breakable | null;
-      if (bk) bk.spawnBreakable(pt.x, pt.y, 'barrel');
-    }
-  }
-
   /**
    * I 鍵:切換遊戲內道具生成開關(即時生效)。關→額外清掉場上現有道具(直覺:「關道具」=場上馬上乾淨)。
    * 底層改 this.itemsEnabled(dropItemAt 讀它);config.items.spawnEnabled 只當初始預設。
@@ -1154,6 +1110,27 @@ export class GameScene extends Phaser.Scene {
       if (c.isDashing) this.actions.endDashState(c);
       else c.stopMoving();
     }
+  }
+
+  /**
+   * 建立 BreakableController 需要的場景能力
+   */
+  private createBreakableHost(): BreakableHost {
+    return {
+      scene: this,
+      group: () => this.breakables,
+      enemies: () => this.enemies,
+      characters: () => this.characters,
+      player: () => this.player,
+      arena: () => this.arena,
+      isLevelMode: () => this.levelMode,
+      damageEnemyFrom: (actor, enemy, damage, knockback, fromX, fromY, time) => this.damageEnemyFrom(actor, enemy, damage, knockback, fromX, fromY, time),
+      damageCharacterFrom: (c, amount, fromX, fromY) => this.damageCharacterFrom(c, amount, fromX, fromY),
+      flashHurt: (c) => this.flashHurt(c),
+      dropItemAt: (x, y, time) => this.dropItemAt(x, y, time),
+      spawnExpandingRing: (x, y, radius, color, ms) => this.spawnExpandingRing(x, y, radius, color, ms),
+      shakeOnce: (duration, intensity) => this.shakeOnce(duration, intensity)
+    };
   }
 
   /**
@@ -1246,7 +1223,7 @@ export class GameScene extends Phaser.Scene {
       guardNpc: () => this.eventCtl.guardNpc,
       attackDamage: () => this.curAttackDamage(),
       damageEnemy: (actor, enemy, damage, knockback, time) => this.damageEnemy(actor, enemy, damage, knockback, time),
-      hitBreakablesInRange: (c, radius, half, useArc, damage, time) => this.hitBreakablesInRange(c, radius, half, useArc, damage, time),
+      hitBreakablesInRange: (c, radius, half, useArc, damage, time) => this.breakableCtl.hitInRange(c, radius, half, useArc, damage, time),
       performAttackOn: (actor, primary, time) => this.performAttackOn(actor, primary, time),
       onComboHit: (c, time) => this.onComboHit(c, time),
       triggerComboHit: (c) => this.triggerComboHit(c),
@@ -1269,7 +1246,7 @@ export class GameScene extends Phaser.Scene {
       recycleBackground: (side, slot) => this.artStyle.recycleBackground(side, slot),
       resetCharacterMotion: () => this.resetCharacterMotion(),
       onAreaLeave: (to) => this.onAreaLeave(to),
-      clearArea: () => { this.clearAllBreakables(); this.clearAllEnemies(); },
+      clearArea: () => { this.breakableCtl.clearAll(); this.clearAllEnemies(); },
       onAreaEnter: (to, side) => this.onAreaEnter(to, side)
     };
   }
@@ -1298,14 +1275,14 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     if (to === 'side') {
-      this.clearAllBreakables();
-      this.placeStaticBreakables(side);
+      this.breakableCtl.clearAll();
+      this.breakableCtl.placeStatic(side);
     }
     this.currentWave++;
     this.waveKilled = 0;
     this.waveSpawned = 0;
     this.spawnAccumulator = 0;
-    if (to === 'nextArea') this.placeStaticBreakables('L'); // 新區域的物件布置一律用左側基調
+    if (to === 'nextArea') this.breakableCtl.placeStatic('L'); // 新區域的物件布置一律用左側基調
     this.startStage();
     this.emitStats();
   }
@@ -2132,271 +2109,6 @@ export class GameScene extends Phaser.Scene {
     item.spawnItem(cx, cy, skill, time);
   }
 
-  // ---------------------------------------------------------------------------
-  // 可打破物件（瓶罐/箱子）
-  // ---------------------------------------------------------------------------
-  /** 每波開始成堆灑可打破物件——幾堆、每堆幾個聚在一起，堆遠離場地中心、避開玩家/彼此。 */
-  private spawnBreakablesForWave(): void {
-    // 關卡制:可破壞物件改【進入子區時靜態布置】(placeStaticBreakables),不隨波次重生。
-    if (this.levelMode) return;
-    const cfg = GameConfig.breakable;
-    const inset = cfg.edgeInset;
-    const ccx = this.arena.centerX, ccy = this.arena.centerY;
-    const clusterCenters: Array<{ x: number; y: number }> = [];
-    for (let cl = 0; cl < cfg.clustersPerWave; cl++) {
-      if (this.breakables.countActive(true) >= cfg.maxAlive) break;
-      // 找一個堆中心：遠離場地中心(>minDistFromCenter)、避開玩家、避開其他堆
-      let hx = 0, hy = 0, ok = false;
-      for (let attempt = 0; attempt < 20; attempt++) {
-        const x = Phaser.Math.Between(this.arena.left + inset, this.arena.right - inset);
-        const y = Phaser.Math.Between(this.arena.top + inset, this.arena.bottom - inset);
-        if (Phaser.Math.Distance.Between(x, y, ccx, ccy) < cfg.minDistFromCenter) continue; // 太靠中心
-        if (Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y) < cfg.safeDistanceFromPlayer) continue;
-        let clash = false;
-        for (const c of clusterCenters) {
-          if (Phaser.Math.Distance.Between(x, y, c.x, c.y) < cfg.minClusterSpacing) { clash = true; break; }
-        }
-        if (clash) continue;
-        hx = x; hy = y; ok = true; break;
-      }
-      if (!ok) continue;
-      clusterCenters.push({ x: hx, y: hy });
-      // 堆內幾個木箱：排成【不互疊】的一叢——用小陣列/環狀排開，彼此間距≥木箱直徑。
-      const placed: Array<{ x: number; y: number }> = [];
-      const minGap = cfg.radius * 2 + 4; // 彼此至少一個直徑+縫，不互疊
-      for (let n = 0; n < cfg.perCluster; n++) {
-        if (this.breakables.countActive(true) >= cfg.maxAlive) break;
-        let bx = 0, by = 0, placedOk = false;
-        for (let attempt = 0; attempt < 16; attempt++) {
-          const ang = Math.random() * Math.PI * 2;
-          const rad = Math.random() * cfg.clusterSpread;
-          const x = Phaser.Math.Clamp(hx + Math.cos(ang) * rad, this.arena.left + inset, this.arena.right - inset);
-          const y = Phaser.Math.Clamp(hy + Math.sin(ang) * rad, this.arena.top + inset, this.arena.bottom - inset);
-          if (Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y) < GameConfig.player.radius + cfg.radius + 8) continue;
-          // 同堆不互疊：與已放的木箱間距≥minGap
-          let overlap = false;
-          for (const q of placed) { if (Phaser.Math.Distance.Between(x, y, q.x, q.y) < minGap) { overlap = true; break; } }
-          if (overlap) continue;
-          bx = x; by = y; placedOk = true; break;
-        }
-        if (!placedOk) continue;
-        placed.push({ x: bx, y: by });
-        const bk = this.breakables.get(bx, by) as Breakable | null;
-        if (!bk) break;
-        bk.spawnBreakable(bx, by);
-      }
-    }
-    // 每波再灑少量【爆炸桶】(比照木箱位置規則：遠離中心/避玩家/不與現有物件互疊)。
-    const bcfg = cfg.barrel;
-    let placedBarrels = 0;
-    for (let n = 0; n < bcfg.perWave; n++) {
-      if (this.breakables.countActive(true) >= cfg.maxAlive) break;
-      let bx = 0, by = 0, ok2 = false;
-      for (let attempt = 0; attempt < 20; attempt++) {
-        const x = Phaser.Math.Between(this.arena.left + inset, this.arena.right - inset);
-        const y = Phaser.Math.Between(this.arena.top + inset, this.arena.bottom - inset);
-        if (Phaser.Math.Distance.Between(x, y, ccx, ccy) < cfg.minDistFromCenter) continue;
-        if (Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y) < cfg.safeDistanceFromPlayer) continue;
-        // 不與任何現有物件(木箱/桶)互疊
-        let clash = false;
-        for (const ch of this.breakables.getChildren()) {
-          const o = ch as Breakable;
-          if (!o.active) continue;
-          const need = o.explosive ? bcfg.minBarrelSpacing : (cfg.radius * 2 + 6);
-          if (Phaser.Math.Distance.Between(x, y, o.x, o.y) < need) { clash = true; break; }
-        }
-        if (clash) continue;
-        bx = x; by = y; ok2 = true; break;
-      }
-      if (!ok2) continue;
-      const bk = this.breakables.get(bx, by) as Breakable | null;
-      if (!bk) break;
-      bk.spawnBreakable(bx, by, 'barrel');
-      placedBarrels++;
-    }
-    void placedBarrels;
-  }
-
-  /**
-   * 玩家攻擊(普攻揮擊/衝刺命中)命中判定內順手打破範圍內的可打破物件。
-   * 不納入自動鎖定(玩家不會自動衝去打)，只是揮到/衝到就扣 HP。打破→碎裂特效 + 有機率(同怪物 dropChance)掉道具。
-   * @param useArc true=扇形(普攻,需在 aimAngle±half 內)；false=圓形(衝刺,範圍內即中)
-   */
-  /** 招式 AOE(道具招/連段招)【直接秒碎】範圍內圓形的可打破物件(不管剩餘 hp)；
-   *  掉落上限：一次呼叫最多 maxDropPerBreak 個掉道具，其餘只碎不掉(避免一招炸一堆洗版)。 */
-  private breakBreakablesInCircle(x: number, y: number, radius: number, _amount: number, time: number): void {
-    let drops = 0;
-    for (const child of this.breakables.getChildren()) {
-      const bk = child as Breakable;
-      if (!bk.active || bk.dead) continue;
-      if (Phaser.Math.Distance.Between(x, y, bk.x, bk.y) <= radius + bk.getBodyRadius()) {
-        if (bk.fusing) continue; // 已在fuse倒數的爆炸桶跳過(它本來就會爆),不再設dead→避免殭屍
-        bk.dead = true; // 秒碎
-        const allowDrop = drops < GameConfig.breakable.maxDropPerBreak;
-        this.breakBreakable(bk, time, allowDrop);
-        if (allowDrop) drops++;
-      }
-    }
-  }
-
-  /** 招式 AOE 對【朝 dir 的定向矩形】內可打破物件【直接秒碎】+ 掉落上限。 */
-  private breakBreakablesInRect(ox: number, oy: number, dir: number, back: number, length: number, width: number, _amount: number, time: number): void {
-    let drops = 0;
-    for (const child of this.breakables.getChildren()) {
-      const bk = child as Breakable;
-      if (!bk.active || bk.dead) continue;
-      if (pointInOrientedRect(bk.x, bk.y, ox, oy, dir, back, length, width)) {
-        if (bk.fusing) continue; // 已在fuse倒數的爆炸桶跳過,不再設dead→避免殭屍
-        bk.dead = true; // 秒碎
-        const allowDrop = drops < GameConfig.breakable.maxDropPerBreak;
-        this.breakBreakable(bk, time, allowDrop);
-        if (allowDrop) drops++;
-      }
-    }
-  }
-
-  private hitBreakablesInRange(c: Character, radius: number, half: number, useArc: boolean, atk: number, time: number): void {
-    for (const child of this.breakables.getChildren()) {
-      const bk = child as Breakable;
-      if (!bk.active || bk.dead) continue;
-      const dist = Phaser.Math.Distance.Between(c.x, c.y, bk.x, bk.y);
-      if (dist > radius + bk.getBodyRadius()) continue;
-      if (useArc) {
-        const toBk = Phaser.Math.Angle.Between(c.x, c.y, bk.x, bk.y);
-        const diff = Math.abs(Phaser.Math.Angle.Wrap(toBk - c.aimAngle));
-        if (diff > half) continue;
-      }
-      if (bk.hit(atk)) this.breakBreakable(bk, time);
-    }
-  }
-
-  /** 打破一個物件：爆炸桶→進入 fuse 倒數(延遲爆)；木箱→碎裂特效 + (allowDrop 時)掉道具 + 回收。 */
-  private breakBreakable(bk: Breakable, time: number, allowDrop = true): void {
-    if (bk.explosive) { this.startBarrelFuse(bk, allowDrop); return; }
-    const bx = bk.x, by = bk.y;
-    // 碎裂特效：小粒子爆開
-    this.spawnBreakParticles(bx, by);
-    bk.despawn();
-    // 有機率掉道具(共用怪物掉率 dropChance、同 pickDropSkill 加權)
-    if (allowDrop && Math.random() < GameConfig.items.dropChance) this.dropItemAt(bx, by, time);
-  }
-
-  /**
-   * 爆炸桶打破→進入 fuse 倒數(延遲爆,像蓄力)：桶標記 fusing(不再被打)、閃紅抖動、地面出現【警示範圍圈】
-   * (半徑=explodeRadius，由內而外填滿+閃爍，跟隨桶移動——fuse 期間桶仍可被推)，倒數 fuseMs 完→explodeBarrel。
-   * 怪/玩家看到警示圈有時間跑出範圍閃避。
-   */
-  private startBarrelFuse(bk: Breakable, allowDrop: boolean): void {
-    if (bk.fusing) { bk.dead = false; return; } // 已在fuse中→還原任何被呼叫端剛設的dead(避免AOE秒碎設dead後在此早退→殭屍),不重啟fuse
-    const bcfg = GameConfig.breakable.barrel;
-    // hit()/AOE 打破時已把 bk.dead 設 true(代表「被打破」)，但爆炸桶被打破=進入 fuse 倒數(還活著、將爆)，
-    // 不是立即消失。這裡把 dead 還原(改由 fusing 表示狀態)，否則 fuse/推動/再受擊迴圈都會因 dead 跳過→桶變殭屍(不受擊/不能推)。
-    bk.dead = false;
-    bk.fusing = true;
-    const R = bcfg.explodeRadius;
-    const g = this.add.graphics().setDepth(4);
-    const start = this.time.now;
-    // 地面警示圈：外框 + 由內而外填滿 + 邊閃；跟隨桶(fuse 期間桶可被推)
-    const ev = this.time.addEvent({
-      delay: 16, loop: true,
-      callback: () => {
-        if (!bk.active || bk.dead) { g.destroy(); ev.remove(); return; }
-        const p = Phaser.Math.Clamp((this.time.now - start) / bcfg.fuseMs, 0, 1);
-        g.clear();
-        const blink = Math.floor(this.time.now / 90) % 2 === 0;
-        g.lineStyle(3, 0xff3322, blink ? 0.95 : 0.5);
-        g.strokeCircle(bk.x, bk.y, R);
-        g.fillStyle(0xff5522, 0.18 + 0.12 * p);
-        g.fillCircle(bk.x, bk.y, R * p);
-        // 桶身閃紅(將爆)：紅↔正常貼圖交替；不用 setTintFill(0xffffff)(會變純白塊,爆炸/清除時序若殘留=白塊bug)
-        if (blink) bk.setTint(0xff4422); else bk.clearTint();
-        bk.setPosition(bk.x, bk.y);
-      }
-    });
-    this.time.delayedCall(bcfg.fuseMs, () => {
-      g.destroy(); ev.remove();
-      if (bk.active && !bk.dead) this.explodeBarrel(bk, this.time.now, 0, allowDrop);
-    });
-  }
-
-  /**
-   * 引爆爆炸桶：範圍 AOE 爆炸——閃白+強震+火光特效；範圍內【怪】低傷+朝外擊退(炸飛)；
-   * 【玩家】受影響(快扣血/慢掉能量、不擊退)；連鎖引爆範圍內其他桶(深度上限 maxChainDepth)。
-   * @param depth 連鎖深度(0=首爆)；@param allowDrop 是否可掉道具
-   */
-  private explodeBarrel(bk: Breakable, time: number, depth: number, allowDrop = true): void {
-    const bcfg = GameConfig.breakable.barrel;
-    const ex = bk.x, ey = bk.y;
-    bk.dead = true;
-    bk.despawn();
-    // ── 特效：火光擴散圈 + 粒子 + 閃白 + 強震 ──
-    this.spawnExpandingRing(ex, ey, bcfg.explodeRadius, 0xff6a1a, 360);
-    const core = this.add.circle(ex, ey, bcfg.explodeRadius * 0.4, 0xffd400, 0.8).setDepth(30);
-    this.tweens.add({ targets: core, alpha: 0, scale: 2.2, duration: 300, onComplete: () => core.destroy() });
-    for (let i = 0; i < 14; i++) {
-      const a = Math.random() * Math.PI * 2, spd = 90 + Math.random() * 150;
-      const col = Math.random() < 0.5 ? 0xff6a1a : 0xffd400;
-      const pr = this.add.rectangle(ex, ey, 6, 6, col).setDepth(31);
-      this.tweens.add({ targets: pr, x: ex + Math.cos(a) * spd, y: ey + Math.sin(a) * spd, alpha: 0, angle: Phaser.Math.Between(-180, 180), duration: 360, onComplete: () => pr.destroy() });
-    }
-    this.shakeOnce(GameConfig.juice.burstShakeDuration + 40, GameConfig.juice.burstShakeIntensity * 1.6);
-    // ── 範圍內【怪】：低傷 + 朝外擊退(炸飛)。boss/tower/anchor/npc 不擊退。 ──
-    for (const child of this.enemies.getChildren()) {
-      const e = child as Enemy;
-      if (!e.active || !e.isVulnerable()) continue;
-      const d = Phaser.Math.Distance.Between(ex, ey, e.x, e.y);
-      if (d > bcfg.explodeRadius + e.getBodyRadius()) continue;
-      this.damageEnemyFrom(this.player, e, bcfg.explodeDamage, 0, ex, ey, time); // 低傷(不用內建擊退,下面自訂位移擊退)
-      if (!e.active || e.dead) continue;
-      if (!isFixedEnemy(e)) {
-        const ang = d > 0.001 ? Math.atan2(e.y - ey, e.x - ex) : Math.random() * Math.PI * 2;
-        const nx = Phaser.Math.Clamp(e.x + Math.cos(ang) * bcfg.knockback, this.arena.left + e.getBodyRadius(), this.arena.right - e.getBodyRadius());
-        const ny = Phaser.Math.Clamp(e.y + Math.sin(ang) * bcfg.knockback, this.arena.top + e.getBodyRadius(), this.arena.bottom - e.getBodyRadius());
-        e.setPosition(nx, ny); // 一次性強位移=擊退炸飛(明顯)
-      }
-    }
-    // ── 炸到【玩家】：快速扣血 / 慢速掉能量(比照 takeDamage noHpLoss)、玩家不擊退。 ──
-    for (const c of this.characters) {
-      if (!c.alive) continue;
-      if (Phaser.Math.Distance.Between(ex, ey, c.x, c.y) <= bcfg.explodeRadius + GameConfig.player.radius) {
-        this.damageCharacterFrom(c, bcfg.explodeDamage, ex, ey); // takeDamage 內部:noHpLoss(慢速)只 energy-1、fast 扣血；均不擊退
-        this.flashHurt(c);
-      }
-    }
-    // ── 掉道具(低機率,主打爆炸不主打掉落) ──
-    if (allowDrop && Math.random() < bcfg.dropChance) this.dropItemAt(ex, ey, time);
-    // ── 連鎖引爆範圍內其他桶(深度上限) ──
-    if (depth < bcfg.maxChainDepth) {
-      for (const child of this.breakables.getChildren()) {
-        const other = child as Breakable;
-        if (!other.active || other.dead || !other.explosive) continue;
-        if (Phaser.Math.Distance.Between(ex, ey, other.x, other.y) <= bcfg.explodeRadius + other.getBodyRadius()) {
-          // 稍延遲連鎖(視覺上一顆接一顆)、深度+1，超過上限的桶不再往下連鎖(但仍會被引爆一次)
-          this.time.delayedCall(90, () => { if (other.active && !other.dead) this.explodeBarrel(other, this.time.now, depth + 1, false); });
-        }
-      }
-    }
-  }
-
-  /** 打破碎裂小粒子特效 */
-  private spawnBreakParticles(x: number, y: number): void {
-    const cfg = GameConfig.breakable;
-    for (let i = 0; i < 8; i++) {
-      const ang = (i / 8) * Math.PI * 2 + Math.random() * 0.4;
-      const spd = 60 + Math.random() * 80;
-      const p = this.add.rectangle(x, y, 5, 5, cfg.color).setDepth(11);
-      this.tweens.add({
-        targets: p,
-        x: x + Math.cos(ang) * spd,
-        y: y + Math.sin(ang) * spd,
-        alpha: 0,
-        angle: Phaser.Math.Between(-180, 180),
-        duration: 320,
-        onComplete: () => p.destroy()
-      });
-    }
-  }
-
   /** 加權隨機挑掉落招式（T 時停權重明顯低於其他 4 種）。慢速排除補血 H(慢速無血量、H 無意義)。 */
   private pickDropSkill(): SkillType {
     const w = GameConfig.items.weights;
@@ -2519,9 +2231,9 @@ export class GameScene extends Phaser.Scene {
       damageEnemy: (actor, enemy, damage, knockback, time) => this.damageEnemy(actor, enemy, damage, knockback, time),
       damageEnemyFrom: (actor, enemy, damage, knockback, fromX, fromY, time) =>
         this.damageEnemyFrom(actor, enemy, damage, knockback, fromX, fromY, time),
-      breakBreakablesInCircle: (x, y, radius, damage, time) => this.breakBreakablesInCircle(x, y, radius, damage, time),
-      breakBreakablesInRect: (ox, oy, dir, nearOffset, length, width, damage, time) =>
-        this.breakBreakablesInRect(ox, oy, dir, nearOffset, length, width, damage, time),
+      breakBreakablesInCircle: (x, y, radius, _damage, time) => this.breakableCtl.breakInCircle(x, y, radius, time),
+      breakBreakablesInRect: (ox, oy, dir, nearOffset, length, width, _damage, time) =>
+        this.breakableCtl.breakInRect(ox, oy, dir, nearOffset, length, width, time),
       spawnExpandingRing: (x, y, radius, color, ms) => this.spawnExpandingRing(x, y, radius, color, ms),
       shakeOnce: (duration, intensity) => this.shakeOnce(duration, intensity),
       beginTimeStop: (owner, time, durationMs) => this.beginTimeStop(owner, time, durationMs)
@@ -2831,7 +2543,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
     if (hitAny) this.triggerComboHit(c); // COMBO 獎勵：連段技命中算 1 下
-    this.breakBreakablesInCircle(c.x, c.y, radius, dmg, time); // 圓形斬掃到木箱也打破
+    this.breakableCtl.breakInCircle(c.x, c.y, radius, time); // 圓形斬掃到木箱也打破
     this.shakeOnce(80, 0.006);
     this.enterPerformance(c, GameConfig.performanceTime.circle, time); // 表演時間:定身無敵
   }
@@ -2862,7 +2574,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
     if (hitAny) this.triggerComboHit(c); // COMBO 獎勵：連段技命中算 1 下
-    this.breakBreakablesInRect(ox, oy, dir, 0, length, width, dmg, time); // 直線氣波掃到木箱也打破
+    this.breakableCtl.breakInRect(ox, oy, dir, 0, length, width, time); // 直線氣波掃到木箱也打破
     this.shakeOnce(80, 0.006);
     this.enterPerformance(c, GameConfig.performanceTime.line, time); // 表演時間:定身無敵
   }
@@ -2973,7 +2685,7 @@ export class GameScene extends Phaser.Scene {
         hitAny = true;
       }
     }
-    this.breakBreakablesInCircle(c.x, c.y, radius, GameConfig.burst.damagePerHit, time); // 爆發掃到木箱也打破
+    this.breakableCtl.breakInCircle(c.x, c.y, radius, time); // 爆發掃到木箱也打破
     // 這段有打中敵人 → 觸發極短 hitstop（破頓）+ 命中閃白/小震動強化打擊感
     // hitstop=physics.world.pause() 全域暫停物理(含P1)→只在【施放者=P1】時觸發,
     //   否則 BOT 爆發的 hitstop 會反覆 pause 物理把 P1 也凍住(=「BOT爆發停P1」bug)。
