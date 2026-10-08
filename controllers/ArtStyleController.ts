@@ -1,8 +1,10 @@
 import Phaser from 'phaser';
+import { GameConfig } from '../config';
 import type { Character } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
 import { createCoverImage } from '../systems/zoneScenery';
-import { visibleBottomOffset } from '../systems/spriteFeet';
+import type { GroundFootprint } from '../systems/bodySeparation';
+import { visibleBottomOffset, visibleFootHalfWidth } from '../systems/spriteFeet';
 
 /**
  * ArtStyleController 需要場景提供的能力。由 GameScene 建立並傳入。
@@ -134,6 +136,23 @@ export class ArtStyleController {
   characterFootOffset(c: Character): number {
     const img: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite = c === this.host.player() && this.skin && this.skin.visible ? this.skin : c;
     return visibleBottomOffset(this.scene.textures, img.texture.key) * img.scaleY;
+  }
+
+  /**
+   * 敵人在地面上的佔位橢圓（敵人間碰撞用）：只有 F4 新美術外觀的怪才有，依圖片腳寬自動計算；
+   * 舊美術外觀回傳 null，沿用中心 + 身體半徑的圓
+   *
+   * @param e 敵人
+   */
+  enemyFootprint(e: Enemy): GroundFootprint | null {
+    const key = e.texture.key;
+    if (!this.skeletonEnemies || key !== NORMAL_ENEMY_LOOK.skeleton.texture) return null;
+    const rx = visibleFootHalfWidth(this.scene.textures, key) * e.scaleX;
+    return {
+      footY: visibleBottomOffset(this.scene.textures, key) * e.scaleY,
+      rx,
+      ry: rx * GameConfig.enemySeparation.footprintFlatten
+    };
   }
 
   /** 一般怪生成時應使用的外觀（Enemy.spawn 透過 GameScene 查詢） */

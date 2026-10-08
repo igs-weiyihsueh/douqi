@@ -138,7 +138,7 @@ export const GameConfig = {
 
   /**
    * 敵人↔敵人碰撞分離（讓怪不再完全重疊擠成團）——照異靈藍圖：軟分離 steering(主力) + 硬 de-overlap(補刀)。
-   * 純幾何、不走 Phaser collider，config 可調手感。純俯視無縱深壓縮→忽略貼地壓扁。
+   * 純幾何、不走 Phaser collider，config 可調手感。舊美術純俯視無縱深壓縮→圓形判定；F4 新美術改用腳底佔位橢圓（footprintFlatten / footprintSteerScale）。
    */
   enemySeparation: {
     /** 總開關 */
@@ -158,7 +158,14 @@ export const GameConfig = {
     /**
      * 單幀硬解最大推移量(像素)：玩家衝進怪群瞬間大量重疊→限制每幀每隻最多推這麼多，分多幀鬆弛，避免瞬移/爆衝。
      */
-    maxStepPx: 9
+    maxStepPx: 9,
+    /**
+     * F4 新美術（側視站立圖）的地面佔位：腳寬由圖片自動量出（左右半徑），上下半徑 = 左右半徑 × footprintFlatten，
+     * 與慢速真空圈相同的透視壓扁（slow.vacuumFlatten）。中心在腳底，判定與真空圈同一基準。
+     */
+    footprintFlatten: 0.45,
+    /** F4 新美術的軟分離影響範圍 = 兩個佔位橢圓相加的邊界 × 此倍數（舊美術 radiusPx 44 ÷ 半徑和 28 ≈ 1.6） */
+    footprintSteerScale: 1.6
   },
 
   /**

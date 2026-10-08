@@ -1602,8 +1602,10 @@ export class GameScene extends Phaser.Scene {
         if (joinsEnemySeparation(e)) separators.push(e);
       }
       // 軟分離（改移動方向）為主，硬分離（推開殘留重疊）補刀
-      for (const e of separators) applyEnemySeparationSteering(e, separators);
-      resolveEnemyOverlap(separators, this.arena);
+      // F4 新美術外觀的怪改用腳底佔位橢圓（舊美術查不到佔位，維持圓形判定）
+      const footprintOf = (e: Enemy) => this.artStyle.enemyFootprint(e);
+      for (const e of separators) applyEnemySeparationSteering(e, separators, footprintOf);
+      resolveEnemyOverlap(separators, this.arena, footprintOf);
     }
   }
 
