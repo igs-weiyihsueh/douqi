@@ -5,6 +5,7 @@ import type { Enemy } from '../objects/Enemy';
 import { createCoverImage } from '../systems/zoneScenery';
 import type { GroundFootprint } from '../systems/bodySeparation';
 import { visibleBottomOffset, visibleFootHalfWidth } from '../systems/spriteFeet';
+import { OVERLAY_DEPTH_STEP } from '../systems/standingDepth';
 
 /**
  * ArtStyleController 需要場景提供的能力。由 GameScene 建立並傳入。
@@ -29,7 +30,6 @@ const SCENE_BG_RELOAD_URL = 'assets/Scene.png';
  * 圍欄（1）與場景粒子（2）疊在背景圖上；皮膚 15 高於角色本體（10），頭上覆蓋圖 20 再更高
  */
 const SCENE_BG_DEPTH = 0.5;
-const SKIN_DEPTH = 15;
 const UI_OVERLAY_DEPTH = 20;
 /** P1 皮膚紋理：一般 / 強化 */
 export const SKIN_TEXTURE = 'character-goku-skin';
@@ -39,7 +39,7 @@ const UI_OVERLAY_TEXTURE = 'character-ui-overlay';
 const UI_OVERLAY_OFFSET_Y = -130;
 /** 一般怪的兩種外觀：新美術骷髏戰士 / 舊版紅色圓形 */
 const NORMAL_ENEMY_LOOK = {
-  skeleton: { texture: 'skeleton-warrior', scale: 0.8 },
+  skeleton: { texture: 'skeleton-warrior', scale: 1.0 },
   classic: { texture: 'enemy-normal', scale: 1.0 }
 } as const;
 /** 等待 UIScene 元件建立的重試次數與間隔 */
@@ -86,7 +86,7 @@ export class ArtStyleController {
     const p = this.host.player();
     const textures = this.scene.textures;
     if (textures.exists(SKIN_TEXTURE)) {
-      this.skin = this.scene.add.image(p.x, p.y, SKIN_TEXTURE).setDepth(SKIN_DEPTH).setVisible(false);
+      this.skin = this.scene.add.image(p.x, p.y, SKIN_TEXTURE).setDepth(p.depth + OVERLAY_DEPTH_STEP).setVisible(false);
     } else {
       console.warn(`⚠️ 皮膚資源不存在：${SKIN_TEXTURE}`);
     }
@@ -112,6 +112,11 @@ export class ArtStyleController {
       if (this.skin.texture.key !== target && this.scene.textures.exists(target)) this.skin.setTexture(target);
     }
     this.uiOverlay?.setPosition(p.x, p.y + UI_OVERLAY_OFFSET_Y);
+  }
+
+  /** P1 皮膚疊在 P1 本體正上方（P1 的深度由 Y-sorting 每幀更新後呼叫） */
+  followPlayerDepth(): void {
+    this.skin?.setDepth(this.host.player().depth + OVERLAY_DEPTH_STEP);
   }
 
   /**
@@ -192,7 +197,7 @@ export class ArtStyleController {
     const look = this.normalEnemyLook();
     for (const child of this.host.enemies().getChildren()) {
       const e = child as Enemy;
-      if (e.enemyType === 'normal') e.setTexture(look.texture).setScale(look.scale);
+      if (e.enemyType === 'normal') e.setLook(look.texture, look.scale);
     }
   }
 

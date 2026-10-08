@@ -21,6 +21,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private maxHp = 0;
   private moveSpeed = 0;
   private bodyRadius = 0;
+  /** 外觀基準縮放（依美術外觀設定；蓄力 / 出手 / 擊退打斷 / 死亡後都復原到這個值） */
+  private baseScale = 1;
 
   /** 面向（弧度）：朝目標角色方向 */
   facing = 0;
@@ -176,15 +178,13 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       const gameScene = this.scene as any; // GameScene
       if (gameScene.getNormalEnemyTextureConfig) {
         const config = gameScene.getNormalEnemyTextureConfig();
-        this.setTexture(config.texture);
-        this.setScale(config.scale);
+        this.setLook(config.texture, config.scale);
       } else {
         // 降級方案：使用骷髏戰士（預設）
-        this.setTexture('skeleton-warrior');
-        this.setScale(0.8);
+        this.setLook('skeleton-warrior', 1);
       }
     } else {
-      this.setTexture(`enemy-${type}`);
+      this.setLook(`enemy-${type}`, 1);
     }
     
     this.enableBody(true, x, y, true, true);
@@ -227,7 +227,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.treasureMoveTY = y;
     this.setActive(true);
     this.setVisible(true);
-    this.setScale(1);
+    this.setScale(this.baseScale);
     this.clearTint();
 
     // 登場提示
@@ -395,7 +395,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private fireAttack(time: number): void {
     this.chargeTween?.remove();
     this.chargeTween = undefined;
-    this.setScale(1);
+    this.setScale(this.baseScale);
     this.clearTint();
     this.onAttackFire?.(this);
     this.aiState = 'cooldown';
@@ -542,7 +542,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (this.aiState === 'charge') {
       this.chargeTween?.remove();
       this.chargeTween = undefined;
-      this.setScale(1);
+      this.setScale(this.baseScale);
       this.aiState = 'cooldown';
       this.cooldownUntil = time + GameConfig.enemy.attackCooldownMs;
     }
@@ -563,11 +563,22 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.telegraphTween = undefined;
     this.chargeTween?.remove();
     this.chargeTween = undefined;
-    this.setScale(1);
+    this.setScale(this.baseScale);
     this.setAlpha(1);
     this.disableBody(true, true);
     this.setActive(false);
     this.setVisible(false);
+  }
+
+  /**
+   * 換外觀：設定紋理與基準縮放（之後的縮放復原都回到這個值；F4 切換一般怪外觀也走這裡）
+   *
+   * @param texture 紋理 key
+   * @param scale 基準縮放
+   */
+  setLook(texture: string, scale: number): this {
+    this.baseScale = scale;
+    return this.setTexture(texture).setScale(scale);
   }
 
   getBodyRadius(): number {
