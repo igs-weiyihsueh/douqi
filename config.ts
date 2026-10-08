@@ -903,6 +903,17 @@ export const GameConfig = {
       glowMinAlpha: 0.35, glowMaxAlpha: 0.85, glowPulseScale: 1.15
     },
     /**
+     * 獎勵關（寶藏密室）：限時 durationMs，剩 finalCountdownSec 秒時畫面中央大倒數；倒數 HUD 在畫面上方 hudY。
+     * 場地覆蓋金色色調（tintColor / tintAlpha），散布 decorCount 組金幣堆 / 寶石 / 寶箱（距邊 decorMargin、
+     * 彼此間隔 decorSpacing、避開下緣入口半徑 entryClearRadius）
+     */
+    treasureRoom: {
+      durationMs: 60000, finalCountdownSec: 5, hudY: 104, hudLabel: '💰 寶藏密室',
+      enterBanner: '寶藏密室！限時 60 秒', endBanner: '時間到！',
+      tintColor: 0xffc84a, tintAlpha: 0.18, tintDepth: 0.6, decorDepth: 0.8,
+      decorCount: 10, decorMargin: 80, decorSpacing: 160, entryClearRadius: 260
+    },
+    /**
      * 出口標記：實心發光圓（核心半徑 radius、外圍光暈 glowRadius 分 glowLayers 層，總透明度 glowAlpha），
      * 在場地邊緣往內 arrowInset 處（左右出口在左右緣中段、上方出口在上緣中央），走到這裡觸發轉場；開放期間呼吸閃爍
      */

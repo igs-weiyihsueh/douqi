@@ -14,6 +14,7 @@ import { drawCorridorScenery, drawZoneScenery } from '../systems/zoneScenery';
 import { ArtStyleController } from '../controllers/ArtStyleController';
 import { GoIndicator } from '../controllers/GoIndicator';
 import { HiddenGateController } from '../controllers/HiddenGateController';
+import { TreasureRoomController } from '../controllers/TreasureRoomController';
 import { SkillController, type SkillHost } from '../controllers/SkillController';
 import { pointInOrientedRect } from '../systems/geometry';
 import {
@@ -135,6 +136,8 @@ export class GameScene extends Phaser.Scene {
   private goIndicator!: GoIndicator;
   /** 隱藏入口（熔岩拱門），每次 create() 重建 */
   private hiddenGate!: HiddenGateController;
+  /** 隱藏入口後的獎勵關（寶藏密室），每次 create() 重建 */
+  private treasureRoom!: TreasureRoomController;
   /** 階段1:右走廊純色佔位底圖(進 B 後清)。 */
   private corridorGfx: Phaser.GameObjects.Graphics | null = null;
   /** 階段2:左走廊底圖。 */
@@ -336,6 +339,12 @@ export class GameScene extends Phaser.Scene {
     this.skillCtl = new SkillController(this.createSkillHost());
     this.goIndicator = new GoIndicator(this);
     this.hiddenGate = new HiddenGateController(this);
+    this.treasureRoom = new TreasureRoomController({
+      scene: this,
+      zone: () => this.zoneA,
+      slot: () => this.slotA,
+      onFinished: () => this.onTreasureRoomFinished()
+    });
 
     // 道具群
     this.items = this.physics.add.group({
@@ -767,6 +776,7 @@ export class GameScene extends Phaser.Scene {
         if (this.towerNextSpawnAt > 0) this.towerNextSpawnAt += frozenDur;
         if (this.guardNextSpawnAt > 0) this.guardNextSpawnAt += frozenDur;
         this.bossCtl.onTimeStopEnd(frozenDur); // 亂入 BOSS 的離場倒數也凍結
+        this.treasureRoom.onTimeStopEnd(frozenDur); // 獎勵關倒數也凍結
         // ④ 寶箱怪時間戳(跑點停頓/出生限時)也後移,凍結期間不流失(否則暫停後跑點/限時錯亂)
         const tr = this.treasureEnemy;
         if (tr && tr.active) {
@@ -814,6 +824,7 @@ export class GameScene extends Phaser.Scene {
     this.handleSpawning(delta);
     if (this.waveState === 'event') this.updateEvent(time);
     this.bossCtl.update(time);
+    this.treasureRoom.update(time);
     this.updateEnemies(time);
     this.updateTreasure(time); // 寶箱怪:跑點移動/金光閃爍/限時跑走
     this.finishPendingSubZoneIfTreasureGone(); // 延後的場景切換:寶箱怪死/離場後才開啟
@@ -2080,10 +2091,43 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  /** 進入隱藏入口：閃黑轉場到新區域 */
+  /** 進入隱藏入口：收掉其他出口，閃黑後在目前區域展開獎勵關（寶藏密室） */
   private enterHiddenGate(): void {
     this.hiddenGate.clear();
-    this.startTransition();
+    this.progressPhase = 'transition';
+    if (this.choiceGfx) { this.choiceGfx.destroy(); this.choiceGfx = null; }
+    this.closeTopExit();
+    this.bossCtl.onZoneLeave();
+    this.crossingOpen = false;
+    this.crossSide = null;
+    this.goIndicator.hideAll();
+    const cam = this.cameras.main;
+    const fade = GameConfig.stage.fadeMs;
+    this.disableFollow();
+    cam.fadeOut(fade, 0, 0, 0);
+    cam.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+      this.beginTreasureRoom();
+      cam.fadeIn(fade, 0, 0, 0);
+    });
+  }
+
+  /** 黑幕中：清場、全隊放到下緣入口，開始獎勵關倒數（不生一般怪） */
+  private beginTreasureRoom(): void {
+    this.clearAllBreakables();
+    this.clearAllEnemies();
+    this.arena = this.zoneA;
+    this.physics.world.setBounds(this.zoneA.x, this.zoneA.y, this.zoneA.width, this.zoneA.height);
+    this.placeCharactersAtEntry();
+    this.enableFollow(this.slotA);
+    this.waveState = 'clearing';
+    this.progressPhase = 'playing';
+    this.treasureRoom.begin(this.time.now);
+  }
+
+  /** 獎勵關時間到：開上方出口，走出去閃黑到新區域，接著打佇列中的下一關 */
+  private onTreasureRoomFinished(): void {
+    this.progressPhase = 'exiting';
+    this.showExit();
   }
 
   /** 收掉上方出口的圖與 GO（問號關前選了另一條路時用） */
@@ -2647,6 +2691,7 @@ export class GameScene extends Phaser.Scene {
     if (this.choiceGfx) { this.choiceGfx.destroy(); this.choiceGfx = null; }
     this.closeTopExit();
     this.bossCtl.onZoneLeave();
+    this.treasureRoom.end();
     // 問號關前若左右也同時開放：選了上方就收掉左右轉場狀態
     this.crossingOpen = false;
     this.crossSide = null;
@@ -2677,18 +2722,7 @@ export class GameScene extends Phaser.Scene {
     this.drawAreaScenes();
     // ③玩家進下關【自動走到定位】演出:角色先放在 A【下緣入口】(=從上一關出口走進來的方向),
     //   然後 updateLevelEnter 程式驅動全隊走到 A 中心環狀定位,到位才恢復操控(不再閃黑完就瞬間定住)。
-    const cx = this.zoneA.centerX;
-    const entryY = this.zoneA.bottom - 40; // 下緣入口(對應出口在下方)
-    for (const c of this.characters) {
-      if (!c.alive) continue;
-      const off = c === this.player ? 0 : Phaser.Math.Between(-70, 70);
-      c.x = cx + off;
-      c.y = entryY;
-      c.aimAngle = -Math.PI / 2; // 面向場內(往上)
-      (c.body as Phaser.Physics.Arcade.Body).reset(c.x, c.y);
-    }
-    // 重啟鏡頭跟隨到 A slot（角色被搬到新位置，清掉轉場前的衝刺狀態）
-    this.resetCharacterMotion();
+    this.placeCharactersAtEntry();
     this.enableFollow(this.slotA);
     this.currentWave++;
     this.waveKilled = 0;
@@ -2702,6 +2736,21 @@ export class GameScene extends Phaser.Scene {
     this.levelEntering = true;
     this.progressPhase = 'playing';
     this.emitStats();
+  }
+
+  /** 全隊放到 A 下緣入口（P1 在中央、BOT 左右散開），面向場內，並清掉轉場前的移動狀態 */
+  private placeCharactersAtEntry(): void {
+    const cx = this.zoneA.centerX;
+    const entryY = this.zoneA.bottom - 40;
+    for (const c of this.characters) {
+      if (!c.alive) continue;
+      const off = c === this.player ? 0 : Phaser.Math.Between(-70, 70);
+      c.x = cx + off;
+      c.y = entryY;
+      c.aimAngle = -Math.PI / 2;
+      (c.body as Phaser.Physics.Arcade.Body).reset(c.x, c.y);
+    }
+    this.resetCharacterMotion();
   }
 
   /** 靜態布置可破壞物件(木箱/桶),依選邊配置,座標為子區內比例。不進 spawn 循環=不重生。 */
