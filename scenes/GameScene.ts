@@ -5,6 +5,7 @@ import { Enemy } from '../objects/Enemy';
 import { Item, type SkillType } from '../objects/Item';
 import { Breakable } from '../objects/Breakable';
 import { loadCharacterParams, type CharacterParams } from '../systems/characterParams';
+import { reloadHitFeel } from '../systems/hitFeelParams';
 import { createStageQueue, nextStageNode, revealStageNode, displayKindOf, type StageNode } from '../systems/stageQueue';
 import type { TelegraphFx } from '../systems/telegraphFx';
 import { BossController, type BossHost } from '../controllers/BossController';
@@ -415,6 +416,7 @@ export class GameScene extends Phaser.Scene {
   private resetState(): void {
     // 角色編輯器參數：每局重新讀取（主選單可能剛改過），衝刺距離/速度同步到慢速即時調參，鎖敵範圍跟衝刺距離同步
     this.charParams = loadCharacterParams();
+    reloadHitFeel(); // 打擊感參數：每局重新讀取（主選單打擊感編輯器可能剛改過）
     this.slowTuning.dashDistance = this.charParams.dashDistance;
     this.slowTuning.dashSpeed = this.charParams.dashSpeed;
     this.slowTuning.lockRadius = this.charParams.dashDistance; // 鎖敵範圍跟衝刺距離同步

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GameConfig } from '../config';
+import { hitFeel } from '../systems/hitFeelParams';
 
 /** BOSS 招式：a 範圍普攻 / b 直線衝刺 / c 扇形攻擊 */
 export type BossSkillKind = 'a' | 'b' | 'c';
@@ -591,15 +592,15 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
    * @returns 這次命中是否處於凍結（擊退要延後）
    */
   private beginHitFreeze(time: number): boolean {
-    const cfg = GameConfig.hitstop;
-    if (!cfg.enabled || cfg.freezeMs <= 0) return false;
+    const p = hitFeel();
+    if (p.hitstopEnabled !== 1 || p.freezeMs <= 0) return false;
     if (this.hitFreezeUntil > 0) {
-      this.hitFreezeUntil = Math.min(this.hitFreezeStartAt + cfg.maxFreezeMs, Math.max(this.hitFreezeUntil, time + cfg.freezeMs));
+      this.hitFreezeUntil = Math.min(this.hitFreezeStartAt + p.maxFreezeMs, Math.max(this.hitFreezeUntil, time + p.freezeMs));
       return true;
     }
-    if (this.hitFreezeEndedAt > 0 && time < this.hitFreezeEndedAt + cfg.cooldownMs) return false;
+    if (this.hitFreezeEndedAt > 0 && time < this.hitFreezeEndedAt + p.freezeCooldownMs) return false;
     this.hitFreezeStartAt = time;
-    this.hitFreezeUntil = time + Math.min(cfg.freezeMs, cfg.maxFreezeMs);
+    this.hitFreezeUntil = time + Math.min(p.freezeMs, p.maxFreezeMs);
     return true;
   }
 

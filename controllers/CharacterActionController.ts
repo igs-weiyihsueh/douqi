@@ -3,6 +3,7 @@ import { GameConfig } from '../config';
 import type { Character } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
 import type { CharacterParams } from '../systems/characterParams';
+import { hitFeel } from '../systems/hitFeelParams';
 import { standCharacterOutside } from '../systems/bodySeparation';
 import { isStructureEnemy } from '../systems/enemyKinds';
 import type { LockTarget, TargetingController } from './TargetingController';
@@ -422,17 +423,17 @@ export class CharacterActionController {
    * @param time 目前場景時間
    */
   private beginCutIn(c: Character, hit: Enemy, dashSpeed: number, time: number): void {
-    const cfg = GameConfig.cutIn;
+    const p = hitFeel();
     const angle = Math.atan2(c.dashDestY - c.y, c.dashDestX - c.x);
-    if (cfg.streakEnabled) this.host.spawnSlashStreak(hit.x, hit.y, angle, c.isEmpowered(time));
-    if (!cfg.enabled || cfg.durationMs <= 0) {
+    if (p.streakEnabled === 1) this.host.spawnSlashStreak(hit.x, hit.y, angle, c.isEmpowered(time));
+    if (p.cutInEnabled !== 1 || p.cutInMs <= 0) {
       this.endDashState(c);
       return;
     }
-    const speed = dashSpeed * cfg.speedRatio;
+    const speed = dashSpeed * p.cutInSpeedRatio;
     c.cutInVelocityX = Math.cos(angle) * speed;
     c.cutInVelocityY = Math.sin(angle) * speed;
-    c.cutInUntil = time + cfg.durationMs;
+    c.cutInUntil = time + p.cutInMs;
     (c.body as Phaser.Physics.Arcade.Body).setVelocity(c.cutInVelocityX, c.cutInVelocityY);
   }
 

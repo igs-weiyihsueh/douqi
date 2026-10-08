@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { GameConfig } from '../config';
 import type { Character } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
+import { hitFeel } from '../systems/hitFeelParams';
 
 /** 擴張環：初始半徑、深度、透明度、邊框粗細 */
 const RING_START_RADIUS = 10;
@@ -190,8 +191,10 @@ export class CombatFx {
 
   /** 敵人受擊閃白 */
   flashEnemy(enemy: Enemy): void {
+    const ms = hitFeel().enemyFlashMs;
+    if (ms <= 0) return;
     enemy.setTintFill(0xffffff);
-    this.scene.time.delayedCall(GameConfig.juice.enemyFlashMs, () => {
+    this.scene.time.delayedCall(ms, () => {
       if (enemy.active) enemy.clearTint();
     });
   }
