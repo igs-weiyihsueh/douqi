@@ -15,7 +15,7 @@ import {
 /** 面板版面與配色（畫面座標；面板置中於畫面） */
 const LAYOUT = {
   WIDTH: 1100,
-  HEIGHT: 620,
+  HEIGHT: 780,
   DEPTH: 100,
   BG_COLOR: 0x111827,
   BG_ALPHA: 0.96,
@@ -23,10 +23,10 @@ const LAYOUT = {
   BORDER_WIDTH: 2,
   /** 遮罩：面板開啟時壓暗背後的主選單 */
   DIM_ALPHA: 0.55,
-  TITLE_Y: -245,
-  SUBTITLE_Y: -210,
+  TITLE_Y: -345,
+  SUBTITLE_Y: -310,
   /** 第一列參數的 y 與列距 */
-  ROW_START_Y: -150,
+  ROW_START_Y: -250,
   ROW_GAP: 60,
   LABEL_X: -510,
   TRACK_X: -250,
@@ -40,16 +40,16 @@ const LAYOUT = {
   /** 選中列的底色條 */
   ROW_HIGHLIGHT_WIDTH: 1060,
   ROW_HIGHLIGHT_HEIGHT: 56,
-  BUTTON_Y: 235,
+  BUTTON_Y: 300,
   BUTTON_WIDTH: 150,
   BUTTON_HEIGHT: 40,
   BUTTON_GAP: 175,
-  HELP_Y: 190,
+  HELP_Y: 240,
   /** 預覽區域 */
   PREVIEW_X: 300,
-  PREVIEW_Y: -50,
+  PREVIEW_Y: -40,
   PREVIEW_SCALE: 0.6,
-  PREVIEW_TITLE_Y: -150,
+  PREVIEW_TITLE_Y: -250,
   COLORS: {
     TEXT: '#e5e7eb',
     HINT: '#94a3b8',
