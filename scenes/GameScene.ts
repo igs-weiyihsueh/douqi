@@ -186,6 +186,8 @@ export class GameScene extends Phaser.Scene {
   private guardGlobalWaveCount = 0;
   // 寶箱怪:場上同時只 1 隻(有則不再生);null=場上無寶箱怪
   private treasureEnemy: Enemy | null = null;
+  /** 獎勵關中的寶箱怪（可同時多隻、不限時，時間到統一離場），每次 create() 重建 */
+  private roomTreasures = new Set<Enemy>();
   // ③ 寶箱怪金光加強:發光圈(脈動 halo)+ 金色粒子環繞
   private treasureGlow: Phaser.GameObjects.Graphics | null = null;
   private treasureEmitter: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
@@ -339,10 +341,14 @@ export class GameScene extends Phaser.Scene {
     this.skillCtl = new SkillController(this.createSkillHost());
     this.goIndicator = new GoIndicator(this);
     this.hiddenGate = new HiddenGateController(this);
+    this.roomTreasures = new Set();
     this.treasureRoom = new TreasureRoomController({
       scene: this,
       zone: () => this.zoneA,
       slot: () => this.slotA,
+      roomTreasureCount: () => this.roomTreasures.size,
+      spawnRoomTreasure: (x, y) => this.spawnRoomTreasure(x, y),
+      dismissRoomTreasures: () => this.dismissRoomTreasures(),
       onFinished: () => this.onTreasureRoomFinished()
     });
 
@@ -827,6 +833,7 @@ export class GameScene extends Phaser.Scene {
     this.treasureRoom.update(time);
     this.updateEnemies(time);
     this.updateTreasure(time); // 寶箱怪:跑點移動/金光閃爍/限時跑走
+    this.updateRoomTreasures(time);
     this.finishPendingSubZoneIfTreasureGone(); // 延後的場景切換:寶箱怪死/離場後才開啟
     // 守護事件——怪移動後把怪推回守護目標外圈(不疊上去);玩家仍可穿越。放 updateEnemies 之後→怪這幀先移動再被推出,渲染前已在外緣。
     if (this.waveState === 'event' && this.eventKind === 'guard' && this.guardNpc) pushEnemiesOutOfNpc(this.guardNpc, this.enemies, this.arena);
@@ -3976,24 +3983,23 @@ export class GameScene extends Phaser.Scene {
     const pulse = 0.6 + 0.4 * Math.abs(Math.sin(time / 140));
     t.setTint(Phaser.Display.Color.GetColor(255, Math.round(210 * pulse) + 45, Math.round(63 * pulse)));
 
-    // telegraph 中(出場提示)不動、不計限時起點由 treasureSpawnAt(spawn 時設)
-    if (t.telegraphing) { body.setVelocity(0, 0); return; }
+    this.stepTreasureMovement(t, time, cfg.lifetimeMs);
+  }
 
-    // 限時:出現滿 lifetimeMs 未打死→跑走(淡出移除)
-    if (!t.treasureFleeing && time - t.treasureSpawnAt >= cfg.lifetimeMs) {
-      t.treasureFleeing = true;
-      // 朝最近牆外方向衝走 + 淡出
-      const a = this.arena;
-      const toLeft = t.x - a.left, toRight = a.right - t.x, toTop = t.y - a.top, toBottom = a.bottom - t.y;
-      const m = Math.min(toLeft, toRight, toTop, toBottom);
-      let fx = 0, fy = 0;
-      if (m === toLeft) fx = -1; else if (m === toRight) fx = 1; else if (m === toTop) fy = -1; else fy = 1;
-      body.setVelocity(fx * cfg.moveSpeed * 1.4, fy * cfg.moveSpeed * 1.4);
-      this.tweens.add({ targets: t, alpha: 0, duration: 700, onComplete: () => {
-        if (this.treasureEnemy === t) this.treasureEnemy = null;
-        this.clearTreasureFx();
-        t.kill();
-      }});
+  /**
+   * 寶箱怪的移動（關卡中的寶箱怪與獎勵關共用）：出場提示中不動；快速衝到隨機點 → 停頓 pauseMin~Max → 再衝。
+   * lifetimeMs 不為 null 時，出現滿這麼久還沒打死就朝最近的牆跑走並淡出
+   *
+   * @param t 寶箱怪
+   * @param time 目前場景時間
+   * @param lifetimeMs 限時（獎勵關的寶箱怪不限時，傳 null）
+   */
+  private stepTreasureMovement(t: Enemy, time: number, lifetimeMs: number | null): void {
+    const cfg = GameConfig.enemy.treasure;
+    const body = t.body as Phaser.Physics.Arcade.Body;
+    if (t.telegraphing) { body.setVelocity(0, 0); return; }
+    if (lifetimeMs !== null && !t.treasureFleeing && time - t.treasureSpawnAt >= lifetimeMs) {
+      this.fleeTreasure(t);
       return;
     }
     if (t.treasureFleeing) return; // 跑走中維持速度直到淡出移除
@@ -4026,20 +4032,111 @@ export class GameScene extends Phaser.Scene {
     body.setVelocity(Math.cos(ang) * cfg.moveSpeed, Math.sin(ang) * cfg.moveSpeed);
   }
 
-  /** 命中寶箱怪:計 1 下 + 噴少量金幣;達 hitsToKill 死亡→噴大量金幣。回傳 true=已處理(呼叫端不走一般扣血)。 */
-  private hitTreasure(enemy: Enemy): boolean {
-    if (enemy.enemyType !== 'treasure' || enemy.dead || !enemy.active) return false;
-    if (enemy.treasureFleeing) { enemy.kill(); if (this.treasureEnemy === enemy) this.treasureEnemy = null; return true; } // 跑走中被打到→直接消(算打到)
+  /**
+   * 寶箱怪跑走：朝最近的牆衝出去並淡出移除
+   *
+   * @param t 寶箱怪
+   */
+  private fleeTreasure(t: Enemy): void {
     const cfg = GameConfig.enemy.treasure;
+    const body = t.body as Phaser.Physics.Arcade.Body;
+    t.treasureFleeing = true;
+    const a = this.arena;
+    const toLeft = t.x - a.left, toRight = a.right - t.x, toTop = t.y - a.top, toBottom = a.bottom - t.y;
+    const m = Math.min(toLeft, toRight, toTop, toBottom);
+    let fx = 0, fy = 0;
+    if (m === toLeft) fx = -1; else if (m === toRight) fx = 1; else if (m === toTop) fy = -1; else fy = 1;
+    body.setVelocity(fx * cfg.moveSpeed * 1.4, fy * cfg.moveSpeed * 1.4);
+    this.tweens.add({ targets: t, alpha: 0, duration: 700, onComplete: () => {
+      if (this.treasureEnemy === t) { this.treasureEnemy = null; this.clearTreasureFx(); }
+      this.roomTreasures.delete(t);
+      t.kill();
+    }});
+  }
+
+  /**
+   * 獎勵關：從金銀財寶裝飾位置跳出一隻寶箱怪（不限時，時間到統一離場）
+   *
+   * @param x 裝飾位置 x
+   * @param y 裝飾位置 y
+   */
+  private spawnRoomTreasure(x: number, y: number): void {
+    const t = this.enemies.get(x, y) as Enemy | null;
+    if (!t) return;
+    t.spawn(x, y, this.time.now, 'treasure', 1);
+    this.roomTreasures.add(t);
+    this.spawnCoins(x, y, GameConfig.stage.treasureRoom.spawnCoinBurst, true); // 從財寶堆裡噴出來
+  }
+
+  /** 每幀更新獎勵關寶箱怪：金光閃爍 + 跑點移動（時停中凍結） */
+  private updateRoomTreasures(time: number): void {
+    for (const t of this.roomTreasures) {
+      if (!t.active || t.dead) { this.roomTreasures.delete(t); continue; }
+      const body = t.body as Phaser.Physics.Arcade.Body;
+      if (this.timeStopped) { body.setVelocity(0, 0); continue; }
+      const pulse = 0.6 + 0.4 * Math.abs(Math.sin(time / 140));
+      t.setTint(Phaser.Display.Color.GetColor(255, Math.round(210 * pulse) + 45, Math.round(63 * pulse)));
+      this.stepTreasureMovement(t, time, null);
+    }
+  }
+
+  /** 獎勵關時間到：場上的寶箱怪全部跑走 */
+  private dismissRoomTreasures(): void {
+    for (const t of this.roomTreasures) {
+      if (t.active && !t.dead && !t.treasureFleeing) this.fleeTreasure(t);
+    }
+  }
+
+  /**
+   * 角色頭上飄出「+N 🎫」
+   *
+   * @param x 位置 x
+   * @param y 位置 y
+   * @param tickets 張數
+   */
+  private popTicketText(x: number, y: number, tickets: number): void {
+    const txt = this.add.text(x, y, `+${tickets} 🎫`, {
+      fontFamily: 'monospace', fontSize: '26px', color: '#ffd166', stroke: '#000000', strokeThickness: 5, fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(40);
+    this.tweens.add({ targets: txt, y: y - 60, alpha: 0, duration: 800, onComplete: () => txt.destroy() });
+  }
+
+  /**
+   * 命中寶箱怪：計 1 下 + 噴少量金幣，達到命中數就死亡並噴大量金幣。
+   * 獎勵關的寶箱怪命中數改用 treasureRoom.hitsToKill，每次命中給命中者 ticketsPerHit 張彩票、擊殺再給 ticketsOnKill 張
+   *
+   * @param enemy 寶箱怪
+   * @param actor 命中的角色
+   * @returns true = 已處理（呼叫端不走一般扣血）
+   */
+  private hitTreasure(enemy: Enemy, actor: Character): boolean {
+    if (enemy.enemyType !== 'treasure' || enemy.dead || !enemy.active) return false;
+    const inRoom = this.roomTreasures.has(enemy);
+    if (enemy.treasureFleeing) {
+      // 關卡中的寶箱怪跑走途中被打到算打到（直接消失）；獎勵關時間到後跑走的不再給獎勵
+      if (!inRoom) { enemy.kill(); if (this.treasureEnemy === enemy) this.treasureEnemy = null; }
+      return true;
+    }
+    const cfg = GameConfig.enemy.treasure;
+    const room = GameConfig.stage.treasureRoom;
+    const hitsToKill = inRoom ? room.hitsToKill : cfg.hitsToKill;
     enemy.treasureHits++;
     this.flashEnemy(enemy);
     this.spawnCoins(enemy.x, enemy.y, cfg.coinsPerHit, false); // 每下少量金幣
-    this.spawnDamageText(enemy.x, enemy.y - 10, cfg.hitsToKill - enemy.treasureHits); // 顯示剩餘命中數
-    if (enemy.treasureHits >= cfg.hitsToKill) {
+    this.spawnDamageText(enemy.x, enemy.y - 10, hitsToKill - enemy.treasureHits); // 顯示剩餘命中數
+    if (inRoom) {
+      actor.credit += room.ticketsPerHit;
+      this.popTicketText(enemy.x, enemy.y - 40, room.ticketsPerHit);
+    }
+    if (enemy.treasureHits >= hitsToKill) {
       const dx = enemy.x, dy = enemy.y;
       enemy.kill();
-      if (this.treasureEnemy === enemy) this.treasureEnemy = null;
-      this.clearTreasureFx(); // ③ 死亡清金光特效
+      if (inRoom) {
+        this.roomTreasures.delete(enemy);
+        actor.credit += room.ticketsOnKill;
+        this.popTicketText(dx, dy - 70, room.ticketsOnKill);
+      }
+      if (this.treasureEnemy === enemy) { this.treasureEnemy = null; this.clearTreasureFx(); }
       this.spawnCoins(dx, dy, cfg.coinsOnDeath, true); // 死亡大量金幣(華麗)
       this.spawnExpandingRing(dx, dy, 100, 0xffd700, 450);
       this.shakeOnce(120, 0.006);
@@ -5466,7 +5563,7 @@ export class GameScene extends Phaser.Scene {
     actor: Character, enemy: Enemy, damage: number, knockback: number, fromX: number, fromY: number, time: number
   ): void {
     if (enemy.dead || !enemy.active) return;
-    if (enemy.enemyType === 'treasure') { this.hitTreasure(enemy); return; }
+    if (enemy.enemyType === 'treasure') { this.hitTreasure(enemy, actor); return; }
     const dmg = Math.max(1, Math.round(damage * enemy.damageMultiplierFrom(fromX, fromY)));
     enemy.aggroActive = true;
     const dead = enemy.takeDamage(dmg);

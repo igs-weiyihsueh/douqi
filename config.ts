@@ -905,10 +905,15 @@ export const GameConfig = {
     /**
      * 獎勵關（寶藏密室）：限時 durationMs，剩 finalCountdownSec 秒時畫面中央大倒數；倒數 HUD 在畫面上方 hudY。
      * 場地覆蓋金色色調（tintColor / tintAlpha），散布 decorCount 組金幣堆 / 寶石 / 寶箱（距邊 decorMargin、
-     * 彼此間隔 decorSpacing、避開下緣入口半徑 entryClearRadius）
+     * 彼此間隔 decorSpacing、避開下緣入口半徑 entryClearRadius）。
+     * 寶箱怪：進場 firstSpawnDelayMs 後開始，每 spawnIntervalMs 從裝飾處跳出一隻（噴 spawnCoinBurst 枚金幣），
+     * 場上最多 maxAlive 隻；打 hitsToKill 下死，每次命中給命中者 ticketsPerHit 張彩票、擊殺再給 ticketsOnKill 張；
+     * 時間到全部離場
      */
     treasureRoom: {
       durationMs: 60000, finalCountdownSec: 5, hudY: 104, hudLabel: '💰 寶藏密室',
+      firstSpawnDelayMs: 1500, spawnIntervalMs: 4000, maxAlive: 3, spawnCoinBurst: 16,
+      hitsToKill: 10, ticketsPerHit: 1, ticketsOnKill: 30,
       enterBanner: '寶藏密室！限時 60 秒', endBanner: '時間到！',
       tintColor: 0xffc84a, tintAlpha: 0.18, tintDepth: 0.6, decorDepth: 0.8,
       decorCount: 10, decorMargin: 80, decorSpacing: 160, entryClearRadius: 260

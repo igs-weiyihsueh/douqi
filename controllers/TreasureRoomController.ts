@@ -10,6 +10,12 @@ export interface TreasureRoomHost {
   zone(): Phaser.Geom.Rectangle;
   /** 獎勵關所在的整格（覆蓋金色色調用） */
   slot(): Phaser.Geom.Rectangle;
+  /** 場上獎勵關寶箱怪的數量 */
+  roomTreasureCount(): number;
+  /** 在 (x, y) 生成一隻獎勵關寶箱怪 */
+  spawnRoomTreasure(x: number, y: number): void;
+  /** 讓場上的獎勵關寶箱怪全部離場 */
+  dismissRoomTreasures(): void;
   /** 時間到（寶箱怪已離場）：場景開出口 */
   onFinished(): void;
 }
@@ -27,8 +33,8 @@ const UI_DEPTH = 60;
 
 /**
  * 隱藏入口後的獎勵關（寶藏密室）：在目前區域鋪上金色色調與金幣、寶石、寶箱裝飾，限時 durationMs 倒數；
- * 剩 finalCountdownSec 秒時畫面中央依序顯示大倒數數字，時間到通知場景開出口。
- * 裝飾位置也是之後寶箱怪跳出來的地點（spawnPoints）。
+ * 期間每 spawnIntervalMs 從隨機一處裝飾跳出一隻寶箱怪（場上最多 maxAlive 隻）。
+ * 剩 finalCountdownSec 秒時畫面中央依序顯示大倒數數字；時間到寶箱怪全部離場，通知場景開出口。
  */
 export class TreasureRoomController {
   private active = false;
@@ -37,6 +43,8 @@ export class TreasureRoomController {
   private hud: Phaser.GameObjects.Text | null = null;
   /** 最後倒數已顯示到的秒數（避免同一秒重複顯示） */
   private lastBigSecond = 0;
+  /** 下一次補寶箱怪的時間 */
+  private nextSpawnAt = 0;
   private points: Array<{ x: number; y: number }> = [];
 
   constructor(private readonly host: TreasureRoomHost) {}
@@ -72,6 +80,7 @@ export class TreasureRoomController {
     this.endsAt = time + cfg.durationMs;
     this.lastBigSecond = 0;
     this.drawDecor();
+    this.nextSpawnAt = time + cfg.firstSpawnDelayMs;
     this.hud = this.scene.add.text(GameConfig.width / 2, cfg.hudY, '', HUD_STYLE)
       .setOrigin(0.5).setScrollFactor(0).setDepth(UI_DEPTH);
     this.showBanner(cfg.enterBanner);
@@ -86,8 +95,12 @@ export class TreasureRoomController {
   update(time: number): void {
     if (!this.active) return;
     this.updateHud(time);
-    if (time < this.endsAt) return;
+    if (time < this.endsAt) {
+      this.spawnTick(time);
+      return;
+    }
     this.active = false;
+    this.host.dismissRoomTreasures();
     this.hud?.destroy();
     this.hud = null;
     this.showBanner(GameConfig.stage.treasureRoom.endBanner);
@@ -100,17 +113,34 @@ export class TreasureRoomController {
    * @param frozenMs 凍結時長
    */
   onTimeStopEnd(frozenMs: number): void {
-    if (this.active) this.endsAt += frozenMs;
+    if (!this.active) return;
+    this.endsAt += frozenMs;
+    this.nextSpawnAt += frozenMs;
   }
 
   /** 離開獎勵關：移除裝飾與 HUD（不在獎勵關中時也可安全呼叫） */
   end(): void {
+    if (this.active) this.host.dismissRoomTreasures();
     this.active = false;
     for (const o of this.decor) o.destroy();
     this.decor = [];
     this.points = [];
     this.hud?.destroy();
     this.hud = null;
+  }
+
+  /**
+   * 到了補怪時間且場上未滿 maxAlive 隻，就從隨機一處裝飾跳出一隻寶箱怪
+   *
+   * @param time 目前場景時間
+   */
+  private spawnTick(time: number): void {
+    const cfg = GameConfig.stage.treasureRoom;
+    if (time < this.nextSpawnAt || this.points.length === 0) return;
+    this.nextSpawnAt = time + cfg.spawnIntervalMs;
+    if (this.host.roomTreasureCount() >= cfg.maxAlive) return;
+    const p = this.points[Phaser.Math.Between(0, this.points.length - 1)];
+    this.host.spawnRoomTreasure(p.x, p.y);
   }
 
   /** 倒數 HUD；剩 finalCountdownSec 秒內每秒在畫面中央跳一個大數字 */
