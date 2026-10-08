@@ -207,7 +207,18 @@ export const GameConfig = {
     /** 慢速專屬「衝刺速度」預設(用戶定案700)；fast 用 GameConfig.player.dashSpeed 不受影響 */
     dashSpeed: 700,
     /** 慢速模式普攻間隔（毫秒；角色編輯器的預設值，快速模式仍用 player.attackCooldownMs） */
-    attackCooldownMs: 200
+    attackCooldownMs: 200,
+    /**
+     * 真空圈（腳下地盤 = 敵人進不來的範圍，P1 與 BOT 都有）：左右半徑 vacuumRadius，上下 = vacuumRadius × vacuumFlatten。
+     * 一般怪會被推到「圈 + 自身半徑」之外（身體邊緣停在圈上）；近戰怪改在圈邊緣蓄力、出手
+     */
+    vacuumRadius: 65,
+    /** 真空圈的上下壓扁比例（地盤畫法與判定共用） */
+    vacuumFlatten: 0.45,
+    /** 近戰怪在真空邊緣再往外多少像素內開始蓄力 */
+    vacuumEngageMargin: 10,
+    /** 近戰怪出手時，離真空邊緣多少像素內的角色會被打中（比蓄力餘量大，角色稍微退開仍打得到） */
+    vacuumHitMargin: 16
   },
 
   /**

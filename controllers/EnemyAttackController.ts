@@ -13,6 +13,8 @@ export interface EnemyAttackHost {
   /** 全部角色（攻擊判定對象） */
   characters(): ReadonlyArray<Character>;
   isGameOver(): boolean;
+  /** 近戰怪出手時，角色離怪多近會被打中（慢速模式依真空圈邊界計算） */
+  meleeHitRange(enemy: Enemy, c: Character): number;
   /** 守護事件中可被攻擊的守護目標；不在守護事件或目標已倒為 null */
   hittableGuardNpc(): Enemy | null;
   /** 守護目標被打中一次（扣血、可能使事件失敗） */
@@ -63,7 +65,7 @@ export class EnemyAttackController {
     this.host.fx().attackFlash(enemy.x, enemy.y);
     for (const c of this.host.characters()) {
       if (!c.alive) continue;
-      if (Phaser.Math.Distance.Between(enemy.x, enemy.y, c.x, c.y) > GameConfig.enemy.attackRadius) continue;
+      if (Phaser.Math.Distance.Between(enemy.x, enemy.y, c.x, c.y) > this.host.meleeHitRange(enemy, c)) continue;
       this.host.damageCharacter(c, GameConfig.enemy.attackDamage, enemy.x, enemy.y);
     }
   };

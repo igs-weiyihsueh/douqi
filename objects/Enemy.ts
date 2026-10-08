@@ -253,7 +253,15 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     return this.active && !this.telegraphing && this.enemyType !== 'npc';
   }
 
-  updateAI(targetX: number, targetY: number, time: number): void {
+  /**
+   * 每幀 AI
+   *
+   * @param targetX 目標 x
+   * @param targetY 目標 y
+   * @param time 目前場景時間
+   * @param engageRange 近戰怪開始蓄力的距離（慢速模式依真空圈邊界計算；省略用 config.enemy.engageRange）
+   */
+  updateAI(targetX: number, targetY: number, time: number, engageRange: number = GameConfig.enemy.engageRange): void {
     if (!this.active) return;
     // 塔/NPC：靜止物件，不跑 AI（行為由事件邏輯管）。寶箱怪：跑點 / 限時 / 計命中由寶箱怪控制器管，不跑一般 AI。
     if (this.enemyType === 'tower' || this.enemyType === 'npc' || this.enemyType === 'treasure') {
@@ -284,13 +292,13 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         break;
       default:
         // normal / tank：巡邏 / 警戒追擊 + 蓄力
-        this.updateMelee(targetX, targetY, time);
+        this.updateMelee(targetX, targetY, time, engageRange);
         break;
     }
   }
 
   // --- normal / tank：巡邏 / 警戒 / 蓄力---
-  private updateMelee(targetX: number, targetY: number, time: number): void {
+  private updateMelee(targetX: number, targetY: number, time: number, engageRange: number): void {
     const body = this.body as Phaser.Physics.Arcade.Body;
     const cfg = GameConfig.enemy.ai;
     const dist = Phaser.Math.Distance.Between(this.x, this.y, targetX, targetY);
@@ -355,7 +363,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         } else {
           this.outOfRangeSince = 0;
         }
-        if (dist <= GameConfig.enemy.engageRange) {
+        if (dist <= engageRange) {
           this.beginCharge(time);
         } else {
           body.setVelocity(Math.cos(this.facing) * this.moveSpeed, Math.sin(this.facing) * this.moveSpeed);

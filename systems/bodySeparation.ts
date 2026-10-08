@@ -212,21 +212,38 @@ export function standCharacterOutside(c: Character, e: Enemy, arena: Phaser.Geom
 // ---------------------------------------------------------------------------
 
 /**
+ * 慢速模式真空圈：沿 (nx, ny) 方向，敵人中心離角色中心的最小距離。
+ * 真空圈是橢圓（左右 vacuumRadius、上下 × vacuumFlatten），敵人的身體半徑也同樣壓扁後加上去，身體邊緣剛好停在圈上
+ *
+ * @param nx 角色 → 敵人的單位向量 x
+ * @param ny 角色 → 敵人的單位向量 y
+ * @param enemyRadius 敵人的身體半徑
+ */
+export function vacuumBoundaryDistance(nx: number, ny: number, enemyRadius: number): number {
+  const cfg = GameConfig.slow;
+  const a = cfg.vacuumRadius + enemyRadius;
+  const b = a * cfg.vacuumFlatten;
+  return (a * b) / Math.hypot(b * nx, a * ny);
+}
+
+/**
  * 角色與一般怪不重疊：把重疊的怪推離角色（全額），角色位置不動、保留玩家走位手感。
+ * vacuum = true（慢速模式）時改用真空圈邊界（見 vacuumBoundaryDistance）。
  * 固定目標跳過（各有站外緣 / 穿越邏輯）；呼叫端在衝刺中不套用，保留衝刺穿怪的打擊感
  *
  * @param c 角色
  * @param enemies 敵人物件池
  * @param arena 移動區
+ * @param vacuum 是否使用真空圈
  */
-export function pushEnemiesAwayFromCharacter(c: Character, enemies: Phaser.Physics.Arcade.Group, arena: Phaser.Geom.Rectangle): void {
+export function pushEnemiesAwayFromCharacter(c: Character, enemies: Phaser.Physics.Arcade.Group, arena: Phaser.Geom.Rectangle, vacuum: boolean): void {
   const pr = GameConfig.player.radius;
   for (const child of enemies.getChildren()) {
     const e = child as Enemy;
     if (!e.active || e.dead || isFixedEnemy(e)) continue;
     const er = e.getBodyRadius();
-    const minDist = pr + er;
     const { nx, ny, d } = normalBetween(c.x, c.y, e.x, e.y); // 角色 → 怪
+    const minDist = vacuum ? vacuumBoundaryDistance(nx, ny, er) : pr + er;
     if (d >= minDist) continue;
     e.setPosition(
       Phaser.Math.Clamp(e.x + nx * (minDist - d), arena.left + er, arena.right - er),
