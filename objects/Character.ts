@@ -24,7 +24,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
     lastKillTime: 0,
     ticketsEarned: 0,
     isWarning: false,
-    nextMilestone: GameConfig.comboReward.MILESTONES[0],  // 使用配置中的第一個里程碑
+    nextMilestone: GameConfig.comboReward.MILESTONES[0] as number,  // 使用配置中的第一個里程碑
     // 新增：待處理獎勵狀態
     pendingRewardIndex: undefined as number | undefined,
     pendingRewardTickets: undefined as number | undefined,

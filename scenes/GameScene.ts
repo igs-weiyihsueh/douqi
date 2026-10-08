@@ -16,6 +16,7 @@ import { HiddenGateController } from '../controllers/HiddenGateController';
 import { TreasureRoomController } from '../controllers/TreasureRoomController';
 import { TreasureEnemyController, type TreasureEnemyHost } from '../controllers/TreasureEnemyController';
 import { BreakableController, type BreakableHost } from '../controllers/BreakableController';
+import { ComboRewardController } from '../controllers/ComboRewardController';
 import { SlotWorldController, type AreaTransition, type Side, type SlotWorldHost } from '../controllers/SlotWorldController';
 import { PerfOverlay } from '../controllers/PerfOverlay';
 import { GameDebugApi, type GameDebugHost } from '../controllers/GameDebugApi';
@@ -55,6 +56,8 @@ export class GameScene extends Phaser.Scene {
   private breakables!: Phaser.GameObjects.Group;
   /** 可破壞物件的布置、打破與爆炸桶，每次 create() 重建 */
   private breakableCtl!: BreakableController;
+  /** COMBO 連擊獎勵（頭上 UI 連擊數與彩票），每次 create() 重建 */
+  private comboReward!: ComboRewardController;
   private chargeWarnGfx!: Phaser.GameObjects.Graphics;
 
   /** F4 新舊美術切換（背景圖、P1 皮膚與覆蓋 UI、一般怪外觀），每次 create() 重建 */
@@ -267,6 +270,7 @@ export class GameScene extends Phaser.Scene {
       runChildUpdate: false
     });
     this.breakableCtl = new BreakableController(this.createBreakableHost());
+    this.comboReward = new ComboRewardController(this, () => this.characters);
     this.chargeWarnGfx = this.add.graphics().setDepth(2);
     this.targeting = new TargetingController(this.createTargetingHost());
     this.actions = new CharacterActionController(this.createActionHost());
@@ -557,8 +561,8 @@ export class GameScene extends Phaser.Scene {
     this.artStyle.update(time);
     this.goIndicator.update(delta);
 
-    // 階段三：更新COMBO計時系統
-    this.updateComboTimers();
+    // COMBO 連擊計時（警告 / 中斷）
+    this.comboReward.update();
 
     // 事件開場演出期間鎖操作、事件不計時也不生怪，只推進演出並重繪標記；演出結束（或逾時）才開戰
     if (this.eventCtl.isIntroActive) {
@@ -1226,7 +1230,7 @@ export class GameScene extends Phaser.Scene {
       hitBreakablesInRange: (c, radius, half, useArc, damage, time) => this.breakableCtl.hitInRange(c, radius, half, useArc, damage, time),
       performAttackOn: (actor, primary, time) => this.performAttackOn(actor, primary, time),
       onComboHit: (c, time) => this.onComboHit(c, time),
-      triggerComboHit: (c) => this.triggerComboHit(c),
+      triggerComboHit: (c) => this.comboReward.hit(c),
       empowerAoe: (c, time) => this.empowerAoe(c, time),
       flashWhite: (c) => this.flashWhite(c),
       spawnMeleeArcEffect: (x, y, angle) => this.spawnMeleeArcEffect(x, y, angle)
@@ -1305,7 +1309,7 @@ export class GameScene extends Phaser.Scene {
       clearTelegraphsOf: (owner) => this.clearTelegraphsOf(owner),
       damageCharacter: (c, amount, fromX, fromY, rootMs) => this.damageCharacterFrom(c, amount, fromX, fromY, rootMs),
       damageEnemy: (actor, enemy, damage, knockback, time) => this.damageEnemy(actor, enemy, damage, knockback, time),
-      triggerComboHit: (actor) => this.triggerComboHit(actor),
+      triggerComboHit: (actor) => this.comboReward.hit(actor),
       dropItemAt: (x, y, time) => this.dropItemAt(x, y, time),
       spawnExpandingRing: (x, y, radius, color, ms) => this.spawnExpandingRing(x, y, radius, color, ms),
       shakeOnce: (duration, intensity) => this.shakeOnce(duration, intensity),
@@ -2291,8 +2295,8 @@ export class GameScene extends Phaser.Scene {
     }
     // 衝撞命中(必中 primary) → combo/鬥氣累積
     this.onComboHit(actor, time);
-    // 階段三：衝刺命中也觸發COMBO獎勵系統
-    this.triggerComboHit(actor);
+    // 衝刺命中也算一次 COMBO 連擊
+    this.comboReward.hit(actor);
 
     this.flashWhite(actor);
     // 一般攻擊命中不再震動（只保留閃白/傷害數字/擊退）
@@ -2508,7 +2512,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
     if (hitAny) {
-      this.triggerComboHit(c); // COMBO 獎勵：變身 AOE 命中算 1 下
+      this.comboReward.hit(c); // COMBO 獎勵：變身 AOE 命中算 1 下
       this.registerEmpowerAoeHit(c, time);
     }
   }
@@ -2542,7 +2546,7 @@ export class GameScene extends Phaser.Scene {
         hitAny = true;
       }
     }
-    if (hitAny) this.triggerComboHit(c); // COMBO 獎勵：連段技命中算 1 下
+    if (hitAny) this.comboReward.hit(c); // COMBO 獎勵：連段技命中算 1 下
     this.breakableCtl.breakInCircle(c.x, c.y, radius, time); // 圓形斬掃到木箱也打破
     this.shakeOnce(80, 0.006);
     this.enterPerformance(c, GameConfig.performanceTime.circle, time); // 表演時間:定身無敵
@@ -2573,7 +2577,7 @@ export class GameScene extends Phaser.Scene {
         hitAny = true;
       }
     }
-    if (hitAny) this.triggerComboHit(c); // COMBO 獎勵：連段技命中算 1 下
+    if (hitAny) this.comboReward.hit(c); // COMBO 獎勵：連段技命中算 1 下
     this.breakableCtl.breakInRect(ox, oy, dir, 0, length, width, time); // 直線氣波掃到木箱也打破
     this.shakeOnce(80, 0.006);
     this.enterPerformance(c, GameConfig.performanceTime.line, time); // 表演時間:定身無敵
@@ -2651,7 +2655,7 @@ export class GameScene extends Phaser.Scene {
       callback: () => {
         if (this.burstTick(c) && !comboCounted) {
           comboCounted = true;
-          this.triggerComboHit(c);
+          this.comboReward.hit(c);
         }
         hitCount++;
         if (hitCount >= GameConfig.burst.hits) this.endBurst(c);
@@ -2985,152 +2989,6 @@ export class GameScene extends Phaser.Scene {
       // slow 模式不畫「衝刺距離延長指示線」(用戶要拿掉那條延長瞄準線)；fast 維持顯示。
       showDashLine: this.controlMode !== 'slow'
     });
-  }
-
-  /**
-   * 階段三：觸發COMBO命中獎勵系統
-   *
-   * 計數規則：每一次「出手」命中至少一隻敵人 → COMBO +1（打中幾隻都只算 1，擊殺不另外加）
-   * - 普攻揮擊、衝刺撞擊、連段技（圓/直線）、變身 AOE 各算 1 下
-   * - 爆發整招算 1 下
-   *
-   * @param actor 執行命中的角色
-   */
-  private triggerComboHit(actor: any): void {
-    const currentTime = this.time.now;
-    const combo = actor.comboState;
-    
-    // 更新連擊數和時間
-    combo.currentStreak++;
-    combo.lastKillTime = currentTime;  // 沿用lastKillTime變數名，但實際記錄lastHitTime
-    combo.isWarning = false; // 重置警告狀態
-    
-    // 檢查是否達到獎勵里程碑
-    this.checkAndGrantComboReward(actor);
-  }
-
-  /**
-   * 階段三：檢查並發放COMBO獎勵
-   *
-   * 當角色連擊數達到配置的里程碑時自動發放票券獎勵
-   *
-   * 獎勵計算邏輯：
-   * - 遍歷所有里程碑(5, 10, 20, 50, 100連擊)
-   * - 如果當前連擊數 === 里程碑值 → 觸發獎勵
-   * - 發放對應票券數量(1, 3, 10, 50, 100張)
-   * - 更新下個目標里程碑
-   * - 播放獎勵特效和音效
-   *
-   * 防重複機制：只在連擊數剛好等於里程碑時觸發一次
-   * 最後一階（上限，100 連擊）：立即發獎並歸零重新累積，不等中斷
-   *
-   * @param actor 觸發獎勵的角色對象
-   */
-  private checkAndGrantComboReward(actor: any): void {
-    const combo = actor.comboState;
-    const config = GameConfig.comboReward;
-    const lastIndex = config.MILESTONES.length - 1;
-
-    // 達上限：立即發最高階獎勵並歸零（較低階的待發獎勵被最高階取代）
-    if (combo.currentStreak >= config.MILESTONES[lastIndex]) {
-      this.grantComboReward(actor, config.REWARDS[lastIndex], config.MILESTONES[lastIndex]);
-      this.resetComboStreak(combo);
-      return;
-    }
-    
-    // 檢查是否達到任何里程碑
-    for (let i = 0; i < config.MILESTONES.length; i++) {
-      if (combo.currentStreak === config.MILESTONES[i]) {
-        // 修復觸發邏輯：標記達到里程碑，但暫不觸發獎勵
-        combo.pendingRewardIndex = i;
-        combo.pendingRewardTickets = config.REWARDS[i];
-        combo.pendingRewardMilestone = config.MILESTONES[i];
-        
-        // 更新下個里程碑目標
-        combo.nextMilestone = i + 1 < config.MILESTONES.length ? 
-          config.MILESTONES[i + 1] : 
-          config.MILESTONES[config.MILESTONES.length - 1];
-        
-        break;
-      }
-    }
-  }
-
-  /**
-   * 發放 COMBO 獎勵：票券加到該角色的 Credit，並在下方面板播放彩票噴發與獲得文字
-   *
-   * @param actor 獲得獎勵的角色
-   * @param tickets 票券數量
-   * @param milestone 達成的里程碑（連擊數，影響彩票噴發數量/速度）
-   */
-  private grantComboReward(actor: any, tickets: number, milestone: number): void {
-    const combo = actor.comboState;
-    combo.ticketsEarned += tickets;
-    actor.credit += tickets; // 同步更新Credit顯示
-    const uiScene = this.scene.get('UIScene') as any;
-    if (uiScene?.playComboRewardFx) {
-      uiScene.playComboRewardFx(actor.index, tickets, milestone);
-    } else {
-      console.error('❌ UIScene.playComboRewardFx 不存在，COMBO 獎勵特效無法播放');
-    }
-  }
-
-  /**
-   * COMBO 歸零：清除連擊數、警告狀態與待發獎勵，下個目標回到第一個里程碑
-   *
-   * @param combo 角色的 comboState
-   */
-  private resetComboStreak(combo: any): void {
-    combo.currentStreak = 0;
-    combo.isWarning = false;
-    combo.nextMilestone = GameConfig.comboReward.MILESTONES[0];
-    combo.pendingRewardIndex = undefined;
-    combo.pendingRewardTickets = undefined;
-    combo.pendingRewardMilestone = undefined;
-  }
-  
-  /**
-   * 階段三：更新所有角色的COMBO計時系統
-   *
-   * 實現基於時機視窗的連擊重置機制：
-   * - 正常期：連擊持續累積，UI顯示綠色
-   * - 警告期(1.5-2秒)：UI閃爍橙色/紅色，提醒玩家時間緊迫
-   * - 超時重置(>2秒)：連擊歸零，重回起始狀態
-   *
-   * 算法說明：
-   * 1. 計算每個角色的 timeSinceLastKill = currentTime - lastKillTime
-   * 2. 如果 timeSinceLastKill >= STREAK_TIMEOUT_MS → 重置連擊
-   * 3. 如果 timeSinceLastKill >= WARNING_START_MS → 進入警告狀態
-   * 4. 警告狀態觸發UI閃爍動畫，增強緊迫感
-   *
-   * 在Phaser.update()中每幀調用，確保即時響應玩家操作
-   */
-  private updateComboTimers(): void {
-    const currentTime = this.time.now;
-    const config = GameConfig.comboReward;
-    
-    for (const character of this.characters) {
-      const combo = character.comboState;
-      
-      if (combo.currentStreak > 0) {
-        const timeSinceLastKill = currentTime - combo.lastKillTime;
-        
-        if (timeSinceLastKill >= config.STREAK_TIMEOUT_MS) {
-          // 修復邏輯：COMBO中斷前先觸發待處理的獎勵
-          if (combo.pendingRewardTickets !== undefined && combo.pendingRewardTickets > 0) {
-            this.grantComboReward(character, combo.pendingRewardTickets, combo.pendingRewardMilestone!);
-          }
-          // 超時：重置COMBO到初始狀態
-          this.resetComboStreak(combo);
-        } else if (timeSinceLastKill >= config.WARNING_START_MS) {
-          // 進入警告期：觸發UI閃爍提醒
-          combo.isWarning = true;
-        } else {
-          // 正常狀態：保持UI穩定顯示
-          combo.isWarning = false;
-        }
-      }
-    }
   }
 
   private emitStats(): void {
