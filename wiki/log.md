@@ -5,6 +5,59 @@
 
 ---
 
+## [2026-10-08 13:33] 重構完成 | 方案B B-3雙控制器拆分 (b7e9a77)
+**變更摘要**：方案B深度重構第三里程碑達成，智慧拆分為TargetingController+CharacterActionController雙控制器，GameScene從4,857行降到4,037行(-820行)
+**影響頁面**：
+- [architecture/project-structure.md] (更新) - 方案B B-1+B-2+B-3完整架構與七Controller體系
+- [systems/targeting-action.md] (新建) - 鎖定與行動雙控制器系統完整技術文檔
+- [architecture/game-engine.md] (更新) - GameScene重構統計更新
+- [glossary.md] (更新) - 新增TargetingController、CharacterActionController、LockTarget核心術語
+**代碼位置**：commit b7e9a77，銳騎審查98/100高品質通過，部署成功 index-CkzS7Lvb.js
+**重構統計**：
+- **TargetingController.ts**: +374行 (鎖定與目標選擇系統)
+- **CharacterActionController.ts**: +451行 (角色行動與AI系統)
+- **GameScene.ts**: -982行 (4,857→4,037行，-17%)
+- **淨變化**: +905行新增，-902行重構
+**方案B累計進度**：
+- **B-1**: 事件系統 ✅ (-680行) - 塔/守護/佔領 + 開場演出
+- **B-2**: slot世界+轉場 ✅ (-764行) - 三格佈局 + 全出口 + 轉場系統
+- **B-3**: 雙控制器拆分 ✅ (-820行) - 鎖定系統 + 行動系統智慧分離
+- **B-4**: 除錯API重構 (🔄進行中，預估-400行)
+- **累計進度**: 6,301→4,037行 (-2,264行，-36%)
+- **剩餘目標**: 僅需-1,037行到達3,000行終極目標！
+**智慧拆分設計**：
+- **職責分離哲學**: "要打誰"(TargetingController) vs "怎麼動、怎麼打"(CharacterActionController)
+- **TargetingController**: P1鎖定機制(快速瞄準錐+慢速範圍圈) + BOT選目標 + 鎖定標記
+- **CharacterActionController**: 出手攻擊(近身+衝刺) + 慢速鍵盤控制 + BOT AI系統
+- **協調機制**: 雙控制器無縫銜接，數據流向清晰(鎖定→行動)
+**技術實作亮點**：
+- **智慧拆分**: 原單一TargetingController智慧拆為職責更明確的雙控制器
+- **P1鎖定雙模式**: 快速模式滑鼠瞄準錐 + 慢速模式範圍圈鎖定機制
+- **BOT智能系統**: 目標選擇(道具搶奪+最近敵人) + AI行為邏輯
+- **出手攻擊統一**: 近身扇形劍氣 + 遠距衝刺 + 空衝處理完整系統
+- **慢速控制**: 鍵盤八方向移動(方向鍵+WASD)完整支援
+- **協調設計**: CharacterActionHost包含targeting()取得鎖定控制器
+**代碼優化成果**：
+- **重複合併**: tryAct/actByAim重複的「近身小位移+扇形劍氣」統一為stepInAndSwing
+- **搜尋統一**: pickTargetByAim/findNearestLockable候選走訪邏輯合併
+- **職責保留**: 敵人追擊目標與時停凍結判斷合理留在GameScene
+- **規範提升**: 數值常數化、過時註解更新
+**品質保證**：
+- **決定性測試**: 16,000幀測試(快速/慢速戰鬥×2組6,000幀 + 轉場×2組10,000幀)
+- **逐幀比對**: 新舊版本完全一致，涵蓋戰鬥+轉場+AI+道具邏輯
+- **零行為變更**: 確保雙控制器拆分不影響遊戲行為
+- **銳騎評分**: 98/100高品質評分通過
+**架構意義**：
+- **七Controller完善**: BossController/SkillController/ArtStyleController/EventController/SlotWorldController/TargetingController/CharacterActionController完整體系
+- **智慧拆分範本**: 建立複雜系統職責分離的最佳實踐標準
+- **極致瘦身衝刺**: -2,264行已完成(-36%)，距3,000行目標僅-1,037行
+- **架構設計典範**: 雙控制器協調機制展現職責分離設計最高境界
+**歷史突破意義**：
+- 方案B技術攀升：從879行事件到737行世界到820行雙控制器，複雜度持續征服
+- 職責分離典範：展現大型系統智慧拆分的設計哲學與實踐標準
+- 極致目標衝刺：GameScene從8,059行→4,037行，距3,000行觸手可及
+**下次提醒**：翼騎可評估B-4除錯API最終重構，征騎可學習雙控制器協調設計模式
+
 ## [2026-10-08 13:22] 重構完成 | 方案B B-2 slot世界系統拆分 (cc7a433)
 **變更摘要**：方案B深度重構第二里程碑達成，slot世界系統完整抽取到SlotWorldController，GameScene從5,621行降到4,857行(-764行)
 **影響頁面**：

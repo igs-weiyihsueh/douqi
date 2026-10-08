@@ -87,6 +87,9 @@
 | **SlotWorldController** | slot世界控制器類別 (cc7a433新增) | `controllers/SlotWorldController.ts:50` | [slot世界](./systems/slot-world.md) |
 | **SlotWorldHost** | 世界控制器場景介面 (cc7a433新增) | `controllers/SlotWorldController.ts:17` | [slot世界](./systems/slot-world.md) |
 | **AreaTransition** | 區域轉場類型 (cc7a433新增) | `controllers/SlotWorldController.ts:12` | [slot世界](./systems/slot-world.md) |
+| **TargetingController** | 鎖定系統控制器 (b7e9a77新增) | `controllers/TargetingController.ts:40` | [鎖定與行動](./systems/targeting-action.md) |
+| **CharacterActionController** | 行動系統控制器 (b7e9a77新增) | `controllers/CharacterActionController.ts:30` | [鎖定與行動](./systems/targeting-action.md) |
+| **LockTarget** | 可鎖定目標型別 (b7e9a77新增) | `controllers/TargetingController.ts:7` | [鎖定與行動](./systems/targeting-action.md) |
 | **markerDotScale** | 位置標記中心亮點縮放 (05dafae新增) | `config.ts:85` | [關卡系統](./systems/stage-system.md) |
 | **drawStageMarker** | HUD位置標記繪製函式 (05dafae新增) | `UIScene.ts:858` | [關卡系統](./systems/stage-system.md) |
 | **stageCycle** | 無限關卡循環配置 (874b8f9新增) | `config.ts:920` | [關卡系統](./systems/stage-system.md) |
