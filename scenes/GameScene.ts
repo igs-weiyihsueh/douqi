@@ -1,9 +1,8 @@
 import Phaser from 'phaser';
 import { GameConfig } from '../config';
 import { Character } from '../objects/Character';
-import { Enemy, type EnemyType } from '../objects/Enemy';
+import { Enemy } from '../objects/Enemy';
 import { Item, type SkillType } from '../objects/Item';
-import { updateRefillLatch, shouldSpawnMore, type WaveSpawnState } from '../systems/waveMath';
 import { Bullet } from '../objects/Bullet';
 import { Breakable } from '../objects/Breakable';
 import { loadCharacterParams, type CharacterParams } from '../systems/characterParams';
@@ -18,6 +17,7 @@ import { TreasureEnemyController, type TreasureEnemyHost } from '../controllers/
 import { BreakableController, type BreakableHost } from '../controllers/BreakableController';
 import { ComboRewardController } from '../controllers/ComboRewardController';
 import { ComboSkillController, type ComboSkillHost } from '../controllers/ComboSkillController';
+import { SpawnController, type SpawnHost } from '../controllers/SpawnController';
 import { SlotWorldController, type AreaTransition, type Side, type SlotWorldHost } from '../controllers/SlotWorldController';
 import { PerfOverlay } from '../controllers/PerfOverlay';
 import { GameDebugApi, type GameDebugHost } from '../controllers/GameDebugApi';
@@ -69,9 +69,8 @@ export class GameScene extends Phaser.Scene {
   private survivalMs = 0;
   private gameOver = false;
 
-  // 生成
-  private spawnAccumulator = 0;
-  private currentSpawnInterval: number = GameConfig.spawn.initialIntervalMs;
+  /** 波次生怪（補生閘門、隊形、近身 / 場上組、召喚怪），每次 create() 重建 */
+  private spawner!: SpawnController;
   /** 道具定時保底掉落計時 */
   private itemDropAccumulator = 0;
 
@@ -80,14 +79,6 @@ export class GameScene extends Phaser.Scene {
   private waveQuota = 0;
   private waveKilled = 0;
   private waveSpawned = 0;
-  /** 階段2a:latch 補生栓(活怪跌破 threshold 開→補到 maxAlive 才關,防抖)。跨幀持有。 */
-  private spawnRefilling = false;
-  /** 階段2b 分配制:本波已生的近身組/場上組隻數(用來讓比例收斂 nearShare)+ 近身組輪派座位游標(多人平均分)。 */
-  private nearSpawned = 0;
-  private fieldSpawned = 0;
-  private nearSeatCursor = 0;
-  /** 本波已生成的【隊形次數】(spawnFormation 呼叫次數);寶箱怪只在第2次隊形起才 roll,確保「首次生怪」絕不出寶箱。 */
-  private waveFormations = 0;
   private waveState: 'spawning' | 'clearing' | 'intermission' | 'boss' | 'event' = 'spawning';
   private intermissionUntil = 0;
 
@@ -236,6 +227,7 @@ export class GameScene extends Phaser.Scene {
       maxSize: GameConfig.spawn.maxAlive,
       runChildUpdate: false
     });
+    this.spawner = new SpawnController(this.createSpawnHost());
     this.bossCtl = new BossController(this.createBossHost());
     this.skillCtl = new SkillController(this.createSkillHost());
     this.eventCtl = new EventController(this.createEventHost());
@@ -399,9 +391,9 @@ export class GameScene extends Phaser.Scene {
     if (this.levelMode) {
       this.breakableCtl.placeStatic('L'); // 1-A 用預設一套布置
       this.startStage();
-      if (GameConfig.spawn.spawnOnStart) this.spawnFormation();
+      if (GameConfig.spawn.spawnOnStart) this.spawner.spawnFormation();
     } else if (GameConfig.spawn.spawnOnStart) {
-      this.spawnFormation();
+      this.spawner.spawnFormation();
     }
 
     this.emitStats();
@@ -420,8 +412,6 @@ export class GameScene extends Phaser.Scene {
     this.characters = [];
     this.survivalMs = 0;
     this.gameOver = false;
-    this.spawnAccumulator = 0;
-    this.currentSpawnInterval = GameConfig.spawn.initialIntervalMs;
     this.itemDropAccumulator = 0;
     this.pendingPickups = new Map();
     this.activeFxCount = 0;
@@ -435,8 +425,6 @@ export class GameScene extends Phaser.Scene {
     this.currentWave = 1;
     this.waveKilled = 0;
     this.waveSpawned = 0;
-    this.spawnRefilling = false; // 階段2a:重置 drip latch
-    this.nearSpawned = 0; this.fieldSpawned = 0; this.nearSeatCursor = 0; // 階段2b:重置分配計數
     this.itemsEnabled = GameConfig.items.spawnEnabled; // 道具開關:重開回到 config 預設
     this.waveQuota = this.computeWaveQuota(1);
     this.waveState = 'spawning';
@@ -797,30 +785,6 @@ export class GameScene extends Phaser.Scene {
     return n;
   }
 
-  /** 階段2a:場上【已實體化】的波次一般怪數(排除結構/寶箱/telegraph中)。drip 的 alive。 */
-  private countWaveAlive(): number {
-    let n = 0;
-    for (const child of this.enemies.getChildren()) {
-      const e = child as Enemy;
-      if (!e.active || e.dead || e.telegraphing) continue;
-      if (!isRegularEnemy(e)) continue;
-      n++;
-    }
-    return n;
-  }
-
-  /** 階段2a:場上【telegraph 登場中(未實體化)】的波次一般怪數。drip 的 pending(算進總量防超生)。 */
-  private countWavePending(): number {
-    let n = 0;
-    for (const child of this.enemies.getChildren()) {
-      const e = child as Enemy;
-      if (!e.active || e.dead || !e.telegraphing) continue;
-      if (!isRegularEnemy(e)) continue;
-      n++;
-    }
-    return n;
-  }
-
   /** 延後的場景切換：寶箱怪已打倒或離場 → 真正開啟切換。每幀在寶箱怪更新後檢查 */
   private finishPendingSubZoneIfTreasureGone(): void {
     if (!this.pendingSubZoneComplete) return;
@@ -847,18 +811,11 @@ export class GameScene extends Phaser.Scene {
         this.waveQuota = this.computeWaveQuota(this.currentWave) + residual;
         this.waveKilled = 0;
         this.waveSpawned = residual;
-        this.spawnRefilling = true; // 階段2a:開波 latch 開→立刻補生首批(不冷場、初期飽滿)
-        this.nearSpawned = 0; this.fieldSpawned = 0; // 階段2b:新波重置分配計數(比例每波獨立收斂)
-        this.waveFormations = 0; // 新波:隊形次數歸零(寶箱怪第2隊形起才可能出)
         this.waveState = 'spawning';
         // 每波開始灑幾個可打破物件(清掉的下一波再補)
         this.breakableCtl.spawnForWave();
-        // 開波首批怪立刻湧出，不冷場——直接生一組 + 歸零 accumulator（後續維持原節奏）
-        this.spawnAccumulator = 0;
-        // 階段2a:開波用 drip 補到 maxAlive(spawnFormation 內每隻 spawnBlocked 精準封頂,不超 target)
-        if (!this.spawnBlocked()) {
-          this.spawnFormation();
-        }
+        // 開波首批怪立刻湧出，不冷場（之後由補生閘門維持節奏）
+        this.spawner.startWave();
         this.emitStats();
       }
       return;
@@ -879,45 +836,8 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    // waveState === 'spawning' —— 階段2a:drip 持續補生(latch 防抖)+ 聰明停生(封頂不超生)
-    const survivalSec = this.survivalMs / 1000;
-    const baseInterval = Math.max(
-      GameConfig.spawn.minIntervalMs,
-      GameConfig.spawn.initialIntervalMs - survivalSec * GameConfig.spawn.intervalDecayPerSec
-    );
-    // 等級越高出怪越快
-    this.currentSpawnInterval = baseInterval;
-
-    // drip 狀態:更新 latch(活怪+pending 跌破 threshold 開→補到 maxAlive 才關,防抖)
-    const maxAlive = this.curMaxAlive();
-    const alive = this.countWaveAlive();
-    const pending = this.countWavePending();
-    const occupancy = alive + pending;
-    const spawnThreshold = Math.round(maxAlive * GameConfig.wave.drip.spawnThresholdRatio);
-    this.spawnRefilling = updateRefillLatch(occupancy, maxAlive, spawnThreshold, this.spawnRefilling);
-
-    const ws: WaveSpawnState = {
-      progress: this.waveKilled,
-      targetProgress: this.waveQuota,
-      alive, pending, maxAlive, spawnThreshold,
-      refilling: this.spawnRefilling
-    };
-
-    // 生產總量已達目標(progress+alive+pending>=target)→本波生產結束,停止再生(殺完剩下即達標過波)
-    if (this.waveKilled + occupancy >= this.waveQuota) {
-      this.waveState = 'clearing';
-      return;
-    }
-
-    this.spawnAccumulator += delta;
-    if (this.spawnAccumulator < this.currentSpawnInterval) return;
-
-    // 聰明停生:只有 latch 開(occupancy 跌破 threshold)且未達封頂/上限時才補
-    if (!shouldSpawnMore(ws)) return;
-    this.spawnAccumulator = 0;
-
-    // spawnFormation 內每隻 spawnEnemyAt 再走 spawnBlocked 精準封頂(formation 大小不會超生)
-    this.spawnFormation();
+    // 生怪中：生產總量達本波配額 → 停止再生，等清完場上的怪即過關
+    if (this.spawner.tick(delta)) this.waveState = 'clearing';
   }
 
   /** 一隻怪被清掉時呼叫——計入本波進度；達配額 → intermission 或（BOSS 波）召喚 BOSS */
@@ -1041,7 +961,7 @@ export class GameScene extends Phaser.Scene {
     this.subWavesDone = 0;
     this.subWavesTarget = 1;
     this.waveQuota = GameConfig.stage.quotaByChest[chest];
-    this.waveFormations = 0; // 首波隊形次數歸零（寶箱怪第 2 隊形起才可能出）
+    this.spawner.resetFormationCount(); // 寶箱怪第 2 次隊形起才可能出現
     this.waveState = 'spawning';
     this.stageInProgress = true;
   }
@@ -1121,6 +1041,27 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
+   * 建立 SpawnController 需要的場景能力
+   */
+  private createSpawnHost(): SpawnHost {
+    return {
+      scene: this,
+      enemies: () => this.enemies,
+      characters: () => this.characters,
+      arena: () => this.arena,
+      currentWave: () => this.currentWave,
+      survivalMs: () => this.survivalMs,
+      waveProgress: () => ({ killed: this.waveKilled, quota: this.waveQuota }),
+      onWaveEnemySpawned: () => { this.waveSpawned++; },
+      maxAlive: () => this.curMaxAlive(),
+      aliveScale: () => this.curAliveScale(),
+      nearestSeat: (x, y) => this.nearestSeat(x, y),
+      wireEnemyCallbacks: (e) => this.wireEnemyCallbacks(e),
+      onFormationSpawned: (time) => this.treasures.trySpawn(time) // 寶箱怪擲骰（場上只會有一隻）
+    };
+  }
+
+  /**
    * 建立 ComboSkillController 需要的場景能力
    */
   private createComboSkillHost(): ComboSkillHost {
@@ -1178,7 +1119,7 @@ export class GameScene extends Phaser.Scene {
       player: () => this.player,
       isTimeStopped: () => this.timeStopped,
       isEventActive: () => this.eventCtl.kind !== null || this.waveState === 'event',
-      waveProgress: () => ({ formations: this.waveFormations, quota: this.waveQuota, spawned: this.waveSpawned }),
+      waveProgress: () => ({ formations: this.spawner.formationCount, quota: this.waveQuota, spawned: this.waveSpawned }),
       flashEnemy: (e) => this.flashEnemy(e),
       spawnDamageText: (x, y, amount) => this.spawnDamageText(x, y, amount),
       spawnExpandingRing: (x, y, radius, color, ms) => this.spawnExpandingRing(x, y, radius, color, ms),
@@ -1315,7 +1256,7 @@ export class GameScene extends Phaser.Scene {
     this.currentWave++;
     this.waveKilled = 0;
     this.waveSpawned = 0;
-    this.spawnAccumulator = 0;
+    this.spawner.resetTimer();
     if (to === 'nextArea') this.breakableCtl.placeStatic('L'); // 新區域的物件布置一律用左側基調
     this.startStage();
     this.emitStats();
@@ -1348,21 +1289,6 @@ export class GameScene extends Phaser.Scene {
       emitStats: () => this.emitStats(),
       onWaveBossDefeated: () => this.onWaveBossDefeated()
     };
-  }
-
-  /** BOSS 召喚的小怪（不計 waveSpawned/quota） */
-  private spawnSummonAt(x: number, y: number, time: number, forceType?: EnemyType, leashImmune = false, forceChase = false): void {
-    const type = forceType ?? this.pickEnemyType();
-    const enemy = this.enemies.get(x, y) as Enemy | null;
-    if (!enemy) return;
-    enemy.onAttackFire = this.onEnemyAttackFire;
-    enemy.onShoot = this.onEnemyShoot;
-    enemy.onLaserFire = this.onEnemyLaserFire;
-    enemy.onBombThrow = this.onEnemyBombThrow;
-    enemy.spawn(x, y, time, type);
-    enemy.targetSeat = this.nearestSeat(x, y); // 黏著:召喚怪也綁最近角色(守護波 resolveEnemyTarget 會覆寫成 guardNpc)
-    if (leashImmune) { enemy.leashRadius = Infinity; enemy.leashTravelDist = Infinity; } // 守護波怪免疫 leash(一直衝 NPC)
-    if (forceChase) enemy.forceChase = true; // 守護波怪:無視 alertRadius 生成即直衝目標(NPC)
   }
 
   /** 波次 BOSS 被打倒（BossController 回呼）：決定通關、轉場或該波過關 */
@@ -1424,7 +1350,7 @@ export class GameScene extends Phaser.Scene {
       removeTelegraph: (fx) => this.removeTelegraphFx(fx),
       clearTelegraphsOf: (owner) => this.clearTelegraphsOf(owner),
       damageCharacter: (c, amount, fromX, fromY, rootMs) => this.damageCharacterFrom(c, amount, fromX, fromY, rootMs),
-      spawnSummonAt: (x, y, time, forceType, leashImmune, forceChase) => this.spawnSummonAt(x, y, time, forceType, leashImmune, forceChase),
+      spawnSummonAt: (x, y, time, forceType, leashImmune, forceChase) => this.spawner.spawnSummonAt(x, y, time, forceType, leashImmune, forceChase),
       flashEnemy: (e) => this.flashEnemy(e),
       dropItemAt: (x, y, time) => this.dropItemAt(x, y, time),
       shakeOnce: (duration, intensity) => this.shakeOnce(duration, intensity),
@@ -1597,161 +1523,6 @@ export class GameScene extends Phaser.Scene {
       hold: GameConfig.wave.intermissionMs - 700,
       onComplete: () => txt.destroy()
     });
-  }
-
-  private spawnFormation(): void {
-    const time = this.time.now;
-    this.waveFormations++; // 本波隊形計數(第1次=首次生怪,寶箱不出;第2次起才可能 roll)
-    // 階段2b 分配制:每次補生決定生【近身組(綁旁邊玩家、近戰環形)】或【場上組(散佈、含遠程)】,
-    //   讓本波比例收斂到 nearShare。目前近身占比 < nearShare → 生近身;否則生場上。
-    const alloc = GameConfig.spawnAlloc;
-    const totalSoFar = this.nearSpawned + this.fieldSpawned;
-    const nearRatio = totalSoFar > 0 ? this.nearSpawned / totalSoFar : 0;
-    const wantNear = nearRatio < alloc.nearShare;
-    if (wantNear) this.spawnNearBatch(time);
-    else this.spawnFieldBatch(time);
-    this.treasures.trySpawn(time); // 每次波次生怪→roll 寶箱怪(場上只1隻)
-  }
-
-  /**
-   * 階段2b 近身組:在【輪派的存活玩家】身旁 nearRingRadius 環形生 nearPerPlayer(3~5)隻【近戰為主】,
-   * 綁定該玩家 seat(接階段1黏著)。多人→輪派游標平均分配每個 seat;solo→都在 P1 旁。
-   * 每隻仍走 spawnBlocked 精準封頂(不超 target/maxAlive)。
-   */
-  private spawnNearBatch(time: number): void {
-    const alloc = GameConfig.spawnAlloc;
-    // 存活座位
-    const seats: number[] = [];
-    for (let i = 0; i < this.characters.length; i++) if (this.characters[i]?.alive) seats.push(i);
-    if (seats.length === 0) return;
-    // 輪派下一個座位(多人平均分)
-    const seat = seats[this.nearSeatCursor % seats.length];
-    this.nearSeatCursor++;
-    const focus = this.characters[seat];
-    const n = Phaser.Math.Between(alloc.nearPerPlayerMin, alloc.nearPerPlayerMax);
-    const start = Math.random() * Math.PI * 2;
-    for (let i = 0; i < n; i++) {
-      if (this.spawnBlocked()) return;
-      const a = start + (i / n) * Math.PI * 2;
-      const x = focus.x + Math.cos(a) * alloc.nearRingRadius;
-      const y = focus.y + Math.sin(a) * alloc.nearRingRadius;
-      this.spawnEnemyAt(x, y, time, alloc.nearTypes as EnemyType[], seat);
-      this.nearSpawned++;
-    }
-  }
-
-  /**
-   * 階段2b/3 場上組:在【離所有玩家 fieldMinDistFromPlayer 遠】的點散佈一叢、【含遠程】(全池),綁就近角色。
-   * 階段3:出生點加大離玩家距離→場上組生更遠、待命(配合縮小的 alertRadius),不一出生就在旁。
-   */
-  private spawnFieldBatch(time: number): void {
-    const cfg = GameConfig.formation.scatter;
-    const alloc = GameConfig.spawnAlloc;
-    const raw = Phaser.Math.Between(cfg.minCount, cfg.maxCount);
-    const count = Math.max(3, Math.round(raw * this.curAliveScale()));
-    const { x: cx, y: cy } = this.randomFieldPoint(alloc.fieldMinDistFromPlayer);
-    const pool = alloc.fieldTypes.length > 0 ? (alloc.fieldTypes as EnemyType[]) : undefined; // undefined=全池
-    for (let i = 0; i < count; i++) {
-      if (this.spawnBlocked()) return;
-      const ang = Math.random() * Math.PI * 2;
-      const rad = Math.random() * cfg.areaRadius;
-      const ex = Phaser.Math.Clamp(cx + Math.cos(ang) * rad, this.arena.left + 20, this.arena.right - 20);
-      const ey = Phaser.Math.Clamp(cy + Math.sin(ang) * rad, this.arena.top + 20, this.arena.bottom - 20);
-      this.spawnEnemyAt(ex, ey, time, pool, -1); // seat -1 → 生成點就近綁
-      this.fieldSpawned++;
-    }
-  }
-
-  /** 階段3:找一個離【所有存活玩家】至少 minDist 的隨機場內點(場上組遠處出生用);找不到退回最遠嘗試點。 */
-  private randomFieldPoint(minDist: number): { x: number; y: number } {
-    const inset = GameConfig.spawn.edgeInset + 40;
-    let bx = this.arena.centerX, by = this.arena.centerY, bestMin = -1;
-    for (let attempt = 0; attempt < 16; attempt++) {
-      const x = Phaser.Math.Between(this.arena.left + inset, this.arena.right - inset);
-      const y = Phaser.Math.Between(this.arena.top + inset, this.arena.bottom - inset);
-      let nearest = Infinity;
-      for (const c of this.characters) {
-        if (!c.alive) continue;
-        nearest = Math.min(nearest, Phaser.Math.Distance.Between(x, y, c.x, c.y));
-      }
-      if (nearest >= minDist) return { x, y };       // 夠遠→直接用
-      if (nearest > bestMin) { bestMin = nearest; bx = x; by = y; } // 記最遠的備援(小場地放不下 minDist 時)
-    }
-    return { x: bx, y: by };
-  }
-
-  /**
-   * 階段2b:生成一隻怪。pool=限定敵種池(undefined=全池,pickEnemyType 預設);
-   * assignSeat>=0→綁定該座位(近身組綁旁邊玩家);-1→生成點就近綁(場上組)。BOSS 一律綁 P1。
-   */
-  private spawnEnemyAt(x: number, y: number, time: number, pool?: EnemyType[], assignSeat = -1): void {
-    const type = this.pickEnemyType(pool);
-    const inset = GameConfig.spawn.edgeInset;
-    const r = GameConfig.enemy.types[type].radius;
-    const cx = Phaser.Math.Clamp(x, this.arena.left + inset + r, this.arena.right - inset - r);
-    const cy = Phaser.Math.Clamp(y, this.arena.top + inset + r, this.arena.bottom - inset - r);
-    const enemy = this.enemies.get(cx, cy) as Enemy | null;
-    if (!enemy) return;
-    enemy.onAttackFire = this.onEnemyAttackFire;
-    enemy.onShoot = this.onEnemyShoot;
-    enemy.onLaserFire = this.onEnemyLaserFire;
-    enemy.onBombThrow = this.onEnemyBombThrow;
-    enemy.spawn(cx, cy, time, type);
-    // 黏著目標(階段1):BOSS 綁 P1(seat0);近身組綁指定 seat;其餘生成點就近綁。之後黏著不亂換。
-    enemy.targetSeat = enemy.isBoss ? 0 : (assignSeat >= 0 ? assignSeat : this.nearestSeat(cx, cy));
-    enemy.stickyOutOfRangeSince = 0;
-    // leash 拴繩:場上組(assignSeat<0)套 config fieldLeashRadius;近身組(assignSeat>=0)用大值≈不套用(貼玩家);BOSS/塔不追不套用。
-    enemy.leashRadius = (enemy.isBoss || type === 'tower')
-      ? Infinity
-      : (assignSeat >= 0 ? GameConfig.spawnAlloc.nearLeashRadius : GameConfig.spawnAlloc.fieldLeashRadius);
-    // leash 第二條(累積路程):同上分派——場上組=config、近身組=大值、BOSS/塔=Infinity。
-    enemy.leashTravelDist = (enemy.isBoss || type === 'tower')
-      ? Infinity
-      : (assignSeat >= 0 ? GameConfig.spawnAlloc.nearLeashTravelDist : GameConfig.spawnAlloc.fieldLeashTravelDist);
-    // 計入本波已生成數
-    this.waveSpawned++;
-  }
-
-  /**
-   * 階段2a:每隻怪生成前的封頂檢查(precise per-enemy,formation 大小不影響)。
-   * ① 場上(含 telegraph pending)已達 maxAlive → 阻。
-   * ② 生產總量(progress + alive + pending)已達 targetProgress → 阻(絕不超生,波騎頭號雷)。
-   * progress=waveKilled、targetProgress=waveQuota。
-   */
-  private spawnBlocked(): boolean {
-    const maxAlive = this.curMaxAlive();
-    const alive = this.countWaveAlive();
-    const pending = this.countWavePending();
-    if (alive + pending >= maxAlive) return true;                    // ① 場上上限
-    if (this.waveKilled + alive + pending >= this.waveQuota) return true; // ② 生產總量封頂
-    return false;
-  }
-
-  /** 依各類型 spawnWeight 權重隨機選一種敵人 */
-  /**
-   * 依 spawnWeight 權重隨機選一種敵人(只在 currentWave 已解鎖的類型間抽選)。
-   * 階段2b:restrictPool 限定敵種池(如近身組近戰池)→在【解鎖∩限定池∩有權重】中抽;交集空→退回全解鎖池。
-   */
-  private pickEnemyType(restrictPool?: EnemyType[]): EnemyType {
-    const types = GameConfig.enemy.types;
-    const unlock = GameConfig.enemy.unlockByWave as Record<string, number>;
-    // 已解鎖 & 有權重的類型（依波次）
-    let pool = (Object.keys(types) as EnemyType[]).filter(
-      (k) => (unlock[k] ?? Infinity) <= this.currentWave && types[k].spawnWeight > 0
-    );
-    if (restrictPool && restrictPool.length > 0) {
-      const restricted = pool.filter((k) => restrictPool.includes(k));
-      if (restricted.length > 0) pool = restricted; // 交集非空才限定;空(如早期近戰未解鎖)→退回全池
-    }
-    if (pool.length === 0) return 'normal';
-    let total = 0;
-    for (const k of pool) total += types[k].spawnWeight;
-    let roll = Math.random() * total;
-    for (const k of pool) {
-      roll -= types[k].spawnWeight;
-      if (roll <= 0) return k;
-    }
-    return pool[0];
   }
 
   // ---------------------------------------------------------------------------
