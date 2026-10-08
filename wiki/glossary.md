@@ -84,6 +84,9 @@
 | **EventController** | 事件系統控制器類別 (7bb93c4新增) | `controllers/EventController.ts:25` | [事件系統](./systems/event-system.md) |
 | **EventHost** | 事件控制器場景介面 (7bb93c4新增) | `controllers/EventController.ts:11` | [事件系統](./systems/event-system.md) |
 | **EventKind** | 限時事件種類型別 (7bb93c4新增) | `controllers/EventController.ts:8` | [事件系統](./systems/event-system.md) |
+| **SlotWorldController** | slot世界控制器類別 (cc7a433新增) | `controllers/SlotWorldController.ts:50` | [slot世界](./systems/slot-world.md) |
+| **SlotWorldHost** | 世界控制器場景介面 (cc7a433新增) | `controllers/SlotWorldController.ts:17` | [slot世界](./systems/slot-world.md) |
+| **AreaTransition** | 區域轉場類型 (cc7a433新增) | `controllers/SlotWorldController.ts:12` | [slot世界](./systems/slot-world.md) |
 | **markerDotScale** | 位置標記中心亮點縮放 (05dafae新增) | `config.ts:85` | [關卡系統](./systems/stage-system.md) |
 | **drawStageMarker** | HUD位置標記繪製函式 (05dafae新增) | `UIScene.ts:858` | [關卡系統](./systems/stage-system.md) |
 | **stageCycle** | 無限關卡循環配置 (874b8f9新增) | `config.ts:920` | [關卡系統](./systems/stage-system.md) |
