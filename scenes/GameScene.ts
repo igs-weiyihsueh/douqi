@@ -127,8 +127,8 @@ export class GameScene extends Phaser.Scene {
   private slotA!: Phaser.Geom.Rectangle;
   private slotBLeft!: Phaser.Geom.Rectangle;
   private slotBRight!: Phaser.Geom.Rectangle;
-  private choiceGfx: Phaser.GameObjects.Graphics | null = null;   // 左右箭頭繪圖
-  /** 上方出口繪圖（與左右箭頭分開：問號關前兩者可能同時存在） */
+  private choiceGfx: Phaser.GameObjects.Graphics | null = null;   // 左右出口標記
+  /** 上方出口標記（與左右出口標記分開：問號關前兩者可能同時存在） */
   private exitGfx: Phaser.GameObjects.Graphics | null = null;
   /** 出口開啟時畫面邊緣的 GO 指示，每次 create() 重建 */
   private goIndicator!: GoIndicator;
@@ -727,8 +727,9 @@ export class GameScene extends Phaser.Scene {
         this.emitAim();
         return;
       }
-      if (this.progressPhase === 'choosing') { this.updateChoosing(); this.pulseChoice(time); }
-      else if (this.progressPhase === 'exiting') { this.updateExiting(); this.pulseChoice(time); }
+      if (this.progressPhase === 'choosing') this.updateChoosing();
+      else if (this.progressPhase === 'exiting') this.updateExiting();
+      if (this.choiceGfx || this.exitGfx) this.pulseChoice(time); // 出口標記呼吸閃爍
       // 階段1:crossing 開放期間(progressPhase 仍 'playing',玩家自由走動不凍結)→偵測走進右 B。
       if (this.crossingOpen) this.updateCrossing();
       // 進B鏡頭跳一下修:進B後等鏡頭平滑捲進 slotB 範圍才收 bounds(避免硬收 clamp 跳)。
@@ -2088,22 +2089,22 @@ export class GameScene extends Phaser.Scene {
     this.drawCrossingArrows();
   }
 
-  /** 畫 A 左右緣開放方向的引導箭頭（純視覺，玩家仍需走到邊緣才觸發）並在箭頭上方顯示 GO；開始平移時隱藏 */
+  /** 畫 A 左右緣開放方向的出口標記（玩家走到該側邊緣觸發）並顯示指向它的 GO；開始平移時隱藏 */
   private drawCrossingArrows(): void {
     this.clearCrossArrows();
     const g = this.add.graphics().setDepth(20).setScrollFactor(1);
     const a = this.arena;
     const midY = a.centerY;
     const inset = GameConfig.stage.arrowInset;
-    // 與上方出口共用 drawArrow 樣式；箭頭正上方顯示 GO
-    const ring = GameConfig.stage.guideArrow.size + GameConfig.stage.guideArrow.ringPad;
+    // 出口標記與上方出口同樣式；GO 箭頭指向出口
+    const orbR = GameConfig.stage.exitOrb.radius;
     if (this.crossAllowed.L) {
-      this.drawArrow(g, a.left + inset, midY, Math.PI);
-      this.goIndicator.show('L', a.left + inset, midY, ring);
+      this.drawExitOrb(g, a.left + inset, midY);
+      this.goIndicator.show('L', a.left + inset, midY, orbR);
     }
     if (this.crossAllowed.R) {
-      this.drawArrow(g, a.right - inset, midY, 0);
-      this.goIndicator.show('R', a.right - inset, midY, ring);
+      this.drawExitOrb(g, a.right - inset, midY);
+      this.goIndicator.show('R', a.right - inset, midY, orbR);
     }
     this.choiceGfx = g;
   }
@@ -2428,44 +2429,38 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * 畫一個出口引導箭頭（左 / 右 / 上共用樣式）：三角形 + 白色外圈
+   * 畫一個出口標記（左 / 右 / 上共用樣式）：外圍由外往內疊幾層半透明光暈，中間實心圓與亮色核心
    *
    * @param g 畫在哪個 graphics
    * @param x 圓心 x
    * @param y 圓心 y
-   * @param angle 箭頭指向（弧度；0 = 右、π = 左、-π/2 = 上）
    */
-  private drawArrow(g: Phaser.GameObjects.Graphics, x: number, y: number, angle: number): void {
-    const { size: s, ringPad, color } = GameConfig.stage.guideArrow;
-    const c = Math.cos(angle), sn = Math.sin(angle);
-    // 尖端朝 angle；底邊在反方向 s 處，沿垂直方向 ±s
-    const bx = x - c * s, by = y - sn * s;
-    g.fillStyle(color, 0.9);
-    g.beginPath();
-    g.moveTo(x + c * s, y + sn * s);
-    g.lineTo(bx + sn * s, by - c * s);
-    g.lineTo(bx - sn * s, by + c * s);
-    g.closePath();
-    g.fillPath();
-    g.lineStyle(4, 0xffffff, 0.8);
-    g.strokeCircle(x, y, s + ringPad);
+  private drawExitOrb(g: Phaser.GameObjects.Graphics, x: number, y: number): void {
+    const cfg = GameConfig.stage.exitOrb;
+    for (let i = cfg.glowLayers; i >= 1; i--) {
+      g.fillStyle(cfg.color, cfg.glowAlpha / cfg.glowLayers);
+      g.fillCircle(x, y, cfg.radius + (cfg.glowRadius * i) / cfg.glowLayers);
+    }
+    g.fillStyle(cfg.color, 1);
+    g.fillCircle(x, y, cfg.radius);
+    g.fillStyle(cfg.coreColor, 0.9);
+    g.fillCircle(x, y, cfg.radius * 0.5);
   }
 
   /**
-   * 開上方出口：在場地上緣中央畫向上的引導箭頭（與左右箭頭同樣式、同樣距邊 arrowInset），箭頭旁顯示 GO；
-   * 玩家走到箭頭 → 閃黑到新區域
+   * 開上方出口：在場地上緣中央畫出口標記（與左右出口同樣式、同樣距邊 arrowInset），並顯示指向它的 GO；
+   * 玩家走到標記 → 閃黑到新區域
    */
   private showExit(): void {
     if (this.exitGfx) this.exitGfx.destroy();
     const g = this.add.graphics().setDepth(20);
     const { x, y } = this.topExitPoint();
-    this.drawArrow(g, x, y, -Math.PI / 2);
+    this.drawExitOrb(g, x, y);
     this.exitGfx = g;
-    const arrow = GameConfig.stage.guideArrow;
-    this.goIndicator.show('U', x, y, arrow.size + arrow.ringPad);
+    this.goIndicator.show('U', x, y, GameConfig.stage.exitOrb.radius);
   }
 
-  /** 上方出口的位置（引導箭頭圓心，也是觸發點）：場地上緣中央往內 arrowInset */
+  /** 上方出口的位置（出口標記圓心，也是觸發點）：場地上緣中央往內 arrowInset */
   private topExitPoint(): { x: number; y: number } {
     return { x: this.arena.centerX, y: this.arena.top + GameConfig.stage.arrowInset };
   }
@@ -2599,7 +2594,7 @@ export class GameScene extends Phaser.Scene {
     uiScene?.playComboRewardFx?.(c.index, tickets, tickets);
   }
 
-  /** exiting 階段每幀：玩家走到上方出口箭頭 → 閃黑轉場到新區域 */
+  /** exiting 階段每幀：玩家走到上方出口標記 → 閃黑轉場到新區域 */
   private updateExiting(): void {
     const { x, y } = this.topExitPoint();
     if (Phaser.Math.Distance.Between(this.player.x, this.player.y, x, y) <= GameConfig.stage.triggerDist + 20) {
@@ -2768,7 +2763,7 @@ export class GameScene extends Phaser.Scene {
       onComplete: () => { if (this.itemToggleBanner === t) this.itemToggleBanner = null; t.destroy(); } });
   }
 
-  /** 選邊箭頭/出口的脈動(alpha 呼吸)提示。 */
+  /** 出口標記的呼吸閃爍（alpha 起伏） */
   private pulseChoice(time: number): void {
     const a = 0.6 + 0.4 * Math.abs(Math.sin(time / 300));
     if (this.choiceGfx) this.choiceGfx.setAlpha(a);

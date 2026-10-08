@@ -873,20 +873,25 @@ export const GameConfig = {
     /** 各寶箱階級的關卡擊殺數（問號依揭曉結果） */
     quotaByChest: { low: 25, high: 35 },
     /**
-     * 出口開啟時的 GO 指示（文字本身發光，無底框；閃動週期 blinkMs，最暗透明度 blinkMinAlpha）：
-     * - 引導箭頭完整在畫面內 → GO 底部在箭頭外圈上方 gapAboveArrow
-     * - 箭頭在畫面外 → GO 貼畫面邊緣：左右距邊 edgeInset，垂直位置夾在畫面頂 edgeMinY（上方 HUD 之下）
+     * 出口開啟時的 GO 指示：指向出口方向的箭頭圖示（樣式見 guideArrow），外圍光暈 glowRadius（glowLayers 層、
+     * 總透明度 glowAlpha），閃動週期 blinkMs、最暗透明度 blinkMinAlpha、脈動放大 pulseScale：
+     * - 出口完整在畫面內 → GO 在出口標記上方，與標記間隔 gapFromTarget
+     * - 出口在畫面外 → GO 貼畫面邊緣：左右距邊 edgeInset，垂直範圍在畫面頂 edgeMinY（上方 HUD 之下）
      *   與畫面底 edgeBottomMargin（下方面板之上）之間；上方出口的 GO 在 edgeMinY
-     * - 箭頭超出畫面 hysteresisPx 以上才切回邊緣（避免在畫面邊緣來回跳）；位置以約 followMs 平滑跟上
+     * - 出口超出畫面 hysteresisPx 以上才切回邊緣（避免在畫面邊緣來回跳）；位置以約 followMs 平滑跟上
      */
     goIndicator: {
-      fontSize: '64px', color: '#fff59d', strokeColor: '#b26a00', strokeThickness: 4,
-      glowColor: '#ffd54f', glowBlur: 22, depth: 55,
-      gapAboveArrow: 10, blinkMs: 420, blinkMinAlpha: 0.35, pulseScale: 1.15,
-      edgeInset: 90, edgeMinY: 210, edgeBottomMargin: 180, hysteresisPx: 40, followMs: 120
+      depth: 55, gapFromTarget: 12, blinkMs: 420, blinkMinAlpha: 0.45, pulseScale: 1.12,
+      glowColor: 0x7affc0, glowRadius: 22, glowLayers: 6, glowAlpha: 0.55,
+      edgeInset: 90, edgeMinY: 150, edgeBottomMargin: 180, hysteresisPx: 40, followMs: 120
     },
-    /** 出口引導箭頭（左 / 右 / 上共用同一樣式）：三角形半邊長 size、外圈半徑 = size + ringPad */
+    /** GO 箭頭樣式：三角形半邊長 size、白色外圈半徑 = size + ringPad、三角形顏色 color */
     guideArrow: { size: 34, ringPad: 14, color: 0x7affc0 },
+    /**
+     * 出口標記：實心發光圓（核心半徑 radius、外圍光暈 glowRadius 分 glowLayers 層，總透明度 glowAlpha），
+     * 在場地邊緣往內 arrowInset 處（左右出口在左右緣中段、上方出口在上緣中央），走到這裡觸發轉場；開放期間呼吸閃爍
+     */
+    exitOrb: { radius: 26, color: 0x7affc0, coreColor: 0xeafff5, glowRadius: 34, glowLayers: 6, glowAlpha: 0.6 },
     /** 問號關前的出口組合（隨機挑一組；L 左、R 右、U 上方）；含回頭方向（與 dirLock 相反）的組合會被排除 */
     mysteryExitCombos: [['L', 'R'], ['L', 'U'], ['R', 'U']] as ReadonlyArray<ReadonlyArray<'L' | 'R' | 'U'>>,
     /** 寶箱獎勵：完成小關卡直接發給每位存活玩家的彩票張數 */
@@ -940,7 +945,7 @@ export const GameConfig = {
     panMs: 900,
     /** 閃黑轉場淡出/淡入時間(毫秒) */
     fadeMs: 500,
-    /** 出口引導箭頭距場地邊緣的內縮（左右箭頭距左右緣、上方箭頭距上緣） */
+    /** 出口標記距場地邊緣的內縮（左右出口距左右緣、上方出口距上緣） */
     arrowInset: 70,
     /** 玩家走到箭頭/出口的觸發距離 */
     triggerDist: 46,
