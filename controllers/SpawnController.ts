@@ -48,6 +48,8 @@ const FIELD_BATCH_MIN = 3;
 const FIELD_EDGE_MARGIN = 20;
 const FIELD_POINT_TRIES = 16;
 const FIELD_POINT_EXTRA_INSET = 40;
+/** 畫面內可出生範圍的最小寬高（小於此值時退回整個移動區） */
+const FIELD_VIEW_MIN_SIZE = 120;
 
 /**
  * 波次生怪（波次流程本身——開波、清場、過關——由場景管理）：
@@ -188,26 +190,33 @@ export class SpawnController {
     const a = this.host.arena();
     const count = Math.max(FIELD_BATCH_MIN, Math.round(Phaser.Math.Between(cfg.minCount, cfg.maxCount) * this.host.aliveScale()));
     const { x: cx, y: cy } = this.randomFieldPoint(alloc.fieldMinDistFromPlayer);
+    // 每隻的散佈位置夾在：移動區（邊距 FIELD_EDGE_MARGIN）；畫面內出生時再與畫面可出生範圍取交集
+    const edge = new Phaser.Geom.Rectangle(a.left + FIELD_EDGE_MARGIN, a.top + FIELD_EDGE_MARGIN, a.width - FIELD_EDGE_MARGIN * 2, a.height - FIELD_EDGE_MARGIN * 2);
+    const clampTo = this.limitToView(edge);
     const pool = alloc.fieldTypes.length > 0 ? (alloc.fieldTypes as EnemyType[]) : undefined; // undefined = 全部解鎖的敵種
     for (let i = 0; i < count; i++) {
       if (this.isBlocked()) return;
       const ang = Math.random() * Math.PI * 2;
       const rad = Math.random() * cfg.areaRadius;
-      const ex = Phaser.Math.Clamp(cx + Math.cos(ang) * rad, a.left + FIELD_EDGE_MARGIN, a.right - FIELD_EDGE_MARGIN);
-      const ey = Phaser.Math.Clamp(cy + Math.sin(ang) * rad, a.top + FIELD_EDGE_MARGIN, a.bottom - FIELD_EDGE_MARGIN);
+      const ex = Phaser.Math.Clamp(cx + Math.cos(ang) * rad, clampTo.left, clampTo.right);
+      const ey = Phaser.Math.Clamp(cy + Math.sin(ang) * rad, clampTo.top, clampTo.bottom);
       this.spawnEnemyAt(ex, ey, time, pool, -1);
       this.fieldSpawned++;
     }
   }
 
-  /** 離所有存活玩家至少 minDist 的隨機場內點；小場地找不到時退回嘗試中最遠的點 */
+  /**
+   * 離所有存活玩家至少 minDist 的隨機點（移動區內縮範圍；畫面內出生時限在畫面可出生範圍內）；
+   * 找不到時退回嘗試中最遠的點
+   */
   private randomFieldPoint(minDist: number): { x: number; y: number } {
     const a = this.host.arena();
     const inset = GameConfig.spawn.edgeInset + FIELD_POINT_EXTRA_INSET;
-    let bx = a.centerX, by = a.centerY, bestMin = -1;
+    const b = this.limitToView(new Phaser.Geom.Rectangle(a.left + inset, a.top + inset, a.width - inset * 2, a.height - inset * 2));
+    let bx = b.centerX, by = b.centerY, bestMin = -1;
     for (let attempt = 0; attempt < FIELD_POINT_TRIES; attempt++) {
-      const x = Phaser.Math.Between(a.left + inset, a.right - inset);
-      const y = Phaser.Math.Between(a.top + inset, a.bottom - inset);
+      const x = Phaser.Math.Between(b.left, b.right);
+      const y = Phaser.Math.Between(b.top, b.bottom);
       let nearest = Infinity;
       for (const c of this.host.characters()) {
         if (!c.alive) continue;
@@ -217,6 +226,22 @@ export class SpawnController {
       if (nearest > bestMin) { bestMin = nearest; bx = x; by = y; }
     }
     return { x: bx, y: by };
+  }
+
+  /**
+   * 場上組出生範圍限制在畫面內（config.spawnAlloc.fieldSpawnInView）：回傳 area 與鏡頭畫面（內縮 fieldViewInset）的交集；
+   * 關閉、或交集太小（例如鏡頭在轉場中、場地比畫面小很多）時回傳 area 本身
+   *
+   * @param area 原本的可出生範圍
+   */
+  private limitToView(area: Phaser.Geom.Rectangle): Phaser.Geom.Rectangle {
+    const alloc = GameConfig.spawnAlloc;
+    if (!alloc.fieldSpawnInView) return area;
+    const v = this.host.scene.cameras.main.worldView;
+    const inset = alloc.fieldViewInset;
+    const view = new Phaser.Geom.Rectangle(v.x + inset, v.y + inset, v.width - inset * 2, v.height - inset * 2);
+    const both = Phaser.Geom.Rectangle.Intersection(area, view);
+    return both.width >= FIELD_VIEW_MIN_SIZE && both.height >= FIELD_VIEW_MIN_SIZE ? both : area;
   }
 
   /**

@@ -730,6 +730,12 @@ export const GameConfig = {
     /** 階段3:場上組出生點離【所有玩家】的最小距離(像素)。加大→場上組生更遠、不一出生就在旁。現值 300（原 420）。 */
     fieldMinDistFromPlayer: 300,
     /**
+     * 場上組只在目前鏡頭畫面內出生（畫面邊緣再內縮 fieldViewInset px），場地比畫面寬時兩側不會出現看不到的怪。
+     * 仍維持離所有玩家至少 fieldMinDistFromPlayer；畫面內可用範圍太小時退回整個移動區
+     */
+    fieldSpawnInView: true,
+    fieldViewInset: 80,
+    /**
      * leash 拴繩(難度微調):場上組怪離【出生點】超過此距離就放棄追、回走。起手 650。
      * 效果:玩家能拉一小群但拉不動整片場(想清遠處怪要自己走過去)。近身組不套用(貼玩家)。
      */
