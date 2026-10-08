@@ -45,7 +45,8 @@ const LAYOUT = {
   VALUE_X: -70,
   PLUS_X: -20,
   /** 選中列的底色條 */
-  ROW_HIGHLIGHT_WIDTH: 1340,
+  ROW_HIGHLIGHT_X: -300,
+  ROW_HIGHLIGHT_WIDTH: 680,
   ROW_HIGHLIGHT_HEIGHT: 46,
   /** 預設組合按鈕區域 */
   PRESET_Y: 60,
@@ -84,6 +85,7 @@ const LAYOUT = {
 /** 一列參數的 UI 元件 */
 interface ParamRow {
   def: HitFeelParamDef;
+  container: Phaser.GameObjects.Container;
   highlight: Phaser.GameObjects.Rectangle;
   fill: Phaser.GameObjects.Rectangle;
   handle: Phaser.GameObjects.Rectangle;
@@ -139,6 +141,7 @@ export class HitFeelEditorPanel {
     this.buildTabs();
     this.buildPresetButtons();
     this.buildBottomButtons();
+    setHitFeel(this.values); // 讓預覽一開始就用已存檔的值
     this.buildPreview();
     this.switchToGroup(0);
     this.refresh();
@@ -155,6 +158,10 @@ export class HitFeelEditorPanel {
     this.dim?.destroy();
     this.container = null;
     this.dim = null;
+    // 清空陣列避免第二次開啟時累積到舊物件
+    this.tabButtons = [];
+    this.tabTexts = [];
+    this.rows = [];
     reloadHitFeel(); // 還原預覽用的暫時值
   }
 
@@ -252,6 +259,14 @@ export class HitFeelEditorPanel {
 
   /** 建立預覽區域 */
   private buildPreview(): void {
+    const c = this.container!;
+    
+    // 預覽區標題
+    const previewTitle = this.scene.add.text(LAYOUT.PREVIEW_X, LAYOUT.PREVIEW_Y - 180, '即時預覽', {
+      fontFamily: 'monospace', fontSize: '16px', color: LAYOUT.COLORS.HINT, fontStyle: 'bold'
+    }).setOrigin(0.5);
+    c.add(previewTitle);
+    
     this.preview = new HitFeelPreview(this.scene, this.container!, LAYOUT.PREVIEW_X, LAYOUT.PREVIEW_Y, LAYOUT.DEPTH);
   }
 
@@ -266,12 +281,9 @@ export class HitFeelEditorPanel {
       btn.setFillStyle(i === index ? LAYOUT.COLORS.TAB_ACTIVE : LAYOUT.COLORS.TAB_INACTIVE);
     });
     
-    // 清除舊的參數列
+    // 清除舊的參數列：銷毀整個 container
     this.rows.forEach(row => {
-      row.highlight.destroy();
-      row.fill.destroy();
-      row.handle.destroy();
-      row.valueText.destroy();
+      row.container.destroy();
     });
     this.rows = [];
     
@@ -295,7 +307,10 @@ export class HitFeelEditorPanel {
     const colors = LAYOUT.COLORS;
     const y = LAYOUT.ROW_START_Y + index * LAYOUT.ROW_GAP;
     
-    const highlight = this.scene.add.rectangle(0, y, LAYOUT.ROW_HIGHLIGHT_WIDTH, LAYOUT.ROW_HIGHLIGHT_HEIGHT, colors.ROW_HIGHLIGHT, 0.6)
+    // 創建子容器包含該列所有元素
+    const rowContainer = this.scene.add.container(0, 0);
+    
+    const highlight = this.scene.add.rectangle(LAYOUT.ROW_HIGHLIGHT_X, y, LAYOUT.ROW_HIGHLIGHT_WIDTH, LAYOUT.ROW_HIGHLIGHT_HEIGHT, colors.ROW_HIGHLIGHT, 0.6)
       .setVisible(false);
     
     const label = def.hint ? `${def.label}（${def.hint}）` : def.label;
@@ -320,8 +335,10 @@ export class HitFeelEditorPanel {
       fontFamily: 'monospace', fontSize: '16px', color: colors.VALUE, fontStyle: 'bold'
     }).setOrigin(0.5);
     
-    c.add([highlight, labelText, track, fill, handle, minus, plus, valueText]);
-    return { def, highlight, fill, handle, valueText };
+    rowContainer.add([highlight, labelText, track, fill, handle, minus, plus, valueText]);
+    c.add(rowContainer);
+    
+    return { def, container: rowContainer, highlight, fill, handle, valueText };
   }
 
   /**
@@ -390,7 +407,12 @@ export class HitFeelEditorPanel {
    * @param value 新數值
    */
   private setValue(def: HitFeelParamDef, value: number): void {
-    this.values[def.key] = hitFeelStore.clamp(def, value);
+    // 先對齊到 step 格點
+    const snapped = def.min + Math.round((value - def.min) / def.step) * def.step;
+    // 依 step 小數位數取整避免浮點誤差
+    const rounded = this.roundByStep(snapped, def.step);
+    // 最後 clamp 到範圍內
+    this.values[def.key] = hitFeelStore.clamp(def, rounded);
     this.refresh();
     this.updatePreview();
   }
@@ -449,6 +471,18 @@ export class HitFeelEditorPanel {
    */
   private stepDecimals(step: number): number {
     return step.toString().split('.')[1]?.length || 0;
+  }
+
+  /**
+   * 依據step的小數位數四捨五入，避免浮點誤差
+   *
+   * @param value 要處理的數值
+   * @param step 步進值
+   * @returns 四捨五入後的數值
+   */
+  private roundByStep(value: number, step: number): number {
+    const decimalPlaces = this.stepDecimals(step);
+    return Math.round(value * Math.pow(10, decimalPlaces)) / Math.pow(10, decimalPlaces);
   }
 
   /**
