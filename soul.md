@@ -151,8 +151,8 @@
 - **6招道具(吃到觸發)**：A旋風斬(v27改**放置式**: 施放不鎖角色、可自由移動, 在施放座標放3秒地面旋風場DOT每200ms, 可同時多個) / B天降雷擊 / C居合(往最密集敵方向切 v28, distance1300/hitRadius55/寬斬擊帶) / E震爆 / F火焰(**十字**四方向火道+燒灼 v25) / T時停。**H補血**(+40只補自己)。道具互搶+多色點。**場上道具上限 5**(v25)。
 - **等級制**：團隊共用經驗/等級(cap10)。v32 expToNext 總 **2550**(約第6波達Lv10)。等級=強度(敵HP/傷害縮放)+角色成長；波次=量與怪種解鎖(雙軌)。
 - **★波次制(v27)**：每波清固定 quota(baseQuota12 + (N-1)×6, cap80)才過關 → intermission(2500ms)→下一波。狀態機 spawning→clearing→(boss/event/intermission)。**intermission 期間凍結**強化倒數與道具消失倒數(v34)。怪量同時上限 curMaxAlive(含單人 soloMaxAliveCap **35**)。
-- **怪種依波次解鎖(unlockByWave)**：normal1/tank2/shielder4/bomber5/shooter6(charger不列)。normal spawnWeight **75**(雜兵多), tank12/shielder6/shooter10/bomber8。tank maxHp **200**、shielder **100**、normal90、shooter45、bomber60。
-- **敵種行為**：normal/tank/shielder 巡邏警戒+蓄力(chargeMs **950**, alertRadius460/loseRadius560/loseGrace2000, 由內而外填滿紅圈預警)；**shooter**=蓄力直線雷射(laserChargeMs **2500**, 被打中斷)；**bomber**=**定點不動**朝玩家落點蓄力投彈(落點紅圈預警+爆炸)；charger 休眠。
+- **怪種依波次解鎖(unlockByWave)**：normal1/tank2/bomber5（2026-10-08 移除 shielder / shooter / charger / anchor）。normal spawnWeight **75**(雜兵多), tank12/bomber8。tank maxHp **200**、normal90、bomber60。
+- **敵種行為**：normal/tank 巡邏警戒+蓄力(chargeMs **950**, alertRadius460/loseRadius560/loseGrace2000, 由內而外填滿紅圈預警)；**bomber**=**定點不動**朝玩家落點蓄力投彈(落點紅圈預警+爆炸)。
 - **★BOSS波(v28, 每5波)**：清完小怪→BOSS登場(打倒才過關)。高HP(baseHp3000×(1+(隻數-1)×0.6)×等級縮放)、上方血條、三招輪替(近身橫掃/召喚小怪/投彈)、擊殺大爆炸+掉4道具。**BOSS不被擊退**(v34)。
 - **★三事件(v33/v34, 每3波非BOSS波輪替 tower→guard→capture)**：清完小怪→啟動事件→完成才過關+獎勵(掉4道具+經驗)。事件期間持續生怪無視配額。HUD event-hud 進度/倒數條。
   - **塔事件**：中央塔(可鎖可打、**不被推**)。每3.5s放一輪**三個中空環**(甜甜圈)衝擊波、**由內而外填滿預警**(fillMs900)、**三環依序擴大**(rings[40-130,150-260,280-400], ringGap700)；環帶命中→扣血+**定身3秒**(rootedUntil, 不能移動/攻擊)。打掉塔完成。
@@ -202,12 +202,11 @@
     ├── config.ts         # ★ 所有可調數值集中於此（見下）
     ├── objects/
     │   ├── Character.ts   # P1 與 BOT 共用角色類別（hp/spirit/kills/衝刺/爆發/skillLock/dashShield）
-    │   ├── Enemy.ts       # 5 種敵人類型 + AI 狀態機
-    │   ├── Item.ts        # 道具（掉落/存活/拾取；SkillType 'A'|'B'|'C'|'E'|'T'）
-    │   └── Bullet.ts      # shooter 子彈（目前 shooter 權重 0 未生成）
+    │   ├── Enemy.ts       # 敵人類型（normal / tank / bomber / boss / tower / npc / treasure）+ AI 狀態機
+    │   └── Item.ts        # 道具（掉落/存活/拾取；SkillType 'A'|'B'|'C'|'E'|'T'）
     └── scenes/
-        ├── BootScene.ts   # 程序化產生所有貼圖（char-0..3 / enemy-<type> / item-<A..T> / bullet / ground / spark）
-        ├── GameScene.ts   # ★ 核心：角色/敵人/道具/子彈/招式/生成/鎖定/時停/邊界反彈/結算（~55KB 最大檔）
+        ├── BootScene.ts   # 程序化產生所有貼圖（char-0..3 / enemy-<type> / item-<A..T> / ground / spark）
+        ├── GameScene.ts   # ★ 核心：角色/敵人/道具/招式/生成/鎖定/時停/邊界反彈/結算（~55KB 最大檔）
         ├── UIScene.ts     # HUD（4 角色血/鬥氣/擊殺條、團隊總分、攻擊鈕、瞄準圓環+指示線、加BOT提示）
         └── GameOverScene.ts # 結算 + 重新開始（乾淨重啟，已修 bug）
 ```

@@ -22,22 +22,15 @@ export class BootScene extends Phaser.Scene {
     this.makeCircleTexture('enemy-normal', types.normal.radius, types.normal.color, types.normal.stroke);
     // 其他敵人類型仍使用程式生成的圓形
     this.makeCircleTexture('enemy-tank', types.tank.radius, types.tank.color, types.tank.stroke);
-    this.makeCircleTexture('enemy-shielder', types.shielder.radius, types.shielder.color, types.shielder.stroke);
-    this.makeCircleTexture('enemy-shooter', types.shooter.radius, types.shooter.color, types.shooter.stroke);
-    this.makeCircleTexture('enemy-charger', types.charger.radius, types.charger.color, types.charger.stroke);
     this.makeCircleTexture('enemy-bomber', types.bomber.radius, types.bomber.color, types.bomber.stroke);
     this.makeCircleTexture('enemy-boss', GameConfig.boss.radius, GameConfig.boss.color, GameConfig.boss.stroke);
     this.makeCircleTexture('enemy-tower', GameConfig.event.tower.radius, GameConfig.event.tower.color, GameConfig.event.tower.stroke);
     // NPC 專屬貼圖——藍色圓角方塊 + 白十字 + 外環，一眼跟「圓形怪物」區別
     this.makeNpcTexture('enemy-npc', GameConfig.event.guard.radius, GameConfig.event.guard.color, GameConfig.event.guard.stroke);
-    // BOSS 戰錨點專屬貼圖——青色發光菱形+外環，跟圓形怪/藍方塊NPC 都不同（走位落點）
-    this.makeAnchorTexture('enemy-anchor', GameConfig.enemy.types.anchor.radius);
     // 寶箱怪貼圖:金色寶箱(箱身+鎖扣+金邊高光),一眼金光閃閃
     this.makeTreasureTexture('enemy-treasure', GameConfig.enemy.types.treasure.radius);
     // 金幣特效貼圖(金色小圓幣,噴散用)
     this.makeCoinTexture('coin');
-    // 子彈貼圖
-    this.makeCircleTexture('bullet', GameConfig.enemy.shooter.bulletRadius, 0x9dff5a, 0x1a3300);
     // 4 種道具貼圖（圓角方塊 + 白描邊，字母圖示由 Item 疊上）
     const ic = GameConfig.items.colors;
     this.makeItemTexture('item-A', ic.A);
@@ -403,34 +396,6 @@ export class BootScene extends Phaser.Scene {
     g.destroy();
   }
 
-  /**
-   * BOSS 戰錨點貼圖——青色發光菱形 + 外環 + 中心亮點（走位落點標記）。
-   * 跟圓形怪、藍方塊 NPC 明顯區別，一眼認出是「可衝過去的走位點」。
-   */
-  private makeAnchorTexture(key: string, radius: number): void {
-    const size = radius * 2 + 14;
-    const cx = size / 2, cy = size / 2;
-    const body = 0x00e5ff, stroke = 0x063842, ring = 0x7bf5ff;
-    const g = this.add.graphics();
-    // 外環光暈
-    g.fillStyle(ring, 0.20); g.fillCircle(cx, cy, radius + 6);
-    g.lineStyle(2, ring, 0.9); g.strokeCircle(cx, cy, radius + 4);
-    // 菱形（旋轉 45° 的方塊）：用四點多邊形
-    const rr = radius + 2;
-    const diamond = (rad: number, color: number): void => {
-      g.fillStyle(color, 1);
-      g.beginPath();
-      g.moveTo(cx, cy - rad); g.lineTo(cx + rad, cy);
-      g.lineTo(cx, cy + rad); g.lineTo(cx - rad, cy);
-      g.closePath(); g.fillPath();
-    };
-    diamond(rr, stroke);            // 描邊底
-    diamond(radius - 1, body);      // 本體
-    // 中心亮點
-    g.fillStyle(0xffffff, 0.9); g.fillCircle(cx, cy, radius * 0.28);
-    g.generateTexture(key, size, size);
-    g.destroy();
-  }
   private makeHumanoidTexture(key: string, radius: number, fill: number, stroke: number): void {
     const size = radius * 2 + 8; // 留描邊/四肢空間
     const cx = size / 2;

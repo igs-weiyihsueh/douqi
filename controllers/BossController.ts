@@ -22,7 +22,7 @@ export interface BossHost {
   isGameOver(): boolean;
   /** 是否為慢速模式（只有慢速模式會留 BOSS 屍體、可變身） */
   isSlowMode(): boolean;
-  /** 掛上一般敵人的攻擊回呼（近戰 / 射擊 / 雷射 / 投彈） */
+  /** 掛上一般敵人的攻擊回呼（近戰 / 投彈） */
   wireEnemyCallbacks(enemy: Enemy): void;
   /** 登記 / 移除 / 清除場景層級的預警特效 */
   addTelegraph(fx: TelegraphFx): void;

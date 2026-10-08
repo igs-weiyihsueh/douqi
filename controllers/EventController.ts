@@ -30,7 +30,7 @@ export interface EventHost {
   /** 目前波次（塔血量成長用） */
   currentWave(): number;
   isGameOver(): boolean;
-  /** 掛上一般敵人的攻擊回呼（近戰 / 射擊 / 雷射 / 投彈） */
+  /** 掛上一般敵人的攻擊回呼（近戰 / 投彈） */
   wireEnemyCallbacks(enemy: Enemy): void;
   /** 登記 / 移除 / 清除場景層級的預警特效 */
   addTelegraph(fx: TelegraphFx): void;

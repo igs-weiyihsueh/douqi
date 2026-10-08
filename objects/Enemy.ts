@@ -4,15 +4,13 @@ import { GameConfig } from '../config';
 /** BOSS 招式：a 範圍普攻 / b 直線衝刺 / c 扇形攻擊 */
 export type BossSkillKind = 'a' | 'b' | 'c';
 
-export type EnemyType = 'normal' | 'tank' | 'shielder' | 'shooter' | 'charger' | 'bomber' | 'boss' | 'tower' | 'npc' | 'anchor' | 'treasure';
+export type EnemyType = 'normal' | 'tank' | 'bomber' | 'boss' | 'tower' | 'npc' | 'treasure';
 
 /**
  * 敵人：類型系統擴充。
  * - normal：近戰蓄力攻擊（原本）
  * - tank：高 HP 慢速肉盾（原本，行為同 normal）
- * - shielder：近戰蓄力攻擊 + 正面護盾（正面被打大幅減傷，需繞側/背）
- * - shooter：與角色保持距離、朝最近角色發射子彈，本體脆
- * - charger：接近後蓄力→高速直線衝刺撞擊→硬直
+ * - bomber：定點站立、瞄準玩家位置蓄力投擲炸彈，本體脆
  * 全部走 場內出生 + 登場提示(telegraph) 流程。
  */
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
@@ -24,7 +22,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private moveSpeed = 0;
   private bodyRadius = 0;
 
-  /** 面向（弧度）：朝目標角色方向；shielder 用來判定正面 */
+  /** 面向（弧度）：朝目標角色方向 */
   facing = 0;
 
   // 寶箱怪:被命中次數(累積到 hitsToKill 死)、跑點狀態、出現時間戳(限時跑走用)。public 供 GameScene.updateTreasure 讀寫。
@@ -42,7 +40,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private telegraphTween?: Phaser.Tweens.Tween;
 
   /**
-   * 近戰狀態機（normal/tank/shielder 用）。
+   * 近戰狀態機（normal/tank 用）。
    * 新增 patrol(巡邏) / alert(=chase 追擊)；出生預設 patrol。
    */
   private aiState: 'patrol' | 'chase' | 'charge' | 'cooldown' = 'patrol';
@@ -99,14 +97,6 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private lastChaseX = 0;
   private lastChaseY = 0;
 
-  /** shooter：下次可射擊時間 */
-  private nextShootAt = 0;
-
-  /** shooter 雷射狀態機：idle(移動就位) → charging(蓄力鎖向) → 發射後回 idle+冷卻 */
-  private laserState: 'idle' | 'charging' = 'idle';
-  private laserChargeStartAt = 0;
-  private laserAngle = 0;
-
   /** bomber 投擲狀態機：idle → charging(鎖定玩家落點) → 投出後回 idle+冷卻 */
   private bombState: 'idle' | 'charging' = 'idle';
   private bombChargeStartAt = 0;
@@ -114,21 +104,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private bombTargetY = 0;
   private nextBombAt = 0;
 
-  /** charger：衝鋒狀態機 */
-  private chargerState: 'chase' | 'charge' | 'dash' | 'recover' = 'chase';
-  private chargerTimer = 0;
-  private dashDirX = 0;
-  private dashDirY = 0;
-
-  /** 盾怪的護盾指示圖 */
-  private shieldGfx?: Phaser.GameObjects.Graphics;
-
-  /** 回呼：近戰蓄力發動（normal/tank/shielder），由場景做範圍傷害判定 */
+  /** 回呼：近戰蓄力發動（normal/tank），由場景做範圍傷害判定 */
   onAttackFire?: (enemy: Enemy) => void;
-  /** 回呼：shooter 發射子彈（場景生成子彈） */
-  onShoot?: (enemy: Enemy, angle: number) => void;
-  /** 回呼：shooter 雷射填滿發射，場景做直線 AOE 判定 + 演出 */
-  onLaserFire?: (enemy: Enemy, angle: number) => void;
   /** 回呼：bomber 投出炸彈到落點(tx,ty)，場景做飛行/預警/落地爆炸 */
   onBombThrow?: (enemy: Enemy, tx: number, ty: number) => void;
   /** BOSS 三招輪替回呼（場景實作預警/判定），tx/ty = 施放當下的目標位置（b / c 瞄準用） */
@@ -142,8 +119,6 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   bossCasting = false;
   /** v37fix(A)：對守護 NPC 的接觸攻擊冷卻（每隻怪每 npcAttackCooldownMs 才扣一次 NPC 血，避免每幀扣） */
   nextNpcHitAt = 0;
-  /** 守護 NPC 被子彈命中的全域冷卻(NPC 側,避免連發子彈每幀瞬秒);放在 NPC enemy 物件上。 */
-  bulletNpcHitAt = 0;
   /** BOSS 攻擊輪替狀態 */
   private bossNextAttackAt = 0;
   private bossAttackIndex = 0;
@@ -183,11 +158,6 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.maxHp = Math.max(1, Math.round(g.npcHp * hpScale));
       this.moveSpeed = 0;
       this.bodyRadius = g.radius;
-    } else if (type === 'anchor') {
-      // BOSS 戰錨點：純位移落點，靜止、不可被玩家傷（isAnchorLike）；HP 給大值防呆
-      this.maxHp = 999999;
-      this.moveSpeed = 0;
-      this.bodyRadius = GameConfig.enemy.types.anchor.radius;
     } else if (type === 'treasure') {
       // 寶箱怪:大 HP(改用命中次數死)、移動由跑點 AI(treasure.moveSpeed)、體型中等
       this.maxHp = 999999;
@@ -225,7 +195,6 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.dead = false;
     this.knockbackUntil = 0;
     this.nextNpcHitAt = 0; // v37fix(A)
-    this.bulletNpcHitAt = 0; // 守護 NPC 子彈冷卻重置
     // 出生預設巡邏，記住出生點；不再一出生就直衝玩家
     this.aiState = 'patrol';
     this.homeX = x;
@@ -245,15 +214,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.chargeUntil = 0;
     this.chargeStartAt = 0;
     this.cooldownUntil = 0;
-    this.nextShootAt = time + Phaser.Math.Between(300, 1200);
-    this.laserState = 'idle';
-    this.laserChargeStartAt = 0;
-    this.laserAngle = 0;
     this.bombState = 'idle';
     this.bombChargeStartAt = 0;
     this.nextBombAt = time + Phaser.Math.Between(400, 1400);
-    this.chargerState = 'chase';
-    this.chargerTimer = 0;
     this.facing = 0;
     // 寶箱怪狀態重置
     this.treasureHits = 0;
@@ -266,15 +229,6 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.setVisible(true);
     this.setScale(1);
     this.clearTint();
-
-    // 盾怪護盾指示圖
-    if (type === 'shielder') {
-      if (!this.shieldGfx) this.shieldGfx = this.scene.add.graphics().setDepth(6);
-      this.shieldGfx.setVisible(true);
-    } else if (this.shieldGfx) {
-      this.shieldGfx.clear();
-      this.shieldGfx.setVisible(false);
-    }
 
     // 登場提示
     this.telegraphing = true;
@@ -293,26 +247,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * 可否被「玩家」傷害。anchor-like（位移點：NPC / 之後第9點的錨點）不受玩家傷害
-   * （NPC 只會被「敵人」用 takeDamage 直接扣血——守護事件本意）。
+   * 可否被「玩家」傷害：已現身且不是守護 NPC（NPC 只會被敵人直接扣血——守護事件本意）
    */
   isVulnerable(): boolean {
-    return this.active && !this.telegraphing && !this.isAnchorLike();
-  }
-
-  /**
-   * anchor-like「位移點」——可複用機制：
-   * ①不可被玩家傷害(isVulnerable=false) ②玩家可朝它衝過去當走位落點，衝到附近不觸發攻擊、不重疊卡住。
-   * NPC(守護)：不可鎖定；anchor(BOSS戰錨點)：可鎖定（可鎖差異在 GameScene isLockValid/pickAimConeTarget）。
-   */
-  isAnchorLike(): boolean {
-    return this.enemyType === 'npc' || this.enemyType === 'anchor';
+    return this.active && !this.telegraphing && this.enemyType !== 'npc';
   }
 
   updateAI(targetX: number, targetY: number, time: number): void {
     if (!this.active) return;
-    // 塔/NPC/錨點：靜止物件，不跑 AI（行為由 GameScene 邏輯管）。寶箱怪:跑點/限時/計命中由 GameScene.updateTreasure 管,不跑一般 AI。
-    if (this.enemyType === 'tower' || this.enemyType === 'npc' || this.enemyType === 'anchor' || this.enemyType === 'treasure') {
+    // 塔/NPC：靜止物件，不跑 AI（行為由事件邏輯管）。寶箱怪：跑點 / 限時 / 計命中由寶箱怪控制器管，不跑一般 AI。
+    if (this.enemyType === 'tower' || this.enemyType === 'npc' || this.enemyType === 'treasure') {
       if (this.enemyType !== 'treasure') (this.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
       if (this.enemyType === 'treasure' && this.telegraphing && time >= this.telegraphUntil) this.materialize(); // 寶箱怪 telegraph 結束→實體化(可動可被打)
       return;
@@ -326,19 +270,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const body = this.body as Phaser.Physics.Arcade.Body;
     if (time < this.knockbackUntil) {
       body.velocity.scale(0.92);
-      if (this.enemyType === 'shielder') this.drawShield();
       return;
     }
 
     switch (this.enemyType) {
-      case 'shooter':
-        this.facing = Phaser.Math.Angle.Between(this.x, this.y, targetX, targetY);
-        this.updateShooter(targetX, targetY, time);
-        break;
-      case 'charger':
-        this.facing = Phaser.Math.Angle.Between(this.x, this.y, targetX, targetY);
-        this.updateCharger(targetX, targetY, time);
-        break;
       case 'bomber':
         this.facing = Phaser.Math.Angle.Between(this.x, this.y, targetX, targetY);
         this.updateBomber(targetX, targetY, time);
@@ -348,15 +283,13 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.updateBoss(targetX, targetY, time);
         break;
       default:
-        // normal / tank / shielder：巡邏 / 警戒追擊 + 蓄力
+        // normal / tank：巡邏 / 警戒追擊 + 蓄力
         this.updateMelee(targetX, targetY, time);
         break;
     }
-
-    if (this.enemyType === 'shielder') this.drawShield();
   }
 
-  // --- normal / tank / shielder：巡邏 / 警戒 / 蓄力---
+  // --- normal / tank：巡邏 / 警戒 / 蓄力---
   private updateMelee(targetX: number, targetY: number, time: number): void {
     const body = this.body as Phaser.Physics.Arcade.Body;
     const cfg = GameConfig.enemy.ai;
@@ -455,7 +388,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.chargeTween?.remove();
     this.chargeTween = undefined;
     this.setScale(1);
-    if (this.enemyType !== 'shielder') this.clearTint();
+    this.clearTint();
     this.onAttackFire?.(this);
     this.aiState = 'cooldown';
     this.cooldownUntil = time + GameConfig.enemy.attackCooldownMs;
@@ -477,75 +410,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     return this.aiState;
   }
 
-  // --- shooter：保持距離 + 蓄力直線雷射---
-  private updateShooter(targetX: number, targetY: number, time: number): void {
-    const cfg = GameConfig.enemy.shooter;
-    const body = this.body as Phaser.Physics.Arcade.Body;
-    const dist = Phaser.Math.Distance.Between(this.x, this.y, targetX, targetY);
-
-    if (this.laserState === 'charging') {
-      // 蓄力中：站定不動、鎖定方向（laserAngle 固定），填滿即發射
-      body.setVelocity(0, 0);
-      const prog = Phaser.Math.Clamp((time - this.laserChargeStartAt) / cfg.laserChargeMs, 0, 1);
-      if (prog >= 1) {
-        this.onLaserFire?.(this, this.laserAngle);
-        this.laserState = 'idle';
-        this.nextShootAt = time + cfg.shootCooldownMs;
-        this.clearTint();
-      }
-      return;
-    }
-
-    // idle：保持偏好距離站位
-    // 階段3:目標超出 alertRadius→遠處待命(不逼近),玩家進警戒才走位開火(場上組不開場全湧)。
-    // forceChase(守護波 shooter):無視 alertRadius→主動走位靠近到 preferRange/fireRange 再開火(保持距離邏輯不變,不貼身)。
-    if (!this.forceChase && dist > GameConfig.enemy.ai.alertRadius) {
-      body.setVelocity(0, 0);
-      return;
-    }
-    if (dist < cfg.retreatRange) {
-      body.setVelocity(-Math.cos(this.facing) * this.moveSpeed, -Math.sin(this.facing) * this.moveSpeed);
-    } else if (dist > cfg.preferRange) {
-      body.setVelocity(Math.cos(this.facing) * this.moveSpeed, Math.sin(this.facing) * this.moveSpeed);
-    } else {
-      body.setVelocity(0, 0);
-    }
-
-    // 射程內且冷卻好 → 開始蓄力雷射（鎖定當下朝玩家方向）
-    if (dist <= cfg.fireRange && time >= this.nextShootAt) {
-      this.laserState = 'charging';
-      this.laserChargeStartAt = time;
-      this.laserAngle = Phaser.Math.Angle.Between(this.x, this.y, targetX, targetY);
-      this.setTint(0x88ff88);
-    }
-  }
-
-  /** shooter 是否正在蓄力雷射（供 GameScene 畫填充預警線） */
-  isChargingLaser(): boolean {
-    return this.enemyType === 'shooter' && this.laserState === 'charging' && !this.telegraphing;
-  }
-
-  /** 雷射蓄力進度 0→1（供 GameScene 畫由怪端往盡頭填滿） */
-  laserChargeProgress(time: number): number {
-    if (this.laserState !== 'charging') return 0;
-    return Phaser.Math.Clamp((time - this.laserChargeStartAt) / GameConfig.enemy.shooter.laserChargeMs, 0, 1);
-  }
-
-  /** 目前雷射鎖定方向（弧度） */
-  getLaserAngle(): number {
-    return this.laserAngle;
-  }
-
-  /** 中斷雷射蓄力（被玩家命中時呼叫），需重新蓄力 */
-  private interruptLaser(time: number): void {
-    if (this.laserState === 'charging') {
-      this.laserState = 'idle';
-      this.nextShootAt = time + GameConfig.enemy.shooter.shootCooldownMs;
-      if (this.active) this.clearTint();
-    }
-  }
-
-  // --- bomber：保持距離 + 蓄力投擲炸彈到玩家落點---
+  // --- bomber：定點站立 + 蓄力投擲炸彈到玩家落點---
   private updateBomber(targetX: number, targetY: number, time: number): void {
     const cfg = GameConfig.enemy.bomber;
     const body = this.body as Phaser.Physics.Arcade.Body;
@@ -648,96 +513,6 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     return this.maxHp > 0 ? Phaser.Math.Clamp(this.hp / this.maxHp, 0, 1) : 0;
   }
 
-  // --- charger：蓄力 → 直線衝刺 → 硬直 ---
-  private updateCharger(targetX: number, targetY: number, time: number): void {
-    const cfg = GameConfig.enemy.charger;
-    const body = this.body as Phaser.Physics.Arcade.Body;
-    const dist = Phaser.Math.Distance.Between(this.x, this.y, targetX, targetY);
-
-    switch (this.chargerState) {
-      case 'chase':
-        if (dist <= cfg.engageRange) {
-          // 進入蓄力（鎖定當前方向）
-          this.chargerState = 'charge';
-          this.chargerTimer = time + cfg.chargeMs;
-          this.dashDirX = Math.cos(this.facing);
-          this.dashDirY = Math.sin(this.facing);
-          body.setVelocity(0, 0);
-          this.setTint(0xffaa00);
-          this.chargeTween?.remove();
-          this.chargeTween = this.scene.tweens.add({
-            targets: this,
-            scale: { from: 1, to: 1.35 },
-            duration: 120,
-            yoyo: true,
-            repeat: -1
-          });
-        } else {
-          body.setVelocity(Math.cos(this.facing) * this.moveSpeed, Math.sin(this.facing) * this.moveSpeed);
-        }
-        break;
-      case 'charge':
-        body.setVelocity(0, 0);
-        if (time >= this.chargerTimer) {
-          // 發動衝刺（鎖定蓄力時的方向，不再轉向）
-          this.chargerState = 'dash';
-          this.chargerTimer = time + cfg.dashDurationMs;
-          this.chargeTween?.remove();
-          this.chargeTween = undefined;
-          this.setScale(1);
-          this.clearTint();
-          body.setVelocity(this.dashDirX * cfg.dashSpeed, this.dashDirY * cfg.dashSpeed);
-        }
-        break;
-      case 'dash':
-        if (time >= this.chargerTimer) {
-          this.chargerState = 'recover';
-          this.chargerTimer = time + cfg.recoverMs;
-          body.setVelocity(0, 0);
-        }
-        break;
-      case 'recover':
-        body.setVelocity(0, 0);
-        if (time >= this.chargerTimer) this.chargerState = 'chase';
-        break;
-    }
-  }
-
-  /** charger 是否正在衝刺（供場景做撞擊判定） */
-  isChargerDashing(): boolean {
-    return this.enemyType === 'charger' && this.chargerState === 'dash' && !this.telegraphing;
-  }
-
-  /** charger 是否在蓄力（供場景畫預警） */
-  isChargerCharging(): boolean {
-    return this.enemyType === 'charger' && this.chargerState === 'charge' && !this.telegraphing;
-  }
-
-  /** 盾怪：判定攻擊來源方向是否命中「正面」（回傳傷害倍率） */
-  damageMultiplierFrom(fromX: number, fromY: number): number {
-    if (this.enemyType !== 'shielder') return 1;
-    // 攻擊來源相對盾怪的方向
-    const srcAngle = Phaser.Math.Angle.Between(this.x, this.y, fromX, fromY);
-    // 盾面向 = facing（朝目標）。來源與面向夾角小 → 從正面打
-    const diff = Math.abs(Phaser.Math.Angle.Wrap(srcAngle - this.facing));
-    const halfCone = Phaser.Math.DegToRad(GameConfig.enemy.shielder.frontConeDeg);
-    if (diff <= halfCone) return GameConfig.enemy.shielder.frontDamageMult; // 正面大幅減傷
-    return 1;
-  }
-
-  private drawShield(): void {
-    if (!this.shieldGfx) return;
-    const g = this.shieldGfx;
-    g.clear();
-    // 在盾怪面向前方畫一段弧線代表護盾
-    const r = this.bodyRadius + 8;
-    const halfCone = Phaser.Math.DegToRad(GameConfig.enemy.shielder.frontConeDeg);
-    g.lineStyle(4, 0x9be7ff, 0.9);
-    g.beginPath();
-    g.arc(this.x, this.y, r, this.facing - halfCone, this.facing + halfCone);
-    g.strokePath();
-  }
-
   private materialize(): void {
     this.telegraphing = false;
     this.telegraphTween?.remove();
@@ -763,8 +538,6 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.aiState = 'cooldown';
       this.cooldownUntil = time + GameConfig.enemy.attackCooldownMs;
     }
-    // 打斷 shooter 雷射蓄力（被擊中中斷，需重新蓄力）
-    this.interruptLaser(time);
     // 打斷 bomber 投擲蓄力
     this.interruptBomb(time);
   }
@@ -782,10 +555,6 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.telegraphTween = undefined;
     this.chargeTween?.remove();
     this.chargeTween = undefined;
-    if (this.shieldGfx) {
-      this.shieldGfx.clear();
-      this.shieldGfx.setVisible(false);
-    }
     this.setScale(1);
     this.setAlpha(1);
     this.disableBody(true, true);
@@ -810,8 +579,6 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.cooldownUntil = shift(this.cooldownUntil);
     this.nextRepathAt = shift(this.nextRepathAt);
     this.outOfRangeSince = shift(this.outOfRangeSince);
-    this.nextShootAt = shift(this.nextShootAt);
-    this.laserChargeStartAt = shift(this.laserChargeStartAt);
     this.bombChargeStartAt = shift(this.bombChargeStartAt);
     this.nextBombAt = shift(this.nextBombAt);
     this.nextNpcHitAt = shift(this.nextNpcHitAt);

@@ -63,12 +63,12 @@ export function bounceEnemyOffBounds(enemy: Enemy, arena: Phaser.Geom.Rectangle)
  */
 function isWallLike(e: Enemy): boolean {
   if (isFixedEnemy(e) || e.enemyType === 'treasure') return true;
-  return e.isCharging() || e.isChargerCharging() || e.isChargingLaser() || e.isChargingBomb();
+  return e.isCharging() || e.isChargingBomb();
 }
 
-/** 是否參與敵人間分離（活著、已現身、不是錨點） */
+/** 是否參與敵人間分離（活著、已現身） */
 export function joinsEnemySeparation(e: Enemy): boolean {
-  return e.active && !e.dead && !e.telegraphing && e.enemyType !== 'anchor';
+  return e.active && !e.dead && !e.telegraphing;
 }
 
 /**
@@ -153,7 +153,7 @@ export function resolveEnemyOverlap(agents: ReadonlyArray<Enemy>, arena: Phaser.
 
 /**
  * 一般怪不可穿過 BOSS / 塔本體：重疊時把怪硬推回結構外緣（全額，不分幀），結構不動。
- * 補敵人間分離對「像牆」目標的鬆弛不足（衝鋒怪高速時可能穿過）
+ * 補敵人間分離對「像牆」目標的鬆弛不足（被擊飛高速時可能穿過）
  *
  * @param e 一般怪
  * @param enemies 敵人物件池

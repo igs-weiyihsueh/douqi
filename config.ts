@@ -315,9 +315,6 @@ export const GameConfig = {
     /** 擊殺各怪種獲得能量(值調高→打死怪明顯有感;normal10→滿50約5隻)。未列用 default。 */
     perKill: {
       normal: 10,
-      shooter: 12,
-      charger: 12,
-      shielder: 18,
       bomber: 15,
       tank: 25,
       default: 10
@@ -510,7 +507,7 @@ export const GameConfig = {
     attackCooldownMs: 2000,
 
     /**
-     * 警戒 + 巡邏 AI（normal/tank/shielder 套用）。
+     * 警戒 + 巡邏 AI（normal/tank 套用）。
      * 出生預設 patrol：出生點附近小範圍慢速漫步，不再一出生直衝玩家。
      * 角色進入 alertRadius → chase 追擊 + 蓄力攻擊；目標離開 loseRadius 或脫離
      * loseGraceMs 後 → 回 patrol。
@@ -538,56 +535,6 @@ export const GameConfig = {
       aggroCapPassive: 15
     },
 
-    /** 盾怪（shielder）行為參數 */
-    shielder: {
-      /** 正面被攻擊時的傷害倍率（大幅減傷；從側/背打才正常） */
-      frontDamageMult: 0.15,
-      /** 判定為「正面」的夾角（度）：攻擊來源與盾怪面向夾角在此半錐角內算正面 */
-      frontConeDeg: 70
-    },
-    /** 遠攻怪（shooter）行為參數 */
-    shooter: {
-      /** 想與角色保持的距離（太近會後退拉開） */
-      preferRange: 260,
-      /** 小於此距離就後退 */
-      retreatRange: 180,
-      /** 進入此距離開始蓄力雷射 */
-      fireRange: 420,
-      /** 雷射：蓄力填滿時間（毫秒），期間鎖定方向、畫填充預警線 */
-      laserChargeMs: 2500,
-      /** 雷射長度（像素，以怪為起點朝玩家方向） */
-      laserLength: 520,
-      /** 雷射命中判定寬度（像素，直線 AOE 半寬 = laserWidth/2） */
-      laserWidth: 22,
-      /** 雷射命中傷害 */
-      laserDamage: 16,
-      /** 雷射存在時間（毫秒） */
-      laserOnDurationMs: 180,
-      /** 兩次雷射之間的冷卻（毫秒） */
-      shootCooldownMs: 1600,
-      bulletSpeed: 260,
-      bulletDamage: 10,
-      bulletLifespanMs: 3200,
-      bulletRadius: 7,
-      maxBullets: 200
-    },
-    /** 衝鋒怪（charger）行為參數 */
-    charger: {
-      /** 進入此距離開始蓄力 */
-      engageRange: 260,
-      /** 蓄力/預警時間（毫秒） */
-      chargeMs: 700,
-      /** 衝刺速度（像素/秒） */
-      dashSpeed: 620,
-      /** 衝刺最長持續（毫秒），到時或撞牆就停 */
-      dashDurationMs: 650,
-      /** 衝刺撞到角色的傷害 */
-      dashDamage: 18,
-      /** 衝刺撞擊判定半徑 */
-      dashHitRadius: 30,
-      /** 衝完硬直/冷卻（毫秒） */
-      recoverMs: 900
-    },
 
     /**
      * 各類型定義（含出現權重 spawnWeight，用於隊形內混編）。
@@ -611,33 +558,6 @@ export const GameConfig = {
         color: 0x8b5cf6,
         stroke: 0x1a0a2e,
         spawnWeight: 12
-      },
-      /** 盾怪：正面減傷，需繞側/背 */
-      shielder: {
-        maxHp: 100,
-        speed: 58,
-        radius: 16,
-        color: 0x38bdf8,
-        stroke: 0x0a2a3a,
-        spawnWeight: 6
-      },
-      /** 遠攻怪：保持距離、蓄力直線雷射，本體脆 */
-      shooter: {
-        maxHp: 45,
-        speed: 60,
-        radius: 13,
-        color: 0x22c55e,
-        stroke: 0x0a2a12,
-        spawnWeight: 10
-      },
-      /** 衝鋒怪：蓄力後高速直線衝撞（暫不解鎖，spawnWeight 0、不列 unlockByWave） */
-      charger: {
-        maxHp: 110,
-        speed: 66,
-        radius: 15,
-        color: 0xf59e0b,
-        stroke: 0x3a2400,
-        spawnWeight: 0
       },
       /** 投射兵：保持距離、瞄準玩家位置蓄力投擲炸彈（落點有預警圈），本體脆 */
       bomber: {
@@ -674,15 +594,6 @@ export const GameConfig = {
         stroke: 0x0a3a1a,
         spawnWeight: 0
       },
-      /** BOSS 戰錨點：型別索引安全佔位（實際靜止、可鎖、不可傷；spawnWeight 0 永不自然生成） */
-      anchor: {
-        maxHp: 999999,
-        speed: 0,
-        radius: 22,
-        color: 0x00e5ff,
-        stroke: 0x083a44,
-        spawnWeight: 0
-      },
       /** 寶箱怪：稀有趣味怪。spawnWeight 0（不走一般權重生成,由 treasure.spawnChance roll）。maxHp 大（改用命中次數死,非扣血）。 */
       treasure: {
         maxHp: 999999,
@@ -717,17 +628,14 @@ export const GameConfig = {
 
     /**
      * 怪種改「依波次」解鎖（pickEnemyType 依 currentWave gating）。越後面波次怪種越多。
-     * 未列者（charger）永不解鎖。
      */
     unlockByWave: {
       normal: 1,
       tank: 2,
-      shielder: 4,
-      bomber: 5,
-      shooter: 6
+      bomber: 5
     },
 
-    /** 投射兵（bomber）行為參數（仿 shooter 蓄力 pattern，改投擲炸彈到玩家落點） */
+    /** 投射兵（bomber）行為參數（蓄力後投擲炸彈到玩家落點） */
     bomber: {
       /** 想與角色保持的距離（太近後退） */
       preferRange: 300,
@@ -798,7 +706,7 @@ export const GameConfig = {
     /** 近身組生在玩家旁的環形半徑(像素,留空間不貼臉)。 */
     nearRingRadius: 180,
     /** 近身組敵種池(近戰為主) */
-    nearTypes: ['normal', 'tank', 'shielder', 'charger'] as string[],
+    nearTypes: ['normal', 'tank'] as string[],
     /** 場上組敵種池(含遠程);空陣列=用全池(pickEnemyType 預設)。 */
     fieldTypes: [] as string[],
     /** 階段3:場上組出生點離【所有玩家】的最小距離(像素)。加大→場上組生更遠、不一出生就在旁。起手 420。 */
@@ -1204,32 +1112,30 @@ export const GameConfig = {
       /** v37fix(A)：每隻怪對 NPC 的接觸攻擊冷卻（毫秒）——不再每幀扣血，避免一群怪貼上瞬秒 */
       npcAttackCooldownMs: 1000,
       /**
-       * 守護 4 波腳本(取代持續隨機生怪):依序 4 波,每波【左右兩側】各生指定怪種數量;
-       * 該波怪清完(或 waveTimeoutMs 超時防卡波)→進下一波;第4波清完 or 撐過 durationMs(保底)=守護成功。
+       * 守護 3 波腳本(取代持續隨機生怪):依序 3 波循環,每波【左右兩側】各生指定怪種數量;
+       * 上一波清空或過了 waveSpawnIntervalMs 就出下一波,撐過 durationMs = 守護成功。
        * 守護波怪【免疫 leash】(一直衝 NPC)。全 config 可調。
        */
       waves: [
         // 波1:左右各大量一般怪
         [{ type: 'normal', perSide: 8 }],
-        // 波2:兩側遠程怪(用戶:4→2)
-        [{ type: 'shooter', perSide: 2 }],
-        // 波3:兩側肉怪
+        // 波2:兩側肉怪
         [{ type: 'tank', perSide: 4 }],
-        // 波4:前三者混合(用戶:shooter 2→1)
-        [{ type: 'normal', perSide: 3 }, { type: 'shooter', perSide: 1 }, { type: 'tank', perSide: 2 }]
+        // 波3:前兩者混合
+        [{ type: 'normal', perSide: 3 }, { type: 'tank', perSide: 2 }]
       ] as Array<Array<{ type: string; perSide: number }>>,
       /** 左右兩側生成的 x 內縮(離場邊界);左批 x=left+sideMargin、右批 x=right-sideMargin。 */
       sideMargin: 90,
       /** 每波防卡波超時(毫秒):純時間間隔制下已停用(改用 waveSpawnIntervalMs)。 */
       waveTimeoutMs: 12000,
-      /** 純時間間隔制:每過此毫秒數就生下一波(不管上波清掉沒),4 波循環重複。 */
+      /** 純時間間隔制:每過此毫秒數就生下一波(不管上波清掉沒),3 波循環重複。 */
       waveSpawnIntervalMs: 8000,
       /** 清波推進門檻(混合制:清空 OR 8秒較早):countGuardWaveAlive()==0 即出下一波。保留備用。 */
       guardWaveClearThreshold: 2,
-      /** 守護怪物遞增改善：改成「每循環一輪(4波跑完)+1/側」（減少原本每波增加太多的問題） */
+      /** 守護怪物遞增：每循環一輪(3 波跑完)每種怪每側 +1 */
       waveCountStep: 1,
-      /** 改進：每4波一輪後才遞增，而不是每波遞增 */
-      wavesPerCycle: 4,
+      /** 每輪的波數（= waves 長度），跑完一輪才遞增 */
+      wavesPerCycle: 3,
       waveCountCap: 12
     },
     /** 佔領事件：改「圈內一波波出怪、殺完出下波、圈內有怪進度停、無怪且玩家在圈內才增」 */

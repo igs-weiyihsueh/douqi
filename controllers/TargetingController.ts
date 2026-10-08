@@ -4,7 +4,7 @@ import type { Character } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
 import { Item } from '../objects/Item';
 
-/** 可鎖定的目標：敵人（含走位錨點）或道具 */
+/** 可鎖定的目標：敵人或道具 */
 export type LockTarget = Enemy | Item;
 
 /**
@@ -79,22 +79,16 @@ export class TargetingController {
     return t instanceof Item;
   }
 
-  /** 鎖定目標目前是否有效（敵人 = 可傷或走位錨點、道具 = 還在場上；守護 NPC 不可鎖定） */
+  /** 鎖定目標目前是否有效（敵人 = 可傷、道具 = 還在場上） */
   isLockValid(t: LockTarget | null): boolean {
     if (!t || !t.active) return false;
     if (this.isItem(t)) return true;
-    const e = t as Enemy;
-    if (e.enemyType === 'npc') return false;
-    if (e.enemyType === 'anchor') return true;
-    return e.isVulnerable();
+    return (t as Enemy).isVulnerable();
   }
 
-  /** 敵人是否可當鎖定 / 瞄準候選：可傷的怪或走位錨點，排除守護 NPC 與不可傷者 */
+  /** 敵人是否可當鎖定 / 瞄準候選：可傷的怪（守護 NPC 與預告中的怪不可傷） */
   isLockableEnemy(e: Enemy): boolean {
-    if (!e.active) return false;
-    if (e.enemyType === 'npc') return false;
-    if (e.enemyType === 'anchor') return true;
-    return e.isVulnerable();
+    return e.active && e.isVulnerable();
   }
 
   /**
@@ -143,7 +137,7 @@ export class TargetingController {
     const cur = this.p1Target;
     const curValid = this.isLockValid(cur) && Phaser.Math.Distance.Between(p.x, p.y, cur!.x, cur!.y) <= R;
     if (curValid) {
-      const aimTarget = this.pickAimConeTarget(p, R, true);
+      const aimTarget = this.pickAimConeTarget(p, R);
       if (aimTarget && aimTarget !== cur) {
         const toCur = Phaser.Math.Angle.Between(p.x, p.y, cur!.x, cur!.y);
         const curDiff = Math.abs(Phaser.Math.Angle.Wrap(toCur - p.aimAngle));
@@ -153,7 +147,7 @@ export class TargetingController {
       }
       return;
     }
-    this.p1Target = this.pickAimConeTarget(p, R, true) ?? this.pickNearestInCircle(p, R);
+    this.p1Target = this.pickAimConeTarget(p, R) ?? this.pickNearestInCircle(p, R);
   }
 
   /** 沒有有效鎖定時取得新目標：滑鼠活躍用方向選，否則選最近（皆含道具） */
@@ -201,16 +195,15 @@ export class TargetingController {
   }
 
   /**
-   * c.aimAngle 方向錐形（±aimConeDeg、searchR 內）中最接近方向的候選（敵人、走位錨點、道具）；錐形外不鎖（才能朝空地走位）。
+   * c.aimAngle 方向錐形（±aimConeDeg、searchR 內）中最接近方向的候選（敵人、道具）；錐形外不鎖（才能朝空地走位）。
    * 道具的角度差打折，略優先於敵人。方向來源一律是 c.aimAngle（快速 = 滑鼠、慢速 = 鍵盤面向）
    *
    * @param c 瞄準的角色
    * @param searchR 搜尋半徑（快速模式預設 lock.searchRadius；慢速傳範圍圈半徑）
-   * @param limitAnchors true = 走位錨點也受 searchR 限制（慢速）；快速模式錨點不受限，BOSS 四錨點才能自由切換
    */
-  pickAimConeTarget(c: Character, searchR: number = GameConfig.lock.searchRadius, limitAnchors = false): LockTarget | null {
+  pickAimConeTarget(c: Character, searchR: number = GameConfig.lock.searchRadius): LockTarget | null {
     const cone = Phaser.Math.DegToRad(GameConfig.aim.aimConeDeg);
-    // 「腳下」的目標（尤其站在錨點上時距離約為 0）方向不穩定又恆被選中，會黏死；排除後滑鼠才能指向他處
+    // 「腳下」的目標（距離約為 0）方向不穩定又恆被選中，會黏死；排除後滑鼠才能指向他處
     const underfootR = GameConfig.player.radius + UNDERFOOT_EXTRA;
     let best: LockTarget | null = null;
     let bestScore = Infinity; // 套用道具優惠後的有效角度差
@@ -218,8 +211,7 @@ export class TargetingController {
       const enemy = child as Enemy;
       if (!this.isLockableEnemy(enemy)) continue;
       const dist = Phaser.Math.Distance.Between(c.x, c.y, enemy.x, enemy.y);
-      if (dist <= underfootR) continue;
-      if ((limitAnchors || enemy.enemyType !== 'anchor') && dist > searchR) continue;
+      if (dist <= underfootR || dist > searchR) continue;
       const toE = Phaser.Math.Angle.Between(c.x, c.y, enemy.x, enemy.y);
       const diff = Math.abs(Phaser.Math.Angle.Wrap(toE - c.aimAngle));
       if (diff > cone) continue;
@@ -254,7 +246,7 @@ export class TargetingController {
     return best;
   }
 
-  /** 搜尋範圍內最近的可傷怪（不含走位錨點與守護 NPC），滑鼠靜止時的自動鎖定用 */
+  /** 搜尋範圍內最近的可傷怪（不含守護 NPC），滑鼠靜止時的自動鎖定用 */
   findNearestDamageableEnemy(c: Character): Enemy | null {
     const searchR = GameConfig.lock.searchRadius;
     let best: Enemy | null = null;

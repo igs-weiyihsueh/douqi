@@ -5,11 +5,11 @@ import type { Enemy } from '../objects/Enemy';
  */
 
 /**
- * 固定目標：BOSS、塔，以及 NPC、錨點等 anchor-like 位移點。
+ * 固定目標：BOSS、塔、守護 NPC。
  * 這些目標各有自己的站位邏輯，推擠分離、擊飛位移都會跳過它們
  */
 export function isFixedEnemy(e: Enemy): boolean {
-  return e.isBoss || e.enemyType === 'tower' || e.isAnchorLike();
+  return e.isBoss || e.enemyType === 'tower' || e.enemyType === 'npc';
 }
 
 /** 結構：BOSS、塔（本體會擋住角色與一般怪，攻擊時停在外緣） */

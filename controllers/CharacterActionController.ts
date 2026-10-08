@@ -25,7 +25,7 @@ export interface SlowTuning {
  * CharacterActionController 需要場景提供的能力。由 GameScene 建立並傳入；控制器不直接存取場景私有成員。
  */
 export interface CharacterActionHost {
-  /** 敵人物件池（扇形劍氣判定、衝刺路徑上的走位錨點） */
+  /** 敵人物件池（扇形劍氣判定） */
   enemies(): Phaser.Physics.Arcade.Group;
   /** P1 */
   player(): Character;
@@ -45,8 +45,6 @@ export interface CharacterActionHost {
   slowKeys(): SlowMoveKeys;
   /** 時停期間此角色是否被凍結（施放者以外都凍結） */
   isFrozenByTimestop(c: Character): boolean;
-  /** 守護目標（可被衝刺穿越，不當作衝刺落點） */
-  guardNpc(): Enemy | null;
   /** 目前普攻傷害 */
   attackDamage(): number;
   /** 角色對敵人造成傷害（走場景的擊殺結算） */
@@ -67,10 +65,6 @@ export interface CharacterActionHost {
 
 /** 對 BOSS / 塔停外緣時，與目標外緣多留的距離 */
 const STANDOFF_MARGIN = 6;
-/** 「腳下」目標的判定距離加成（角色半徑之外）：站在錨點上往別處衝時，腳下的錨點不攔停 */
-const UNDERFOOT_EXTRA = 12;
-/** 衝刺方向與「角色 → 錨點」方向的餘弦超過此值才算衝向該錨點 */
-const ANCHOR_FACING_DOT = 0.2;
 /** 衝刺到點的最小判定距離 */
 const DASH_ARRIVE_MIN = 12;
 /** 衝刺到點距離 = 速度 × 此秒數（約兩幀），避免高速衝刺越過終點後反向、在牆邊來回震盪 */
@@ -191,11 +185,6 @@ export class CharacterActionController {
       return;
     }
     const dist = Phaser.Math.Distance.Between(c.x, c.y, target.x, target.y);
-    // 走位錨點：一律衝過去，到外緣停下、不攻擊（handleDash 的錨點分支）
-    if ((target as Enemy).enemyType === 'anchor') {
-      this.startDirectionDash(c, time);
-      return;
-    }
     if (this.isImmovableLargeTarget(target as Enemy)) {
       this.standoffMeleeAttack(c, target as Enemy, time);
       return;
@@ -217,7 +206,7 @@ export class CharacterActionController {
     c.nextAttackAllowedAt = time + this.attackCooldownMs();
   }
 
-  /** 不可推動的大型目標（BOSS / 塔）：攻擊時停在外緣原地揮擊，不衝進中心重疊（走位錨點不算） */
+  /** 不可推動的大型目標（BOSS / 塔）：攻擊時停在外緣原地揮擊，不衝進中心重疊 */
   private isImmovableLargeTarget(e: Enemy | null): boolean {
     return !!e && e.active && isStructureEnemy(e);
   }
@@ -360,8 +349,8 @@ export class CharacterActionController {
   }
 
   /**
-   * 每幀推進衝刺：P1 撞碎路上的可破壞物件；一般衝刺撞到敵人停下攻擊（BOSS / 塔停在外緣）、
-   * 衝向走位錨點停在外緣不攻擊；否則朝固定終點前進（方向不隨滑鼠改變），到點停下
+   * 每幀推進衝刺：P1 撞碎路上的可破壞物件；一般衝刺撞到敵人停下攻擊（BOSS / 塔停在外緣）；
+   * 否則朝固定終點前進（方向不隨滑鼠改變），到點停下
    *
    * @param c 角色
    * @param time 目前場景時間
@@ -378,13 +367,6 @@ export class CharacterActionController {
         c.stopMoving();
         this.host.performAttackOn(c, hit, time);
         if (isStructureEnemy(hit)) standCharacterOutside(c, hit, this.host.arena());
-        this.endDashState(c);
-        return;
-      }
-      const anchor = this.findAnchorInDashPath(c, hitRadius);
-      if (anchor) {
-        c.stopMoving();
-        standCharacterOutside(c, anchor, this.host.arena());
         this.endDashState(c);
         return;
       }
@@ -418,34 +400,5 @@ export class CharacterActionController {
       c.setPosition(cx, cy);
       if (c.isDashing) this.endDashState(c);
     }
-  }
-
-  /**
-   * 衝刺路徑上即將重疊的走位錨點（角色與錨點中心距離 ≤ 錨點半徑 + 角色半徑 + extra）中最近的一個。
-   * 只算衝刺方向朝向的錨點，且排除腳下的錨點（站在錨點上往別處衝不會被攔）與守護目標（可穿越）
-   */
-  private findAnchorInDashPath(c: Character, extra: number): Enemy | null {
-    const dashDX = c.dashDestX - c.x;
-    const dashDY = c.dashDestY - c.y;
-    const dashLen = Math.hypot(dashDX, dashDY);
-    const underfootR = GameConfig.player.radius + UNDERFOOT_EXTRA;
-    const guardNpc = this.host.guardNpc();
-    let best: Enemy | null = null;
-    let bestD = Infinity;
-    for (const child of this.host.enemies().getChildren()) {
-      const e = child as Enemy;
-      if (!e.active || !e.isAnchorLike()) continue;
-      if (e === guardNpc) continue;
-      const reach = e.getBodyRadius() + GameConfig.player.radius + extra;
-      const d = Phaser.Math.Distance.Between(c.x, c.y, e.x, e.y);
-      if (d <= underfootR) continue;
-      if (d > reach || d >= bestD) continue;
-      if (dashLen > 1) {
-        const dot = (dashDX * (e.x - c.x) + dashDY * (e.y - c.y)) / (dashLen * d);
-        if (dot <= ANCHOR_FACING_DOT) continue;
-      }
-      bestD = d; best = e;
-    }
-    return best;
   }
 }

@@ -3,7 +3,6 @@ import { GameConfig } from '../config';
 import { Character } from '../objects/Character';
 import { Enemy } from '../objects/Enemy';
 import { Item, type SkillType } from '../objects/Item';
-import { Bullet } from '../objects/Bullet';
 import { Breakable } from '../objects/Breakable';
 import { loadCharacterParams, type CharacterParams } from '../systems/characterParams';
 import { createStageQueue, nextStageNode, revealStageNode, displayKindOf, type StageNode } from '../systems/stageQueue';
@@ -54,7 +53,6 @@ export class GameScene extends Phaser.Scene {
   }
 
   private enemies!: Phaser.Physics.Arcade.Group;  private items!: Phaser.Physics.Arcade.Group;
-  private bullets!: Phaser.Physics.Arcade.Group;
   private breakables!: Phaser.GameObjects.Group;
   /** 可破壞物件的布置、打破與爆炸桶，每次 create() 重建 */
   private breakableCtl!: BreakableController;
@@ -74,7 +72,7 @@ export class GameScene extends Phaser.Scene {
   private spawner!: SpawnController;
   /** 戰鬥視覺回饋（特效、閃白、震動），每次 create() 重建 */
   private fx!: CombatFx;
-  /** 敵人的攻擊（近戰、子彈、雷射、投彈、衝鋒撞擊），每次 create() 重建 */
+  /** 敵人的攻擊（近戰、投彈），每次 create() 重建 */
   private enemyAttacks!: EnemyAttackController;
   /** 道具定時保底掉落計時 */
   private itemDropAccumulator = 0;
@@ -255,12 +253,6 @@ export class GameScene extends Phaser.Scene {
     this.items = this.physics.add.group({
       classType: Item,
       maxSize: GameConfig.items.maxAlive,
-      runChildUpdate: false
-    });
-    // 子彈群（shooter 用）
-    this.bullets = this.physics.add.group({
-      classType: Bullet,
-      maxSize: GameConfig.enemy.shooter.maxBullets,
       runChildUpdate: false
     });
     // 可打破物件群——普通群(每個 Breakable 自帶靜態物理 body)；碰撞由 createCharacter 的 collider 處理。
@@ -529,14 +521,6 @@ export class GameScene extends Phaser.Scene {
       undefined,
       this
     );
-    // 子彈命中角色
-    this.physics.add.overlap(
-      c,
-      this.bullets,
-      this.enemyAttacks.onBulletHitCharacter as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
-      undefined,
-      this
-    );
     // 木箱與角色的碰撞由每幀手動分離處理（systems/bodySeparation），不用 Arcade collider（高速時會慢慢穿透）。
     return c;
   }
@@ -647,8 +631,6 @@ export class GameScene extends Phaser.Scene {
     if (this.waveState === 'event' && this.eventCtl.kind === 'guard' && guardNpc) pushEnemiesOutOfNpc(guardNpc, this.enemies, this.arena);
     this.updateItems(delta, time);
     updateBreakableMotion(this.breakables, this.arena, delta); // 可推動物件的位移 / 摩擦 / 邊界 / 互推
-    this.enemyAttacks.updateBullets(time);
-    this.enemyAttacks.updateChargerCollisions();
 
     // slow：先更新 P1 面向(aimAngle)+鍵盤八方向移動，再算鎖定/處理攻擊（同幀用最新面向，無延遲）。
     if (this.controlMode === 'slow') this.actions.handleSlowMovement(time);
@@ -733,7 +715,7 @@ export class GameScene extends Phaser.Scene {
 
   /**
    * 黏著目標(階段1):決定一隻怪這一幀要追誰。優先序 = 【事件覆寫 > 黏著綁定 > 就近重綁】。
-   * - 事件波(守護)：一般怪強制打 guardNpc(忽略黏著)。BOSS/塔/NPC/錨點不套用。
+   * - 事件波(守護)：一般怪強制打 guardNpc(忽略黏著)。BOSS/塔/NPC 不套用。
    * - 黏著:讀 targetSeat 綁定角色;若目標死/移除 → 立即重綁最近。
    *   若目標存活但距離 > stickyBreakRadius 持續 stickyBreakSec → 才重綁最近(防抖);否則黏著不換。
    * 回傳目標(角色或事件物件),null 表示原地。
@@ -774,7 +756,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * 計算場上殘留的「一般敵人」數（排除 tower/npc/boss/anchor-like）。
+   * 計算場上殘留的「一般敵人」數（排除塔、NPC、BOSS、寶箱怪）。
    * 用於事件/上一波結束進下一波時，把殘留怪計入新波 quota。
    */
   private countResidualEnemies(): number {
@@ -1051,11 +1033,7 @@ export class GameScene extends Phaser.Scene {
     return {
       scene: this,
       characters: () => this.characters,
-      enemies: () => this.enemies,
-      bullets: () => this.bullets,
-      arena: () => this.arena,
       isGameOver: () => this.gameOver,
-      isTimeStopped: () => this.timeStopped,
       hittableGuardNpc: () => (this.waveState === 'event' ? this.eventCtl.hittableGuardNpc : null),
       hitGuardNpc: () => { this.eventCtl.hitGuardNpc(); },
       damageCharacter: (c, amount, fromX, fromY) => this.damageCharacterFrom(c, amount, fromX, fromY),
@@ -1218,7 +1196,6 @@ export class GameScene extends Phaser.Scene {
       charParams: () => this.charParams,
       slowKeys: () => this.slowKeys!,
       isFrozenByTimestop: (c) => this.isFrozenByTimestop(c),
-      guardNpc: () => this.eventCtl.guardNpc,
       attackDamage: () => this.curAttackDamage(),
       damageEnemy: (actor, enemy, damage, knockback, time) => this.damageEnemy(actor, enemy, damage, knockback, time),
       hitBreakablesInRange: (c, radius, half, useArc, damage, time) => this.breakableCtl.hitInRange(c, radius, half, useArc, damage, time),
@@ -1601,7 +1578,7 @@ export class GameScene extends Phaser.Scene {
         const ty = target ? target.y : enemy.y;
         enemy.updateAI(tx, ty, time);
 
-        drawEnemyChargeWarnings(this.chargeWarnGfx, enemy, target, time);
+        drawEnemyChargeWarnings(this.chargeWarnGfx, enemy, time);
       }
 
       // 邊界反彈——敵人被擊飛超出場地時 clamp 回內側並反向該軸速度
@@ -1673,7 +1650,7 @@ export class GameScene extends Phaser.Scene {
     return this.characters.reduce((n, c) => n + (c.alive ? 1 : 0), 0);
   }
 
-  /** 直線雷射等來源對角色扣血（含 enemyDamageScale），從 (fromX,fromY) 方向做受傷回饋。
+  /** 對角色扣血（敵人近戰、炸彈、塔扇形、BOSS 招、爆炸桶等），從 (fromX,fromY) 方向做受傷回饋。
    *  rootMs>0 時，命中後定身該角色 rootMs 毫秒（禁移動+禁攻擊；塔扇形/BOSS招用 2000）。 */
   private damageCharacterFrom(c: Character, amount: number, _fromX: number, _fromY: number, rootMs = 0): void {
     if (!c.alive) return;
@@ -1913,12 +1890,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * 角色對敵人造成傷害並結算擊殺；擊退、盾怪正面減傷都以 (fromX, fromY) 為來源（AOE 招式傳落點，近戰傳角色位置）。
+   * 角色對敵人造成傷害並結算擊殺；擊退以 (fromX, fromY) 為來源（AOE 招式傳落點，近戰傳角色位置）。
    *
    * - 已死亡 / 失效的敵人不再受理，避免同一幀重複命中；寶箱怪改走命中次數制
    * - 被打中的怪標記為主動仇恨，不受被動追擊上限限制
    * - 打中 BOSS：交給 BossController（噴道具、亂入 BOSS 掉彩票）；慢速模式下有機率給 P1 能量
-   * - 擊殺：BOSS → BossController；塔 → 事件完成；NPC / 錨點不會被打死（防呆）；
+   * - 擊殺：BOSS → BossController；塔 → 事件完成；NPC 不會被打死（防呆）；
    *   一般怪 → 計擊殺、推進關卡、慢速模式給 P1 能量（不論是誰擊殺）、機率掉道具
    * - COMBO 與鬥氣由攻擊動作本身累積，這裡不處理
    *
@@ -1935,7 +1912,7 @@ export class GameScene extends Phaser.Scene {
   ): void {
     if (enemy.dead || !enemy.active) return;
     if (enemy.enemyType === 'treasure') { this.treasures.hit(enemy, actor); return; }
-    const dmg = Math.max(1, Math.round(damage * enemy.damageMultiplierFrom(fromX, fromY)));
+    const dmg = Math.max(1, Math.round(damage));
     enemy.aggroActive = true;
     const dead = enemy.takeDamage(dmg);
     if (enemy.isBoss) {
@@ -1960,7 +1937,7 @@ export class GameScene extends Phaser.Scene {
     } else if (etype === 'tower') {
       this.fx.expandingRing(dx, dy, 120, 0xff8844, 400);
       this.eventCtl.onTowerDestroyed(); // 取消塔蓄力中的扇形預警，事件成功
-    } else if (etype !== 'npc' && etype !== 'anchor') {
+    } else if (etype !== 'npc') {
       actor.kills++;
       this.onWaveKill();
       this.fx.deathBurst(dx, dy);
