@@ -47,15 +47,15 @@ scene: [
 |-------|------|----------|------|------|
 | `BootScene` | 24KB | 程序化貼圖生成、資源預處理 | 小 | - |
 | `TitleScene` | 44KB | 主選單、模式選擇、設定面板 | 中 | - |
-| `GameScene` | 174KB | 🎯 核心遊戲邏輯、戰鬥系統 | **中** | 方案C-1完成 |
+| `GameScene` | 160KB | 🎯 核心遊戲邏輯、戰鬥系統 | **中** | 方案C-2完成 |
 | `UIScene` | 71KB | HUD系統、血條、UI覆蓋 | 大 | - |
 | `GameOverScene` | 5KB | 結算畫面、重新開始 | 小 | - |
 | `MinigameMenuScene` | 5KB | 小遊戲選單導航 | 小 | - |
 
-**方案B+C重構進展** (commits 7bb93c4+cc7a433+b7e9a77+3c143c8+10f4af8):
-- **GameScene**: 422KB→174KB，8,408行→3,488行 (-58.5%)
-- **九Controller**: TreasureEnemyController新增，距離3,000行目標僅-488行
-- **架構成就**: Legacy巨型檔案持續向極致模組化邁進
+**方案B+C重構加速** (commits 7bb93c4+cc7a433+b7e9a77+3c143c8+10f4af8+ede39c8):
+- **GameScene**: 422KB→160KB，8,408行→3,200行 (-62%)
+- **十Controller**: BreakableController新增，C-3完成後預期2,685行
+- **架構成就**: 極致模組化重構展現驚人效率，向2,155行終極目標邁進
 
 ### 場景間通訊
 ```typescript
