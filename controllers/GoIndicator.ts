@@ -4,9 +4,12 @@ import { GameConfig } from '../config';
 /** GO 指示的方向：左、右出口或上方出口 */
 export type GoDirection = 'L' | 'R' | 'U';
 
-/** 一個方向的 GO：箭頭圖示、對應的出口標記，以及目前是否貼在出口旁 */
+/** 一個方向的 GO：「GO」字與箭頭的組合、對應的出口標記，以及目前是否貼在出口旁 */
 interface GoLabel {
-  icon: Phaser.GameObjects.Image;
+  group: Phaser.GameObjects.Container;
+  /** 組合的半寬 / 半高（定位與夾限用） */
+  halfW: number;
+  halfH: number;
   /** 出口標記圓心（世界座標）與半徑 */
   targetX: number;
   targetY: number;
@@ -21,7 +24,8 @@ const ARROW_TEXTURE_KEY = 'go-arrow';
 const DIRECTION_ANGLE: Record<GoDirection, number> = { R: 0, L: Math.PI, U: -Math.PI / 2 };
 
 /**
- * 出口開啟時的 GO 指示：一個指向出口方向、閃動發光的箭頭圖示（三角 + 白圈）。每幀依出口是否在畫面內決定位置：
+ * 出口開啟時的 GO 指示：發光的「GO」字加上同色調、同樣發光的方向箭頭（純三角形），
+ * 排列為 右：GO ▶、左：◀ GO、上：▲ 疊在 GO 上方，整組一起閃動。每幀依出口是否在畫面內決定位置：
  * - 出口完整在畫面內 → GO 在出口上方（上方會碰到 HUD 時改放出口下方）
  * - 出口在畫面外 → GO 貼在畫面對應邊緣（左 / 右緣在出口高度、上緣在出口水平位置，皆夾在 HUD 之間），保持可見
  *
@@ -43,17 +47,17 @@ export class GoIndicator {
   show(dir: GoDirection, targetX: number, targetY: number, targetRadius: number): void {
     if (this.labels.has(dir)) return;
     const cfg = GameConfig.stage.goIndicator;
-    this.ensureArrowTexture();
-    const icon = this.scene.add.image(0, 0, ARROW_TEXTURE_KEY).setRotation(DIRECTION_ANGLE[dir]).setDepth(cfg.depth);
-    // 閃動發光：透明度與大小同步脈動
+    const { group, halfW, halfH } = this.buildGroup(dir);
+    group.setDepth(cfg.depth);
+    // 閃動發光：整組的透明度與大小同步脈動
     this.scene.tweens.add({
-      targets: icon, alpha: { from: 1, to: cfg.blinkMinAlpha }, scale: { from: cfg.pulseScale, to: 1 },
+      targets: group, alpha: { from: 1, to: cfg.blinkMinAlpha }, scale: { from: cfg.pulseScale, to: 1 },
       duration: cfg.blinkMs, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
     });
-    const label: GoLabel = { icon, targetX, targetY, targetRadius, onTarget: false };
+    const label: GoLabel = { group, halfW, halfH, targetX, targetY, targetRadius, onTarget: false };
     label.onTarget = this.targetFullyVisible(label, 0);
     const pos = this.targetPosition(dir, label);
-    icon.setPosition(pos.x, pos.y); // 第一次直接放到位，不從原點滑過來
+    group.setPosition(pos.x, pos.y); // 第一次直接放到位，不從原點滑過來
     this.labels.set(dir, label);
   }
 
@@ -72,7 +76,7 @@ export class GoIndicator {
         ? this.targetFullyVisible(label, -cfg.hysteresisPx)
         : this.targetFullyVisible(label, 0);
       const pos = this.targetPosition(dir, label);
-      label.icon.setPosition(label.icon.x + (pos.x - label.icon.x) * t, label.icon.y + (pos.y - label.icon.y) * t);
+      label.group.setPosition(label.group.x + (pos.x - label.group.x) * t, label.group.y + (pos.y - label.group.y) * t);
     }
   }
 
@@ -84,8 +88,8 @@ export class GoIndicator {
   hide(dir: GoDirection): void {
     const label = this.labels.get(dir);
     if (!label) return;
-    this.scene.tweens.killTweensOf(label.icon);
-    label.icon.destroy();
+    this.scene.tweens.killTweensOf(label.group);
+    label.group.destroy();
     this.labels.delete(dir);
   }
 
@@ -99,33 +103,58 @@ export class GoIndicator {
     return [...this.labels.keys()];
   }
 
-  /** 箭頭外圈半徑（三角半邊長 + 外圈留白） */
-  private ringRadius(): number {
-    const a = GameConfig.stage.guideArrow;
-    return a.size + a.ringPad;
+  /**
+   * 建立「GO」字 + 箭頭的組合（容器原點在組合中心）
+   *
+   * @param dir 出口方向（決定箭頭朝向與排列）
+   */
+  private buildGroup(dir: GoDirection): { group: Phaser.GameObjects.Container; halfW: number; halfH: number } {
+    const cfg = GameConfig.stage.goIndicator;
+    // 文字畫布四周留出光暈半徑的空間，避免陰影被畫布邊界切掉而出現方框
+    const pad = cfg.glowBlur + cfg.strokeThickness;
+    const text = this.scene.add.text(0, 0, 'GO', {
+      fontFamily: 'monospace', fontSize: cfg.fontSize, color: cfg.color,
+      stroke: cfg.strokeColor, strokeThickness: cfg.strokeThickness, fontStyle: 'bold',
+      padding: { x: pad, y: pad }
+    }).setOrigin(0.5).setShadow(0, 0, cfg.glowColor, cfg.glowBlur, true, true);
+    this.ensureArrowTexture();
+    const arrow = this.scene.add.image(0, 0, ARROW_TEXTURE_KEY).setRotation(DIRECTION_ANGLE[dir]);
+    // 實際字形大小（扣掉畫布留白）與箭頭大小（不含光暈）
+    const textW = text.width - pad * 2, textH = text.height - pad * 2;
+    const arrowLen = cfg.arrowSize * 2;
+    if (dir === 'U') {
+      // 箭頭疊在字的上方
+      const totalH = arrowLen + cfg.arrowGap + textH;
+      arrow.setPosition(0, -totalH / 2 + arrowLen / 2);
+      text.setPosition(0, totalH / 2 - textH / 2);
+      return { group: this.scene.add.container(0, 0, [text, arrow]), halfW: Math.max(textW, arrowLen) / 2, halfH: totalH / 2 };
+    }
+    // 左右：箭頭在字的外側（右出口 GO ▶、左出口 ◀ GO）
+    const totalW = textW + cfg.arrowGap + arrowLen;
+    const side = dir === 'R' ? 1 : -1;
+    text.setPosition(-side * (totalW / 2 - textW / 2), 0);
+    arrow.setPosition(side * (totalW / 2 - arrowLen / 2), 0);
+    return { group: this.scene.add.container(0, 0, [text, arrow]), halfW: totalW / 2, halfH: Math.max(textH, arrowLen) / 2 };
   }
 
   /**
-   * 產生朝右的箭頭紋理（只產生一次）：外圍光暈 + 三角形 + 白色外圈
+   * 產生朝右的箭頭紋理（只產生一次）：與 GO 同色調的實心三角形，外圍由大到小疊幾層半透明三角形做光暈
    */
   private ensureArrowTexture(): void {
     if (this.scene.textures.exists(ARROW_TEXTURE_KEY)) return;
-    const a = GameConfig.stage.guideArrow;
-    const glow = GameConfig.stage.goIndicator;
-    const ring = this.ringRadius();
-    const half = ring + glow.glowRadius;
+    const cfg = GameConfig.stage.goIndicator;
+    const s = cfg.arrowSize;
+    const half = s + cfg.arrowGlowSpread;
     const g = this.scene.make.graphics({ x: 0, y: 0 }, false);
-    // 光暈：由外往內疊幾層半透明圓，越靠近外圈越亮
-    for (let i = glow.glowLayers; i >= 1; i--) {
-      g.fillStyle(glow.glowColor, glow.glowAlpha / glow.glowLayers);
-      g.fillCircle(half, half, ring + (glow.glowRadius * i) / glow.glowLayers);
+    const triangle = (k: number): void => {
+      g.fillTriangle(half + k, half, half - k, half - k, half - k, half + k);
+    };
+    for (let i = cfg.arrowGlowLayers; i >= 1; i--) {
+      g.fillStyle(cfg.arrowGlowColor, cfg.arrowGlowAlpha / cfg.arrowGlowLayers);
+      triangle(s + (cfg.arrowGlowSpread * i) / cfg.arrowGlowLayers);
     }
-    // 三角形（尖端朝右）
-    g.fillStyle(a.color, 0.95);
-    g.fillTriangle(half + a.size, half, half - a.size, half - a.size, half - a.size, half + a.size);
-    // 白色外圈
-    g.lineStyle(4, 0xffffff, 0.9);
-    g.strokeCircle(half, half, ring);
+    g.fillStyle(cfg.arrowColor, 1);
+    triangle(s);
     g.generateTexture(ARROW_TEXTURE_KEY, half * 2, half * 2);
     g.destroy();
   }
@@ -144,23 +173,21 @@ export class GoIndicator {
   }
 
   /**
-   * GO 箭頭中心應在的世界座標：出口在畫面內時在出口上方（上方空間不足就放出口下方）；
+   * GO 組合中心應在的世界座標：出口在畫面內時在出口上方（上方空間不足就放出口下方）；
    * 否則貼畫面對應邊緣，夾在上方 HUD 與下方面板之間
    */
   private targetPosition(dir: GoDirection, label: GoLabel): { x: number; y: number } {
     const cfg = GameConfig.stage.goIndicator;
-    const ring = this.ringRadius();
     const view = this.scene.cameras.main.worldView;
-    const minY = view.top + cfg.edgeMinY + ring, maxY = view.bottom - cfg.edgeBottomMargin - ring;
-    const offset = label.targetRadius + cfg.gapFromTarget + ring;
+    const minY = view.top + cfg.edgeMinY + label.halfH, maxY = view.bottom - cfg.edgeBottomMargin - label.halfH;
+    const minX = view.left + cfg.edgeInset + label.halfW, maxX = view.right - cfg.edgeInset - label.halfW;
+    const offset = label.targetRadius + cfg.gapFromTarget + label.halfH;
     const aboveY = label.targetY - offset;
     if (label.onTarget) {
-      return { x: label.targetX, y: aboveY >= minY ? aboveY : label.targetY + offset };
+      // 出口貼近畫面邊緣時，組合仍夾在畫面內
+      return { x: Phaser.Math.Clamp(label.targetX, minX, maxX), y: aboveY >= minY ? aboveY : label.targetY + offset };
     }
-    if (dir === 'U') {
-      return { x: Phaser.Math.Clamp(label.targetX, view.left + cfg.edgeInset, view.right - cfg.edgeInset), y: minY };
-    }
-    const x = dir === 'L' ? view.left + cfg.edgeInset : view.right - cfg.edgeInset;
-    return { x, y: Phaser.Math.Clamp(aboveY, minY, maxY) };
+    if (dir === 'U') return { x: Phaser.Math.Clamp(label.targetX, minX, maxX), y: minY };
+    return { x: dir === 'L' ? minX : maxX, y: Phaser.Math.Clamp(aboveY, minY, maxY) };
   }
 }
