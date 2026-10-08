@@ -151,8 +151,6 @@ export class UIScene extends Phaser.Scene {
   private stageHudMysteryUsed = 0;
   /** 遞補動畫開始時間（scene time）；動畫時長見 waveHud.shiftMs */
   private stageHudShiftAt = -Infinity;
-  /** 第8項：P1 普攻命中計數（左上角） */
-  private hitText!: Phaser.GameObjects.Text;
   /** 頭上UI系統 - 替換舊的左上角COMBO系統 */
   // 頭上UI系統：使用角色索引作為Map鍵，避免對象引用問題
   private overheadUIs: Map<number, Phaser.GameObjects.Container> = new Map();
@@ -375,17 +373,6 @@ export class UIScene extends Phaser.Scene {
       .setVisible(false); // 🚫 關閉加入夥伴提示
 
     // 拔等級(階段2):等級數字 + 經驗條 HUD 已移除(等級系統已拔,數值固定滿等)。畫面下方留白,不再顯示 Lv/經驗。
-
-    // 第8項：P1 普攻命中計數（左上角，不擋主要畫面）
-    this.hitText = this.add
-      .text(12, 12, '命中 0', {
-        fontFamily: 'monospace',
-        fontSize: '16px',
-        color: '#8be9fd',
-        stroke: '#000000',
-        strokeThickness: 4
-      })
-      .setOrigin(0, 0);
 
     // 波次顯示（右上角）- 🚫 用戶要求關閉
     this.waveText = this.add
@@ -673,8 +660,6 @@ export class UIScene extends Phaser.Scene {
     // 隱藏中的文字不更新（setText 內容改變時會重繪文字畫布，時間每幀都變）
     if (this.teamText.visible) this.teamText.setText(`團隊總擊殺 ${s.teamKills}`);
     if (this.timeText.visible) this.timeText.setText(`時間 ${(s.survivalMs / 1000).toFixed(1)}s`);
-    // 第8項：P1 普攻命中次數
-    if (this.hitText.visible) this.hitText.setText(`命中 ${s.p1AttackHits ?? 0}`);
     // 波次：Wave N + 進度；intermission 顯示過關中
     if (this.waveText.visible) {
       this.waveText.setText(s.waveState === 'intermission' ? `WAVE ${s.wave} CLEAR!` : `WAVE ${s.wave}  ${s.waveKilled}/${s.waveQuota}`);
