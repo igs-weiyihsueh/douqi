@@ -1259,7 +1259,8 @@ export class GameScene extends Phaser.Scene {
       performAttackOn: (actor, primary, time) => this.performAttackOn(actor, primary, time),
       onComboHit: (c, time) => this.comboSkills.onComboHit(c, time),
       triggerComboHit: (c) => this.comboReward.hit(c),
-      empowerAoe: (c, time) => this.comboSkills.empowerAoe(c, time),
+      pickEmpowerTarget: (c) => this.comboSkills.pickEmpowerTarget(c),
+      empowerStrike: (c, x, y, time) => this.comboSkills.empowerStrike(c, x, y, time),
       flashWhite: (c) => this.fx.flashWhite(c),
       spawnMeleeArcEffect: (x, y, angle) => this.fx.meleeArc(x, y, angle),
       spawnSlashStreak: (target, angle, empowered) =>

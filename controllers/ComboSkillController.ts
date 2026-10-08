@@ -67,10 +67,7 @@ const AURA_DEPTH = 8;
 const AURA_PULSE_MS = 400;
 /** 光環跟隨角色的更新間隔 */
 const AURA_FOLLOW_MS = 16;
-/** 變身 AOE：投射物、內圈擴張環 */
-const AOE_PROJ_RADIUS = 10;
-const AOE_PROJ_DEPTH = 16;
-const AOE_PROJ_MIN_MS = 60;
+/** 變身 AOE：內圈擴張環顏色 */
 const AOE_INNER_RING_COLOR = 0xfff2a8;
 
 /**
@@ -168,52 +165,46 @@ export class ComboSkillController {
   }
 
   /**
-   * 慢速強化期間的攻擊：選範圍圈內的敵人（優先目前鎖定的、否則最近的；只選敵人、不含道具），
-   * 朝它射出投射物，到達後以目標位置為中心炸圓形 AOE；角色不位移。圈內沒有敵人就不放（不進冷卻）
+   * 慢速強化期間的攻擊目標：範圍圈內的敵人（優先目前鎖定的、否則最近的；只選敵人、不含道具）
    *
    * @param c 施放的角色
-   * @param time 目前場景時間
+   * @returns 目標；圈內沒有可打的敵人時為 null
    */
-  empowerAoe(c: Character, time: number): void {
-    const cfg = GameConfig.combo.empower.aoe;
+  pickEmpowerTarget(c: Character): Enemy | null {
     const R = this.host.isSlowMode() ? this.host.slowLockRadius() : GameConfig.lock.searchRadius;
     const targeting = this.host.targeting();
-    let target: Enemy | null = null;
     const cur = targeting.lockedTarget;
     if (cur && !targeting.isItem(cur)) {
       const e = cur as Enemy;
       if (typeof e.isVulnerable === 'function' && targeting.isLockableEnemy(e) &&
           Phaser.Math.Distance.Between(c.x, c.y, e.x, e.y) <= R) {
-        target = e;
+        return e;
       }
     }
-    if (!target) {
-      let bestD = R * R;
-      for (const child of this.host.enemies().getChildren()) {
-        const e = child as Enemy;
-        if (!e.active || e.dead || !e.isVulnerable()) continue;
-        const dx = e.x - c.x, dy = e.y - c.y;
-        const d2 = dx * dx + dy * dy;
-        if (d2 <= bestD) { bestD = d2; target = e; }
-      }
+    let target: Enemy | null = null;
+    let bestD = R * R;
+    for (const child of this.host.enemies().getChildren()) {
+      const e = child as Enemy;
+      if (!e.active || e.dead || !e.isVulnerable()) continue;
+      const dx = e.x - c.x, dy = e.y - c.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 <= bestD) { bestD = d2; target = e; }
     }
-    if (!target || !target.active || target.dead) return;
-    c.nextAttackAllowedAt = time + cfg.cooldownMs;
-    c.aimAngle = Phaser.Math.Angle.Between(c.x, c.y, target.x, target.y);
-    const tx = target.x, ty = target.y;
-    const proj = this.scene.add.circle(c.x, c.y, AOE_PROJ_RADIUS, cfg.projColor, 0.95).setDepth(AOE_PROJ_DEPTH);
-    proj.setStrokeStyle(3, 0xffffff, 0.9);
-    const dur = Math.max(AOE_PROJ_MIN_MS, (Phaser.Math.Distance.Between(c.x, c.y, tx, ty) / cfg.projSpeed) * 1000);
-    this.scene.tweens.add({
-      targets: proj, x: tx, y: ty, duration: dur, ease: 'Quad.easeIn',
-      onComplete: () => {
-        proj.destroy();
-        this.empowerAoeBurst(c, tx, ty, time);
-      }
-    });
+    return target;
   }
 
-  /** 以目標位置為中心炸圓形 AOE：傷圈內所有可傷敵人、擴張環、輕震；命中時算一次 COMBO 並累積變身爆發計數 */
+  /**
+   * 強化衝刺撞到敵人：以撞到的位置為中心炸圓形 AOE（金色擴散圈、輕震），命中時算 COMBO 並累積變身爆發計數
+   *
+   * @param c 施放的角色
+   * @param tx 中心 x（撞到的敵人位置）
+   * @param ty 中心 y
+   * @param time 目前場景時間
+   */
+  empowerStrike(c: Character, tx: number, ty: number, time: number): void {
+    this.empowerAoeBurst(c, tx, ty, time);
+  }
+
   private empowerAoeBurst(c: Character, tx: number, ty: number, time: number): void {
     const cfg = GameConfig.combo.empower.aoe;
     const radius = cfg.radius;

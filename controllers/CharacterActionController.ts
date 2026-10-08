@@ -59,7 +59,10 @@ export interface CharacterActionHost {
   /** 普攻命中：COMBO 獎勵累積 */
   triggerComboHit(c: Character): void;
   /** 慢速模式強化期間的唯一招式（目標中心圓形 AOE） */
-  empowerAoe(c: Character, time: number): void;
+  /** 慢速強化攻擊的目標（範圍圈內，優先鎖定的；沒有為 null） */
+  pickEmpowerTarget(c: Character): Enemy | null;
+  /** 強化衝刺撞到敵人：以 (x, y) 為中心炸圓形 AOE */
+  empowerStrike(c: Character, x: number, y: number, time: number): void;
   flashWhite(c: Character): void;
   spawnMeleeArcEffect(x: number, y: number, angle: number): void;
   /** 衝刺切入的刀光（穿過被砍的怪、沿衝刺方向的斬痕；大小依怪的顯示尺寸） */
@@ -131,9 +134,9 @@ export class CharacterActionController {
     if (time < c.nextAttackAllowedAt) return;
     const player = this.host.player();
     const slow = this.host.isSlowMode();
-    // 慢速模式 P1 強化期間唯一的招式：目標中心圓形 AOE（不衝刺）
+    // 慢速模式 P1 強化期間：衝向鎖定目標，撞到時以它為中心炸圓形 AOE（近身衝上去砍一圈）
     if (c === player && slow && c.empowered) {
-      this.host.empowerAoe(c, time);
+      this.empoweredDash(c, time);
       return;
     }
     // 快速模式 P1 的融合瞄準：方向直接用滑鼠 aimAngle，不被自動鎖定綁死
@@ -194,6 +197,26 @@ export class CharacterActionController {
     }
     if (dist <= GameConfig.melee.range) this.stepInAndSwing(c, dist, time);
     else this.startDirectionDash(c, time);
+  }
+
+  /**
+   * 慢速強化攻擊：範圍圈內有敵人就朝它衝刺，沒有就朝面向衝出（揮空）；衝刺途中撞到敵人時炸圓形 AOE
+   * （見 handleDash）。冷卻用強化 AOE 的 cooldownMs
+   *
+   * @param c 施放的角色（慢速模式 P1）
+   * @param time 目前場景時間
+   */
+  private empoweredDash(c: Character, time: number): void {
+    const target = this.host.pickEmpowerTarget(c);
+    if (target) {
+      c.aimAngle = Phaser.Math.Angle.Between(c.x, c.y, target.x, target.y);
+      this.beginDash(c, target.x, target.y, time, false);
+    } else {
+      this.startDirectionDash(c, time);
+    }
+    if (!c.isDashing) return; // 面向牆壁衝不出去時，startDirectionDash 已改為原地揮擊
+    c.dashEmpowerStrike = true;
+    c.nextAttackAllowedAt = time + GameConfig.combo.empower.aoe.cooldownMs;
   }
 
   /** 近距離：朝 aimAngle 小位移貼身（不穿過目標、夾在移動區內），扇形劍氣，進入普攻冷卻 */
@@ -346,6 +369,7 @@ export class CharacterActionController {
   endDashState(c: Character): void {
     c.isDashing = false;
     c.dashToItem = false;
+    c.dashEmpowerStrike = false;
     c.cutInUntil = 0;
     c.cutInTarget = null;
     c.stopMoving();
@@ -382,7 +406,8 @@ export class CharacterActionController {
       const hit = this.targeting.findFirstEnemyInRangeOf(c, hitRadius);
       if (hit) {
         c.stopMoving();
-        this.host.performAttackOn(c, hit, time);
+        if (c.dashEmpowerStrike) this.host.empowerStrike(c, hit.x, hit.y, time);
+        else this.host.performAttackOn(c, hit, time);
         if (isStructureEnemy(hit)) {
           standCharacterOutside(c, hit, this.host.arena());
           this.endDashState(c);

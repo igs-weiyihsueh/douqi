@@ -299,12 +299,10 @@ export const GameConfig = {
       burstEveryAoeHits: 4,
       /** 階段4:強化期【唯一招】——鎖定角色周圍圓範圍內的怪→打過去→以【目標】為中心炸圓AOE。只 slow P1。 */
       aoe: {
-        radius: 160,             // 炸裂 AOE 半徑（以目標為中心）
+        radius: 160,             // 炸裂 AOE 半徑（以強化衝刺撞到的敵人為中心）
         damage: 60,              // AOE 圓內每隻敵人傷害
         knockback: 180,          // 輕擊退
         cooldownMs: 650,         // 每次放的冷卻(避免狂放)
-        projSpeed: 900,          // 攻擊飛向目標的投射速度(px/s)
-        projColor: 0xffe066,     // 投射/衝擊色
         color: 0xffe066,         // 炸裂圈顏色
         ringMs: 300              // 炸裂圈擴張視覺時長
       }
