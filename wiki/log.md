@@ -533,6 +533,44 @@
 
 ---
 
+## [2026-10-08 15:20] 方案C進展 | C-1寶箱怪系統上線成功
+
+**變更摘要**：📊 **C-1寶箱怪系統上線成功** - 方案C第一階段重要突破！
+
+### ✅ **上線詳情**
+- **Commit**: 10f4af8
+- **Bundle**: index-Daq5frBo.js  
+- **銳騎評分**: 97/100
+- **部署確認**: 已完成上線
+
+### 📈 **代碼成果**
+- **GameScene瘦身**: 3,778行 → 3,488行 (-290行)
+- **新增模組**: controllers/TreasureEnemyController (401行)
+- **功能範圍**: 關卡寶箱怪 + 獎勵關寶箱怪完整邏輯
+- **品質驗證**: 新舊版逐幀比對完全一致
+
+### 🔄 **C-2進展**
+- **Commit**: ede39c8 (BreakableController)
+- **狀態**: 已完成送審，等待銳騎回覆
+- **預期**: 審查通過後GameScene降到3,200行
+
+### 📋 **WIKI維護需求**
+**「待WIKI維護者處理」** - 新增controllers/TreasureEnemyController文檔
+
+### 🚀 **方案C進度追蹤**
+- ✅ **C-1**: TreasureController (-290行) 已上線
+- 🔄 **C-2**: BreakableController 送審中
+- ⏳ **C-3**: ComboController 即將開始
+
+**代碼位置**：
+- `controllers/TreasureEnemyController.ts` - 401行寶箱怪控制器
+- `scenes/GameScene.ts` - 3,488行，移除370行寶箱怪代碼
+- commit 10f4af8 - C-1寶箱怪重構完成
+
+**方案C意義**：在方案B八Controller基礎上，繼續向極致3,000行目標邁進！
+
+---
+
 ## [2025-01-28 22:15] 文檔更新 | 方案B B-4除錯系統拆分完成
 
 **變更摘要**：完成方案B B-4除錯API重構，GameScene徹底瘦身到3,778行，方案B深度重構史詩完成！

@@ -237,7 +237,23 @@ const responsibilities = {
 3. **複雜系統征服**: 從事件到世界到雙控制器到除錯API，複雜度持續攀升全部成功
 4. **品質標準確立**: 決定性測試體系確保架構變更的絕對安全性
 
-## **P1a-P4a + 方案B綜合成果**
+## **方案C進階重構展開**
+
+### **方案C-1寶箱怪系統上線成功** 🎯
+- **Commit**: 10f4af8, Bundle: index-Daq5frBo.js, 銳騎評分: 97/100
+- **GameScene**: 3,778行→3,488行 (-290行)  
+- **新增Controller**: TreasureEnemyController (401行)
+- **功能完整**: 關卡寶箱怪+獎勵關寶箱怪邏輯
+- **品質保證**: 新舊版逐幀比對完全一致
+
+### **方案C進度追蹤**
+- ✅ **C-1**: TreasureController (-290行) 已上線部署
+- 🔄 **C-2**: BreakableController (ede39c8) 送審中，預期降到3,200行
+- ⏳ **C-3**: ComboController 即將開始
+
+**待WIKI維護**: controllers/TreasureEnemyController.ts 系統文檔
+
+## **P1a-P4a + 方案B+C綜合成果**
 
 ### **GameScene演進完整軌跡**
 - **起點**: 8,408行 (P1a前含P4b註解，真實Legacy巨型檔案)
@@ -245,38 +261,39 @@ const responsibilities = {
 - **B-1完成**: 5,621行 (5個Controller，-33.2%)
 - **B-2完成**: 4,857行 (6個Controller，-42.3%)
 - **B-3完成**: 4,037行 (7個Controller，-52.0%)
-- **B-4完成**: 3,778行 (8個Controller，-55.1%) 🆕
-- **超越目標**: 比3,000行目標多778行，為剩餘核心系統保留空間
+- **B-4完成**: 3,778行 (8個Controller，-55.1%)
+- **C-1完成**: 3,488行 (9個Controller，-58.5%) 🆕
+- **終極目標**: 3,000行 (極致瘦身，-64.3%)
 
-### **模組化架構史詩完善**
-- **controllers/**: 8個有狀態場景操作模組 (~4,222行)
+### **模組化架構持續完善**
+- **controllers/**: 9個有狀態場景操作模組 (~4,623行)
 - **systems/**: 9個純邏輯資料模組 (~1,000行)
-- **總抽取**: ~5,200行代碼從GameScene成功模組化
-- **剩餘核心**: 3,778行場景協調與關卡流程邏輯
+- **總抽取**: ~5,500行代碼從GameScene成功模組化
+- **剩餘核心**: 3,488行場景協調與關卡流程邏輯
 
 ### **方案C可選展望**
 ```typescript
-// 剩餘3,778行主要系統
+// 剩餘3,488行主要系統 (C-1後更新)
 const remainingSystems = [
   '生怪系統與波次管理 (~800行)',
-  '寶箱怪AI與行為 (~400行)',
-  '可破壞物件系統 (~300行)', 
-  '連段與強化機制 (~500行)',
+  '可破壞物件系統 (~300行) - C-2進行中', 
+  '連段與強化機制 (~500行) - C-3計劃中',
   '傷害結算與計算 (~600行)',
-  '其他核心場景邏輯 (~1,178行)'
+  '其他核心場景邏輯 (~1,288行)'
 ];
 
-// 可進一步拆分為方案C，實現極致3,000行或更低
-// 決策權在使用者 - 當前架構已達到優秀的模組化水準
+// C-2+C-3完成後預期降到~2,700行
+// 極致3,000行目標觸手可及！
 ```
 
-**方案B深度重構史詩完成，GameScene從8,408行瘦身到3,778行(-55%)！** 🏗️✨
+**方案B+C重構進展，GameScene從8,408行瘦身到3,488行(-58.5%)！** 🏗️✨
 
 **參考檔案**: 
 - `controllers/EventController.ts` (事件系統模組 879行)
 - `controllers/SlotWorldController.ts` (世界系統模組 737行)
 - `controllers/TargetingController.ts` (鎖定系統模組 374行)
 - `controllers/CharacterActionController.ts` (行動系統模組 451行)
-- `controllers/GameDebugApi.ts` (除錯系統模組 361行) 🆕
-- `scenes/GameScene.ts` (重構後主場景 3,778行)
-- commits 7bb93c4 (B-1) + cc7a433 (B-2) + b7e9a77 (B-3) + 3c143c8 (B-4)
+- `controllers/GameDebugApi.ts` (除錯系統模組 361行)
+- `controllers/TreasureEnemyController.ts` (寶箱怪系統模組 401行) 🆕
+- `scenes/GameScene.ts` (重構後主場景 3,488行)
+- commits 7bb93c4 (B-1) + cc7a433 (B-2) + b7e9a77 (B-3) + 3c143c8 (B-4) + 10f4af8 (C-1)
