@@ -15,9 +15,9 @@ interface Fighter {
   nextPushAt: number;
   // BOT AI
   nextDecideAt: number;
-  // ★v2:面向(單位向量,決定空白推人的方向);由移動方向更新,停下保留最後面向
+  // 面向(單位向量,決定空白推人的方向);由移動方向更新,停下保留最後面向
   faceX: number; faceY: number;
-  // ★v7:短衝撞人——衝到何時、衝速度向量、這次衝已撞過誰(避免同一次衝重複推)
+  // 短衝撞人——衝到何時、衝速度向量、這次衝已撞過誰(避免同一次衝重複推)
   dashUntil: number;
   dashVx: number; dashVy: number;
   dashHit: Set<number>;
@@ -49,8 +49,8 @@ export class PushSurvivalScene extends Phaser.Scene {
   private nextShakeAt = 0;
   private faceIndicator?: Phaser.GameObjects.Graphics;
   private running = false;
-  private slowFactor = 1;     // ★慢動作(第3人出局決勝)
-  private finishing = false;  // ★結束演出進行中
+  private slowFactor = 1;     // 慢動作(第3人出局決勝)
+  private finishing = false;  // 結束演出進行中
   private phase: 'intro' | 'ready' | 'playing' | 'ended' = 'intro';
   private introLayer?: Phaser.GameObjects.Container;
   private readyText?: Phaser.GameObjects.Text;
@@ -129,7 +129,7 @@ export class PushSurvivalScene extends Phaser.Scene {
         dashUntil: 0, dashVx: 0, dashVy: 0, dashHit: new Set<number>()
       });
     }
-    // ★玩家面向指示(圓圈+箭頭)——顯示「空白會往這個方向推人」,只 P1
+    // 玩家面向指示(圓圈+箭頭)——顯示「空白會往這個方向推人」,只 P1
     this.faceIndicator = this.add.graphics().setDepth(9);
   }
 
@@ -174,7 +174,7 @@ export class PushSurvivalScene extends Phaser.Scene {
     this.timerText.setText(String(Math.ceil(this.cfg.durationMs / 1000)));
   }
 
-  /** ★v6:intro 按空白後→進 ready 預備階段:大字倒數(3→2→1→開始!),角色不動/預警圈不出/計時未起,倒數完才 playing。 */
+  /** intro 按空白後→進 ready 預備階段:大字倒數(3→2→1→開始!),角色不動/預警圈不出/計時未起,倒數完才 playing。 */
   private startReady(): void {
     if (this.phase !== 'intro') return;
     this.phase = 'ready';
@@ -241,7 +241,7 @@ export class PushSurvivalScene extends Phaser.Scene {
     this.startDash(p);
   }
 
-  /** ★v7 短衝撞人:角色朝面向【短衝一段(dash)】,衝的過程中撞到其他角色→撞到者被推飛。取代原地推。 */
+  /** 短衝撞人:角色朝面向【短衝一段(dash)】,衝的過程中撞到其他角色→撞到者被推飛。取代原地推。 */
   private startDash(pusher: Fighter): void {
     if (this.time.now < pusher.stunUntil) return; // 被推失控中不能衝
     pusher.nextPushAt = this.time.now + this.cfg.pushCooldownMs;
@@ -301,7 +301,7 @@ export class PushSurvivalScene extends Phaser.Scene {
     const radius = Phaser.Math.Linear(this.cfg.ringRadiusStart, this.cfg.ringRadiusEnd, t);
     const fillMs = Phaser.Math.Linear(this.cfg.ringFillStartMs, this.cfg.ringFillEndMs, t);
     let x: number, y: number;
-    // ★v3:隨機+追人各半——擲骰命中→開在隨機存活角色附近(±偏移,逼玩家一直動);否則純隨機
+    // 隨機+追人各半——擲骰命中→開在隨機存活角色附近(±偏移,逼玩家一直動);否則純隨機
     const alive = this.fighters.filter(f => f.alive);
     if (alive.length > 0 && Math.random() < this.cfg.ringChaseChance) {
       const tgt = alive[Phaser.Math.Between(0, alive.length - 1)];
@@ -321,7 +321,7 @@ export class PushSurvivalScene extends Phaser.Scene {
 
   private updateRings(): void {
     const t = this.progress();
-    // ★維持「多個並存」的目標圈數(難度遞增),各圈獨立填滿→爆自然錯開時間差。
+    // 維持「多個並存」的目標圈數(難度遞增),各圈獨立填滿→爆自然錯開時間差。
     const targetConcurrent = Math.round(Phaser.Math.Linear(this.cfg.ringConcurrentStart, this.cfg.ringConcurrentEnd, t));
     const interval = Phaser.Math.Linear(this.cfg.ringIntervalStartMs, this.cfg.ringIntervalEndMs, t);
     // 補圈到目標數用【較短的 fill-up stagger】(否則慢於 fillMs、圈爆得比補得快、湊不到目標數);
@@ -359,7 +359,7 @@ export class PushSurvivalScene extends Phaser.Scene {
     this.tweens.add({ targets: ring, radius: r.radius, alpha: 0, duration: 320, onComplete: () => ring.destroy() });
     const core = this.add.circle(r.x, r.y, r.radius * 0.3, 0xffd400, 0.7).setDepth(16);
     this.tweens.add({ targets: core, alpha: 0, duration: 200, onComplete: () => core.destroy() });
-    // ★v2:震動降低 + 節流(短時間內多圈連爆只震一次,避免後期狂抖暈)
+    // 震動降低 + 節流(短時間內多圈連爆只震一次,避免後期狂抖暈)
     if (this.time.now >= this.nextShakeAt) {
       this.cameras.main.shake(this.cfg.shakeDurationMs, this.cfg.shakeIntensity);
       this.nextShakeAt = this.time.now + this.cfg.shakeThrottleMs;
@@ -395,20 +395,20 @@ export class PushSurvivalScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     if (!this.running) return;
-    const dt = (delta / 1000) * this.slowFactor; // ★慢動作縮放
+    const dt = (delta / 1000) * this.slowFactor; // 慢動作縮放
     const remainMs = Math.max(0, this.endsAt - this.time.now);
     this.timerText.setText(String(Math.ceil(remainMs / 1000)));
 
     this.updateRings();
     this.updatePlayer(dt);
     for (let i = 1; i < 4; i++) this.updateBot(this.fighters[i], dt);
-    this.updateDashes(dt); // ★短衝撞人位移+撞人判定
+    this.updateDashes(dt); // 短衝撞人位移+撞人判定
     this.applyKnockback(dt);
-    this.separateFighters(); // ★角色間被動身體推擠(輕、只防重疊,獨立於空白主動推飛)
-    // ★面向指示在所有位移(走位/推飛/身體推擠)之後畫→用角色【最終即時位置】,被推飛時絕不留原地
+    this.separateFighters(); // 角色間被動身體推擠(輕、只防重疊,獨立於空白主動推飛)
+    // 面向指示在所有位移(走位/推飛/身體推擠)之後畫→用角色【最終即時位置】,被推飛時絕不留原地
     this.drawFaceIndicator(this.fighters[0]);
 
-    // ★結束:第3人出局(剩最後1人)→慢動作決勝;60秒到多人活→正常緩衝。finishing 中不重複觸發。
+    // 結束:第3人出局(剩最後1人)→慢動作決勝;60秒到多人活→正常緩衝。finishing 中不重複觸發。
     if (!this.finishing) {
       const aliveCount = this.fighters.filter(f => f.alive).length;
       if (aliveCount <= 1) { this.beginFinish(true); }
@@ -416,7 +416,7 @@ export class PushSurvivalScene extends Phaser.Scene {
     }
   }
 
-  /** ★結束演出緩衝:dramatic(剩最後1人)→慢動作1.2秒→恢復→短停→結算;否則(60秒多人活)正常緩衝1秒→結算。 */
+  /** 結束演出緩衝:dramatic(剩最後1人)→慢動作1.2秒→恢復→短停→結算;否則(60秒多人活)正常緩衝1秒→結算。 */
   private beginFinish(dramatic: boolean): void {
     if (this.finishing) return;
     this.finishing = true;
@@ -439,7 +439,7 @@ export class PushSurvivalScene extends Phaser.Scene {
   }
 
   /**
-   * ★角色間被動身體推擠:每幀存活角色兩兩若重疊(dist<兩半徑和)→各推一半分開(手動位置校正分離,同 separateCharacterFromEnemies)。
+   * 角色間被動身體推擠:每幀存活角色兩兩若重疊(dist<兩半徑和)→各推一半分開(手動位置校正分離,同 separateCharacterFromEnemies)。
    * 輕(只推出重疊量、不給速度、不失控)→走位碰到自然擠開、不穿透。出局灰影不參與。clamp 留場內。
    */
   private separateFighters(): void {
@@ -514,13 +514,13 @@ export class PushSurvivalScene extends Phaser.Scene {
       p.x += (vx / len) * this.cfg.moveSpeed * dt;
       p.y += (vy / len) * this.cfg.moveSpeed * dt;
       p.sprite.setFlipX(vx < 0);
-      // ★由移動方向更新面向(停下時保留最後面向)
+      // 由移動方向更新面向(停下時保留最後面向)
       p.faceX = vx / len; p.faceY = vy / len;
     }
     this.clampFighter(p);
   }
 
-  /** ★玩家面向指示:腳下圓圈 + 朝面向的箭頭(顯示「空白會往這方向推人」) */
+  /** 玩家面向指示:腳下圓圈 + 朝面向的箭頭(顯示「空白會往這方向推人」) */
   private drawFaceIndicator(p: Fighter): void {
     const g = this.faceIndicator;
     if (!g) return;
@@ -552,7 +552,7 @@ export class PushSurvivalScene extends Phaser.Scene {
 
     // 決策節流
     let moveX = 0, moveY = 0;
-    // ①閃圈:計算所有「將爆或填充中」的圈對 f 的排斥向量(在圈內或邊緣→往外跑)。★v6:偵測邊際 botDangerMargin(縮小→較晚反應、沒那麼準=變弱)
+    // ①閃圈:計算所有「將爆或填充中」的圈對 f 的排斥向量(在圈內或邊緣→往外跑)。偵測邊際 botDangerMargin(縮小→較晚反應、沒那麼準=變弱)
     let danger = false;
     const margin = this.cfg.botDangerMargin;
     for (const r of this.rings) {

@@ -1,12 +1,12 @@
 /**
- * ★階段2a 波次進度制核心純函式(波騎藍圖 decision 001387fb)。
+ * 階段2a 波次進度制核心純函式(波騎藍圖 decision 001387fb)。
  * 無副作用、可單元測試。GameScene 持有狀態,每幀呼叫這些判定。
  *
  * 名詞:
  * - progress:本波已累積進度(殺一隻+1,加權留後續)。
  * - targetProgress:本波目標(達標即可過波)。
  * - alive:場上實體化的活怪數。
- * - pending:已生成但還在 telegraph(登場預警)中、尚未實體化的怪數(★算進總量防超生)。
+ * - pending:已生成但還在 telegraph(登場預警)中、尚未實體化的怪數(算進總量防超生)。
  * - maxAlive:場上同時上限。
  * - spawnThreshold:活怪跌破此值→開始補生。
  * - refilling(latch):補生栓——跌破 threshold 開,補到 maxAlive 才關(防抖,避免在 threshold 邊界抖動)。
@@ -34,11 +34,11 @@ export function updateRefillLatch(occupancy: number, maxAlive: number, spawnThre
 }
 
 /**
- * ★聰明停生:這一幀是否【還能再生一隻】(生產總量封頂,絕不超生)。
+ * 聰明停生:這一幀是否【還能再生一隻】(生產總量封頂,絕不超生)。
  * ① 生產總量已達目標(progress + alive + pending >= targetProgress)→停(不多生,殺完剛好達標)。
  * ② 場上(含 pending)已達上限(alive + pending >= maxAlive)→停(這幀不生,等空位)。
  * ③ 其餘:只有在【補生中(refilling latch 開)】才補——即 occupancy 曾跌破 threshold 且尚未補滿。
- * ★pending 一定要算進①②(波騎頭號雷:只算 alive 會在 telegraph 空窗連續超生)。
+ * pending 一定要算進①②(波騎頭號雷:只算 alive 會在 telegraph 空窗連續超生)。
  */
 export function shouldSpawnMore(s: WaveSpawnState): boolean {
   const occupancy = s.alive + s.pending;

@@ -46,10 +46,10 @@ export class CollectRaceScene extends Phaser.Scene {
   private nextSignAt = 0;
   private endsAt = 0;
   private running = false;
-  private finishing = false; // ★結束演出(聚光燈)進行中
+  private finishing = false; // 結束演出(聚光燈)進行中
   private phase: 'intro' | 'playing' | 'ended' = 'intro';
   private introLayer?: Phaser.GameObjects.Container;
-  // ★v4:撿取提示(玩家 pickRadius 內最近可撿物件的高亮圈,脈動)
+  // 撿取提示(玩家 pickRadius 內最近可撿物件的高亮圈,脈動)
   private pickHint?: Phaser.GameObjects.Graphics;
   private pickHintPulse = 0;
 
@@ -152,7 +152,7 @@ export class CollectRaceScene extends Phaser.Scene {
     this.phase = 'playing';
     if (this.introLayer) { this.introLayer.destroy(); this.introLayer = undefined; }
     this.endsAt = this.time.now + this.cfg.durationMs;
-    this.nextSignAt = this.time.now + Phaser.Math.Between(this.cfg.signIntervalMinMs, this.cfg.signIntervalMaxMs); // v5:開始起算,首次也 9~12 秒隨機
+    this.nextSignAt = this.time.now + Phaser.Math.Between(this.cfg.signIntervalMinMs, this.cfg.signIntervalMaxMs); // 開始起算,首次也 9~12 秒隨機
     this.running = true;
   }
 
@@ -201,7 +201,7 @@ export class CollectRaceScene extends Phaser.Scene {
       };
       this.racers.push(racer);
     }
-    // ★v4:撿取提示圖層(在物件下方一點,高亮可撿物件)
+    // 撿取提示圖層(在物件下方一點,高亮可撿物件)
     this.pickHint = this.add.graphics().setDepth(4);
   }
 
@@ -212,11 +212,11 @@ export class CollectRaceScene extends Phaser.Scene {
     this.add.rectangle(w / 2, 24, 380, 46, 0x101828, 0.9).setStrokeStyle(2, 0xffd23f, 0.9).setDepth(20);
     this.add.text(w / 2 - 176, 24, '收集：', { fontFamily: 'monospace', fontSize: '18px', color: '#cbd5e1' })
       .setOrigin(0, 0.5).setDepth(21);
-    // ★告示圖示用【與場上物件同一套貼圖 collect-<shape>】→圖示形狀+顏色與場上物件完全一致
+    // 告示圖示用【與場上物件同一套貼圖 collect-<shape>】→圖示形狀+顏色與場上物件完全一致
     this.signIcon = this.add.image(w / 2 - 30, 24, 'collect-diamond').setDepth(21);
     this.signText = this.add.text(w / 2 + 4, 24, '', { fontFamily: 'monospace', fontSize: '22px', color: '#ffffff', fontStyle: 'bold' })
       .setOrigin(0, 0.5).setDepth(21);
-    // ★清楚的 60 秒倒數(上方置中偏上、大字)
+    // 清楚的 60 秒倒數(上方置中偏上、大字)
     this.timerText = this.add.text(w / 2, 62, '60', {
       fontFamily: 'monospace', fontSize: '40px', color: '#7ee7ff', fontStyle: 'bold', stroke: '#000', strokeThickness: 5
     }).setOrigin(0.5).setDepth(21);
@@ -256,7 +256,7 @@ export class CollectRaceScene extends Phaser.Scene {
       // 避免生在箱子上
       let clash = false;
       for (const b of this.bins) { if (Phaser.Math.Distance.Between(x, y, b.x, b.y) < this.cfg.binRadius + 30) { clash = true; break; } }
-      // ★與其他物件不互疊
+      // 與其他物件不互疊
       if (!clash) {
         for (const it of this.items) {
           if (!it.active || it.carried) continue;
@@ -284,13 +284,13 @@ export class CollectRaceScene extends Phaser.Scene {
 
   // ── 告示：換要收集的形狀 ──
   private pickNewTargetShape(_force = false): void {
-    // v2:固定定時換(不再看「丟對就換」或最短間隔)。換完排下一次。
+    // 固定定時換(不再看「丟對就換」或最短間隔)。換完排下一次。
     let next = this.randShape();
     let guard = 0; while (next === this.targetShape && guard++ < 5) next = this.randShape();
     this.targetShape = next;
-    // ★v5:下次換告示間隔【9~12 秒隨機】(不規律)
+    // 下次換告示間隔【9~12 秒隨機】(不規律)
     this.nextSignAt = this.time.now + Phaser.Math.Between(this.cfg.signIntervalMinMs, this.cfg.signIntervalMaxMs);
-    this.signIcon.setTexture('collect-' + next); // ★與場上物件同貼圖(形狀+顏色一致)
+    this.signIcon.setTexture('collect-' + next); // 與場上物件同貼圖(形狀+顏色一致)
     this.signText.setText(this.cfg.shapeNames[next]);
     // 告示閃一下
     this.tweens.add({ targets: [this.signIcon, this.signText], scale: { from: 1.4, to: 1 }, duration: 250 });
@@ -351,7 +351,7 @@ export class CollectRaceScene extends Phaser.Scene {
       // 得分特效：箱子上跳分
       this.showFloatText(r.bin.x, r.bin.y - this.cfg.binRadius - 20, '+1', r.bin.color);
       this.tweens.add({ targets: r.bin.gfx, scale: { from: 1.25, to: 1 }, duration: 200 });
-      // v2:丟對【照常計分,但不觸發換告示】——換告示只由 10 秒定時器
+      // 丟對照常計分,但不觸發換告示——換告示只由 10 秒定時器
     } else {
       // 撿錯不算分：物件彈出消失
       this.showFloatText(r.bin.x, r.bin.y - this.cfg.binRadius - 20, '✗', 0xff5555);
@@ -391,22 +391,22 @@ export class CollectRaceScene extends Phaser.Scene {
 
     this.updatePlayer(dt);
     for (let i = 1; i < 4; i++) this.updateBot(this.racers[i], dt);
-    // ★v5 物件補充【每幀即時】:任一形狀場上(未撿)數量<perShapeTarget→立刻補齊,場上隨時充足、不會缺、找得到告示指定形狀
+    // 物件補充【每幀即時】:任一形狀場上(未撿)數量<perShapeTarget→立刻補齊,場上隨時充足、不會缺、找得到告示指定形狀
     this.replenishItems();
-    // v2 物件【可被推開】(反轉):角色走路碰到物件→推動【物件】讓開(不擋角色);物件速度整合+摩擦+邊界+互不疊。
+    // 物件【可被推開】(反轉):角色走路碰到物件→推動【物件】讓開(不擋角色);物件速度整合+摩擦+邊界+互不疊。
     for (const r of this.racers) this.pushItemsFromRacer(r, dt);
     this.updateItemsPhysics(dt);
     // 帶著的物件跟隨角色(在頭上)
     for (const r of this.racers) {
       if (r.carrying) { r.carrying.x = r.x; r.carrying.y = r.y - 30; r.carrying.setDepth(11); }
     }
-    // v2 告示【固定每 N 秒換】(定時,不看丟對)
+    // 告示【固定每 N 秒換】(定時,不看丟對)
     if (this.time.now >= this.nextSignAt) this.pickNewTargetShape(true);
-    // ★v4:撿取提示——高亮玩家可撿範圍內最近可撿物件
+    // 撿取提示——高亮玩家可撿範圍內最近可撿物件
     this.updatePickHint(dt);
   }
 
-  /** ★v4 撿取提示:玩家手上無物件時,高亮 pickRadius 內【最近可撿物件】(脈動描邊發光)→一眼知道按空白會撿到誰。手上有物件→不顯示。 */
+  /** 撿取提示:玩家手上無物件時,高亮 pickRadius 內【最近可撿物件】(脈動描邊發光)→一眼知道按空白會撿到誰。手上有物件→不顯示。 */
   private updatePickHint(dt: number): void {
     const g = this.pickHint;
     if (!g) return;
@@ -431,8 +431,8 @@ export class CollectRaceScene extends Phaser.Scene {
   }
 
   /**
-   * v2 物件可被推開(反轉自「擋角色」)：角色與未撿物件重疊→把【物件】朝被撞方向推出重疊 + 給推速度。
-   * 角色照常移動不被擋(走過去把物件撥開)。carried 物件不參與。同 v62 主戰鬥木箱可推動做法。
+   * 物件可被推開(反轉自「擋角色」)：角色與未撿物件重疊→把【物件】朝被撞方向推出重疊 + 給推速度。
+   * 角色照常移動不被擋(走過去把物件撥開)。carried 物件不參與。同 主戰鬥木箱可推動做法。
    */
   private pushItemsFromRacer(r: Racer, dt: number): void {
     const rr = 16;
@@ -445,7 +445,7 @@ export class CollectRaceScene extends Phaser.Scene {
       if (d < minDist) {
         const overlap = minDist - d;
         const nx = d > 0.001 ? dx / d : 1, ny = d > 0.001 ? dy / d : 0;
-        // ★v4:位置校正拖行【上限 itemPushDragMax】——即使玩家一直走進來,物件每幀最多只被撥開一點點
+        // 位置校正拖行【上限 itemPushDragMax】——即使玩家一直走進來,物件每幀最多只被撥開一點點
         //   (允許輕微重疊,靠 pickRadius 仍可撿);→碰到幾乎不動,不會被拖著跑一整段。
         const move = Math.min(overlap, this.cfg.itemPushDragMax);
         it.x += nx * move; it.y += ny * move;
@@ -456,7 +456,7 @@ export class CollectRaceScene extends Phaser.Scene {
     }
   }
 
-  /** v2 每幀更新物件物理：速度整合+摩擦停下 + 夾場內(推到牆停) + 物件間不疊(互推)。 */
+  /** 每幀更新物件物理：速度整合+摩擦停下 + 夾場內(推到牆停) + 物件間不疊(互推)。 */
   private updateItemsPhysics(dt: number): void {
     const a = this.arena;
     const items = this.items;
@@ -559,7 +559,7 @@ export class CollectRaceScene extends Phaser.Scene {
   }
 
   /**
-   * ★結束演出:時間到分出勝者→不立刻結算,先做【聚光燈聚焦勝利者】:
+   * 結束演出:時間到分出勝者→不立刻結算,先做【聚光燈聚焦勝利者】:
    * 畫面變暗 + 亮圈聚焦在最高分者(放大脈動慶祝),平手多人則同時聚焦→停留約1.8秒→才 endGame(排名)。
    */
   private beginFinish(): void {

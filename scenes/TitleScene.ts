@@ -3,14 +3,14 @@ import { GameConfig } from '../config';
 import { CharacterEditorPanel } from '../objects/CharacterEditorPanel';
 
 /**
- * TitleScene（v16）：進入遊戲的第一個畫面。
+ * TitleScene：進入遊戲的第一個畫面。
  * 顯示標題「鬥氣割草」+ 開始按鈕 + 操作說明。
  * 按下「開始」（點擊按鈕 / 任意鍵 / 空白鍵）才 scene.start('GameScene') + launch('UIScene')，
  * 此時 GameScene 才真正開打並開始生怪（在此之前不生怪）。
  */
 export class TitleScene extends Phaser.Scene {
   private started = false;
-  /** v47：目前用鍵盤選中的模式 + 黃框物件 + 兩鈕 x 座標 */
+  /** 目前用鍵盤選中的模式 + 黃框物件 + 兩鈕 x 座標 */
   private selected: 'fast' | 'slow' = 'fast';
   private highlightRect?: Phaser.GameObjects.Rectangle;
   private hlPos: { fast: number; slow: number } = { fast: 0, slow: 0 };
@@ -21,7 +21,7 @@ export class TitleScene extends Phaser.Scene {
     super('TitleScene');
   }
 
-  /** v47：切換選取的模式——移動黃框到該鈕。 */
+  /** 切換選取的模式——移動黃框到該鈕。 */
   private selectMode(mode: 'fast' | 'slow'): void {
     if (this.charEditor?.isOpen) return; // 角色編輯器開啟中：方向鍵交給面板
     this.selected = mode;
@@ -60,8 +60,8 @@ export class TitleScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(5);
 
-    // v46：兩個模式按鈕並排——「快速模式」「慢速模式」
-    // v47：兩個模式按鈕 + 鍵盤選擇（方向鍵切換、選中黃框、空白鍵確認）。滑鼠點擊仍保留。
+    // 兩個模式按鈕並排——「快速模式」「慢速模式」
+    // 兩個模式按鈕 + 鍵盤選擇（方向鍵切換、選中黃框、空白鍵確認）。滑鼠點擊仍保留。
     const btnW = 240;
     const btnH = 66;
     const btnY = h * 0.5;
@@ -117,7 +117,7 @@ export class TitleScene extends Phaser.Scene {
     kb.addKey(KC.W).on('down', toggle);
     kb.addKey(KC.S).on('down', toggle);
 
-    // 操作說明（v44：更新為最新玩法，分兩欄精簡呈現）
+    // 操作說明
     const helpLeft = [
       '▍操作',
       '滑鼠瞄準：指向敵人／道具即鎖定',
@@ -172,7 +172,7 @@ export class TitleScene extends Phaser.Scene {
       .setDepth(5);
     this.tweens.add({ targets: hint, alpha: 0.3, duration: 700, yoyo: true, repeat: -1 });
 
-    // v47：空白鍵 = 確認【目前選中(黃框)】的模式進入
+    // 空白鍵 = 確認【目前選中(黃框)】的模式進入
     // （用 on 而非 once：角色編輯器開啟時按空白會被忽略，不能因此吃掉唯一一次）
     this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE).on('down', () => this.startGame(this.selected));
 

@@ -46,9 +46,9 @@ export class BombArenaScene extends Phaser.Scene {
   private nextBombSpawnAt = 0;
   private nextShakeAt = 0;
   private running = false;
-  private slowFactor = 1;       // ★慢動作:遊戲位移/tween 時間縮放(1=正常,0.35=慢動作)
-  private finishing = false;    // ★結束演出(慢動作/緩衝)進行中,避免重複觸發 endGame
-  // ★結束演出時序(timestamp 驅動,由 update 每幀推進;不依賴巢狀 delayedCall→避免任何路徑漏恢復造成永久卡)
+  private slowFactor = 1;       // 慢動作:遊戲位移/tween 時間縮放(1=正常,0.35=慢動作)
+  private finishing = false;    // 結束演出(慢動作/緩衝)進行中,避免重複觸發 endGame
+  // 結束演出時序(timestamp 驅動,由 update 每幀推進;不依賴巢狀 delayedCall→避免任何路徑漏恢復造成永久卡)
   private finishSlowEndAt = 0;  // 慢動作恢復時間(0=不在慢動作)
   private finishEndGameAt = 0;  // 觸發 endGame 時間(0=未排定)
   private phase: 'intro' | 'ready' | 'playing' | 'ended' = 'intro';
@@ -305,7 +305,7 @@ export class BombArenaScene extends Phaser.Scene {
   // ── 主循環 ──
   update(_time: number, delta: number): void {
     if (!this.running) return;
-    const dt = (delta / 1000) * this.slowFactor; // ★套用慢動作縮放(結束決勝時刻)
+    const dt = (delta / 1000) * this.slowFactor; // 套用慢動作縮放(結束決勝時刻)
     const remainMs = Math.max(0, this.endsAt - this.time.now);
     this.timerText.setText(String(Math.ceil(remainMs / 1000)));
 
@@ -318,7 +318,7 @@ export class BombArenaScene extends Phaser.Scene {
     this.drawFaceIndicator(this.fighters[0]);
     this.updatePickHint(dt);
 
-    // ★結束判定:第3人出局(≤1)→dramatic 慢動作;60秒到多人活→非dramatic 緩衝。finishing 中改推進結束時序(不重複觸發)。
+    // 結束判定:第3人出局(≤1)→dramatic 慢動作;60秒到多人活→非dramatic 緩衝。finishing 中改推進結束時序(不重複觸發)。
     if (!this.finishing) {
       const aliveCount = this.fighters.filter(f => f.alive).length;
       if (aliveCount <= 1) { this.beginFinish(true); }
@@ -329,7 +329,7 @@ export class BombArenaScene extends Phaser.Scene {
   }
 
   /**
-   * ★結束演出緩衝:
+   * 結束演出緩衝:
    * - dramatic=true(第3人出局=剩最後1人決勝):慢動作 slowFactor→0.35 約1.2秒→恢復→短停→結算。
    * - dramatic=false(60秒到仍多人存活):不慢動作,正常短緩衝(停留1秒)→結算。
    * 慢動作結束後才 endGame(計時已停,不受影響)。
@@ -337,7 +337,7 @@ export class BombArenaScene extends Phaser.Scene {
   private beginFinish(dramatic: boolean): void {
     if (this.finishing) return;
     this.finishing = true;
-    // ★不再用巢狀 delayedCall(某些路徑可能漏恢復→永久卡);改 timestamp 驅動、由 update 每幀推進恢復+結算。
+    // 不再用巢狀 delayedCall(某些路徑可能漏恢復→永久卡);改 timestamp 驅動、由 update 每幀推進恢復+結算。
     // running 保持 true 讓 update 續跑(演出+時序);finishing=true 防重複觸發結束判定。
     this.running = true;
     const now = this.time.now;
@@ -356,7 +356,7 @@ export class BombArenaScene extends Phaser.Scene {
     }
   }
 
-  /** ★結束演出時序:每幀由 update 推進——到點恢復慢動作、到點 endGame。timestamp 用 this.time.now(scene clock,穩定前進)→不會永久卡。 */
+  /** 結束演出時序:每幀由 update 推進——到點恢復慢動作、到點 endGame。timestamp 用 this.time.now(scene clock,穩定前進)→不會永久卡。 */
   private updateFinishSequence(): void {
     if (!this.finishing || this.phase === 'ended') return;
     const now = this.time.now;
@@ -461,7 +461,7 @@ export class BombArenaScene extends Phaser.Scene {
         const nx = d > 0.001 ? (f.x - ex) / d : 1, ny = d > 0.001 ? (f.y - ey) / d : 0;
         f.vx = nx * this.cfg.knockSpeed; f.vy = ny * this.cfg.knockSpeed;
         f.stunUntil = this.time.now + this.cfg.knockStunMs;
-        // ★手上拿著炸彈被炸→手上炸彈也連爆
+        // 手上拿著炸彈被炸→手上炸彈也連爆
         const held = f.holding;
         this.eliminate(f);
         if (held && !held.dead && depth < this.cfg.chainMaxDepth) {
@@ -470,7 +470,7 @@ export class BombArenaScene extends Phaser.Scene {
         }
       }
     }
-    // ★連鎖引爆:範圍內其他炸彈(地上/飛行/倒數中)→延遲連爆(深度上限防無限)
+    // 連鎖引爆:範圍內其他炸彈(地上/飛行/倒數中)→延遲連爆(深度上限防無限)
     if (depth < this.cfg.chainMaxDepth) {
       for (const other of this.bombs) {
         if (other.dead || other === b) continue;
@@ -688,7 +688,7 @@ export class BombArenaScene extends Phaser.Scene {
       if (target) {
         const dx = target.x - f.x, dy = target.y - f.y, d = Math.hypot(dx, dy) || 1;
         f.faceX = dx / d; f.faceY = dy / d;
-        // ★不自炸:撞人即爆發生在目標位置,爆炸半徑 explodeRadius;只有當自己離目標夠遠(> explodeRadius+radius+safe)才丟,否則會把自己也炸到
+        // 不自炸:撞人即爆發生在目標位置,爆炸半徑 explodeRadius;只有當自己離目標夠遠(> explodeRadius+radius+safe)才丟,否則會把自己也炸到
         const safeThrowDist = this.cfg.explodeRadius + this.cfg.radius + this.cfg.botSelfSafeMargin;
         if (this.time.now >= f.nextDecideAt) {
           f.nextDecideAt = this.time.now + this.cfg.botReactMs;
@@ -739,7 +739,7 @@ export class BombArenaScene extends Phaser.Scene {
     if (this.phase === 'ended') return;
     this.phase = 'ended';
     this.running = false;
-    // ★防呆:結算時強制恢復慢動作/時間縮放(即使任何路徑漏恢復,結算畫面也絕不停在慢動作/凍結)。
+    // 防呆:結算時強制恢復慢動作/時間縮放(即使任何路徑漏恢復,結算畫面也絕不停在慢動作/凍結)。
     this.slowFactor = 1;
     this.tweens.timeScale = 1;
     if (this.faceIndicator) this.faceIndicator.clear();

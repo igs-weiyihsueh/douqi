@@ -6,22 +6,22 @@ interface GameOverData {
   perKills: number[];
   labels: string[];
   survivalMs: number;
-  /** v25 第8項：本場 P1 普攻總命中次數 */
+  /** 第8項：本場 P1 普攻總命中次數 */
   p1AttackHits?: number;
-  /** v39：是否為「通關」（打倒第 8 關 BOSS）；true=通關畫面、false/未給=全員陣亡 */
+  /** 是否為「通關」（打倒第 8 關 BOSS）；true=通關畫面、false/未給=全員陣亡 */
   won?: boolean;
-  /** v46：本場操作模式，重開時沿用 */
+  /** 本場操作模式，重開時沿用 */
   controlMode?: 'fast' | 'slow';
 }
 
 /**
- * GameOverScene（v6）：全員陣亡後的結算。
+ * GameOverScene：全員陣亡後的結算。
  * 顯示團隊總擊殺、各角色擊殺、存活時間，可重新開始。
  */
 export class GameOverScene extends Phaser.Scene {
   private restarting = false;
   private spaceKey?: Phaser.Input.Keyboard.Key;
-  private controlMode: 'fast' | 'slow' = 'fast'; // v46：沿用本場模式重開
+  private controlMode: 'fast' | 'slow' = 'fast'; // 沿用本場模式重開
   private onSpace = (): void => this.restart();
 
   constructor() {
@@ -38,7 +38,7 @@ export class GameOverScene extends Phaser.Scene {
 
     this.add.rectangle(0, 0, w, h, 0x000000, 0.7).setOrigin(0, 0);
 
-    // v39：通關(won)顯示金色「通關！」；否則紅色「全員陣亡」
+    // 通關(won)顯示金色「通關！」；否則紅色「全員陣亡」
     this.add
       .text(w / 2, h / 2 - 150, data.won ? '通關！擊倒最終 BOSS' : '全員陣亡', {
         fontFamily: 'monospace',
@@ -77,7 +77,7 @@ export class GameOverScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    // v25 第8項：本場 P1 普攻總命中次數
+    // 第8項：本場 P1 普攻總命中次數
     this.add
       .text(w / 2, h / 2 + 32, `P1 普攻命中次數：${data.p1AttackHits ?? 0}`, {
         fontFamily: 'monospace',
@@ -134,7 +134,7 @@ export class GameOverScene extends Phaser.Scene {
     // 根因修復③：GameScene 已被 stop（非 pause，見 triggerGameOver），這裡乾淨全新啟動。
     // 先停 UI 與自己，再 start GameScene（會重跑 init/create，狀態全新）+ 重啟 UIScene。
     this.scene.stop('UIScene');
-    this.scene.start('GameScene', { controlMode: this.controlMode }); // v46：沿用本場模式
+    this.scene.start('GameScene', { controlMode: this.controlMode }); // 沿用本場模式
     this.scene.launch('UIScene');
     this.scene.stop(); // 停掉自己（GameOverScene），放最後避免中斷上面的排程
   }

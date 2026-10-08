@@ -12,20 +12,20 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
 
   hp: number = GameConfig.player.maxHp;
   spirit = 0;
-  /** v55：能量值(僅 P1 用)——獨立於 combo/spirit。命中+1、被打-1、滿10自動強化、強化期間倒退到0解除。 */
+  /** 能量值(僅 P1 用)——獨立於 combo/spirit。命中+1、被打-1、滿10自動強化、強化期間倒退到0解除。 */
   energy = 0;
   /** 慢速變身期間 AOE 命中次數（每 combo.empower.burstEveryAoeHits 次觸發一次爆發）；每次變身開始歸零 */
   empowerAoeHits = 0;
-  /** ★階段二：Credit點數 - 每個角色獨立的貨幣點數 */
+  /** 階段二：Credit點數 - 每個角色獨立的貨幣點數 */
   credit = 0;
-  /** ★階段三：COMBO獎勵系統狀態 */
+  /** 階段三：COMBO獎勵系統狀態 */
   comboState = {
     currentStreak: 0,
     lastKillTime: 0,
     ticketsEarned: 0,
     isWarning: false,
     nextMilestone: GameConfig.comboReward.MILESTONES[0],  // 使用配置中的第一個里程碑
-    // ★新增：待處理獎勵狀態
+    // 新增：待處理獎勵狀態
     pendingRewardIndex: undefined as number | undefined,
     pendingRewardTickets: undefined as number | undefined,
     pendingRewardMilestone: undefined as number | undefined
@@ -34,16 +34,16 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
   alive = true;
 
   invulnUntil = 0;
-  /** v11：遠距衝撞衝刺期間的護盾（無敵）；衝刺結束由場景清除 */
+  /** 遠距衝撞衝刺期間的護盾（無敵）；衝刺結束由場景清除 */
   dashShielded = false;
-  /** v13：招式演出鎖——期間無敵且玩家輸入不驅動角色（到此時間戳前鎖定） */
+  /** 招式演出鎖——期間無敵且玩家輸入不驅動角色（到此時間戳前鎖定） */
   skillLockUntil = 0;
 
   // 衝刺（純方向，遇第一個敵人停下）
   isDashing = false;
   dashDestX = 0;
   dashDestY = 0;
-  /** v14.2：本次衝刺是否為「衝去撿道具」（途中不因撞到敵人而中止，確保撿得到） */
+  /** 本次衝刺是否為「衝去撿道具」（途中不因撞到敵人而中止，確保撿得到） */
   dashToItem = false;
   /** 目前瞄準角度（弧度） */
   aimAngle = 0;
@@ -51,20 +51,20 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
 
   // 爆發
   isBursting = false;
-  /** v31：限時強化結束時間戳(★快速模式用：combo10 觸發、固定 durationMs)。 */
+  /** 限時強化結束時間戳(快速模式用：combo10 觸發、固定 durationMs)。 */
   empowerUntil = 0;
-  /** v55：慢速模式限時強化旗標(能量驅動：滿10→true，能量倒退到0→GameScene 設回 false)。 */
+  /** 慢速模式限時強化旗標(能量驅動：滿10→true，能量倒退到0→GameScene 設回 false)。 */
   empowered = false;
-  /** v34：被塔環命中→定身(不能移動/衝刺)到此時間戳 */
+  /** 被塔環命中→定身(不能移動/衝刺)到此時間戳 */
   rootedUntil = 0;
-  /** v59：時停穿梭瞬移期間旗標——期間 physics overlap 不觸發拾取道具(穿梭經過道具不吃)。 */
+  /** 時停穿梭瞬移期間旗標——期間 physics overlap 不觸發拾取道具(穿梭經過道具不吃)。 */
   timestopping = false;
 
   // BOT 專用：下次自動出手時間
   nextBotActAt = 0;
 
   /**
-   * v15：此角色當前鎖定的目標（敵人或道具）。P1 由玩家自動鎖定寫入，BOT 由 AI 寫入。
+   * 此角色當前鎖定的目標（敵人或道具）。P1 由玩家自動鎖定寫入，BOT 由 AI 寫入。
    * 用最小介面型別避免與 Enemy/Item 的循環 import；實際物件由 GameScene 指派。
    */
   lockedTarget: (Phaser.GameObjects.GameObject & { x: number; y: number }) | null = null;
@@ -72,23 +72,23 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
   private label: Phaser.GameObjects.Text;
   /** 衝刺護盾光環 */
   private shieldAura: Phaser.GameObjects.Arc;
-  /** v40(2)：強化狀態環繞特效（繞角色轉的光點 + 脈動光環，取代放大） */
+  /** 強化狀態環繞特效（繞角色轉的光點 + 脈動光環，取代放大） */
   private empowerOrbit!: Phaser.GameObjects.Graphics;
-  /** ★v60 階段3:啟用【強化型態造型】(升級版變身視覺;只 slow P1 開)。程式繪製疊加,不放大。 */
+  /** 階段3:啟用【強化型態造型】(升級版變身視覺;只 slow P1 開)。程式繪製疊加,不放大。 */
   empoweredForm = false;
-  /** ★v60:強化型態上升粒子(能量感);empoweredForm 開時強化期間發射。 */
+  /** 強化型態上升粒子(能量感);empoweredForm 開時強化期間發射。 */
   private empowerParticles?: Phaser.GameObjects.Particles.ParticleEmitter;
   private empowerFormOn = false; // 目前是否正在顯示強化造型(用於進入/退出切換)
-  /** v19：角色腳下 血條/鬥氣條（跟隨移動） */
+  /** 角色腳下 血條/鬥氣條（跟隨移動） */
   private hpBarBg!: Phaser.GameObjects.Rectangle;
   private hpBar!: Phaser.GameObjects.Rectangle;
   private spiritBarBg!: Phaser.GameObjects.Rectangle; // 鬥氣條背景
   private spiritBar!: Phaser.GameObjects.Rectangle;
-  /** v19：鬥氣滿/爆發時角色身上的「爆」標記 */
+  /** 鬥氣滿/爆發時角色身上的「爆」標記 */
   private burstMark!: Phaser.GameObjects.Text;
-  /** v26：爆標記脈動 tween */
+  /** 爆標記脈動 tween */
   private burstMarkTween?: Phaser.Tweens.Tween;
-  /** v45(5)：被定身時的「定身!」提示 + 鎖鏈環（讓玩家知道為何不能動） */
+  /** 被定身時的「定身!」提示 + 鎖鏈環（讓玩家知道為何不能動） */
   private rootMark!: Phaser.GameObjects.Text;
   private rootRing!: Phaser.GameObjects.Graphics;
   private readonly footBarW = 34;
@@ -112,7 +112,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
       .setVisible(false);
     this.shieldAura.setStrokeStyle(3, 0x8be9fd, 0.9);
 
-    // v40(2)：強化環繞特效（繞角色轉的金色光點 + 脈動光環），預設隱藏
+    // 強化環繞特效（繞角色轉的金色光點 + 脈動光環），預設隱藏
     this.empowerOrbit = scene.add.graphics().setDepth(9).setVisible(false);
 
     this.label = scene.add
@@ -126,7 +126,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
       .setOrigin(0.5)
       .setDepth(11);
 
-    // v19：角色腳下小型血條 + 鬥氣條（跟隨移動）
+    // 角色腳下小型血條 + 鬥氣條（跟隨移動）
     const bw = this.footBarW;
     const footY = y + GameConfig.player.radius + 6;
     this.hpBarBg = scene.add
@@ -141,7 +141,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
       .setDepth(11);
     this.spiritBar = scene.add.rectangle(x - bw / 2 + 1, footY + 5, 0, 3, 0x60a5fa).setOrigin(0, 0.5).setDepth(11);
 
-    // v19：鬥氣滿/爆發標記「爆」（平時隱藏）（v26：字放大更突出）
+    // 鬥氣滿/爆發標記「爆」（平時隱藏）
     this.burstMark = scene.add
       .text(x, y - GameConfig.player.radius - 44, '爆', {
         fontFamily: 'monospace',
@@ -155,7 +155,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
       .setDepth(12)
       .setVisible(false);
 
-    // v45(5)：定身視覺——頭上「定身!」字 + 腳下青色鎖鏈環，預設隱藏
+    // 定身視覺——頭上「定身!」字 + 腳下青色鎖鏈環，預設隱藏
     this.rootMark = scene.add
       .text(x, y - GameConfig.player.radius - 26, '定身!', {
         fontFamily: 'monospace',
@@ -175,17 +175,17 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
     return this.dashShielded || time < this.skillLockUntil || time < this.invulnUntil || time < this.empowerUntil || this.empowered;
   }
 
-  /** v31/v55：限時強化中——fast 用 empowerUntil 時間戳、slow 用 empowered 旗標(能量驅動)。 */
+  /** 限時強化中——fast 用 empowerUntil 時間戳、slow 用 empowered 旗標(能量驅動)。 */
   isEmpowered(time: number): boolean {
     return this.empowered || time < this.empowerUntil;
   }
 
-  /** v34：被定身中（不能移動/衝刺/攻擊位移） */
+  /** 被定身中（不能移動/衝刺/攻擊位移） */
   isRooted(time: number): boolean {
     return time < this.rootedUntil;
   }
 
-  /** v13：招式演出鎖定中（無敵 + 玩家不可操控） */
+  /** 招式演出鎖定中（無敵 + 玩家不可操控） */
   isSkillLocked(time: number): boolean {
     return time < this.skillLockUntil;
   }
@@ -195,12 +195,12 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
 
   /**
    * 受傷，回傳是否實際「被命中」(無敵/衝刺護盾/已死不算)。
-   * fast：扣血(可死)。v55 slow(noHpLoss)：不扣血、不會死，只作為命中判定(能量 -1 由此處理)。
+   * fast：扣血(可死)。slow(noHpLoss)：不扣血、不會死，只作為命中判定(能量 -1 由此處理)。
    */
   takeDamage(amount: number, time: number): boolean {
     if (!this.alive || this.isInvulnerable(time)) return false;
     if (this.noHpLoss) {
-      // v55 slow：不扣血、不死；被命中→能量 -1(夾≥0)。
+      // slow：不扣血、不死；被命中→能量 -1(夾≥0)。
       this.energy = Math.max(0, this.energy - 1);
       this.invulnUntil = time + GameConfig.player.invulnMs;
       return true;
@@ -216,7 +216,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
     if (on) this.shieldAura.setPosition(this.x, this.y);
   }
 
-  /** v19：一次攻擊命中(至少1隻)累積 1 次鬥氣（不論打中幾隻只算 1） */
+  /** 一次攻擊命中(至少1隻)累積 1 次鬥氣（不論打中幾隻只算 1） */
   gainSpiritHit(): void {
     if (this.isBursting) return;
     this.spirit = Math.min(GameConfig.spirit.hitsToBurst, this.spirit + 1);
@@ -236,7 +236,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
     this.label.setPosition(this.x, this.y - GameConfig.player.radius - 12);
     if (this.shieldAura.visible) this.shieldAura.setPosition(this.x, this.y);
 
-    // v19：腳下血條 + 鬥氣條跟隨 + 更新比例。v55：slow P1(noHpLoss) 無血量→隱藏腳下血條。
+    // 腳下血條 + 鬥氣條跟隨 + 更新比例。slow P1(noHpLoss) 無血量→隱藏腳下血條。
     const bw = this.footBarW;
     const footY = this.y + GameConfig.player.radius + 6;
     if (this.noHpLoss) {
@@ -276,7 +276,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
       this.spiritBar.setAlpha(1); // 恢復正常透明度
     }
 
-    // v19：鬥氣滿或爆發中 → 顯示「爆」標記（跟隨頭上）（v26：放大 + 脈動）
+    // 鬥氣滿或爆發中 → 顯示「爆」標記（跟隨頭上）
     const showMark = this.spiritFull || this.isBursting;
     if (showMark && !this.burstMark.visible) {
       // 剛變成顯示 → 起脈動放大 tween（發勁跳出感）
@@ -299,8 +299,8 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
     }
     if (showMark) this.burstMark.setPosition(this.x, this.y - GameConfig.player.radius - 44);
 
-    // v31：限時強化狀態視覺——金色染色 + 護盾光環；v40(2)：取消放大、改身上環繞特效（光點繞轉 + 脈動光環）
-    // ★v60 階段3:empoweredForm(slow P1)開時,升級成明顯的【強化變身造型】(疊亮色+雙光環+glow外框+上升粒子)。
+    // 限時強化狀態視覺——金色染色 + 護盾光環
+    // 階段3:empoweredForm(slow P1)開時,升級成明顯的【強化變身造型】(疊亮色+雙光環+glow外框+上升粒子)。
     const now = this.scene.time.now;
     if (this.isEmpowered(now)) {
       if (this.empoweredForm) {
@@ -325,7 +325,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
       this.empowerFormOn = false;
     }
 
-    // v45(5)：定身視覺——「定身!」字閃動 + 腳下青色鎖鏈環脈動 + 角色偏青灰染色（強化中不覆蓋金色）
+    // 定身視覺——「定身!」字閃動 + 腳下青色鎖鏈環脈動 + 角色偏青灰染色（強化中不覆蓋金色）
     if (this.isRooted(now)) {
       if (!this.rootMark.visible) this.rootMark.setVisible(true);
       this.rootMark.setPosition(this.x, this.y - GameConfig.player.radius - 26);
@@ -350,7 +350,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
     }
   }
 
-  /** v40(2)：畫強化環繞特效——3 個金色光點繞角色公轉 + 脈動光圈（不放大角色本體） */
+  /** 畫強化環繞特效——3 個金色光點繞角色公轉 + 脈動光圈（不放大角色本體） */
   private drawEmpowerOrbit(now: number): void {
     const g = this.empowerOrbit;
     g.setVisible(true).clear();
@@ -369,7 +369,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * ★v60 階段3:強化【變身造型】——在角色本體上疊繪(不放大):
+   * 階段3:強化【變身造型】——在角色本體上疊繪(不放大):
    * ①glow外框(粗描邊圈脈動) ②內光環(順轉光點) ③外光環(反轉、能量橙紅) ④弧形能量帶。
    */
   private drawEmpowerForm(now: number): void {
@@ -404,7 +404,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
     }
   }
 
-  /** ★v60:強化造型上升粒子(能量感)——on=true 建立/發射,false 停止清除。輕量、僅造型期間。 */
+  /** 強化造型上升粒子(能量感)——on=true 建立/發射,false 停止清除。輕量、僅造型期間。 */
   private ensureEmpowerParticles(on: boolean): void {
     if (on) {
       if (!this.empowerParticles) {
@@ -432,7 +432,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
     this.isBursting = false;
     this.dashShielded = false;
     this.skillLockUntil = 0;
-    this.rootedUntil = 0; // v45(5)：死亡清定身
+    this.rootedUntil = 0; // 死亡清定身
     this.rootMark.setVisible(false);
     this.rootRing.setVisible(false).clear();
     this.lockedTarget = null;
@@ -441,12 +441,12 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
     this.stopMoving();
     this.setTint(0x555555);
     this.setAlpha(0.4);
-    this.ensureEmpowerParticles(false); // ★v60:死亡清強化造型粒子
+    this.ensureEmpowerParticles(false); // 死亡清強化造型粒子
     this.empowerOrbit.setVisible(false).clear();
     (this.body as Phaser.Physics.Arcade.Body).enable = false;
     this.label.setText(`${GameConfig.characters.labels[this.index]} ✖`);
     this.label.setColor('#888888');
-    // v19：死亡隱藏腳下血鬥氣條與爆發標記
+    // 死亡隱藏腳下血鬥氣條與爆發標記
     this.hpBarBg.setVisible(false);
     this.hpBar.setVisible(false);
     this.spiritBar.setVisible(false);
@@ -457,7 +457,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * v16：原地滿血復活（給 P1 的 R 熱鍵用）。還原 die() 的所有狀態：
+   * 原地滿血復活（給 P1 的 R 熱鍵用）。還原 die() 的所有狀態：
    * 血回滿、清灰化/半透明/✖標籤、恢復物理與可操控；鬥氣歸零。
    */
   revive(): void {
@@ -481,7 +481,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
     this.label.setText(GameConfig.characters.labels[this.index]);
     this.label.setColor('#ffffff');
     this.label.setVisible(true);
-    // v19：復活恢復腳下血鬥氣條顯示（爆發標記由 syncLabel 依狀態決定）
+    // 復活恢復腳下血鬥氣條顯示（爆發標記由 syncLabel 依狀態決定）
     this.hpBarBg.setVisible(true);
     this.hpBar.setVisible(true);
     this.spiritBar.setVisible(true);

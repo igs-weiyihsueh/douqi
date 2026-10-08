@@ -11,7 +11,7 @@ export class BootScene extends Phaser.Scene {
   }
 
   create(): void {
-    // v17：4 個角色改「程式繪製人型剪影」（不同顏色；朝右=aimAngle 0），與敵人圓塊區隔
+    // 4 個角色改「程式繪製人型剪影」（不同顏色；朝右=aimAngle 0），與敵人圓塊區隔
     const colors = GameConfig.characters.colors;
     for (let i = 0; i < GameConfig.characters.count; i++) {
       this.makeHumanoidTexture(`char-${i}`, GameConfig.player.radius, colors[i], 0xffffff);
@@ -28,13 +28,13 @@ export class BootScene extends Phaser.Scene {
     this.makeCircleTexture('enemy-bomber', types.bomber.radius, types.bomber.color, types.bomber.stroke);
     this.makeCircleTexture('enemy-boss', GameConfig.boss.radius, GameConfig.boss.color, GameConfig.boss.stroke);
     this.makeCircleTexture('enemy-tower', GameConfig.event.tower.radius, GameConfig.event.tower.color, GameConfig.event.tower.stroke);
-    // v35(9)：NPC 專屬貼圖——藍色圓角方塊 + 白十字 + 外環，一眼跟「圓形怪物」區別
+    // NPC 專屬貼圖——藍色圓角方塊 + 白十字 + 外環，一眼跟「圓形怪物」區別
     this.makeNpcTexture('enemy-npc', GameConfig.event.guard.radius, GameConfig.event.guard.color, GameConfig.event.guard.stroke);
-    // v36：BOSS 戰錨點專屬貼圖——青色發光菱形+外環，跟圓形怪/藍方塊NPC 都不同（走位落點）
+    // BOSS 戰錨點專屬貼圖——青色發光菱形+外環，跟圓形怪/藍方塊NPC 都不同（走位落點）
     this.makeAnchorTexture('enemy-anchor', GameConfig.enemy.types.anchor.radius);
-    // ★寶箱怪貼圖:金色寶箱(箱身+鎖扣+金邊高光),一眼金光閃閃
+    // 寶箱怪貼圖:金色寶箱(箱身+鎖扣+金邊高光),一眼金光閃閃
     this.makeTreasureTexture('enemy-treasure', GameConfig.enemy.types.treasure.radius);
-    // ★金幣特效貼圖(金色小圓幣,噴散用)
+    // 金幣特效貼圖(金色小圓幣,噴散用)
     this.makeCoinTexture('coin');
     // 子彈貼圖
     this.makeCircleTexture('bullet', GameConfig.enemy.shooter.bulletRadius, 0x9dff5a, 0x1a3300);
@@ -47,9 +47,9 @@ export class BootScene extends Phaser.Scene {
     this.makeItemTexture('item-F', ic.F);
     this.makeItemTexture('item-H', ic.H);
     this.makeItemTexture('item-T', ic.T);
-    // v57 可打破物件（木箱）貼圖：棕色方箱 + 十字木紋，跟圓形怪/道具方塊區分
+    // 可打破物件（木箱）貼圖：棕色方箱 + 十字木紋，跟圓形怪/道具方塊區分
     this.makeBreakableTexture('breakable-jar');
-    // v61 爆炸桶貼圖：橘紅桶身 + 黃黑危險條紋 + 圓角，一眼跟木箱區別
+    // 爆炸桶貼圖：橘紅桶身 + 黃黑危險條紋 + 圓角，一眼跟木箱區別
     this.makeBarrelTexture('breakable-barrel');
     // 小遊戲「收集競賽」4 種形狀物件貼圖（鑽石藍/星星黃/心形紅/寶石綠）
     this.makeCollectShapeTexture('collect-diamond', 0x4aa3ff, 0x0a3a6b);
@@ -63,7 +63,7 @@ export class BootScene extends Phaser.Scene {
     this.makeGroundTexture();
     this.makeParticleTexture();
 
-    // ★新增：場景圖資源預載入
+    // 新增：場景圖資源預載入
     console.log('🔄 開始載入Scene.png...');
     
     // 添加載入事件監聽
@@ -107,7 +107,7 @@ export class BootScene extends Phaser.Scene {
     
     // 🎯 載入多角色底部面板UI替換圖片
     this.load.image('bottom-panel-1P', 'assets/1P.png');  // P1底部面板UI
-    this.load.image('bottom-panel-2P', 'assets/2P.png');  // P2底部面板UI  
+    this.load.image('bottom-panel-2P', 'assets/2P.png');  // P2底部面板UI
     this.load.image('bottom-panel-3P', 'assets/3P.png');  // P3底部面板UI
     this.load.image('bottom-panel-4P', 'assets/4P.png');  // P4底部面板UI
     
@@ -136,7 +136,7 @@ export class BootScene extends Phaser.Scene {
         return; // 不要立即啟動TitleScene
       }
       
-      // v16：貼圖產生完 → 先進標題畫面（按下開始才進 GameScene 生怪）
+      // 貼圖產生完 → 先進標題畫面（按下開始才進 GameScene 生怪）
       this.scene.start('TitleScene');
     });
     
@@ -144,7 +144,7 @@ export class BootScene extends Phaser.Scene {
     this.load.start();
   }
 
-  /** ★寶箱怪貼圖:金色寶箱——金邊描邊 + 箱身漸層 + 蓋縫 + 中央鎖扣 + 高光,金光閃閃。 */
+  /** 寶箱怪貼圖:金色寶箱——金邊描邊 + 箱身漸層 + 蓋縫 + 中央鎖扣 + 高光,金光閃閃。 */
   private makeTreasureTexture(key: string, radius: number): void {
     const size = radius * 2 + 6;
     const g = this.add.graphics();
@@ -175,7 +175,7 @@ export class BootScene extends Phaser.Scene {
     g.destroy();
   }
 
-  /** ★金幣特效貼圖:金色小圓幣 + 白高光。 */
+  /** 金幣特效貼圖:金色小圓幣 + 白高光。 */
   private makeCoinTexture(key: string): void {
     const r = 6;
     const size = r * 2 + 4;
@@ -298,7 +298,7 @@ export class BootScene extends Phaser.Scene {
     g.destroy();
   }
 
-  /** v57 可打破物件貼圖：棕色木箱(方形+木紋十字+描邊)，跟圓形怪/道具方塊明顯不同 */
+  /** 可打破物件貼圖：棕色木箱(方形+木紋十字+描邊)，跟圓形怪/道具方塊明顯不同 */
   private makeBreakableTexture(key: string): void {
     const r = GameConfig.breakable.radius;
     const size = r * 2 + 4;
@@ -321,7 +321,7 @@ export class BootScene extends Phaser.Scene {
     g.destroy();
   }
 
-  /** v61 爆炸桶貼圖：橘紅圓角桶身 + 黃色危險橫條紋 + 深紅描邊，一眼跟木箱(棕方箱)區別 */
+  /** 爆炸桶貼圖：橘紅圓角桶身 + 黃色危險橫條紋 + 深紅描邊，一眼跟木箱(棕方箱)區別 */
   private makeBarrelTexture(key: string): void {
     const bcfg = GameConfig.breakable.barrel;
     const r = GameConfig.breakable.radius;
@@ -364,7 +364,7 @@ export class BootScene extends Phaser.Scene {
   }
 
   /**
-   * v35(9)：NPC 專屬貼圖——「要守護的友軍」外觀，跟圓形怪物明顯區別：
+   * NPC 專屬貼圖——「要守護的友軍」外觀，跟圓形怪物明顯區別：
    * 藍色圓角方塊本體 + 白色十字（醫療/守護意象）+ 明亮外環光暈。
    * @param fill/stroke 沿用 config.event.guard 的色（此處另用固定藍為主，讓辨識度高）。
    */
@@ -404,7 +404,7 @@ export class BootScene extends Phaser.Scene {
   }
 
   /**
-   * v36：BOSS 戰錨點貼圖——青色發光菱形 + 外環 + 中心亮點（走位落點標記）。
+   * BOSS 戰錨點貼圖——青色發光菱形 + 外環 + 中心亮點（走位落點標記）。
    * 跟圓形怪、藍方塊 NPC 明顯區別，一眼認出是「可衝過去的走位點」。
    */
   private makeAnchorTexture(key: string, radius: number): void {
@@ -495,8 +495,8 @@ export class BootScene extends Phaser.Scene {
   }
   
   /**
-   * ★備用Scene.png載入方案
-   * 
+   * 備用Scene.png載入方案
+   *
    * 當主要載入失敗時，嘗試不同的路徑和方法
    */
   private tryAlternativeSceneLoad(): void {

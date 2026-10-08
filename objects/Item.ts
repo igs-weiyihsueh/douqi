@@ -4,12 +4,12 @@ import { GameConfig } from '../config';
 export type SkillType = 'A' | 'B' | 'C' | 'E' | 'F' | 'H' | 'T';
 
 /**
- * 道具（v8）：場上掉落，角色碰到即觸發對應一次性招式。
+ * 道具：場上掉落，角色碰到即觸發對應一次性招式。
  * 4 種以顏色 + 字母圖示區分（A 旋風斬 / B 天降雷擊 / C 居合貫穿 / E 全屏震爆）。
  */
 export class Item extends Phaser.Physics.Arcade.Sprite {
   skill: SkillType = 'A';
-  /** v15：原子拾取旗標——第一個拿到的角色設 true，其餘同幀碰到者略過，避免雙重觸發 */
+  /** 原子拾取旗標——第一個拿到的角色設 true，其餘同幀碰到者略過，避免雙重觸發 */
   taken = false;
   private expireAt = 0;
   private blinkTween?: Phaser.Tweens.Tween;
@@ -48,7 +48,7 @@ export class Item extends Phaser.Physics.Arcade.Sprite {
     this.iconText.setVisible(true);
     this.iconText.setAlpha(1);
 
-    // 輕微脈動吸引注意（v11：無護盾，碰到即可拾取）
+    // 輕微脈動吸引注意
     this.blinkTween?.remove();
     this.blinkTween = this.scene.tweens.add({
       targets: this,
@@ -59,7 +59,7 @@ export class Item extends Phaser.Physics.Arcade.Sprite {
     });
   }
 
-  /** v34：把到期時間往後推 ms（intermission 暫停倒數用） */
+  /** 把到期時間往後推 ms（intermission 暫停倒數用） */
   shiftExpire(ms: number): void {
     if (this.active) this.expireAt += ms;
   }

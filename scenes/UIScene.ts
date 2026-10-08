@@ -32,12 +32,12 @@ interface CharStat {
   kills: number;
   alive: boolean;
   isPlayer: boolean;
-  // ★頭上UI：角色世界座標
+  // 頭上UI：角色世界座標
   x: number;
   y: number;
-  // ★階段二：Credit點數
+  // 階段二：Credit點數
   credit: number;
-  // ★階段三：COMBO獎勵系統狀態
+  // 階段三：COMBO獎勵系統狀態
   combo: ComboState;
 }
 
@@ -62,14 +62,14 @@ interface StatsPayload {
   playerBurstReady: boolean;
   count: number;
   maxCount: number;
-  /** v25 第8項：P1 普攻累計命中次數 */
+  /** 第8項：P1 普攻累計命中次數 */
   p1AttackHits: number;
-  /** v27 波次制 */
+  /** 波次制 */
   wave: number;
   waveKilled: number;
   waveQuota: number;
   waveState: string;
-  /** ★波次進度 HUD(關卡制) */
+  /** 波次進度 HUD(關卡制) */
   levelMode?: boolean;
   currentLevel?: number;
   currentSub?: string;
@@ -82,13 +82,13 @@ interface StatsPayload {
   stageChests?: StageNodeKind[];
   progressPhase?: string;
   crossingOpen?: boolean;
-  /** v31/v55 連段(招式)系統 */
+  /** 連段(招式)系統 */
   controlMode: string;
   combo: number;
   comboMax: number;
   comboThresholds: { circle: number; line: number; burst: number; empower: number };
   empowerRemainMs: number;
-  /** v55 能量(強化)系統(slow 用) */
+  /** 能量(強化)系統(slow 用) */
   energy: number;
   energyMax: number;
   energyTrigger: number;
@@ -96,7 +96,7 @@ interface StatsPayload {
 }
 
 /**
- * UIScene（v19）：疊在遊戲上方的 HUD。
+ * UIScene：疊在遊戲上方的 HUD。
  * - 上方中央：團隊總擊殺 + 存活時間 + 加夥伴提示 + 等級/經驗條
  * - 血量/鬥氣改顯示在「各角色腳下」（見 Character），HUD 不再有底部狀態列與攻擊鈕
  * - 攻擊：空白鍵 或 點擊畫面任意處（不顯示大按鈕）
@@ -112,7 +112,7 @@ export class UIScene extends Phaser.Scene {
     circle: Phaser.GameObjects.Arc;
     labelText: Phaser.GameObjects.Text;
     
-    // 📊 雙欄位系統  
+    // 📊 雙欄位系統
     killIconText: Phaser.GameObjects.Text;  // 💀 骷髏圖案
     killText: Phaser.GameObjects.Text;      // 擊殺數字
     ticketIconText: Phaser.GameObjects.Text; // 🎫 彩票圖案
@@ -151,17 +151,17 @@ export class UIScene extends Phaser.Scene {
   private stageHudMysteryUsed = 0;
   /** 遞補動畫開始時間（scene time）；動畫時長見 waveHud.shiftMs */
   private stageHudShiftAt = -Infinity;
-  /** v25 第8項：P1 普攻命中計數（左上角） */
+  /** 第8項：P1 普攻命中計數（左上角） */
   private hitText!: Phaser.GameObjects.Text;
-  /** ★頭上UI系統 - 替換舊的左上角COMBO系統 */
-  // ★頭上UI系統：使用角色索引作為Map鍵，避免對象引用問題
+  /** 頭上UI系統 - 替換舊的左上角COMBO系統 */
+  // 頭上UI系統：使用角色索引作為Map鍵，避免對象引用問題
   private overheadUIs: Map<number, Phaser.GameObjects.Container> = new Map();
   private readonly OVERHEAD_DEPTH = 900;
   
-  // ★覆蓋模式控制標誌 - 防止updateStats()強制顯示P1頭頂UI
+  // 覆蓋模式控制標誌 - 防止updateStats()強制顯示P1頭頂UI
   private isP1HeadUIHidden = false;
   
-  // ★多角色底部面板替換系統
+  // 多角色底部面板替換系統
   private bottomPanelOverlays: Array<Phaser.GameObjects.Image | null> = [null, null, null, null]; // [1P, 2P, 3P, 4P]
 
   /** 下方面板 COMBO 文字（HIT xN），每個角色一個，索引對應 rows */
@@ -196,12 +196,12 @@ export class UIScene extends Phaser.Scene {
     REWARD_FLASH_END_RADIUS: 90
   } as const;
   
-  // ★頭上UI佈局常數：避免魔術數字
+  // 頭上UI佈局常數：避免魔術數字
   private readonly OVERHEAD_UI_CONFIG = {
     // 編號牌配置 - 左側位置
     BADGE: {
-      X: -70,  // ★調整：更左側，為Credit騰出空間
-      Y: -5,   // ★調整：與Credit水平對齊
+      X: -70,  // 更左側，為Credit騰出空間
+      Y: -5,   // 與Credit水平對齊
       RADIUS: 18,
       BORDER_WIDTH: 2,
       FONT_SIZE: '20px',
@@ -209,8 +209,8 @@ export class UIScene extends Phaser.Scene {
     },
     // Credit顯示配置 - 編號牌右側
     CREDIT: {
-      X: 20,   // ★調整：移到編號牌右側
-      Y: -5,   // ★調整：與編號牌水平對齊
+      X: 20,   // 移到編號牌右側
+      Y: -5,   // 與編號牌水平對齊
       BG_WIDTH: 120,
       BG_HEIGHT: 34,
       BORDER_WIDTH: 2,
@@ -283,7 +283,7 @@ export class UIScene extends Phaser.Scene {
       ENERGY_GLOW: 0xfff3a0 as const,
       ENERGY_SHINE: 0xffffff as const,
       ENERGY_BORDER_GLOW: 0xffffff as const,
-      // ★階段三：COMBO系統顏色
+      // 階段三：COMBO系統顏色
       WHITE: '#ffffff',
       BLACK: '#000000',
       TEXT_FLASH: '#ff3b30',
@@ -294,16 +294,16 @@ export class UIScene extends Phaser.Scene {
       COMBO_TEXT_CRITICAL: '#ff0000'
     }
   } as const;
-  /** v27 波次顯示（上方中央） */
+  /** 波次顯示（上方中央） */
   private waveText!: Phaser.GameObjects.Text;
-  /** v28 BOSS 血條 */
+  /** BOSS 血條 */
   private bossLabel!: Phaser.GameObjects.Text;
-  /** v33 事件 HUD（進度/倒數條） */
+  /** 事件 HUD（進度/倒數條） */
   private eventBarBg!: Phaser.GameObjects.Rectangle;
   private eventBar!: Phaser.GameObjects.Rectangle;
   private eventLabel!: Phaser.GameObjects.Text;
   private readonly eventBarWidth = 400;
-  /** ★道具開關觸控按鈕(右上角);面色/字隨 itemsEnabled 狀態更新;與鍵盤 I 鍵並存 */
+  /** 道具開關觸控按鈕(右上角);面色/字隨 itemsEnabled 狀態更新;與鍵盤 I 鍵並存 */
   private itemToggleBtnBg!: Phaser.GameObjects.Rectangle;
   private itemToggleBtnText!: Phaser.GameObjects.Text;
 
@@ -315,7 +315,7 @@ export class UIScene extends Phaser.Scene {
     // 根因修復：重啟時 rows 殘留上一局已銷毀物件會崩潰，每次 create 先清空
     this.rows = [];
     
-    // ★清空並銷毀所有頭上UI容器，防止記憶體洩漏
+    // 清空並銷毀所有頭上UI容器，防止記憶體洩漏
     this.overheadUIs.forEach((container) => {
       if (container && container.active) {
         container.destroy();
@@ -327,7 +327,7 @@ export class UIScene extends Phaser.Scene {
     const w = GameConfig.width;
     const h = GameConfig.height;
 
-    // 團隊總分 + 時間（上方中央）——★用戶要求隱藏這兩個上方文字(保留物件供 stats 更新,不顯示)
+    // 團隊總分 + 時間（上方中央）——用戶要求隱藏這兩個上方文字(保留物件供 stats 更新,不顯示)
     this.teamText = this.add
       .text(w / 2, 14, '團隊總擊殺 0', {
         fontFamily: 'monospace',
@@ -361,7 +361,7 @@ export class UIScene extends Phaser.Scene {
       }).setOrigin(0.5).setScrollFactor(0).setDepth(26).setVisible(false)
     );
 
-    // ★UI調整②:加入夥伴提示移到【畫面下方】(角色狀態列上方,置中) - 🚫 用戶要求關閉
+    // UI調整②:加入夥伴提示移到【畫面下方】(角色狀態列上方,置中) - 🚫 用戶要求關閉
     this.joinHintText = this.add
       .text(w / 2, h - 100, '按 B 加入ROBOT (1/4)', {
         fontFamily: 'monospace',
@@ -374,9 +374,9 @@ export class UIScene extends Phaser.Scene {
       .setDepth(21)
       .setVisible(false); // 🚫 關閉加入夥伴提示
 
-    // ★拔等級(階段2):等級數字 + 經驗條 HUD 已移除(等級系統已拔,數值固定滿等)。畫面下方留白,不再顯示 Lv/經驗。
+    // 拔等級(階段2):等級數字 + 經驗條 HUD 已移除(等級系統已拔,數值固定滿等)。畫面下方留白,不再顯示 Lv/經驗。
 
-    // v25 第8項：P1 普攻命中計數（左上角，不擋主要畫面）
+    // 第8項：P1 普攻命中計數（左上角，不擋主要畫面）
     this.hitText = this.add
       .text(12, 12, '命中 0', {
         fontFamily: 'monospace',
@@ -387,7 +387,7 @@ export class UIScene extends Phaser.Scene {
       })
       .setOrigin(0, 0);
 
-    // v27 波次顯示（右上角）- 🚫 用戶要求關閉
+    // 波次顯示（右上角）- 🚫 用戶要求關閉
     this.waveText = this.add
       .text(w - 12, 12, 'WAVE 1  0/12', {
         fontFamily: 'monospace',
@@ -400,10 +400,10 @@ export class UIScene extends Phaser.Scene {
       .setOrigin(1, 0)
       .setVisible(false); // 🚫 關閉波次顯示
 
-    // ★頭上UI系統初始化 - 替換舊的左上角COMBO/能量系統
+    // 頭上UI系統初始化 - 替換舊的左上角COMBO/能量系統
     this.createOverheadUISystem();
     
-    // ★多角色底部面板替換系統初始化
+    // 多角色底部面板替換系統初始化
     this.initMultiPlayerBottomPanelOverlays();
 
     // 🔄 NEW UI：角色狀態列重大改版 - 圓形標籤 + 雙欄位系統，移除血條系統
@@ -571,7 +571,7 @@ export class UIScene extends Phaser.Scene {
       .setDepth(40)
       .setVisible(false);
 
-    // v33 事件 HUD 條（上方中央，BOSS 條下方；預設隱藏）
+    // 事件 HUD 條（上方中央，BOSS 條下方；預設隱藏）
     const eventBarY = 142;
     this.eventLabel = this.add
       .text(w / 2, eventBarY - 16, '', {
@@ -585,8 +585,8 @@ export class UIScene extends Phaser.Scene {
       .rectangle(w / 2 - this.eventBarWidth / 2 + 2, eventBarY + 2, this.eventBarWidth - 4, 8, 0xffd166)
       .setOrigin(0, 0).setDepth(40).setVisible(false);
 
-    // v19：移除右下攻擊鈕；改為「點擊畫面任意處」觸發攻擊（空白鍵仍可用，於 GameScene）
-    // ★道具開關觸控按鈕(右上角):必須在全畫面攻擊熱區【之前】建立,並攔截 pointerdown(stopPropagation)避免點按鈕也觸發攻擊。
+    // 移除右下攻擊鈕；改為「點擊畫面任意處」觸發攻擊（空白鍵仍可用，於 GameScene）
+    // 道具開關觸控按鈕(右上角):必須在全畫面攻擊熱區【之前】建立,並攔截 pointerdown(stopPropagation)避免點按鈕也觸發攻擊。
     const btnW = 56, btnH = 36, btnPad = 12;
     const btnCx = w - btnPad - btnW / 2;
     const btnCy = btnPad + btnH / 2;
@@ -608,7 +608,7 @@ export class UIScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setVisible(false); // 🚫 關閉按鈕文字
     this.itemToggleBtnBg.on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
-      ev.stopPropagation(); // ★攔截:不讓此點擊冒泡到全畫面攻擊熱區
+      ev.stopPropagation(); // 攔截:不讓此點擊冒泡到全畫面攻擊熱區
       this.game.events.emit('ui-toggle-items');
     });
 
@@ -629,14 +629,14 @@ export class UIScene extends Phaser.Scene {
     });
   }
 
-  /** ★道具開關按鈕面:隨 itemsEnabled 狀態即時更新色/字(開=綠ON、關=紅OFF)。由 GameScene 'items-state' 事件驅動。 */
+  /** 道具開關按鈕面:隨 itemsEnabled 狀態即時更新色/字(開=綠ON、關=紅OFF)。由 GameScene 'items-state' 事件驅動。 */
   private updateItemToggleBtn = (on: boolean): void => {
     if (!this.itemToggleBtnBg) return;
     this.itemToggleBtnBg.setFillStyle(on ? 0x1a7f37 : 0x9b2226, 0.85);
     this.itemToggleBtnText.setText(on ? '道具\nON' : '道具\nOFF');
   };
 
-  /** v33 事件 HUD 更新：label + 進度/倒數 */
+  /** 事件 HUD 更新：label + 進度/倒數 */
   private updateEventHud = (d: { active: boolean; label: string; ratio: number; remainMs: number }): void => {
     const show = d.active;
     this.eventLabel.setVisible(show);
@@ -649,7 +649,7 @@ export class UIScene extends Phaser.Scene {
     }
   };
 
-  /** v28：BOSS 血條更新 */
+  /** BOSS 血條更新 */
   /**
    * 更新 BOSS 提示大字：亂入 BOSS 顯示「BOSS 亂入 XXs」，剩 urgentSec 秒內改警示色並每秒脈動一次
    *
@@ -672,16 +672,16 @@ export class UIScene extends Phaser.Scene {
   private updateStats = (s: StatsPayload): void => {
     this.teamText.setText(`團隊總擊殺 ${s.teamKills}`);
     this.timeText.setText(`時間 ${(s.survivalMs / 1000).toFixed(1)}s`);
-    // v25 第8項：P1 普攻命中次數
+    // 第8項：P1 普攻命中次數
     this.hitText.setText(`命中 ${s.p1AttackHits ?? 0}`);
-    // v27 波次：Wave N + 進度；intermission 顯示過關中
+    // 波次：Wave N + 進度；intermission 顯示過關中
     if (s.waveState === 'intermission') {
       this.waveText.setText(`WAVE ${s.wave} CLEAR!`);
     } else {
       this.waveText.setText(`WAVE ${s.wave}  ${s.waveKilled}/${s.waveQuota}`);
     }
 
-    // ★頭上UI系統：使用角色索引避免重複創建
+    // 頭上UI系統：使用角色索引避免重複創建
     for (let i = 0; i < s.chars.length; i++) {
       const character = s.chars[i];
       const charIndex = i; // 使用數組索引作為唯一鍵
@@ -695,7 +695,7 @@ export class UIScene extends Phaser.Scene {
       // 更新頭上UI位置和內容
       const container = this.overheadUIs.get(charIndex);
       if (container && character.alive) {
-        // ★關鍵修復：在覆蓋模式下，P1頭頂UI跳過更新和顯示
+        // 關鍵修復：在覆蓋模式下，P1頭頂UI跳過更新和顯示
         if (charIndex === 0 && this.isP1HeadUIHidden) {
           // P1頭頂UI處於覆蓋模式，跳過更新但保持位置同步
           this.updateOverheadUI(character, container, false); // 只更新位置，不強制顯示
@@ -710,7 +710,7 @@ export class UIScene extends Phaser.Scene {
       }
     }
 
-    // ★波次進度 HUD(關卡制:節點序列 ●─●─◆);只在【純波次子區】顯示;事件/BOSS/非 levelMode 隱藏。
+    // 波次進度 HUD(關卡制:節點序列 ●─●─◆);只在【純波次子區】顯示;事件/BOSS/非 levelMode 隱藏。
     // 卷軸 HUD：這裡只記錄狀態，實際繪製在 update() 每幀跑（脈動、量條平滑、遞補動畫）
     this.updateStageHudState(s);
 
@@ -1060,7 +1060,7 @@ export class UIScene extends Phaser.Scene {
     if (!a.alive) return;
 
     const cfg = GameConfig.aim;
-    // ★方案e:aimGraphics 在 UIScene(固定相機 scroll0),但玩家座標是 GameScene 世界座標;
+    // 方案e:aimGraphics 在 UIScene(固定相機 scroll0),但玩家座標是 GameScene 世界座標;
     //   GameScene 鏡頭跟隨捲動後,需扣掉 GameScene 相機 scroll 才對齊玩家螢幕位置(否則平移/捲動後圓圈箭頭會位移)。
     const gs = this.scene.get('GameScene');
     const gcam = gs && (gs as Phaser.Scene).cameras ? (gs as Phaser.Scene).cameras.main : null;
@@ -1079,7 +1079,7 @@ export class UIScene extends Phaser.Scene {
       g.fillCircle(ex, ey, ind.endMarkerRadius);
     }
 
-    // ★橢圓圓盤：透視地面圓盤效果（腳底位置+放大尺寸）
+    // 橢圓圓盤：透視地面圓盤效果（腳底位置+放大尺寸）
     const diskY = ay + GameConfig.player.radius + 54; // 圓盤在角色腳底下方54px (總偏移70px)
     const ellipseWidth = cfg.ringRadius * 2.5; // 放大尺寸250%
     const ellipseHeight = cfg.ringRadius * 2.5 * 0.2; // 透視壓縮20%，更扁平的圓盤
@@ -1089,7 +1089,7 @@ export class UIScene extends Phaser.Scene {
     // 純圓盤，無方向指示
   };
 
-  /** ★頭上UI系統：創建跟隨角色的UI容器 */
+  /** 頭上UI系統：創建跟隨角色的UI容器 */
   private createOverheadUISystem(): void {
     // 暫時不創建，等待角色數據傳入後再創建
     // 在updateStats中檢測角色並創建對應的頭上UI
@@ -1097,12 +1097,12 @@ export class UIScene extends Phaser.Scene {
 
   /**
    * 創建單個角色的頭上UI容器
-   * 
+   *
    * 包含兩層UI元素（從上到下）：
    * 1. 編號牌：彩色圓形 + 角色標籤（P1/BOT1/BOT2/BOT3）
    * 2. Credit顯示：劍形圖標 + 五位數Credit數字
    * 3. 能量條：金色進度條（僅慢速模式玩家顯示）
-   * 
+   *
    * @param _character 角色統計數據（暫未直接使用，預留擴展）
    * @param index 角色索引（0=P1玩家, 1+=BOT）
    * @returns 包含所有UI元素的Phaser容器
@@ -1114,7 +1114,7 @@ export class UIScene extends Phaser.Scene {
     // 創建編號牌UI元素
     const { badge, badgeText } = this.createBadgeUI(index);
     
-    // 創建Credit顯示UI元素  
+    // 創建Credit顯示UI元素
     const { creditBg, swordIcon, creditText } = this.createCreditUI();
     
     // 創建能量條UI元素
@@ -1136,9 +1136,9 @@ export class UIScene extends Phaser.Scene {
 
   /**
    * 創建角色編號牌UI元素
-   * 
+   *
    * 顯示彩色圓形背景和角色標籤，位於頭上UI最頂層
-   * 
+   *
    * @param index 角色索引，用於選擇顏色和標籤
    * @returns 包含圓形背景和文字的UI元素
    */
@@ -1170,9 +1170,9 @@ export class UIScene extends Phaser.Scene {
 
   /**
    * 創建Credit點數顯示UI元素
-   * 
+   *
    * 包含背景框、劍形圖標和數字文字，位於編號牌下方
-   * 
+   *
    * @returns Credit顯示相關的UI元素
    */
   private createCreditUI(): { 
@@ -1268,10 +1268,10 @@ export class UIScene extends Phaser.Scene {
 
   /**
    * 繪製劍形圖標
-   * 
+   *
    * 使用Graphics API繪製包含劍身、劍尖、護手、劍柄和底部裝飾的完整劍形
    * 支持正常和閃爍兩種視覺狀態
-   * 
+   *
    * @param graphics 用於繪製的Graphics對象
    * @param isFlashing 是否為閃爍狀態（Credit耗盡時顯示紅色）
    */
@@ -1325,13 +1325,13 @@ export class UIScene extends Phaser.Scene {
 
   /**
    * 更新頭上UI內容：Credit顯示和能量條狀態
-   * 
+   *
    * 根據角色數據和遊戲狀態實時更新UI顯示：
    * - Credit數字格式化和閃爍特效
-   * - 劍形圖標顏色狀態  
+   * - 劍形圖標顏色狀態
    * - 能量條進度和視覺效果
    * - 操作提示的顯示/隱藏
-   * 
+   *
    * @param character 角色統計數據
    * @param container UI容器，包含所有子元件的引用
    * @param stats 全局遊戲狀態數據
@@ -1354,9 +1354,9 @@ export class UIScene extends Phaser.Scene {
 
   /**
    * 更新Credit點數顯示
-   * 
+   *
    * 包含數字格式化和耗盡時的閃爍特效
-   * 
+   *
    * @param character 角色數據
    * @param creditText Credit數字文字對象
    * @param swordIcon 劍形圖標Graphics對象
@@ -1481,10 +1481,10 @@ export class UIScene extends Phaser.Scene {
 
   /**
    * 更新頭上UI的螢幕位置
-   * 
+   *
    * 根據角色的世界座標計算螢幕位置，考慮相機捲動偏移
    * 確保UI容器始終跟隨角色移動並顯示在正確位置
-   * 
+   *
    * @param character 角色統計數據，包含世界座標
    * @param container UI容器對象
    * @param forceVisible 是否強制設置可見性，默認為true
@@ -1496,9 +1496,9 @@ export class UIScene extends Phaser.Scene {
       return;
     }
     
-    // ★用戶要求調整：頭頂UI偏移值從-150調整為-130
+    // 用戶要求調整：頭頂UI偏移值從-150調整為-130
     const worldX = character.x;
-    const worldY = character.y - 130; // ★調整：從-150改為-130，向下移動20px
+    const worldY = character.y - 130; // 調整：從-150改為-130，向下移動20px
     
     // 座標系統轉換：世界座標 → 螢幕座標
     // UIScene使用固定相機，需要減去GameScene相機的捲動偏移
@@ -1510,7 +1510,7 @@ export class UIScene extends Phaser.Scene {
     // 更新容器位置
     container.setPosition(screenX, screenY);
     
-    // ★關鍵修復：只有在forceVisible為true時才設置可見性
+    // 關鍵修復：只有在forceVisible為true時才設置可見性
     if (forceVisible) {
       container.setVisible(true);
     }
@@ -1577,7 +1577,7 @@ export class UIScene extends Phaser.Scene {
 
   /**
    * 創建正式版華麗彩票粒子
-   * 
+   *
    * 恢復原始設計：金色外觀、物理軌跡、拋物線運動
    * 但在UIScene中創建確保可見性
    */
@@ -1678,11 +1678,11 @@ export class UIScene extends Phaser.Scene {
   }
 
   /**
-   * ★正確的P1頭頂UI控制方法
-   * 
+   * 正確的P1頭頂UI控制方法
+   *
    * 控制角色頭頂的overheadUI系統（Credit顯示和能量條）
    * 這是用戶看到的黃色"P1 61000"頭頂UI的正確控制方法
-   * 
+   *
    * @param visible - true顯示P1頭頂UI，false隱藏P1頭頂UI
    */
   setP1HeadUIVisible(visible: boolean): void {
@@ -1701,8 +1701,8 @@ export class UIScene extends Phaser.Scene {
   }
 
   /**
-   * ★多角色底部面板替換系統初始化
-   * 
+   * 多角色底部面板替換系統初始化
+   *
    * 創建1P、2P、3P、4P的底部面板覆蓋UI
    * - 每個角色使用獨立的覆蓋圖片 (1P.png, 2P.png, 3P.png, 4P.png)
    * - 精確定位到對應角色的原始面板位置
@@ -1837,10 +1837,10 @@ export class UIScene extends Phaser.Scene {
   }
 
   /**
-   * ★多角色底部面板替換控制方法
-   * 
+   * 多角色底部面板替換控制方法
+   *
    * 控制所有角色底部狀態面板的顯示/隱藏，並切換多角色覆蓋UI
-   * 
+   *
    * @param useOverlay - true顯示所有覆蓋並隱藏原始面板，false恢復所有原始面板
    */
   setBottomPanelOverlay(useOverlay: boolean): void {
@@ -1892,8 +1892,8 @@ export class UIScene extends Phaser.Scene {
   }
 
   /**
-   * ★設置底部面板行的可見性（通用方法，適用所有角色）
-   * 
+   * 設置底部面板行的可見性（通用方法，適用所有角色）
+   *
    * @param panel - 面板對象 (rows中的元素)
    * @param visible - 是否可見
    */
