@@ -32,7 +32,7 @@ const SCENE_BG_DEPTH = 0.5;
 const SKIN_DEPTH = 15;
 const UI_OVERLAY_DEPTH = 20;
 /** P1 皮膚紋理：一般 / 強化 */
-const SKIN_TEXTURE = 'character-goku-skin';
+export const SKIN_TEXTURE = 'character-goku-skin';
 const SKIN_EMPOWERED_TEXTURE = 'character-goku-skin-2';
 /** P1 頭上覆蓋圖（1P 與積分），與頭上 UI 系統使用相同的垂直偏移 */
 const UI_OVERLAY_TEXTURE = 'character-ui-overlay';

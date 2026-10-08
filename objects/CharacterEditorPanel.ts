@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GameConfig } from '../config';
+import { SKIN_TEXTURE } from '../controllers/ArtStyleController';
 import { visibleBottomOffset } from '../systems/spriteFeet';
 import {
   CHARACTER_PARAM_DEFS,
@@ -13,7 +14,7 @@ import {
 
 /** 面板版面與配色（畫面座標；面板置中於畫面） */
 const LAYOUT = {
-  WIDTH: 720,
+  WIDTH: 1100,
   HEIGHT: 620,
   DEPTH: 100,
   BG_COLOR: 0x111827,
@@ -27,17 +28,17 @@ const LAYOUT = {
   /** 第一列參數的 y 與列距 */
   ROW_START_Y: -150,
   ROW_GAP: 60,
-  LABEL_X: -320,
-  TRACK_X: -60,
+  LABEL_X: -510,
+  TRACK_X: -250,
   TRACK_WIDTH: 260,
   TRACK_HEIGHT: 10,
   HANDLE_WIDTH: 14,
   HANDLE_HEIGHT: 26,
-  MINUS_X: 228,
-  VALUE_X: 278,
-  PLUS_X: 328,
+  MINUS_X: 38,
+  VALUE_X: 88,
+  PLUS_X: 138,
   /** 選中列的底色條 */
-  ROW_HIGHLIGHT_WIDTH: 680,
+  ROW_HIGHLIGHT_WIDTH: 1060,
   ROW_HIGHLIGHT_HEIGHT: 56,
   BUTTON_Y: 235,
   BUTTON_WIDTH: 150,
@@ -45,9 +46,10 @@ const LAYOUT = {
   BUTTON_GAP: 175,
   HELP_Y: 190,
   /** 預覽區域 */
-  PREVIEW_X: 450,
+  PREVIEW_X: 300,
   PREVIEW_Y: -50,
-  PREVIEW_SCALE: 0.8,
+  PREVIEW_SCALE: 0.6,
+  PREVIEW_TITLE_Y: -150,
   COLORS: {
     TEXT: '#e5e7eb',
     HINT: '#94a3b8',
@@ -86,8 +88,9 @@ export class CharacterEditorPanel {
   private rows: ParamRow[] = [];
   private values: CharacterParams = defaultCharacterParams();
   private selected = 0;
-  /** 預覽相關 */
+  /** 預覽用的角色圖 */
   private previewCharacter: Phaser.GameObjects.Image | null = null;
+  /** 預覽用的真空圈線條 */
   private previewVacuum: Phaser.GameObjects.Graphics | null = null;
   private readonly onKeyDown = (e: KeyboardEvent): void => this.handleKey(e);
 
@@ -254,18 +257,38 @@ export class CharacterEditorPanel {
    * @param def 參數定義
    * @param value 目標值
    */
-  /** 依據step的小數位數四捨五入，避免浮點誤差 */
+  /** 計算step的小數位數 */
+  private stepDecimals(step: number): number {
+    return step.toString().split('.')[1]?.length || 0;
+  }
+
+  /**
+   * 依據step的小數位數四捨五入，避免浮點誤差
+   * @param value 要處理的數值
+   * @param step 步進值
+   * @returns 四捨五入後的數值
+   */
   private roundByStep(value: number, step: number): number {
-    const decimalPlaces = step.toString().split('.')[1]?.length || 0;
+    const decimalPlaces = this.stepDecimals(step);
     return Math.round(value * Math.pow(10, decimalPlaces)) / Math.pow(10, decimalPlaces);
   }
 
-  /** 依據step的小數位數格式化數值顯示 */
+  /**
+   * 依據step的小數位數格式化數值顯示
+   * @param value 要格式化的數值
+   * @param step 步進值
+   * @returns 格式化後的字串
+   */
   private formatByStep(value: number, step: number): string {
-    const decimalPlaces = step.toString().split('.')[1]?.length || 0;
+    const decimalPlaces = this.stepDecimals(step);
     return value.toFixed(decimalPlaces);
   }
 
+  /**
+   * 設定參數值並更新顯示
+   * @param def 參數定義
+   * @param value 新數值
+   */
   private setValue(def: CharacterParamDef, value: number): void {
     const snapped = def.min + Math.round((value - def.min) / def.step) * def.step;
     const rounded = this.roundByStep(snapped, def.step);
@@ -302,11 +325,16 @@ export class CharacterEditorPanel {
 
   /** 建立預覽區域 */
   private buildPreview(container: Phaser.GameObjects.Container): void {
-    const skinTextureKey = 'character-goku-skin'; // 依ArtStyleController的SKIN_TEXTURE常數
+    const colors = LAYOUT.COLORS;
+    
+    // 預覽標題
+    container.add(this.scene.add.text(LAYOUT.PREVIEW_X, LAYOUT.PREVIEW_TITLE_Y, '真空圈預覽', {
+      fontFamily: 'monospace', fontSize: '16px', color: colors.TITLE, fontStyle: 'bold'
+    }).setOrigin(0.5));
     
     // 預覽角色圖片
-    if (this.scene.textures.exists(skinTextureKey)) {
-      this.previewCharacter = this.scene.add.image(LAYOUT.PREVIEW_X, LAYOUT.PREVIEW_Y, skinTextureKey)
+    if (this.scene.textures.exists(SKIN_TEXTURE)) {
+      this.previewCharacter = this.scene.add.image(LAYOUT.PREVIEW_X, LAYOUT.PREVIEW_Y, SKIN_TEXTURE)
         .setScale(LAYOUT.PREVIEW_SCALE)
         .setDepth(LAYOUT.DEPTH + 1);
       container.add(this.previewCharacter);
@@ -330,8 +358,7 @@ export class CharacterEditorPanel {
       const charY = LAYOUT.PREVIEW_Y;
       
       // 計算腳底位置
-      const skinTextureKey = 'character-goku-skin';
-      const bottomOffset = visibleBottomOffset(this.scene.textures, skinTextureKey);
+      const bottomOffset = visibleBottomOffset(this.scene.textures, this.previewCharacter.texture.key);
       const footY = charY + bottomOffset * scale;
 
       // 真空圈參數
