@@ -114,7 +114,7 @@ comboState = {
 ### 敵人類型體系
 ```typescript
 // 基於程式碼的敵人分類
-type EnemyType = 'normal' | 'tank' | 'shielder' | 'shooter' | 'charger';
+type EnemyType = 'normal' | 'tank' | 'bomber' | 'boss' | 'tower' | 'npc' | 'treasure';
 
 // 敵人AI黏著機制
 enemySticky: {

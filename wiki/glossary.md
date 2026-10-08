@@ -27,9 +27,11 @@
 | **EnemyType** | 敵人類型聯合型別 | `objects/Enemy.ts:4` | [遊戲功能設計](./design/gameplay-evolution.md) |
 | **normal** | 基礎近戰敵人 | `objects/Enemy.ts:4` | [戰鬥系統](./systems/combat-system.md) |
 | **tank** | 高血量肉盾型敵人 | `objects/Enemy.ts:4` | [戰鬥系統](./systems/combat-system.md) |
-| **shielder** | 護盾型敵人 | `objects/Enemy.ts:4` | [戰鬥系統](./systems/combat-system.md) |
+| **bomber** | 遠程爆炸型敵人 | `objects/Enemy.ts:4` | [戰鬥系統](./systems/combat-system.md) |
 | **treasure** | 寶箱怪 (特殊獎勵型) | `objects/Enemy.ts:4` | [遊戲功能設計](./design/gameplay-evolution.md) |
 | **boss** | BOSS級敵人 | `objects/Enemy.ts:4` | [戰鬥系統](./systems/combat-system.md) |
+| **tower** | 塔防事件敵人 | `objects/Enemy.ts:4` | [戰鬥系統](./systems/combat-system.md) |
+| **npc** | 非戰鬥角色 | `objects/Enemy.ts:4` | [戰鬥系統](./systems/combat-system.md) |
 | **aiState** | 敵人AI狀態機 | `objects/Enemy.ts:31` | [資料流程](./architecture/data-flow.md) |
 | **targetSeat** | 黏著目標角色索引 | `objects/Enemy.ts:49` | [戰鬥系統](./systems/combat-system.md) |
 | **forceChase** | 強制追擊模式 | `objects/Enemy.ts:58` | [戰鬥系統](./systems/combat-system.md) |

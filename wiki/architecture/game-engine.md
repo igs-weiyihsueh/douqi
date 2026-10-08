@@ -100,7 +100,7 @@ Phaser.Physics.Arcade.Sprite
 
 Phaser.GameObjects.Sprite  
 ├── Item            // 道具拾取物
-├── Bullet          // 子彈物件
+├── Bullet          // ~~子彈物件~~ (ad47c9c已移除)
 └── Breakable       // 可破壞物件
 ```
 
@@ -110,7 +110,7 @@ Phaser.GameObjects.Sprite
 private characters: Character[] = [];              // 角色陣列
 private enemies: Phaser.Physics.Arcade.Group;     // 敵人物理群組
 private items: Phaser.Physics.Arcade.Group;       // 道具群組  
-private bullets: Phaser.Physics.Arcade.Group;     // 子彈群組
+private bullets: Phaser.Physics.Arcade.Group;     // ~~子彈群組~~ (ad47c9c已移除)
 private breakables: Phaser.GameObjects.Group;     // 可破壞物群組
 ```
 

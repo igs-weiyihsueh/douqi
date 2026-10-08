@@ -74,7 +74,7 @@ private executeDashAttack(boss: Enemy): void {
 
 #### **2. 射擊攻擊 (Shoot)**
 ```typescript
-// 發射多發子彈，扇形覆蓋
+// ~~發射多發子彈，扇形覆蓋~~ (ad47c9c已移除子彈系統)
 private executeShootAttack(boss: Enemy): void {
   const bulletCount = 5;
   const spreadAngle = Math.PI / 3; // 60度扇形
@@ -86,15 +86,15 @@ private executeShootAttack(boss: Enemy): void {
 }
 ```
 
-#### **3. 雷射攻擊 (Laser)**
+#### **3. ~~雷射攻擊 (Laser)~~ (ad47c9c已移除)**
 ```typescript
-// 蓄力雷射，附帶預警特效
+// ~~蓄力雷射，附帶預警特效~~ (已移除)
 private executeLaserAttack(boss: Enemy): void {
-  // 建立預警特效
+  // ~~建立預警特效~~ (已移除)
   const telegraph = this.createLaserTelegraph(boss);
   this.host.addTelegraph(telegraph);
   
-  // 延遲發射雷射
+  // ~~延遲發射雷射~~ (已移除)
   this.host.scene.time.delayedCall(1000, () => {
     this.fireLaser(boss, targetAngle);
     this.host.removeTelegraph(telegraph);
@@ -185,7 +185,7 @@ export interface TelegraphFx {
 ```
 
 **應用場景**:
-- 🔴 **BOSS雷射預警**: 蓄力期間紅色扇形填滿
+- 🔴 **~~BOSS雷射預警~~**: ~~蓄力期間紅色扇形填滿~~ (ad47c9c已移除)
 - 🏰 **塔防攻擊預警**: 塔射擊前的瞄準指示
 - ⏸️ **時停兼容**: 時停時暫停tween，解除時續播
 
@@ -256,10 +256,10 @@ shoot: {
   bulletSpeed: 400
 },
 
-// 雷射攻擊
+// ~~雷射攻擊~~ (ad47c9c已移除)
 laser: {
   damage: 50,
-  chargeTime: 1000,     // 蓄力時間
+  chargeTime: 1000,     // ~~蓄力時間~~ (已移除)
   beamWidth: 80,
   range: 1000
 }

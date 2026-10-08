@@ -57,7 +57,7 @@ class GameScene {
   private characters: Character[];                    // 角色陣列
   private enemies: Phaser.Physics.Arcade.Group;      // 敵人物理群組
   private items: Phaser.Physics.Arcade.Group;        // 道具群組
-  private bullets: Phaser.Physics.Arcade.Group;      // 子彈群組
+  private bullets: Phaser.Physics.Arcade.Group;      // ~~子彈群組~~ (ad47c9c已移除)
   private breakables: Phaser.GameObjects.Group;      // 可破壞物(非物理)
 }
 

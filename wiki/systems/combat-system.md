@@ -56,7 +56,7 @@ class Character extends Phaser.Physics.Arcade.Sprite {
 ### 敵人類型體系
 ```typescript
 // Enemy類型定義
-export type EnemyType = 'normal' | 'tank' | 'shielder' | 'shooter' | 'charger';
+export type EnemyType = 'normal' | 'tank' | 'bomber' | 'boss' | 'tower' | 'npc' | 'treasure';
 
 // 基於配置的敵人屬性
 const enemyConfig = {
@@ -227,7 +227,7 @@ class SlowModeSkills {
 class GameScene {
   private enemies: Phaser.Physics.Arcade.Group;     // 敵人物理群組
   private items: Phaser.Physics.Arcade.Group;       // 道具群組
-  private bullets: Phaser.Physics.Arcade.Group;     // 子彈群組
+  private bullets: Phaser.Physics.Arcade.Group;     // ~~子彈群組~~ (ad47c9c已移除)
   private breakables: Phaser.GameObjects.Group;     // 可破壞物(非物理)
   
   // 碰撞關係設定

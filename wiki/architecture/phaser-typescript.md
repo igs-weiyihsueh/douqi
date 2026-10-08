@@ -137,7 +137,7 @@ const damage: number = GameConfig.player.attackDamage;
 ### 型別系統設計
 ```typescript
 // 列舉與聯合型別
-export type EnemyType = 'normal' | 'tank' | 'shielder' | 'shooter' | 'charger';
+export type EnemyType = 'normal' | 'tank' | 'bomber' | 'boss' | 'tower' | 'npc' | 'treasure';
 export type SkillType = 'A' | 'B' | 'C' | 'E' | 'T' | 'H';
 export type WaveState = 'spawning' | 'clearing' | 'intermission' | 'boss' | 'event';
 

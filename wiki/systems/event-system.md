@@ -91,7 +91,7 @@ private hitGuardNpc(damage: number, fromX: number, fromY: number): void {
 - 🛡️ **NPC保護**: 血量管理，受傷反饋，失敗檢測
 - 👥 **敵人生成**: 定期在守護範圍外生成攻擊者
 - 💔 **失敗條件**: NPC血量歸零即守護失敗
-- 🔥 **傷害來源**: 近戰、雷射、炸彈、子彈四種攻擊統一處理
+- 🔥 **傷害來源**: 近戰、~~雷射~~、炸彈、~~子彈~~等攻擊統一處理 (ad47c9c簡化為近戰+炸彈)
 
 ### **佔領事件 (Capture)**
 ```typescript
