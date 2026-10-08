@@ -27,7 +27,8 @@ function feetMetrics(textures: Phaser.Textures.TextureManager, key: string): Fee
   if (cached !== undefined) return cached;
   const frame = textures.getFrame(key);
   const w = frame.width, h = frame.height;
-  const opaque = (x: number, y: number): boolean => (textures.getPixelAlpha(x, y, key) ?? 0) > OPAQUE_ALPHA;
+  const alpha = readAlpha(frame);
+  const opaque = (x: number, y: number): boolean => alpha[(y * w + x) * 4 + 3] > OPAQUE_ALPHA;
   const rowHasPixel = (y: number): boolean => {
     for (let x = 0; x < w; x++) if (opaque(x, y)) return true;
     return false;
@@ -51,6 +52,32 @@ function feetMetrics(textures: Phaser.Textures.TextureManager, key: string): Fee
   };
   metricsCache.set(key, metrics);
   return metrics;
+}
+
+/**
+ * 一次讀出 frame 的全部像素（RGBA）。逐點 getPixelAlpha 每次都要畫一次再讀回，大圖會卡上數百毫秒；
+ * 這裡畫到暫存 canvas 後一次 getImageData
+ *
+ * @param frame 紋理 frame
+ */
+function readAlpha(frame: Phaser.Textures.Frame): Uint8ClampedArray {
+  const w = frame.width, h = frame.height;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+  ctx.drawImage(frame.source.image as CanvasImageSource, frame.cutX, frame.cutY, frame.cutWidth, frame.cutHeight, 0, 0, w, h);
+  return ctx.getImageData(0, 0, w, h).data;
+}
+
+/**
+ * 預先量好指定紋理的腳底與腳寬（載入畫面呼叫，避免第一次用到時才量）
+ *
+ * @param textures 紋理管理器
+ * @param keys 紋理 key（不存在的略過）
+ */
+export function warmFeetMetrics(textures: Phaser.Textures.TextureManager, keys: ReadonlyArray<string>): void {
+  for (const key of keys) if (textures.exists(key)) feetMetrics(textures, key);
 }
 
 /**

@@ -4,7 +4,7 @@ import type { Character } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
 import { createCoverImage } from '../systems/zoneScenery';
 import type { GroundFootprint } from '../systems/bodySeparation';
-import { visibleBottomOffset, visibleFootHalfWidth } from '../systems/spriteFeet';
+import { visibleBottomOffset, visibleFootHalfWidth, warmFeetMetrics } from '../systems/spriteFeet';
 import { OVERLAY_DEPTH_STEP } from '../systems/standingDepth';
 
 /**
@@ -87,6 +87,8 @@ export class ArtStyleController {
   createPlayerOverlays(): void {
     const p = this.host.player();
     const textures = this.scene.textures;
+    // 新美術圖的腳底 / 腳寬開局就先量好，F4 切換與二段變身時不必當場量
+    warmFeetMetrics(textures, [SKIN_TEXTURE, SKIN_EMPOWERED_TEXTURE, NORMAL_ENEMY_LOOK.skeleton.texture]);
     if (textures.exists(SKIN_TEXTURE)) {
       this.skin = this.scene.add.image(p.x, p.y, SKIN_TEXTURE).setDepth(p.depth + OVERLAY_DEPTH_STEP).setVisible(false);
     } else {
