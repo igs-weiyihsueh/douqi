@@ -88,6 +88,8 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
   private burstMark!: Phaser.GameObjects.Text;
   /** 爆標記脈動 tween */
   private burstMarkTween?: Phaser.Tweens.Tween;
+  /** F4 新美術下隱藏舊美術的名稱標籤、腳下血條 / 鬥氣條與「爆」標記（新美術改用覆蓋圖 UI） */
+  private legacyUiHidden = false;
   /** 被定身時的「定身!」提示 + 鎖鏈環（讓玩家知道為何不能動） */
   private rootMark!: Phaser.GameObjects.Text;
   private rootRing!: Phaser.GameObjects.Graphics;
@@ -230,9 +232,41 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
     if (this.body) (this.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
   }
 
+  /**
+   * 切換舊美術頭上 / 腳下 UI（名稱標籤、腳下血條 / 鬥氣條、「爆」標記）的顯示：F4 新美術時隱藏、舊美術時恢復。
+   * 「定身!」狀態提示不受影響
+   *
+   * @param hidden 是否隱藏
+   */
+  setLegacyUiHidden(hidden: boolean): void {
+    this.legacyUiHidden = hidden;
+    // 「爆」標記的 visible 是顯示狀態機的一部分（syncLabel 依它決定是否起脈動），改用透明度隱藏
+    this.burstMark.setAlpha(hidden ? 0 : 1);
+    if (hidden) {
+      this.hideLegacyUi();
+      return;
+    }
+    // 恢復成舊美術時的顯示狀態（陣亡時標籤仍顯示「✖」；鬥氣條背景由 syncLabel 每幀決定）
+    this.label.setVisible(true);
+    if (this.alive) {
+      this.spiritBar.setVisible(true);
+      this.hpBarBg.setVisible(!this.noHpLoss);
+      this.hpBar.setVisible(!this.noHpLoss);
+    }
+  }
+
+  /** F4 新美術時把舊美術 UI 元件設為隱藏（其他流程可能把它們設回顯示，每幀 syncLabel 結尾再套一次） */
+  private hideLegacyUi(): void {
+    if (!this.legacyUiHidden) return;
+    for (const o of [this.label, this.hpBarBg, this.hpBar, this.spiritBarBg, this.spiritBar]) o.setVisible(false);
+  }
+
   /** 每幀讓標籤/護盾光環/腳下血鬥氣條/爆發標記跟隨角色 */
   syncLabel(): void {
-    if (!this.alive) return;
+    if (!this.alive) {
+      this.hideLegacyUi();
+      return;
+    }
     this.label.setPosition(this.x, this.y - GameConfig.player.radius - 12);
     if (this.shieldAura.visible) this.shieldAura.setPosition(this.x, this.y);
 
@@ -298,6 +332,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
       this.burstMark.setVisible(false);
     }
     if (showMark) this.burstMark.setPosition(this.x, this.y - GameConfig.player.radius - 44);
+    this.hideLegacyUi();
 
     // 限時強化狀態視覺——金色染色 + 護盾光環
     // 階段3:empoweredForm(slow P1)開時,升級成明顯的【強化變身造型】(疊亮色+雙光環+glow外框+上升粒子)。

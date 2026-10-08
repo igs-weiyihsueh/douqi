@@ -186,6 +186,8 @@ export class ArtStyleController {
     for (const bg of this.backgrounds) bg.setVisible(this.active);
     this.skin?.setVisible(this.active);
     this.uiOverlay?.setVisible(this.active);
+    // P1 改顯示新美術皮膚時，隱藏舊美術的名稱標籤 / 腳下條 / 「爆」標記（原本被舊的固定深度皮膚蓋住）
+    this.host.player().setLegacyUiHidden(this.active && this.skin !== null);
     // 新美術改用覆蓋圖 UI → 隱藏原 P1 頭頂 UI、啟用底部面板替換；舊美術反之
     this.callUiWhenReady('setP1HeadUIVisible', (ui) => !!ui.overheadUIs?.has(0), !this.active);
     this.callUiWhenReady('setBottomPanelOverlay', (ui) => (ui.rows?.length ?? 0) > 0, this.active);
