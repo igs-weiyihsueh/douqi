@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import type { Character } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
 import { createCoverImage } from '../systems/zoneScenery';
+import { visibleBottomOffset } from '../systems/spriteFeet';
 
 /**
  * ArtStyleController 需要場景提供的能力。由 GameScene 建立並傳入。
@@ -123,6 +124,16 @@ export class ArtStyleController {
     const recycled = side === 'R' ? bgL : bgR;
     recycled.setPosition(aheadSlot.centerX, aheadSlot.centerY);
     this.backgrounds = side === 'R' ? [bgA, bgR, recycled] : [recycled, bgL, bgA];
+  }
+
+  /**
+   * 角色腳底（目前顯示的圖像最下緣）離角色中心的垂直距離：P1 在新美術時以皮膚圖為準（強化皮膚較大，腳底也較低）
+   *
+   * @param c 角色
+   */
+  characterFootOffset(c: Character): number {
+    const img: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite = c === this.host.player() && this.skin && this.skin.visible ? this.skin : c;
+    return visibleBottomOffset(this.scene.textures, img.texture.key) * img.scaleY;
   }
 
   /** 一般怪生成時應使用的外觀（Enemy.spawn 透過 GameScene 查詢） */

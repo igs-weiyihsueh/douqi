@@ -1035,8 +1035,8 @@ export class UIScene extends Phaser.Scene {
     angle: number;
     dashDistance: number;
     showDashLine?: boolean;
-    /** 慢速模式真空圈的左右 / 上下半徑；有值時腳下地盤畫成這個大小 */
-    vacuum?: { rx: number; ry: number };
+    /** 慢速模式真空圈的左右 / 上下半徑與腳底離角色中心的距離；有值時腳下地盤畫成真空圈 */
+    vacuum?: { rx: number; ry: number; footY: number };
   }): void => {
     const g = this.aimGraphics;
     g.clear();
@@ -1065,19 +1065,22 @@ export class UIScene extends Phaser.Scene {
     // 橢圓圓盤：透視地面圓盤效果（腳底位置）
     // 慢速模式：地盤就是真空圈（敵人進不來的範圍），依 vacuum 半徑繪製
     // 快速模式：放大尺寸的裝飾性圓盤，維持原算法
-    const diskY = ay + GameConfig.player.radius + 54; // 圓盤在角色腳底下方54px (總偏移70px)
-    let ellipseWidth: number, ellipseHeight: number;
+    let diskX: number, diskY: number, ellipseWidth: number, ellipseHeight: number;
     if (a.vacuum) {
-      // 慢速模式：真空圈大小
+      // 慢速模式：真空圈以實際顯示圖像的腳底為中心（與推擠 / 近戰判定同一個基準點）
+      diskX = ax;
+      diskY = ay + a.vacuum.footY;
       ellipseWidth = a.vacuum.rx * 2;
       ellipseHeight = a.vacuum.ry * 2;
     } else {
       // 快速模式：原本的算法
+      diskX = ax - 5;
+      diskY = ay + GameConfig.player.radius + 54; // 圓盤在角色腳底下方54px (總偏移70px)
       ellipseWidth = cfg.ringRadius * 2.5; // 放大尺寸250%
       ellipseHeight = cfg.ringRadius * 2.5 * 0.2; // 透視壓縮20%，更扁平的圓盤
     }
     g.lineStyle(cfg.ringThickness, cfg.ringColor, cfg.ringAlpha);
-    g.strokeEllipse(ax - 5, diskY, ellipseWidth, ellipseHeight);
+    g.strokeEllipse(diskX, diskY, ellipseWidth, ellipseHeight);
 
     // 純圓盤，無方向指示
   };

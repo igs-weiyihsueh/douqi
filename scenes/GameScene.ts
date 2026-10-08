@@ -29,10 +29,11 @@ import { EventController, type EventHost, type EventKind } from '../controllers/
 import {
   applyEnemySeparationSteering, bounceEnemyOffBounds, joinsEnemySeparation,
   pushBreakablesFromCharacter, pushBreakablesFromEnemy, pushCharacterOutOfStructures, pushEnemiesAwayFromCharacter,
-  pushEnemiesOutOfNpc, pushEnemyOutOfStructures, resolveEnemyOverlap, updateBreakableMotion, vacuumBoundaryDistance
+  pushEnemiesOutOfNpc, pushEnemyOutOfStructures, resolveEnemyOverlap, updateBreakableMotion, vacuumGap, type VacuumFeet
 } from '../systems/bodySeparation';
 import { drawEnemyChargeWarnings } from '../systems/enemyWarnings';
 import { isFixedEnemy, isRegularEnemy } from '../systems/enemyKinds';
+import { visibleBottomOffset } from '../systems/spriteFeet';
 
 /**
  * GameScene：
@@ -680,7 +681,7 @@ export class GameScene extends Phaser.Scene {
         }
       }
       // 戰鬥時角色與一般怪輕微分離（不完全重疊）；衝刺中不套用(不影響衝刺打擊貼近手感)
-      if (!c.isDashing && !c.isSkillLocked(time)) pushEnemiesAwayFromCharacter(c, this.enemies, this.arena, this.controlMode === 'slow');
+      if (!c.isDashing && !c.isSkillLocked(time)) pushEnemiesAwayFromCharacter(c, this.enemies, this.arena, this.controlMode === 'slow' ? this.vacuumFeet(c) : null);
       // 木箱擋角色（不可穿越）——每幀手動把重疊木箱的角色推回木箱外緣(可靠、高速不穿透)；衝刺中不套用(衝刺撞破)
       if (!c.isDashing && !c.isSkillLocked(time)) pushBreakablesFromCharacter(c, this.breakables);
       // 塔/BOSS 實體碰撞:角色不可穿過塔/BOSS 本體(含衝刺中也擋,不讓穿王/塔身)
@@ -1035,7 +1036,8 @@ export class GameScene extends Phaser.Scene {
       scene: this,
       characters: () => this.characters,
       isGameOver: () => this.gameOver,
-      meleeHitRange: (enemy, c) => this.meleeReach(enemy, c, GameConfig.enemy.attackRadius, GameConfig.slow.vacuumHitMargin),
+      meleeHits: (enemy, c) => this.vacuumMeleeInRange(enemy, c, GameConfig.slow.vacuumHitMargin)
+        ?? Phaser.Math.Distance.Between(enemy.x, enemy.y, c.x, c.y) <= GameConfig.enemy.attackRadius,
       hittableGuardNpc: () => (this.waveState === 'event' ? this.eventCtl.hittableGuardNpc : null),
       hitGuardNpc: () => { this.eventCtl.hitGuardNpc(); },
       damageCharacter: (c, amount, fromX, fromY) => this.damageCharacterFrom(c, amount, fromX, fromY),
@@ -1578,7 +1580,7 @@ export class GameScene extends Phaser.Scene {
         const target: Character | { x: number; y: number } | null = this.resolveEnemyTarget(enemy, time);
         const tx = target ? target.x : enemy.x;
         const ty = target ? target.y : enemy.y;
-        enemy.updateAI(tx, ty, time, this.meleeReach(enemy, target, GameConfig.enemy.engageRange, GameConfig.slow.vacuumEngageMargin));
+        enemy.updateAI(tx, ty, time, this.vacuumMeleeInRange(enemy, target, GameConfig.slow.vacuumEngageMargin));
 
         drawEnemyChargeWarnings(this.chargeWarnGfx, enemy, time);
       }
@@ -2025,28 +2027,40 @@ export class GameScene extends Phaser.Scene {
       dashDistance: GameConfig.aim.dashDistance,
       // slow 模式不畫「衝刺距離延長指示線」(用戶要拿掉那條延長瞄準線)；fast 維持顯示。
       showDashLine: this.controlMode !== 'slow',
-      // slow 模式腳下地盤 = 真空圈（左右 / 上下半徑）；fast 不帶，地盤維持原樣
+      // slow 模式腳下地盤 = 真空圈（左右 / 上下半徑、腳底離中心的距離）；fast 不帶，地盤維持原樣
       ...(this.controlMode === 'slow'
-        ? { vacuum: { rx: GameConfig.slow.vacuumRadius, ry: GameConfig.slow.vacuumRadius * GameConfig.slow.vacuumFlatten } }
+        ? { vacuum: {
+          rx: GameConfig.slow.vacuumRadius,
+          ry: GameConfig.slow.vacuumRadius * GameConfig.slow.vacuumFlatten,
+          footY: this.artStyle.characterFootOffset(this.player)
+        } }
         : {})
     });
   }
 
   /**
-   * 近戰怪對角色的蓄力 / 出手距離：慢速模式為真空圈邊界 + margin（怪被擋在圈外，從圈邊緣出手）；
-   * 快速模式或目標不是角色（例如守護 NPC）時用 config 的固定距離
+   * 真空圈判定用的腳底位置：角色依目前顯示的圖像（P1 新美術用皮膚）、敵人依自己的紋理與縮放
+   *
+   * @param c 角色
+   */
+  private vacuumFeet(c: Character): VacuumFeet {
+    return {
+      characterFoot: this.artStyle.characterFootOffset(c),
+      enemyFoot: (e) => visibleBottomOffset(this.textures, e.texture.key) * e.scaleY
+    };
+  }
+
+  /**
+   * 慢速模式：近戰怪的腳底是否已在真空圈邊緣外 margin 以內（怪被擋在圈外，從圈邊緣蓄力 / 出手）。
+   * 快速模式或目標不是角色（例如守護 NPC）時回傳 undefined，由呼叫端用原本的固定距離判斷
    *
    * @param enemy 近戰怪
    * @param target 目標
-   * @param fixedRange 快速模式的固定距離
-   * @param margin 慢速模式在真空邊界外的餘量
+   * @param margin 真空圈邊緣外的餘量
    */
-  private meleeReach(enemy: Enemy, target: Character | { x: number; y: number } | null, fixedRange: number, margin: number): number {
-    if (this.controlMode !== 'slow' || !(target instanceof Character)) return fixedRange;
-    const dx = enemy.x - target.x, dy = enemy.y - target.y;
-    const d = Math.hypot(dx, dy);
-    const [nx, ny] = d > 0.001 ? [dx / d, dy / d] : [1, 0];
-    return vacuumBoundaryDistance(nx, ny, enemy.getBodyRadius()) + margin;
+  private vacuumMeleeInRange(enemy: Enemy, target: Character | { x: number; y: number } | null, margin: number): boolean | undefined {
+    if (this.controlMode !== 'slow' || !(target instanceof Character)) return undefined;
+    return vacuumGap(target, enemy, this.vacuumFeet(target)).gap <= margin;
   }
 
   private emitStats(): void {

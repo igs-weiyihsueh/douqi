@@ -226,28 +226,54 @@ export function vacuumBoundaryDistance(nx: number, ny: number, enemyRadius: numb
   return (a * b) / Math.hypot(b * nx, a * ny);
 }
 
+/** 真空圈判定用的腳底位置：角色與敵人的腳底離各自中心的垂直距離（真空圈畫在腳下，判定也以腳底為準） */
+export interface VacuumFeet {
+  characterFoot: number;
+  enemyFoot(e: Enemy): number;
+}
+
+/**
+ * 地面上「敵人腳底 → 真空圈邊界」還差多少距離（> 0 = 在圈外、≤ 0 = 已踩進圈內），以及從角色腳底指向敵人腳底的方向
+ *
+ * @param c 角色
+ * @param e 敵人
+ * @param feet 腳底位置
+ */
+export function vacuumGap(c: Character, e: Enemy, feet: VacuumFeet): { gap: number; nx: number; ny: number } {
+  const { nx, ny, d } = normalBetween(c.x, c.y + feet.characterFoot, e.x, e.y + feet.enemyFoot(e));
+  return { gap: d - vacuumBoundaryDistance(nx, ny, e.getBodyRadius()), nx, ny };
+}
+
 /**
  * 角色與一般怪不重疊：把重疊的怪推離角色（全額），角色位置不動、保留玩家走位手感。
- * vacuum = true（慢速模式）時改用真空圈邊界（見 vacuumBoundaryDistance）。
+ * 傳入 vacuum（慢速模式）時改用真空圈：以腳底為準，把踩進圈內的怪沿「角色腳底 → 怪腳底」推回圈邊（見 vacuumGap）。
  * 固定目標跳過（各有站外緣 / 穿越邏輯）；呼叫端在衝刺中不套用，保留衝刺穿怪的打擊感
  *
  * @param c 角色
  * @param enemies 敵人物件池
  * @param arena 移動區
- * @param vacuum 是否使用真空圈
+ * @param vacuum 真空圈的腳底位置；null = 不用真空圈（快速模式），以身體半徑分離
  */
-export function pushEnemiesAwayFromCharacter(c: Character, enemies: Phaser.Physics.Arcade.Group, arena: Phaser.Geom.Rectangle, vacuum: boolean): void {
+export function pushEnemiesAwayFromCharacter(c: Character, enemies: Phaser.Physics.Arcade.Group, arena: Phaser.Geom.Rectangle, vacuum: VacuumFeet | null): void {
   const pr = GameConfig.player.radius;
   for (const child of enemies.getChildren()) {
     const e = child as Enemy;
     if (!e.active || e.dead || isFixedEnemy(e)) continue;
     const er = e.getBodyRadius();
-    const { nx, ny, d } = normalBetween(c.x, c.y, e.x, e.y); // 角色 → 怪
-    const minDist = vacuum ? vacuumBoundaryDistance(nx, ny, er) : pr + er;
-    if (d >= minDist) continue;
+    let nx: number, ny: number, push: number;
+    if (vacuum) {
+      const g = vacuumGap(c, e, vacuum);
+      if (g.gap >= 0) continue;
+      nx = g.nx; ny = g.ny; push = -g.gap;
+    } else {
+      const n = normalBetween(c.x, c.y, e.x, e.y); // 角色 → 怪
+      const minDist = pr + er;
+      if (n.d >= minDist) continue;
+      nx = n.nx; ny = n.ny; push = minDist - n.d;
+    }
     e.setPosition(
-      Phaser.Math.Clamp(e.x + nx * (minDist - d), arena.left + er, arena.right - er),
-      Phaser.Math.Clamp(e.y + ny * (minDist - d), arena.top + er, arena.bottom - er)
+      Phaser.Math.Clamp(e.x + nx * push, arena.left + er, arena.right - er),
+      Phaser.Math.Clamp(e.y + ny * push, arena.top + er, arena.bottom - er)
     );
   }
 }
