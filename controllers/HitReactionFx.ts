@@ -79,6 +79,12 @@ export class HitSparks {
     }
   }
 
+  /** 銷毀發射器（編輯器預覽關閉時） */
+  destroy(): void {
+    this.emitter?.destroy();
+    this.emitter = null;
+  }
+
   /** 取得（必要時重建）指定火花大小的發射器 */
   private ensureEmitter(scale: number): Phaser.GameObjects.Particles.ParticleEmitter {
     if (this.emitter && this.emitterScale === scale) return this.emitter;

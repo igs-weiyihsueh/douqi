@@ -117,13 +117,14 @@ export class CombatFx {
    * @param y 命中點 y
    * @param angle 斬擊方向（弧度）
    * @param empowered 強化攻擊（金色、加粗）
+   * @param depth 深度（預設在火花之下、斬擊圈之上；編輯器預覽要畫在面板上方時另給）
    */
-  slashStreak(x: number, y: number, angle: number, empowered: boolean): void {
+  slashStreak(x: number, y: number, angle: number, empowered: boolean, depth = STREAK_DEPTH): void {
     const cfg = GameConfig.cutIn.streak;
     const half = cfg.length / 2;
     const dx = Math.cos(angle) * half, dy = Math.sin(angle) * half;
     const width = empowered ? cfg.empoweredWidth : cfg.width;
-    const g = this.scene.add.graphics().setDepth(STREAK_DEPTH);
+    const g = this.scene.add.graphics().setDepth(depth);
     g.lineStyle(width * STREAK_GLOW_WIDTH_MULT, empowered ? cfg.empoweredColor : cfg.color, STREAK_GLOW_ALPHA);
     g.lineBetween(x - dx, y - dy, x + dx, y + dy);
     g.lineStyle(width, STREAK_CORE_COLOR, 1);
