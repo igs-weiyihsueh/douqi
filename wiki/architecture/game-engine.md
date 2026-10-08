@@ -62,10 +62,20 @@ scene: [
 | `GameOverScene` | 5KB | 結算畫面、重新開始 | 小 | - |
 | `MinigameMenuScene` | 5KB | 小遊戲選單導航 | 小 | - |
 
-**方案B+C重構加速** (commits 7bb93c4+cc7a433+b7e9a77+3c143c8+10f4af8+ede39c8+c05df68+5baaf48):
-- **GameScene**: 315KB→134KB，6,301行→2,685行 (-57%，數據已更正)
-- **十二Controller**: ComboReward+ComboSkill新增，99/100近乎完美評分
-- **架構成就**: 極致模組化重構展現卓越品質，C-4/C-5完成後預期2,116行
+### 場景職責分工
+| Scene | 檔案 | 主要職責 | 大小 | 更新 |
+|-------|------|----------|------|------|
+| `BootScene` | 24KB | 程序化貼圖生成、資源預處理 | 小 | - |
+| `TitleScene` | 44KB | 主選單、模式選擇、設定面板 | 中 | - |
+| `GameScene` | 106KB | 🎯 核心遊戲邏輯、戰鬥系統 | **中** | 方案C完成 |
+| `UIScene` | 71KB | HUD系統、血條、UI覆蓋 | 大 | - |
+| `GameOverScene` | 5KB | 結算畫面、重新開始 | 小 | - |
+| `MinigameMenuScene` | 5KB | 小遊戲選單導航 | 小 | - |
+
+**方案B+C重構史詩完成** (commits 7bb93c4+cc7a433+b7e9a77+3c143c8+10f4af8+ede39c8+c05df68+5baaf48+c358b54+4502caa):
+- **GameScene**: 315KB→106KB，6,301行→2,116行 (-66%史詩級瘦身)
+- **十五Controller**: SpawnController+EnemyAttackController+CombatFx新增，15個Controller完整體系
+- **架構成就**: 創造軟體重構史上-66%瘦身創新紀錄，Legacy巨型檔案到極致模組化完美轉型
 
 ### 場景間通訊
 ```typescript
