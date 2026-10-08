@@ -197,17 +197,17 @@ export const GameConfig = {
   /**
    * 慢速模式（controlMode='slow'）專用數值。fast 模式不使用這些。
    * slow：純鍵盤，方向鍵/WASD 八方向持續移動(moveSpeed)、角色面向=移動方向、
-   * 範圍圈(lockRadius)內敵人自動鎖定(規則同 fast 但限此圈、方向源用面向)、空白鍵攻擊衝刺(共用 fast)。
+   * 範圍圈（半徑 = 衝刺距離）內敵人自動鎖定(規則同 fast 但限此圈、方向源用面向)、空白鍵攻擊衝刺(共用 fast)。
    */
   slow: {
     /** 八方向持續移動速度（像素/秒；「一點點走」手感，做出後可再調） */
-    moveSpeed: 220,
-    /** 自動鎖定範圍圈半徑*/
-    lockRadius: 140,
+    moveSpeed: 400,
     /** 慢速專屬「無鎖衝刺距離」*/
-    dashDistance: 140,
-    /** 慢速專屬「衝刺速度」預設(用戶定案400)；fast 用 GameConfig.player.dashSpeed 不受影響 */
-    dashSpeed: 400
+    dashDistance: 250,
+    /** 慢速專屬「衝刺速度」預設(用戶定案700)；fast 用 GameConfig.player.dashSpeed 不受影響 */
+    dashSpeed: 700,
+    /** 慢速模式普攻間隔（毫秒；角色編輯器的預設值，快速模式仍用 player.attackCooldownMs） */
+    attackCooldownMs: 200
   },
 
   /**

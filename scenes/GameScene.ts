@@ -135,7 +135,7 @@ export class GameScene extends Phaser.Scene {
    * 初值取自 config；slow 模式的鎖定範圍/衝刺距離/衝刺速度改讀這組(fast 仍讀 config 常數不受影響)。
    */
   private slowTuning: Record<'lockRadius' | 'dashDistance' | 'dashSpeed', number> = {
-    lockRadius: GameConfig.slow.lockRadius,
+    lockRadius: GameConfig.slow.dashDistance, // 鎖敵範圍跟衝刺距離同步（開局後改用角色編輯器的值）
     dashDistance: GameConfig.slow.dashDistance,
     dashSpeed: GameConfig.slow.dashSpeed
   };
@@ -402,10 +402,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private resetState(): void {
-    // 角色編輯器參數：每局重新讀取（主選單可能剛改過），衝刺距離/速度同步到慢速即時調參
+    // 角色編輯器參數：每局重新讀取（主選單可能剛改過），衝刺距離/速度同步到慢速即時調參，鎖敵範圍跟衝刺距離同步
     this.charParams = loadCharacterParams();
     this.slowTuning.dashDistance = this.charParams.dashDistance;
     this.slowTuning.dashSpeed = this.charParams.dashSpeed;
+    this.slowTuning.lockRadius = this.charParams.dashDistance; // 鎖敵範圍跟衝刺距離同步
     this.characters = [];
     this.survivalMs = 0;
     this.gameOver = false;

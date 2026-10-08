@@ -3,7 +3,7 @@ import { GameConfig } from '../config';
 /**
  * 角色參數（主選單「角色編輯器」可調整，慢速模式套用於 P1 與 BOT）。
  *
- * - 預設值取自 config（player.attackCooldownMs、slow.moveSpeed / dashSpeed / dashDistance）
+ * - 預設值取自 config 的 slow.attackCooldownMs / moveSpeed / dashSpeed / dashDistance
  * - 編輯後存在瀏覽器 localStorage，重新整理仍保留；讀取時會夾在合法範圍內，資料損壞則回到預設
  * - 快速模式不受影響（仍讀 config 常數）
  */
@@ -35,7 +35,7 @@ export interface CharacterParamDef {
 export const CHARACTER_PARAM_DEFS: ReadonlyArray<CharacterParamDef> = [
   {
     key: 'attackCooldownMs', label: '普攻攻擊間隔', unit: 'ms', hint: '越小越快',
-    min: 100, max: 800, step: 20, defaultValue: GameConfig.player.attackCooldownMs
+    min: 100, max: 800, step: 20, defaultValue: GameConfig.slow.attackCooldownMs
   },
   {
     key: 'moveSpeed', label: '移動速度', unit: '', hint: '',
