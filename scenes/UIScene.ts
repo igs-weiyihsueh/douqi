@@ -540,7 +540,7 @@ export class UIScene extends Phaser.Scene {
     // 下方面板 COMBO 文字（需在 rows 與 F4 面板圖建立後，才能對齊兩種面板）
     this.createPanelComboTexts();
 
-    this.aimGraphics = this.add.graphics().setDepth(-1); // 圓盤在角色下方
+    this.aimGraphics = this.add.graphics().setDepth(-1); // 衝刺距離指示線（腳下圓盤由 GameScene 畫）
 
     // BOSS 提示大字（上方中央，預設隱藏）：不顯示血量，亂入 BOSS 顯示離場倒數
     const bossHud = GameConfig.boss.hud;
@@ -1027,7 +1027,7 @@ export class UIScene extends Phaser.Scene {
     return Phaser.Display.Color.GetColor(r, g, bl);
   }
 
-  /** P1 方向圓環 + 箭頭 + 衝刺距離指示線（P1 陣亡則隱藏） */
+  /** P1 衝刺距離指示線（P1 陣亡則隱藏） */
   private updateAim = (a: {
     alive: boolean;
     x: number;
@@ -1035,8 +1035,6 @@ export class UIScene extends Phaser.Scene {
     angle: number;
     dashDistance: number;
     showDashLine?: boolean;
-    /** 慢速模式真空圈（圈中心離角色中心的偏移、左右半徑、上下壓扁比例）；有值時腳下地盤畫成真空圈 */
-    vacuum?: { offsetX: number; offsetY: number; radius: number; flatten: number };
   }): void => {
     const g = this.aimGraphics;
     g.clear();
@@ -1061,28 +1059,7 @@ export class UIScene extends Phaser.Scene {
       g.fillStyle(ind.color, ind.alpha + 0.25);
       g.fillCircle(ex, ey, ind.endMarkerRadius);
     }
-
-    // 橢圓圓盤：透視地面圓盤效果（腳底位置）
-    // 慢速模式：地盤就是真空圈（敵人進不來的範圍），依 vacuum 半徑繪製
-    // 快速模式：放大尺寸的裝飾性圓盤，維持原算法
-    let diskX: number, diskY: number, ellipseWidth: number, ellipseHeight: number;
-    if (a.vacuum) {
-      // 慢速模式：真空圈中心 = 角色腳底 + 編輯器偏移（與推擠 / 近戰判定同一個形狀與位置）
-      diskX = ax + a.vacuum.offsetX;
-      diskY = ay + a.vacuum.offsetY;
-      ellipseWidth = a.vacuum.radius * 2;
-      ellipseHeight = a.vacuum.radius * a.vacuum.flatten * 2;
-    } else {
-      // 快速模式：原本的算法
-      diskX = ax - 5;
-      diskY = ay + GameConfig.player.radius + 54; // 圓盤在角色腳底下方54px (總偏移70px)
-      ellipseWidth = cfg.ringRadius * 2.5; // 放大尺寸250%
-      ellipseHeight = cfg.ringRadius * 2.5 * 0.2; // 透視壓縮20%，更扁平的圓盤
-    }
-    g.lineStyle(cfg.ringThickness, cfg.ringColor, cfg.ringAlpha);
-    g.strokeEllipse(diskX, diskY, ellipseWidth, ellipseHeight);
-
-    // 純圓盤，無方向指示
+    // 腳下圓盤改由 GameScene 畫在世界座標的角色下方（systems/footDisc），避免整層蓋住角色
   };
 
   /** 頭上UI系統：創建跟隨角色的UI容器 */

@@ -34,6 +34,7 @@ import {
 import { drawEnemyChargeWarnings } from '../systems/enemyWarnings';
 import { isFixedEnemy, isRegularEnemy } from '../systems/enemyKinds';
 import { visibleBottomOffset } from '../systems/spriteFeet';
+import { drawFootDisc, FOOT_DISC_DEPTH, type VacuumDisk } from '../systems/footDisc';
 
 /**
  * GameScene：
@@ -62,6 +63,8 @@ export class GameScene extends Phaser.Scene {
   /** 連段技、強化、爆發與命中頓感，每次 create() 重建 */
   private comboSkills!: ComboSkillController;
   private chargeWarnGfx!: Phaser.GameObjects.Graphics;
+  /** P1 腳下圓盤（地面標記，畫在角色 / 敵人下方） */
+  private footDiscGfx!: Phaser.GameObjects.Graphics;
 
   /** F4 新舊美術切換（背景圖、P1 皮膚與覆蓋 UI、一般怪外觀），每次 create() 重建 */
   private artStyle!: ArtStyleController;
@@ -266,6 +269,7 @@ export class GameScene extends Phaser.Scene {
     this.comboReward = new ComboRewardController(this, () => this.characters);
     this.comboSkills = new ComboSkillController(this.createComboSkillHost());
     this.chargeWarnGfx = this.add.graphics().setDepth(2);
+    this.footDiscGfx = this.add.graphics().setDepth(FOOT_DISC_DEPTH);
     this.targeting = new TargetingController(this.createTargetingHost());
     this.actions = new CharacterActionController(this.createActionHost());
 
@@ -2012,9 +2016,12 @@ export class GameScene extends Phaser.Scene {
   // ---------------------------------------------------------------------------
   private emitAim(): void {
     if (!this.player.alive) {
+      this.footDiscGfx.clear();
       this.game.events.emit('aim', { alive: false, x: 0, y: 0, angle: 0, dashDistance: 0, showDashLine: false });
       return;
     }
+    // 腳下圓盤：slow 模式 = 真空圈（與判定同一個形狀與位置）；fast 維持裝飾圓盤
+    drawFootDisc(this.footDiscGfx, this.player.x, this.player.y, this.controlMode === 'slow' ? this.vacuumDisk() : null);
     // 指示線方向若有鎖定目標（敵人或道具）則指向目標，否則沿用瞄準角
     let ang = this.player.aimAngle;
     const lock = this.targeting.lockedTarget;
@@ -2028,15 +2035,13 @@ export class GameScene extends Phaser.Scene {
       angle: ang,
       dashDistance: GameConfig.aim.dashDistance,
       // slow 模式不畫「衝刺距離延長指示線」(用戶要拿掉那條延長瞄準線)；fast 維持顯示。
-      showDashLine: this.controlMode !== 'slow',
-      // slow 模式腳下地盤 = 真空圈（與判定同一個形狀與位置）；fast 不帶，地盤維持原樣
-      ...(this.controlMode === 'slow' ? { vacuum: this.vacuumDisk() } : {})
+      showDashLine: this.controlMode !== 'slow'
     });
   }
 
   /**
    * 角色的真空圈：大小 / 扁度 / 偏移取自角色編輯器參數，中心在角色腳底 + 偏移。
-   * 腳底依目前顯示的圖像（P1 新美術用皮膚）；敵人腳底依自己的紋理與縮放
+   * 腳底依目前顯示的圖像（P1 新美術用皮膚）；敵人腳底依自己的紋理與縮放，F4 外觀的怪以地面佔位的腳寬碰圈
    *
    * @param c 角色
    */
@@ -2047,12 +2052,13 @@ export class GameScene extends Phaser.Scene {
       offsetY: this.artStyle.characterFootOffset(c) + p.vacuumOffsetY,
       radius: p.vacuumRadius,
       flatten: p.vacuumFlatten,
-      enemyFoot: (e) => visibleBottomOffset(this.textures, e.texture.key) * e.scaleY
+      enemyFoot: (e) => visibleBottomOffset(this.textures, e.texture.key) * e.scaleY,
+      enemyFootprint: (e) => this.artStyle.enemyFootprint(e)
     };
   }
 
-  /** P1 腳下圓盤要畫的真空圈（只送形狀與位置給 UIScene） */
-  private vacuumDisk(): { offsetX: number; offsetY: number; radius: number; flatten: number } {
+  /** P1 腳下圓盤要畫的真空圈（只取形狀與位置） */
+  private vacuumDisk(): VacuumDisk {
     const { offsetX, offsetY, radius, flatten } = this.vacuumZone(this.player);
     return { offsetX, offsetY, radius, flatten };
   }

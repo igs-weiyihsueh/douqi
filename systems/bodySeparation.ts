@@ -267,6 +267,8 @@ export interface VacuumZone {
   flatten: number;
   /** 敵人腳底離敵人中心的垂直距離 */
   enemyFoot(e: Enemy): number;
+  /** 敵人的地面佔位（F4 新美術）；有值時以佔位橢圓的腳寬碰圈，null = 以身體半徑碰圈 */
+  enemyFootprint: FootprintOf;
 }
 
 /**
@@ -292,7 +294,15 @@ function vacuumBoundaryDistance(nx: number, ny: number, enemyRadius: number, zon
  * @param zone 真空圈
  */
 export function vacuumGap(c: Character, e: Enemy, zone: VacuumZone): { gap: number; nx: number; ny: number } {
-  const { nx, ny, d } = normalBetween(c.x + zone.offsetX, c.y + zone.offsetY, e.x, e.y + zone.enemyFoot(e));
+  const cx = c.x + zone.offsetX, cy = c.y + zone.offsetY;
+  const fp = zone.enemyFootprint(e);
+  if (fp) {
+    // F4 新美術：圈 + 佔位橢圓相加的邊界（腳尖剛好碰到圈線），與敵人間碰撞同一份佔位資料
+    const { nx, ny, d } = normalBetween(cx, cy, e.x, e.y + fp.footY);
+    const a = zone.radius + fp.rx, b = zone.radius * zone.flatten + fp.ry;
+    return { gap: d - (a * b) / Math.hypot(b * nx, a * ny), nx, ny };
+  }
+  const { nx, ny, d } = normalBetween(cx, cy, e.x, e.y + zone.enemyFoot(e));
   return { gap: d - vacuumBoundaryDistance(nx, ny, e.getBodyRadius(), zone), nx, ny };
 }
 
