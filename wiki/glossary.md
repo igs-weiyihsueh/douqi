@@ -81,6 +81,9 @@
 | **isFixedEnemy** | 固定敵人判斷函式 (55cca6d統一) | `systems/enemyKinds.ts:10` | [專案架構](./architecture/project-structure.md) |
 | **GoIndicator** | GO指示器控制器類別 (7fe3754迭代) | `controllers/GoIndicator.ts:30` | [GO指示器](./systems/go-indicator.md) |
 | **GoDirection** | GO指示器方向型別 (69f5a1c新增) | `controllers/GoIndicator.ts:5` | [GO指示器](./systems/go-indicator.md) |
+| **EventController** | 事件系統控制器類別 (7bb93c4新增) | `controllers/EventController.ts:25` | [事件系統](./systems/event-system.md) |
+| **EventHost** | 事件控制器場景介面 (7bb93c4新增) | `controllers/EventController.ts:11` | [事件系統](./systems/event-system.md) |
+| **EventKind** | 限時事件種類型別 (7bb93c4新增) | `controllers/EventController.ts:8` | [事件系統](./systems/event-system.md) |
 | **markerDotScale** | 位置標記中心亮點縮放 (05dafae新增) | `config.ts:85` | [關卡系統](./systems/stage-system.md) |
 | **drawStageMarker** | HUD位置標記繪製函式 (05dafae新增) | `UIScene.ts:858` | [關卡系統](./systems/stage-system.md) |
 | **stageCycle** | 無限關卡循環配置 (874b8f9新增) | `config.ts:920` | [關卡系統](./systems/stage-system.md) |
