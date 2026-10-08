@@ -13,6 +13,7 @@ import { BossController, type BossHost } from '../controllers/BossController';
 import { drawCorridorScenery, drawZoneScenery } from '../systems/zoneScenery';
 import { ArtStyleController } from '../controllers/ArtStyleController';
 import { GoIndicator } from '../controllers/GoIndicator';
+import { HiddenGateController } from '../controllers/HiddenGateController';
 import { SkillController, type SkillHost } from '../controllers/SkillController';
 import { pointInOrientedRect } from '../systems/geometry';
 import {
@@ -132,6 +133,8 @@ export class GameScene extends Phaser.Scene {
   private exitGfx: Phaser.GameObjects.Graphics | null = null;
   /** 出口開啟時畫面邊緣的 GO 指示，每次 create() 重建 */
   private goIndicator!: GoIndicator;
+  /** 隱藏入口（熔岩拱門），每次 create() 重建 */
+  private hiddenGate!: HiddenGateController;
   /** 階段1:右走廊純色佔位底圖(進 B 後清)。 */
   private corridorGfx: Phaser.GameObjects.Graphics | null = null;
   /** 階段2:左走廊底圖。 */
@@ -332,6 +335,7 @@ export class GameScene extends Phaser.Scene {
     this.bossCtl = new BossController(this.createBossHost());
     this.skillCtl = new SkillController(this.createSkillHost());
     this.goIndicator = new GoIndicator(this);
+    this.hiddenGate = new HiddenGateController(this);
 
     // 道具群
     this.items = this.physics.add.group({
@@ -398,6 +402,11 @@ export class GameScene extends Phaser.Scene {
     });
 
     // R 鍵：P1 原地滿血復活（無限次）
+    // 除錯 H 鍵：立刻開啟這一區的隱藏入口（沒有拱門就先生成）
+    this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.H).on('down', () => {
+      if (this.levelMode) this.hiddenGate.debugOpen(this.zoneA);
+    });
+
     this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.R).on('down', () => {
       this.revivePlayer();
     });
@@ -2545,6 +2554,7 @@ export class GameScene extends Phaser.Scene {
    * 小遊戲關卡尚未實作
    */
   private startStage(): void {
+    this.hiddenGate.spawnFor(this.zoneA); // 新區域開打：決定這一區是否出現隱藏入口
     const node = this.stageQueue[0];
     const wasMystery = node.kind === 'mystery' && !node.revealed;
     const chest = revealStageNode(node);
