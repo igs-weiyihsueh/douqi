@@ -252,12 +252,10 @@ export class CharacterEditorPanel {
   }
 
   /**
-   * 設定參數值：對齊 step 格點並夾在合法範圍，再更新畫面
+   * step 的小數位數（0.05 → 2、5 → 0），數值取整與顯示共用
    *
-   * @param def 參數定義
-   * @param value 目標值
+   * @param step 步進值
    */
-  /** 計算step的小數位數 */
   private stepDecimals(step: number): number {
     return step.toString().split('.')[1]?.length || 0;
   }
@@ -285,9 +283,10 @@ export class CharacterEditorPanel {
   }
 
   /**
-   * 設定參數值並更新顯示
+   * 設定參數值：對齊 step 格點（依 step 小數位數取整，避免浮點長尾）並夾在合法範圍，再更新畫面
+   *
    * @param def 參數定義
-   * @param value 新數值
+   * @param value 目標值
    */
   private setValue(def: CharacterParamDef, value: number): void {
     const snapped = def.min + Math.round((value - def.min) / def.step) * def.step;
