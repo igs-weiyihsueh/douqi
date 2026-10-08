@@ -79,6 +79,8 @@
 | **ArtStyleController** | 美術切換控制器 (82f5fb6新增) | `controllers/ArtStyleController.ts:35` | [專案架構](./architecture/project-structure.md) |
 | **ScenePalette** | 場景配色介面 (fe938ff抽出) | `systems/zoneScenery.ts:12` | [場景渲染](./systems/scene-rendering.md) |
 | **isFixedEnemy** | 固定敵人判斷函式 (55cca6d統一) | `systems/enemyKinds.ts:10` | [專案架構](./architecture/project-structure.md) |
+| **GoIndicator** | GO指示器控制器類別 (7fe3754迭代) | `controllers/GoIndicator.ts:30` | [GO指示器](./systems/go-indicator.md) |
+| **GoDirection** | GO指示器方向型別 (69f5a1c新增) | `controllers/GoIndicator.ts:5` | [GO指示器](./systems/go-indicator.md) |
 | **markerDotScale** | 位置標記中心亮點縮放 (05dafae新增) | `config.ts:85` | [關卡系統](./systems/stage-system.md) |
 | **drawStageMarker** | HUD位置標記繪製函式 (05dafae新增) | `UIScene.ts:858` | [關卡系統](./systems/stage-system.md) |
 | **stageCycle** | 無限關卡循環配置 (874b8f9新增) | `config.ts:920` | [關卡系統](./systems/stage-system.md) |
