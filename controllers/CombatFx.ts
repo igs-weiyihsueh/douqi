@@ -29,6 +29,11 @@ const DEATH_TINT = 0xff5a6e;
 const DEATH_DEPTH = 45;
 const DEATH_LIFESPAN_MS = 300;
 const DEATH_DESTROY_MS = 320;
+/** 刀光：深度（火花之下、斬擊圈之上）、外層光暈相對粗細與透明度、內層亮芯顏色 */
+const STREAK_DEPTH = 43;
+const STREAK_GLOW_WIDTH_MULT = 3;
+const STREAK_GLOW_ALPHA = 0.45;
+const STREAK_CORE_COLOR = 0xffffff;
 /** 敵人近戰發動閃光：顏色、深度、時間 */
 const ATTACK_FLASH_COLOR = 0xff3344;
 const ATTACK_FLASH_DEPTH = 3;
@@ -102,6 +107,27 @@ export class CombatFx {
       onUpdate: () => ring.setRadius(ring.radius),
       onComplete: () => ring.destroy()
     });
+  }
+
+  /**
+   * 刀光：穿過命中點、沿攻擊方向的細長亮色斬痕（外層光暈 + 內層亮芯），快速淡出
+   *
+   * @param x 命中點 x
+   * @param y 命中點 y
+   * @param angle 斬擊方向（弧度）
+   * @param empowered 強化攻擊（金色、加粗）
+   */
+  slashStreak(x: number, y: number, angle: number, empowered: boolean): void {
+    const cfg = GameConfig.cutIn.streak;
+    const half = cfg.length / 2;
+    const dx = Math.cos(angle) * half, dy = Math.sin(angle) * half;
+    const width = empowered ? cfg.empoweredWidth : cfg.width;
+    const g = this.scene.add.graphics().setDepth(STREAK_DEPTH);
+    g.lineStyle(width * STREAK_GLOW_WIDTH_MULT, empowered ? cfg.empoweredColor : cfg.color, STREAK_GLOW_ALPHA);
+    g.lineBetween(x - dx, y - dy, x + dx, y + dy);
+    g.lineStyle(width, STREAK_CORE_COLOR, 1);
+    g.lineBetween(x - dx, y - dy, x + dx, y + dy);
+    this.scene.tweens.add({ targets: g, alpha: 0, duration: cfg.ms, ease: 'Cubic.easeIn', onComplete: () => g.destroy() });
   }
 
   /** 往上飄的傷害數字（受節流） */

@@ -1308,6 +1308,30 @@ export const GameConfig = {
     cooldownMs: 100
   },
 
+  /**
+   * 衝刺切入（刀切進肉的阻力感）：衝刺撞到敵人後不立即停下，以減速沿衝刺方向繼續「陷入」durationMs 再停。
+   * 只影響攻擊者自己，且在普攻冷卻內，不延遲輸入；BOSS / 塔仍停在外緣
+   */
+  cutIn: {
+    /** 切入開關（關閉 = 撞到立即停下） */
+    enabled: true,
+    /** 陷入時間（毫秒） */
+    durationMs: 70,
+    /** 陷入速度 = 撞擊當下衝刺速度 × 此比例 */
+    speedRatio: 0.25,
+    /** 刀光開關 */
+    streakEnabled: true,
+    /** 刀光：長度（px）、粗細、強化時粗細、淡出時間（毫秒）、外層光暈顏色（一般 / 強化） */
+    streak: {
+      length: 140,
+      width: 3,
+      empoweredWidth: 5,
+      ms: 100,
+      color: 0xbfe9ff,
+      empoweredColor: 0xffd54f
+    }
+  },
+
   juice: {
     /** 爆發螢幕震動 */
     burstShakeDuration: 300,

@@ -45,6 +45,13 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
   dashDestY = 0;
   /** 本次衝刺是否為「衝去撿道具」（途中不因撞到敵人而中止，確保撿得到） */
   dashToItem = false;
+  /**
+   * 衝刺切入：撞到敵人後以減速繼續陷入，直到這個時間才停下（0 = 不在切入中；見 CharacterActionController.handleDash）
+   */
+  cutInUntil = 0;
+  /** 切入期間的速度（x / y，px／秒） */
+  cutInVelocityX = 0;
+  cutInVelocityY = 0;
   /** 目前瞄準角度（弧度） */
   aimAngle = 0;
   /** 畫面上的左右面向（依 aimAngle 由 GameScene 每幀更新；只影響鏡像翻轉） */
@@ -466,6 +473,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
     this.alive = false;
     this.isDashing = false;
     this.dashToItem = false;
+    this.cutInUntil = 0;
     this.isBursting = false;
     this.dashShielded = false;
     this.skillLockUntil = 0;
@@ -503,6 +511,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
     this.spirit = 0; // 復活鬥氣歸零（乾淨重來）
     this.isDashing = false;
     this.dashToItem = false;
+    this.cutInUntil = 0;
     this.isBursting = false;
     this.dashShielded = false;
     this.skillLockUntil = 0;

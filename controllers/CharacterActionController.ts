@@ -61,6 +61,8 @@ export interface CharacterActionHost {
   empowerAoe(c: Character, time: number): void;
   flashWhite(c: Character): void;
   spawnMeleeArcEffect(x: number, y: number, angle: number): void;
+  /** 衝刺切入的刀光（穿過命中點、沿衝刺方向的斬痕） */
+  spawnSlashStreak(x: number, y: number, angle: number, empowered: boolean): void;
 }
 
 /** 對 BOSS / 塔停外緣時，與目標外緣多留的距離 */
@@ -343,6 +345,7 @@ export class CharacterActionController {
   endDashState(c: Character): void {
     c.isDashing = false;
     c.dashToItem = false;
+    c.cutInUntil = 0;
     c.stopMoving();
     c.dashShielded = false;
     c.showDashShield(false);
@@ -360,14 +363,29 @@ export class CharacterActionController {
     if (c === this.host.player()) {
       this.host.hitBreakablesInRange(c, GameConfig.aim.dashHitRadius + GameConfig.breakable.radius, 0, false, DASH_BREAK_DAMAGE, time);
     }
+    // 切入中：以減速繼續陷入敵人，時間到才停下（不再判定撞擊，避免同一次衝刺連打）
+    if (c.cutInUntil > 0) {
+      if (time < c.cutInUntil) {
+        (c.body as Phaser.Physics.Arcade.Body).setVelocity(c.cutInVelocityX, c.cutInVelocityY);
+        return;
+      }
+      c.stopMoving();
+      this.endDashState(c);
+      return;
+    }
+    const dashSpeed = this.currentDashSpeed(c, time);
     if (!c.dashToItem) {
       const hitRadius = GameConfig.aim.dashHitRadius;
       const hit = this.targeting.findFirstEnemyInRangeOf(c, hitRadius);
       if (hit) {
         c.stopMoving();
         this.host.performAttackOn(c, hit, time);
-        if (isStructureEnemy(hit)) standCharacterOutside(c, hit, this.host.arena());
-        this.endDashState(c);
+        if (isStructureEnemy(hit)) {
+          standCharacterOutside(c, hit, this.host.arena());
+          this.endDashState(c);
+        } else {
+          this.beginCutIn(c, hit, dashSpeed, time);
+        }
         return;
       }
     }
@@ -380,14 +398,42 @@ export class CharacterActionController {
       return;
     }
     const dashAngle = Math.atan2(dy, dx);
-    const baseDashSpeed = this.host.isSlowMode() ? this.host.slowTuning().dashSpeed : GameConfig.player.dashSpeed;
-    const dashSpeed = baseDashSpeed * (c.isEmpowered(time) ? GameConfig.combo.empower.dashSpeedMult : 1);
     if (dist <= Math.max(DASH_ARRIVE_MIN, dashSpeed * DASH_ARRIVE_LOOKAHEAD_SEC)) {
       c.stopMoving();
       this.endDashState(c);
       return;
     }
     (c.body as Phaser.Physics.Arcade.Body).setVelocity(Math.cos(dashAngle) * dashSpeed, Math.sin(dashAngle) * dashSpeed);
+  }
+
+  /** 目前衝刺速度：慢速模式讀即時調參，強化中加乘 */
+  private currentDashSpeed(c: Character, time: number): number {
+    const base = this.host.isSlowMode() ? this.host.slowTuning().dashSpeed : GameConfig.player.dashSpeed;
+    return base * (c.isEmpowered(time) ? GameConfig.combo.empower.dashSpeedMult : 1);
+  }
+
+  /**
+   * 衝刺撞到敵人：開始「切入」——以減速沿衝刺方向繼續陷入一小段再停（刀切進肉的阻力感），並畫刀光。
+   * 只影響攻擊者自己，且發生在普攻冷卻內，不延遲任何輸入；關閉時立即停下（原行為）
+   *
+   * @param c 衝刺中的角色
+   * @param hit 撞到的敵人
+   * @param dashSpeed 撞擊當下的衝刺速度
+   * @param time 目前場景時間
+   */
+  private beginCutIn(c: Character, hit: Enemy, dashSpeed: number, time: number): void {
+    const cfg = GameConfig.cutIn;
+    const angle = Math.atan2(c.dashDestY - c.y, c.dashDestX - c.x);
+    if (cfg.streakEnabled) this.host.spawnSlashStreak(hit.x, hit.y, angle, c.isEmpowered(time));
+    if (!cfg.enabled || cfg.durationMs <= 0) {
+      this.endDashState(c);
+      return;
+    }
+    const speed = dashSpeed * cfg.speedRatio;
+    c.cutInVelocityX = Math.cos(angle) * speed;
+    c.cutInVelocityY = Math.sin(angle) * speed;
+    c.cutInUntil = time + cfg.durationMs;
+    (c.body as Phaser.Physics.Arcade.Body).setVelocity(c.cutInVelocityX, c.cutInVelocityY);
   }
 
   /** 把角色夾在可活動範圍內；衝刺中撞牆被夾回就結束衝刺（避免牆邊來回震盪或卡在衝刺狀態） */
