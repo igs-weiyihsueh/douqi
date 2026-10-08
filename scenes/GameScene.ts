@@ -18,6 +18,7 @@ import { ComboRewardController } from '../controllers/ComboRewardController';
 import { ComboSkillController, type ComboSkillHost } from '../controllers/ComboSkillController';
 import { SpawnController, type SpawnHost } from '../controllers/SpawnController';
 import { CombatFx } from '../controllers/CombatFx';
+import { HitReactionFx } from '../controllers/HitReactionFx';
 import { EnemyAttackController, type EnemyAttackHost } from '../controllers/EnemyAttackController';
 import { SlotWorldController, type AreaTransition, type Side, type SlotWorldHost } from '../controllers/SlotWorldController';
 import { PerfOverlay } from '../controllers/PerfOverlay';
@@ -78,6 +79,8 @@ export class GameScene extends Phaser.Scene {
   private spawner!: SpawnController;
   /** 戰鬥視覺回饋（特效、閃白、震動），每次 create() 重建 */
   private fx!: CombatFx;
+  /** 命中火花與敵人受擊反應（純視覺） */
+  private hitFx!: HitReactionFx;
   /** 敵人的攻擊（近戰、投彈），每次 create() 重建 */
   private enemyAttacks!: EnemyAttackController;
   /** 道具定時保底掉落計時 */
@@ -185,6 +188,7 @@ export class GameScene extends Phaser.Scene {
   create(): void {
     this.resetState();
     this.fx = new CombatFx(this);
+    this.hitFx = new HitReactionFx(this);
     this.enemyAttacks = new EnemyAttackController(this.createEnemyAttackHost());
 
     // 固定視角競技場
@@ -1967,6 +1971,7 @@ export class GameScene extends Phaser.Scene {
     enemy.applyKnockback(fromX, fromY, knockback, time);
     this.fx.damageText(enemy.x, enemy.y, dmg);
     this.fx.flashEnemy(enemy);
+    this.hitFx.onEnemyHit(enemy, fromX, fromY, actor.isEmpowered(time));
     // 擊殺只結算一次：takeDamage 判定死亡、且尚未被標記 dead 的才處理
     if (!dead || enemy.dead) return;
     const dx = enemy.x, dy = enemy.y;

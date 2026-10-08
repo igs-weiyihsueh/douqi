@@ -165,7 +165,7 @@ export class CombatFx {
   /** 敵人受擊閃白 */
   flashEnemy(enemy: Enemy): void {
     enemy.setTintFill(0xffffff);
-    this.scene.time.delayedCall(GameConfig.juice.flashMs, () => {
+    this.scene.time.delayedCall(GameConfig.juice.enemyFlashMs, () => {
       if (enemy.active) enemy.clearTint();
     });
   }

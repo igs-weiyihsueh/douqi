@@ -1301,6 +1301,38 @@ export const GameConfig = {
     burstShakeIntensity: 0.009,
     /** 命中閃白時間（毫秒） */
     flashMs: 60,
+    /** 敵人受擊閃白時間（毫秒）；角色出手閃白仍用 flashMs */
+    enemyFlashMs: 100,
+    /** 命中火花（每隻被打到的敵人都噴；純視覺） */
+    hitSpark: {
+      /** 一般攻擊顆數 / 強化攻擊顆數 */
+      count: 8,
+      empoweredCount: 16,
+      /** 噴發錐形的總角度（度），以「攻擊來源 → 敵人」方向為中心 */
+      coneDeg: 70,
+      /** 粒子速度範圍（px/秒） */
+      speedMin: 160,
+      speedMax: 380,
+      /** 粒子存在時間（毫秒） */
+      lifespanMs: 220,
+      /** 粒子起始縮放（spark 貼圖 8px，結束時縮到 0） */
+      scale: 1.2,
+      /** 一般 / 強化攻擊的顏色（輪流使用） */
+      colors: [0xffffff, 0xfff3b0],
+      empoweredColors: [0xffd54f, 0xffa000],
+      /** 深度：在站立物件與斬擊圈之上、傷害數字之下 */
+      depth: 44
+    },
+    /** 敵人受擊反應（純視覺：繪製前套用、繪製後還原，不影響判定） */
+    hitReaction: {
+      /** 反應時間（毫秒） */
+      durationMs: 120,
+      /** 壓扁幅度：橫向放大 / 縱向縮小的比例（隨時間線性回彈到 0） */
+      squash: 0.18,
+      /** 左右抖動幅度（px）與反應期間的來回次數 */
+      jitterPx: 3,
+      jitterCycles: 2
+    },
     /** 傷害數字上飄時間（毫秒） */
     damageTextMs: 600,
     /**
