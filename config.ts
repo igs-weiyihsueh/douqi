@@ -872,6 +872,15 @@ export const GameConfig = {
     mysteryHighChance: 0.4,
     /** 各寶箱階級的關卡擊殺數（問號依揭曉結果） */
     quotaByChest: { low: 25, high: 35 },
+    /**
+     * 出口開啟時的 GO 指示（固定在畫面邊緣、隨鏡頭移動）：左右出口在畫面左 / 右緣中段（距邊 edgeInset），
+     * 上方出口在畫面上緣中央 topY（避開上方卷軸 HUD 與 BOSS 提示）；閃動週期 blinkMs，最暗透明度 blinkMinAlpha
+     */
+    goIndicator: {
+      fontSize: '72px', color: '#fff59d', strokeColor: '#5a3b00', strokeThickness: 8,
+      glowColor: '#ffd54f', glowBlur: 24, depth: 55,
+      edgeInset: 110, topY: 170, blinkMs: 420, blinkMinAlpha: 0.35, pulseScale: 1.15
+    },
     /** 問號關前的出口組合（隨機挑一組；L 左、R 右、U 上方）；含回頭方向（與 dirLock 相反）的組合會被排除 */
     mysteryExitCombos: [['L', 'R'], ['L', 'U'], ['R', 'U']] as ReadonlyArray<ReadonlyArray<'L' | 'R' | 'U'>>,
     /** 寶箱獎勵：完成小關卡直接發給每位存活玩家的彩票張數 */

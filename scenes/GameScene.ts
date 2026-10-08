@@ -12,6 +12,7 @@ import type { TelegraphFx } from '../systems/telegraphFx';
 import { BossController, type BossHost } from '../controllers/BossController';
 import { drawCorridorScenery, drawZoneScenery } from '../systems/zoneScenery';
 import { ArtStyleController } from '../controllers/ArtStyleController';
+import { GoIndicator } from '../controllers/GoIndicator';
 import { SkillController, type SkillHost } from '../controllers/SkillController';
 import { pointInOrientedRect } from '../systems/geometry';
 import {
@@ -129,7 +130,8 @@ export class GameScene extends Phaser.Scene {
   private choiceGfx: Phaser.GameObjects.Graphics | null = null;   // 左右箭頭繪圖
   /** 上方出口繪圖（與左右箭頭分開：問號關前兩者可能同時存在） */
   private exitGfx: Phaser.GameObjects.Graphics | null = null;
-  private choiceHint: Phaser.GameObjects.Text | null = null;      // 提示文字
+  /** 出口開啟時畫面邊緣的 GO 指示，每次 create() 重建 */
+  private goIndicator!: GoIndicator;
   /** 階段1:右走廊純色佔位底圖(進 B 後清)。 */
   private corridorGfx: Phaser.GameObjects.Graphics | null = null;
   /** 階段2:左走廊底圖。 */
@@ -329,6 +331,7 @@ export class GameScene extends Phaser.Scene {
     });
     this.bossCtl = new BossController(this.createBossHost());
     this.skillCtl = new SkillController(this.createSkillHost());
+    this.goIndicator = new GoIndicator(this);
 
     // 道具群
     this.items = this.physics.add.group({
@@ -524,7 +527,6 @@ export class GameScene extends Phaser.Scene {
     if (this.choiceGfx) { this.choiceGfx.destroy(); this.choiceGfx = null; }
     if (this.exitGfx) { this.exitGfx.destroy(); this.exitGfx = null; }
     this.clearCrossArrows();
-    if (this.choiceHint) { this.choiceHint.destroy(); this.choiceHint = null; }
     if (this.levelBanner) { this.levelBanner.destroy(); this.levelBanner = null; }
     this.eventKind = null;
     // 事件開場宣告狀態重置(防殘留/鎖操作卡死)
@@ -2031,23 +2033,24 @@ export class GameScene extends Phaser.Scene {
 
   /**
    * 問號關前的雙出口：從 左+右 / 左+上 / 右+上 中挑一組，排除回頭方向（dirLock='L' 時不出現右，反之亦然）。
-   * 左右照常走邊界平移（並設定 dirLock），上方走出口閃黑（解除 dirLock）；不顯示提示文字，只有箭頭與出口圖示
+   * 左右照常走邊界平移（並設定 dirLock），上方走出口閃黑（解除 dirLock）
    */
   private openMysteryExits(): void {
     const back = this.dirLock === 'L' ? 'R' : this.dirLock === 'R' ? 'L' : null;
     const combos = GameConfig.stage.mysteryExitCombos.filter((c) => !back || !c.includes(back));
     const combo = combos[Phaser.Math.Between(0, combos.length - 1)];
     const L = combo.includes('L'), R = combo.includes('R'), up = combo.includes('U');
-    this.openCrossing({ L, R }, false);
+    this.openCrossing({ L, R });
     if (up) {
       this.progressPhase = 'exiting'; // 左右轉場仍在 crossingOpen 下偵測；exiting 另外偵測上方出口
-      this.showExit(false);
+      this.showExit();
     }
   }
 
-  /** 收掉上方出口的圖（問號關前選了另一條路時用） */
+  /** 收掉上方出口的圖與 GO（問號關前選了另一條路時用） */
   private closeTopExit(): void {
     if (this.exitGfx) { this.exitGfx.destroy(); this.exitGfx = null; }
+    this.goIndicator.hide('U');
   }
 
   /**
@@ -2056,9 +2059,8 @@ export class GameScene extends Phaser.Scene {
    * - 玩家走到開放側的邊界 → updateCrossing → startCameraPanToB(side)
    *
    * @param allowed 開放的方向；省略時依 dirLock（走過一側後只開同側）
-   * @param withHint 是否顯示「走到邊界前往下一區」提示文字
    */
-  private openCrossing(allowed?: { L: boolean; R: boolean }, withHint = true): void {
+  private openCrossing(allowed?: { L: boolean; R: boolean }): void {
     this.crossingOpen = true;
     this.crossPhase = 'walk';
     this.crossAllowed = allowed ?? { L: this.dirLock !== 'R', R: this.dirLock !== 'L' };
@@ -2081,13 +2083,8 @@ export class GameScene extends Phaser.Scene {
     // 開放側的走廊(填滿不露黑)
     if (openR) this.drawCorridorScene('R');
     if (openL) this.drawCorridorScene('L');
-    if (this.choiceHint) { this.choiceHint.destroy(); this.choiceHint = null; }
-    if (withHint) {
-      const hint = openL && openR ? '← 走到左或右邊界前往下一區 →' : openL ? '← 走到左邊界前往下一區' : '走到右邊界前往下一區 →';
-      this.choiceHint = this.add.text(this.zoneA.centerX, this.zoneA.top + 46, hint, {
-        fontFamily: 'monospace', fontSize: '24px', color: '#ffe98a'
-      }).setOrigin(0.5).setDepth(21).setScrollFactor(1);
-    }
+    if (openL) this.goIndicator.show('L');
+    if (openR) this.goIndicator.show('R');
     // 引導箭頭(純視覺提示往左/右可走;非碰箭頭觸發——玩家仍需走到 A 左/右緣才觸發過場)。
     this.drawCrossingArrows();
   }
@@ -2222,9 +2219,10 @@ export class GameScene extends Phaser.Scene {
     this.resetCharacterMotion(); // 觸發邊界時可能正在衝刺，先清掉避免自動走位與衝刺互搶
     this.closeTopExit(); // 問號關前若同時開了上方出口，選了左右就關掉
     this.progressPhase = 'playing';
-    // 觸發鎖定→隱藏引導箭頭(進 panning 後不再顯示,非碰箭頭觸發)。
+    // 觸發鎖定→隱藏引導箭頭與 GO(進 panning 後不再顯示,非碰箭頭觸發)。
     if (this.choiceGfx) { this.choiceGfx.destroy(); this.choiceGfx = null; }
     this.clearCrossArrows();
+    this.goIndicator.hideAll();
     const zoneB = side === 'L' ? this.zoneBLeft : this.zoneBRight;
     const slotB = side === 'L' ? this.slotBLeft : this.slotBRight;
     const cam = this.cameras.main;
@@ -2236,11 +2234,6 @@ export class GameScene extends Phaser.Scene {
       if (progress >= 1) {
         cam.setBounds(slotB.x, slotB.y, slotB.width, slotB.height);
         this.crossPhase = 'enter';
-        if (this.choiceHint) { this.choiceHint.destroy();
-          this.choiceHint = this.add.text(zoneB.centerX, zoneB.top + 46, '前往下一區…', {
-            fontFamily: 'monospace', fontSize: '24px', color: '#ffe98a'
-          }).setOrigin(0.5).setDepth(21).setScrollFactor(1);
-        }
       }
     });
   }
@@ -2259,7 +2252,7 @@ export class GameScene extends Phaser.Scene {
     this.clearTreasure();
     this.bossCtl.onZoneLeave();
     // 保留走廊(不清 corridorGfx/L)→A↔B 銜接不變黑塊。
-    if (this.choiceHint) { this.choiceHint.destroy(); this.choiceHint = null; }
+    this.goIndicator.hideAll();
     // 世界往該側延伸一格：抵達的區域成為新的中央（A），前方再生成下一個 slot、回收身後最遠的 slot
     this.recenterOn(side);
     const zoneB = this.zoneA;
@@ -2442,12 +2435,8 @@ export class GameScene extends Phaser.Scene {
     g.strokeCircle(x, y, s + 14);
   }
 
-  /**
-   * 開上方出口：玩家走進 → 閃黑到新區域
-   *
-   * @param withHint 是否顯示「走進上方出口」提示文字（問號關前不顯示）
-   */
-  private showExit(withHint = true): void {
+  /** 開上方出口：玩家走進 → 閃黑到新區域（畫面上緣顯示 GO） */
+  private showExit(): void {
     if (this.exitGfx) this.exitGfx.destroy();
     const g = this.add.graphics().setDepth(20);
     const a = this.arena;
@@ -2467,11 +2456,7 @@ export class GameScene extends Phaser.Scene {
     g.closePath();
     g.fillPath();
     this.exitGfx = g;
-    if (!withHint) return;
-    if (this.choiceHint) this.choiceHint.destroy();
-    this.choiceHint = this.add.text(a.centerX, ey + 90, '走進上方出口前往新區域 ↑', {
-      fontFamily: 'monospace', fontSize: '24px', color: '#ffe98a'
-    }).setOrigin(0.5).setDepth(21);
+    this.goIndicator.show('U');
   }
 
   /** choosing 階段每幀:偵測玩家走到左/右箭頭 → 記錄選邊 → 平移到 B。 */
@@ -2494,7 +2479,7 @@ export class GameScene extends Phaser.Scene {
   private startPanToB(): void {
     this.progressPhase = 'panning';
     if (this.choiceGfx) { this.choiceGfx.destroy(); this.choiceGfx = null; }
-    if (this.choiceHint) { this.choiceHint.destroy(); this.choiceHint = null; }
+    this.goIndicator.hideAll();
     // 選左→B 在 A 左側(鏡頭往左);選右→B 在 A 右側(鏡頭往右)。
     this.zoneB = this.lastChoice === 'L' ? this.zoneBLeft : this.zoneBRight;
     const slotB = this.lastChoice === 'L' ? this.slotBLeft : this.slotBRight;
@@ -2622,7 +2607,7 @@ export class GameScene extends Phaser.Scene {
     // 問號關前若左右也同時開放：選了上方就收掉左右轉場狀態
     this.crossingOpen = false;
     this.crossSide = null;
-    if (this.choiceHint) { this.choiceHint.destroy(); this.choiceHint = null; }
+    this.goIndicator.hideAll();
     const cam = this.cameras.main;
     const fade = GameConfig.stage.fadeMs;
     this.disableFollow(); // 停跟隨,避免 fade 期間 camera 仍追玩家
