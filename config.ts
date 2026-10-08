@@ -873,13 +873,17 @@ export const GameConfig = {
     /** 各寶箱階級的關卡擊殺數（問號依揭曉結果） */
     quotaByChest: { low: 25, high: 35 },
     /**
-     * 出口開啟時的 GO 指示：顯示在各方向引導箭頭的正上方（世界座標，跟著箭頭），
-     * 底部距箭頭外圈 gapAboveArrow；文字本身發光（陰影光暈，無底框）；閃動週期 blinkMs，最暗透明度 blinkMinAlpha
+     * 出口開啟時的 GO 指示（文字本身發光，無底框；閃動週期 blinkMs，最暗透明度 blinkMinAlpha）：
+     * - 引導箭頭完整在畫面內 → GO 底部在箭頭外圈上方 gapAboveArrow
+     * - 箭頭在畫面外 → GO 貼畫面邊緣：左右距邊 edgeInset，垂直位置夾在畫面頂 edgeMinY（上方 HUD 之下）
+     *   與畫面底 edgeBottomMargin（下方面板之上）之間；上方出口的 GO 在 edgeMinY
+     * - 箭頭超出畫面 hysteresisPx 以上才切回邊緣（避免在畫面邊緣來回跳）；位置以約 followMs 平滑跟上
      */
     goIndicator: {
       fontSize: '64px', color: '#fff59d', strokeColor: '#b26a00', strokeThickness: 4,
       glowColor: '#ffd54f', glowBlur: 22, depth: 55,
-      gapAboveArrow: 10, blinkMs: 420, blinkMinAlpha: 0.35, pulseScale: 1.15
+      gapAboveArrow: 10, blinkMs: 420, blinkMinAlpha: 0.35, pulseScale: 1.15,
+      edgeInset: 90, edgeMinY: 210, edgeBottomMargin: 180, hysteresisPx: 40, followMs: 120
     },
     /** 出口引導箭頭（左 / 右 / 上共用同一樣式）：三角形半邊長 size、外圈半徑 = size + ringPad；上方箭頭在出口門下方 exitArrowOffset */
     guideArrow: { size: 34, ringPad: 14, color: 0x7affc0, exitArrowOffset: 140 },

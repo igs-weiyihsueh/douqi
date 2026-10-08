@@ -676,6 +676,7 @@ export class GameScene extends Phaser.Scene {
     this.survivalMs += delta;
 
     this.artStyle.update(time);
+    this.goIndicator.update(delta);
 
     // 階段三：更新COMBO計時系統
     this.updateComboTimers();
