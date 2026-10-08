@@ -89,6 +89,8 @@
 | **AreaTransition** | 區域轉場類型 (cc7a433新增) | `controllers/SlotWorldController.ts:12` | [slot世界](./systems/slot-world.md) |
 | **TargetingController** | 鎖定系統控制器 (b7e9a77新增) | `controllers/TargetingController.ts:40` | [鎖定與行動](./systems/targeting-action.md) |
 | **CharacterActionController** | 行動系統控制器 (b7e9a77新增) | `controllers/CharacterActionController.ts:30` | [鎖定與行動](./systems/targeting-action.md) |
+| **GameDebugApi** | 除錯系統控制器 (3c143c8新增) | `controllers/GameDebugApi.ts:15` | [除錯系統](./systems/debug-system.md) |
+| **GameDebugHost** | GameScene除錯介面 (3c143c8新增) | `controllers/GameDebugApi.ts:369` | [除錯系統](./systems/debug-system.md) |
 | **LockTarget** | 可鎖定目標型別 (b7e9a77新增) | `controllers/TargetingController.ts:7` | [鎖定與行動](./systems/targeting-action.md) |
 | **markerDotScale** | 位置標記中心亮點縮放 (05dafae新增) | `config.ts:85` | [關卡系統](./systems/stage-system.md) |
 | **drawStageMarker** | HUD位置標記繪製函式 (05dafae新增) | `UIScene.ts:858` | [關卡系統](./systems/stage-system.md) |

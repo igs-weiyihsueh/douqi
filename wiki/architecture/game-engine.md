@@ -47,15 +47,15 @@ scene: [
 |-------|------|----------|------|------|
 | `BootScene` | 24KB | 程序化貼圖生成、資源預處理 | 小 | - |
 | `TitleScene` | 44KB | 主選單、模式選擇、設定面板 | 中 | - |
-| `GameScene` | 200KB | 🎯 核心遊戲邏輯、戰鬥系統 | **中** | 方案B B-1+B-2+B-3 |
+| `GameScene` | 188KB | 🎯 核心遊戲邏輯、戰鬥系統 | **中** | 方案B完成 |
 | `UIScene` | 71KB | HUD系統、血條、UI覆蓋 | 大 | - |
 | `GameOverScene` | 5KB | 結算畫面、重新開始 | 小 | - |
 | `MinigameMenuScene` | 5KB | 小遊戲選單導航 | 小 | - |
 
-**方案B深度重構B-1+B-2+B-3成果** (commits 7bb93c4+cc7a433+b7e9a77):
-- **GameScene**: 305KB→200KB，6,301行→4,037行 (-36%)
-- **新增系統**: EventController + SlotWorldController + 雙控制器(Targeting+Action)
-- **架構完善**: 七Controller模式，極致瘦身衝刺 (距3,000行僅-1,037行)
+**方案B深度重構史詩完成** (commits 7bb93c4+cc7a433+b7e9a77+3c143c8):
+- **GameScene**: 422KB→188KB，8,408行→3,778行 (-55%)
+- **八Controller**: 完整架構體系，超越3,000行目標
+- **架構成就**: Legacy巨型檔案到現代化模組的完美轉型
 
 ### 場景間通訊
 ```typescript

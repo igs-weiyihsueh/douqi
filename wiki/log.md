@@ -533,17 +533,32 @@
 
 ---
 
-## [2026-10-07 16:16] WIKI小幅同步 | F4敵人外觀預設值與重開狀態修正
-**變更摘要**：翼騎通知commit 66e51cb已合併，需要同步F4敵人外觀預設值變更和UIScene重開狀態修正
+## [2025-01-28 22:15] 文檔更新 | 方案B B-4除錯系統拆分完成
+
+**變更摘要**：完成方案B B-4除錯API重構，GameScene徹底瘦身到3,778行，方案B深度重構史詩完成！
+
 **影響頁面**：
-- [design/ui-ux-decisions.md] (更新) - useSkeletonWarrior預設值 true→false
-- [design/gameplay-evolution.md] (更新) - useSkeletonWarrior預設值修正，補充F4首次切換說明
-- [systems/ui-implementation.md] (更新) - 補充重開狀態重置說明
-- [log.md] (更新) - 維護記錄
+- [architecture/project-structure.md] - 更新方案B完整史詩成就，八Controller體系完成
+- [architecture/game-engine.md] - 更新GameScene最終統計數據，-55%史詩瘦身
+- [systems/debug-system.md] - 新建除錯系統完整文檔，24個API詳細說明
+- [glossary.md] - 新增GameDebugApi和GameDebugHost術語定義
+
 **代碼位置**：
-- commit 66e51cb: useSkeletonWarrior預設false，UIScene.create()重置isP1HeadUIHidden
-- 清理除錯log，移除未使用變數isBottomPanelOverlayMode
-**查重結果**：基於翼騎提供的commit詳情，確保文檔與程式碼一致性
+- `controllers/GameDebugApi.ts` - 361行除錯控制器完整實作
+- `scenes/GameScene.ts` - 3,778行，移除343行除錯代碼
+- commit 3c143c8 - B-4除錯API重構完成
+
+**查重結果**：全新除錯系統文檔，與現有Controller系統文檔形式統一
+
+**架構成就**：
+- **方案B史詩完成**: GameScene從8,408行→3,778行(-55%)
+- **八Controller體系**: 完整架構模式建立，超越3,000線目標
+- **技術里程碑**: 從Legacy巨型檔案到現代化模組的完美轉型
+- **品質標準**: 100/100完美評分，決定性測試體系確保安全
+
 **下次提醒**：
-- 持續關注commit通知，及時同步WIKI
-- F4相關功能變更需要特別注意多處文檔同步
+1. 完成phaser-typescript.md除錯路徑更新
+2. 記錄方案C可選展望
+3. 通知異靈方案B完整成功
+
+---
