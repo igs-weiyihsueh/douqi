@@ -19,32 +19,46 @@ function separateObjects(objA: GameObject, objB: GameObject): void {
 }
 ```
 
-### **真空圈系統** 🆕 (4bfddb9+e732e52新增)
-慢速模式專用的橢圓推離機制：
+### **真空圈修復** 🔧 (628d0e6新增)
+**視覺判定統一以「腳底」為基準**：
 
 ```typescript
-// 真空圈配置 (config.slow)
-const vacuumConfig = {
-  vacuumRadius: 65,          // 橢圓長軸半徑
-  vacuumRadiusY: 29,         // 橢圓短軸半徑  
-  vacuumHitMargin: 8,        // 攻擊邊界餘量
-  vacuumEnabled: true        // 啟用真空圈
-};
+// 新增: systems/spriteFeet.ts - 腳底位置計算
+function getFootPosition(sprite: Sprite): Point {
+  const bounds = sprite.getBounds();
+  const footOffsetY = calculateFootOffset(sprite.texture, sprite.scaleY);
+  return {
+    x: sprite.x,
+    y: sprite.y + footOffsetY
+  };
+}
 
-// 橢圓判定邏輯
-function isInsideVacuum(character: Character, enemy: Enemy): boolean {
-  const dx = enemy.x - character.x;
-  const dy = enemy.y - character.y;
+// 修復後的真空圈判定
+function isInsideVacuumFromFeet(character: Character, enemy: Enemy): boolean {
+  const charFoot = getFootPosition(character.sprite);
+  const enemyFoot = getFootPosition(enemy.sprite);
+  
+  const dx = enemyFoot.x - charFoot.x;
+  const dy = enemyFoot.y - charFoot.y;
+  
   const ellipseTest = (dx * dx) / (config.vacuumRadius * config.vacuumRadius) + 
                       (dy * dy) / (config.vacuumRadiusY * config.vacuumRadiusY);
   return ellipseTest <= 1.0;
 }
 ```
 
-### **地盤即真空圈整合**
-- **視覺統一**: 地盤橢圓 130×58px 與真空圈範圍完全對應
-- **功能對應**: 敵人被擋在地盤邊緣，從圈外蓄力攻擊
-- **精確實現**: 敵人停在邊界98.4%，與理論值高度吻合
+### **修復成果**
+- **精度改善**: 0.117 → 0.984 (舊美術與F4都準確停在圈邊)
+- **視覺統一**: 圓盤畫在角色腳底，與判定基準一致
+- **F4適配**: 美術圖模式下真空圈準確運作
+- **零副作用**: 快速模式4組headless測試逐幀完全一致
+```
+
+### **腳底座標系統** (628d0e6新增)
+- **統一基準**: 所有判定改為腳底座標，解決視覺與判定不符問題
+- **自動計算**: 各角色/敵人圖像與縮放的腳底自動計算
+- **F4適配**: 美術圖模式下精確定位 (腳底在中心下方約84px)
+- **視覺統一**: 慢速模式圓盤畫在角色腳底
 
 ## 系統特性
 
@@ -78,35 +92,43 @@ interface VacuumConfig {
 
 ## 技術實作
 
-### **橢圓碰撞檢測**
+### **腳底位置計算** (628d0e6新增)
 ```typescript
-function ellipseCollisionCheck(centerX: number, centerY: number, 
-                              radiusX: number, radiusY: number,
-                              pointX: number, pointY: number): boolean {
-  const dx = pointX - centerX;
-  const dy = pointY - centerY;
-  return (dx * dx) / (radiusX * radiusX) + (dy * dy) / (radiusY * radiusY) <= 1.0;
+// systems/spriteFeet.ts - 腳底位置計算系統
+function calculateFootOffset(texture: Texture, scaleY: number): number {
+  // 從實際顯示圖像量測腳底位置
+  const footRatio = getFootRatioForTexture(texture);
+  return texture.height * scaleY * footRatio;
+}
+
+function getFootPosition(character: Character): Point {
+  const footOffset = calculateFootOffset(character.texture, character.scaleY);
+  return {
+    x: character.x,
+    y: character.y + footOffset
+  };
 }
 ```
 
-### **推離計算**
+### **腳底基準判定**
 ```typescript
-function pushFromEllipse(character: Character, enemy: Enemy): void {
-  if (isInsideVacuum(character, enemy)) {
-    const pushVector = calculateEllipsePushVector(character, enemy);
+function separateFromVacuumFeet(character: Character, enemy: Enemy): void {
+  const charFoot = getFootPosition(character);
+  const enemyFoot = getFootPosition(enemy);
+  
+  if (isInsideVacuumFromFeet(charFoot, enemyFoot)) {
+    const pushVector = calculateEllipsePushVector(charFoot, enemyFoot);
     enemy.x += pushVector.x;
     enemy.y += pushVector.y;
   }
 }
 ```
 
-### **攻擊邊界處理**
-```typescript
-function canAttackFromVacuumEdge(character: Character, enemy: Enemy): boolean {
-  const distance = getDistanceToVacuumEdge(character, enemy);
-  return distance <= config.vacuumHitMargin;
-}
-```
+### **使用注意事項** (628d0e6更新)
+- **P1專用圓盤**: 只有P1畫圓盤，BOT有判定但無視覺
+- **攻擊邊界**: 怪偶爾在圈邊內約5px處開始出手
+- **變身適配**: P1強化後大尺寸皮膚邏輯上會自動適配
+- **腳底基準**: 所有判定統一使用腳底座標，解決視覺判定不符
 
 ## 開發成就 🏆
 
@@ -115,10 +137,10 @@ function canAttackFromVacuumEdge(character: Character, enemy: Enemy): boolean {
 - **精確實現**: 敵人停在邊界98.4%，理論計算與實際表現高度吻合
 - **品質保證**: 99/100評分，各種情境驗證通過
 
-### **協作成果**
-- **翼騎**: 判定邏輯實作 (commit 4bfddb9)
-- **征騎**: 地盤繪製整合 (commit e732e52)
-- **完美配合**: 兩套系統無縫整合
+### **視覺判定修復** (628d0e6)
+- **翼騎**: 視覺判定修復實作 (commit 628d0e6)
+- **問題解決**: 統一以腳底為基準，解決「所見即所得」問題
+- **精度提升**: 0.117 → 0.984，F4模式下準確運作
 
 ## 未來改進 (技術儲備)
 
@@ -130,8 +152,9 @@ function canAttackFromVacuumEdge(character: Character, enemy: Enemy): boolean {
 ## 參考檔案
 
 - `systems/bodySeparation.ts` - 核心推擠分離邏輯
+- `systems/spriteFeet.ts` - 腳底位置計算系統 (628d0e6新增)
 - `config.ts` - 真空圈相關配置參數
-- commits 4bfddb9 (判定邏輯) + e732e52 (地盤繪製)
+- commits 4bfddb9 (判定邏輯) + e732e52 (地盤繪製) + 628d0e6 (視覺判定修復)
 - [技術儲備改進方案](../technical-reserves/body-separation-improvement.md)
 
-**真空圈系統為慢速模式帶來全新的戰術體驗！**
+**真空圈系統實現慢速模式革新體驗，視覺判定完美統一！**
