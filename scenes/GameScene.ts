@@ -20,6 +20,7 @@ import { ComboSkillController, type ComboSkillHost } from '../controllers/ComboS
 import { SpawnController, type SpawnHost } from '../controllers/SpawnController';
 import { CombatFx } from '../controllers/CombatFx';
 import { HitReactionFx } from '../controllers/HitReactionFx';
+import { DashFx } from '../controllers/DashFx';
 import { EnemyAttackController, type EnemyAttackHost } from '../controllers/EnemyAttackController';
 import { SlotWorldController, type AreaTransition, type Side, type SlotWorldHost } from '../controllers/SlotWorldController';
 import { PerfOverlay } from '../controllers/PerfOverlay';
@@ -190,6 +191,11 @@ export class GameScene extends Phaser.Scene {
     this.resetState();
     this.fx = new CombatFx(this);
     this.hitFx = new HitReactionFx(this);
+    // 衝刺殘影、拉長與撞擊壓扁（純視覺；自行掛在場景事件上，場景關閉時解除）
+    new DashFx(this, {
+      characters: () => this.characters,
+      displayImageOf: (c) => this.artStyle.displayImageOf(c)
+    });
     this.enemyAttacks = new EnemyAttackController(this.createEnemyAttackHost());
 
     // 固定視角競技場

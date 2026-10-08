@@ -393,7 +393,9 @@ export class CharacterActionController {
     if (c.cutInUntil > 0) {
       const target = c.cutInTarget;
       if (time < c.cutInUntil && target && target.active && !target.dead) {
-        (c.body as Phaser.Physics.Arcade.Body).setVelocity(c.cutInVelocityX, c.cutInVelocityY);
+        // 撞擊停頓中完全停住，之後才以切入速度陷入
+        const paused = time < c.cutInPauseUntil;
+        (c.body as Phaser.Physics.Arcade.Body).setVelocity(paused ? 0 : c.cutInVelocityX, paused ? 0 : c.cutInVelocityY);
         return;
       }
       c.stopMoving();
@@ -406,6 +408,7 @@ export class CharacterActionController {
       const hit = this.targeting.findFirstEnemyInRangeOf(c, hitRadius);
       if (hit) {
         c.stopMoving();
+        c.dashImpactAt = time;
         if (c.dashEmpowerStrike) this.host.empowerStrike(c, hit.x, hit.y, time);
         else this.host.performAttackOn(c, hit, time);
         if (isStructureEnemy(hit)) {
@@ -441,7 +444,7 @@ export class CharacterActionController {
   }
 
   /**
-   * 衝刺撞到敵人：開始「切入」——以減速沿衝刺方向繼續陷入一小段再停（刀切進肉的阻力感），並畫刀光。
+   * 衝刺撞到敵人：開始「切入」——先撞擊停頓（完全停住），再以減速沿衝刺方向陷入一小段才停（刀切進肉的阻力感），並畫刀光。
    * 只影響攻擊者自己，且發生在普攻冷卻內，不延遲任何輸入；關閉時、或這一擊（或切入途中）怪已死亡時立即停下
    *
    * @param c 衝刺中的角色
@@ -461,9 +464,12 @@ export class CharacterActionController {
     const speed = dashSpeed * p.cutInSpeedRatio;
     c.cutInVelocityX = Math.cos(angle) * speed;
     c.cutInVelocityY = Math.sin(angle) * speed;
-    c.cutInUntil = time + p.cutInMs;
+    // 先撞擊停頓 impactPauseMs（完全停住），再陷入 cutInMs
+    c.cutInPauseUntil = time + p.impactPauseMs;
+    c.cutInUntil = c.cutInPauseUntil + p.cutInMs;
     c.cutInTarget = hit;
-    (c.body as Phaser.Physics.Arcade.Body).setVelocity(c.cutInVelocityX, c.cutInVelocityY);
+    const paused = p.impactPauseMs > 0;
+    (c.body as Phaser.Physics.Arcade.Body).setVelocity(paused ? 0 : c.cutInVelocityX, paused ? 0 : c.cutInVelocityY);
   }
 
   /** 把角色夾在可活動範圍內；衝刺中撞牆被夾回就結束衝刺（避免牆邊來回震盪或卡在衝刺狀態） */

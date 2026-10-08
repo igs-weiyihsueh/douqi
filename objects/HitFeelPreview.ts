@@ -3,6 +3,7 @@ import { GameConfig } from '../config';
 import { SKIN_TEXTURE } from '../controllers/ArtStyleController';
 import { CombatFx } from '../controllers/CombatFx';
 import { HitSparks, hitPoseAt } from '../controllers/HitReactionFx';
+import { dashStretchMult, impactSquashAt } from '../controllers/DashFx';
 import { hitFeel } from '../systems/hitFeelParams';
 
 /** 示範用的敵人圖（F4 骷髏兵；原圖面向右） */
@@ -57,6 +58,9 @@ export class HitFeelPreview {
   private cycleStart = 0;
   /** 本輪是否已觸發命中特效（火花、刀光只放一次） */
   private hitFired = false;
+  /** 殘影（在 container 內；淡出後回收）與上一個殘影的時間 */
+  private readonly ghosts: Array<{ img: Phaser.GameObjects.Image; bornAt: number }> = [];
+  private lastGhostAt = -Infinity;
 
   /**
    * @param scene 所在場景（主選單）
@@ -87,6 +91,7 @@ export class HitFeelPreview {
   restart(): void {
     this.cycleStart = this.scene.time.now;
     this.hitFired = false;
+    this.lastGhostAt = -Infinity;
     this.enemy.clearTint();
   }
 
@@ -97,6 +102,38 @@ export class HitFeelPreview {
     this.ground.destroy();
     this.attacker.destroy();
     this.enemy.destroy();
+    for (const g of this.ghosts) g.img.destroy();
+    this.ghosts.length = 0;
+  }
+
+  /**
+   * 殘影：衝刺中依間隔在角色目前的樣子留一個淡出的殘影（與遊戲中的設定相同），淡出完回收
+   *
+   * @param dashing 是否衝刺中（尚未撞到）
+   * @param enabled 殘影開關
+   */
+  private updateGhosts(dashing: boolean, enabled: boolean): void {
+    const cfg = GameConfig.dashFx;
+    const now = this.scene.time.now;
+    for (const g of this.ghosts) {
+      if (!g.img.visible) continue;
+      const k = (now - g.bornAt) / cfg.afterimageLifeMs;
+      if (k >= 1) g.img.setVisible(false);
+      else g.img.setAlpha(cfg.afterimageAlpha * (1 - k));
+    }
+    if (!dashing || !enabled || now - this.lastGhostAt < cfg.afterimageIntervalMs) return;
+    let ghost = this.ghosts.find((g) => !g.img.visible);
+    if (!ghost && this.ghosts.length < cfg.afterimageMax) {
+      const img = this.scene.add.image(0, 0, this.attacker.texture.key).setOrigin(0.5, 1).setFlipX(true).setTint(cfg.afterimageTint);
+      this.container.addAt(img, this.container.getIndex(this.attacker)); // 畫在角色後方
+      ghost = { img, bornAt: now };
+      this.ghosts.push(ghost);
+    }
+    if (!ghost) return;
+    this.lastGhostAt = now;
+    ghost.bornAt = now;
+    ghost.img.setPosition(this.attacker.x, this.attacker.y).setScale(this.attacker.scaleX, this.attacker.scaleY)
+      .setAlpha(cfg.afterimageAlpha).setVisible(true);
   }
 
   /** 每幀：依本輪經過時間擺放角色與怪、在命中瞬間放特效，播完自動重播 */
@@ -109,22 +146,27 @@ export class HitFeelPreview {
     const contactX = enemyX - LAYOUT.CONTACT_GAP;
     const hitAt = TIMING.IDLE_MS + ((contactX - startX) / TIMING.DASH_SPEED) * 1000;
     const cutInMs = p.cutInEnabled === 1 ? p.cutInMs : 0;
+    const pauseMs = cutInMs > 0 ? p.impactPauseMs : 0; // 撞擊停頓只在有切入時發生（同遊戲）
     const freezeMs = p.hitstopEnabled === 1 ? Math.min(p.freezeMs, p.maxFreezeMs) : 0;
     const knockbackAt = hitAt + freezeMs;
-    const cycleEnd = Math.max(hitAt + cutInMs, knockbackAt + TIMING.KNOCKBACK_MS, hitAt + p.reactionMs) + TIMING.HOLD_MS;
+    const cycleEnd = Math.max(hitAt + pauseMs + cutInMs, hitAt + p.impactSquashMs, knockbackAt + TIMING.KNOCKBACK_MS, hitAt + p.reactionMs) + TIMING.HOLD_MS;
     if (t >= cycleEnd) {
       this.restart();
       return;
     }
 
-    // 角色：停頓 → 全速衝刺 → 撞到後以切入速度陷入 cutInMs → 停
+    // 角色：停頓 → 全速衝刺（拉長、殘影）→ 撞到：撞擊停頓 → 以切入速度陷入 cutInMs → 停（撞擊壓扁回彈）
     let ax = startX;
+    const dashing = t >= TIMING.IDLE_MS && t < hitAt;
     if (t >= TIMING.IDLE_MS) {
       const dashT = Math.min(t, hitAt) - TIMING.IDLE_MS;
       ax += (dashT / 1000) * TIMING.DASH_SPEED;
-      if (t > hitAt) ax += (Math.min(t - hitAt, cutInMs) / 1000) * TIMING.DASH_SPEED * p.cutInSpeedRatio;
+      if (t > hitAt + pauseMs) ax += (Math.min(t - hitAt - pauseMs, cutInMs) / 1000) * TIMING.DASH_SPEED * p.cutInSpeedRatio;
     }
-    this.attacker.setPosition(ax, groundY);
+    const mult = dashing ? dashStretchMult(0) : t >= hitAt ? impactSquashAt(t - hitAt) : null;
+    this.attacker.setPosition(ax, groundY); // 原點在腳底：縮放時腳不離地
+    this.attacker.setScale(LAYOUT.ATTACKER_SCALE * (mult ? mult.sx : 1), LAYOUT.ATTACKER_SCALE * (mult ? mult.sy : 1));
+    this.updateGhosts(dashing, p.afterimageEnabled === 1);
 
     // 命中瞬間：刀光、火花、閃白（只放一次）
     if (!this.hitFired && t >= hitAt) {

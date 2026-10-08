@@ -49,6 +49,10 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
    * 衝刺切入：撞到敵人後以減速繼續陷入，直到這個時間才停下（0 = 不在切入中；見 CharacterActionController.handleDash）
    */
   cutInUntil = 0;
+  /** 撞擊停頓結束時間：撞到敵人後到這個時間前完全停住，之後才開始陷入（0 = 無） */
+  cutInPauseUntil = 0;
+  /** 最近一次衝刺撞到敵人的場景時間（衝刺動態的撞擊壓扁用；0 = 尚未撞過） */
+  dashImpactAt = 0;
   /** 切入期間的速度（x / y，px／秒） */
   cutInVelocityX = 0;
   cutInVelocityY = 0;

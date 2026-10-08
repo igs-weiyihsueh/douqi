@@ -156,8 +156,17 @@ export class ArtStyleController {
    * @param c 角色
    */
   characterFootOffset(c: Character): number {
-    const img: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite = c === this.host.player() && this.skin && this.skin.visible ? this.skin : c;
+    const img = this.displayImageOf(c);
     return visibleBottomOffset(this.scene.textures, img.texture.key) * img.scaleY;
+  }
+
+  /**
+   * 角色畫面上實際看到的圖像：P1 在新美術時是皮膚圖，其餘是角色本體
+   *
+   * @param c 角色
+   */
+  displayImageOf(c: Character): Phaser.GameObjects.Image | Phaser.GameObjects.Sprite {
+    return c === this.host.player() && this.skin && this.skin.visible ? this.skin : c;
   }
 
   /**

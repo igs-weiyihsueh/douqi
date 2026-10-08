@@ -1308,6 +1308,28 @@ export const GameConfig = {
   },
 
   /**
+   * 衝刺動態（純視覺，攻擊者自己）：衝刺中的殘影與沿移動方向拉長、撞到敵人時壓扁回彈。
+   * 繪製前套用、繪製後還原（同 HitReactionFx），不影響物理與判定。開關 / 拉長 / 壓扁為打擊感編輯器的預設值
+   */
+  dashFx: {
+    /** 殘影開關（1 = 開） */
+    afterimageEnabled: true,
+    /** 殘影：產生間隔（毫秒）、淡出時間（毫秒）、起始透明度、同時存在上限、顏色 */
+    afterimageIntervalMs: 30,
+    afterimageLifeMs: 160,
+    afterimageAlpha: 0.45,
+    afterimageMax: 8,
+    afterimageTint: 0x9fd8ff,
+    /** 衝刺中沿移動方向拉長的比例（面積維持不變） */
+    stretch: 0.12,
+    /** 撞到敵人瞬間的壓扁比例（橫向放大、縱向縮小）與回彈時間（毫秒） */
+    impactSquash: 0.2,
+    impactSquashMs: 120,
+    /** 殘影深度相對角色的差（畫在角色後方） */
+    afterimageDepthOffset: -0.000001
+  },
+
+  /**
    * 衝刺切入（刀切進肉的阻力感）：衝刺撞到敵人後不立即停下，以減速沿衝刺方向繼續「陷入」durationMs 再停。
    * 只影響攻擊者自己，且在普攻冷卻內，不延遲輸入；BOSS / 塔仍停在外緣。
    * 開關 / 陷入時間 / 速度 / 刀光開關為預設值，實際值取自主選單打擊感編輯器（systems/hitFeelParams）
@@ -1321,6 +1343,8 @@ export const GameConfig = {
     speedRatio: 0.25,
     /** 刀光開關 */
     streakEnabled: true,
+    /** 撞擊停頓：撞到敵人後先停住多久（毫秒）再開始陷入，讓「滑順衝刺 → 被卡住」的頓更明確 */
+    impactPauseMs: 35,
     /** 刀光：長度（px）、粗細、強化時粗細、淡出時間（毫秒）、外層光暈顏色（一般 / 強化） */
     streak: {
       length: 140,

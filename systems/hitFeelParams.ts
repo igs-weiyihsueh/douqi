@@ -4,7 +4,7 @@ import { createParamStore, type ParamDef, type ParamValues } from './paramStore'
 /**
  * 打擊感參數（主選單「打擊感編輯器」可調整，快速 / 慢速模式都套用）。
  *
- * - 預設值取自 config 的 hitstop / juice（enemyFlashMs、hitReaction、hitSpark）/ cutIn
+ * - 預設值取自 config 的 hitstop / juice（enemyFlashMs、hitReaction、hitSpark）/ cutIn / dashFx
  * - 開關類參數以 0 / 1 表示
  * - 遊戲中透過 hitFeel() 讀取目前值；每局開始（GameScene.resetState）與編輯器儲存時重新讀取存檔，
  *   編輯器預覽時以 setHitFeel 暫時套用未儲存的數值
@@ -15,7 +15,8 @@ export type HitFeelKey =
   | 'hitstopEnabled' | 'freezeMs' | 'maxFreezeMs' | 'freezeCooldownMs'
   | 'enemyFlashMs' | 'reactionMs' | 'squash' | 'jitterPx' | 'jitterCycles'
   | 'sparkCount' | 'sparkConeDeg' | 'sparkSpeedMax' | 'sparkLifespanMs' | 'sparkScale'
-  | 'cutInEnabled' | 'cutInMs' | 'cutInSpeedRatio' | 'streakEnabled';
+  | 'cutInEnabled' | 'cutInMs' | 'cutInSpeedRatio' | 'streakEnabled'
+  | 'impactPauseMs' | 'afterimageEnabled' | 'dashStretch' | 'impactSquash' | 'impactSquashMs';
 
 /** 打擊感參數數值表 */
 export type HitFeelParams = ParamValues<HitFeelKey>;
@@ -54,7 +55,13 @@ export const HIT_FEEL_PARAM_DEFS: ReadonlyArray<HitFeelParamDef> = [
   { key: 'cutInEnabled', label: '衝刺切入', unit: '', hint: '0 關 / 1 開', min: 0, max: 1, step: 1, defaultValue: GameConfig.cutIn.enabled ? 1 : 0 },
   { key: 'cutInMs', label: '陷入時間', unit: 'ms', hint: '', min: 0, max: 150, step: 5, defaultValue: GameConfig.cutIn.durationMs },
   { key: 'cutInSpeedRatio', label: '陷入速度', unit: '', hint: '越小越卡', min: 0, max: 0.6, step: 0.05, defaultValue: GameConfig.cutIn.speedRatio },
-  { key: 'streakEnabled', label: '刀光', unit: '', hint: '0 關 / 1 開', min: 0, max: 1, step: 1, defaultValue: GameConfig.cutIn.streakEnabled ? 1 : 0 }
+  { key: 'streakEnabled', label: '刀光', unit: '', hint: '0 關 / 1 開', min: 0, max: 1, step: 1, defaultValue: GameConfig.cutIn.streakEnabled ? 1 : 0 },
+  // 衝刺動態（撞擊停頓會延後停下；殘影 / 拉長 / 壓扁純視覺，只作用在攻擊者自己）
+  { key: 'impactPauseMs', label: '撞擊停頓', unit: 'ms', hint: '撞到先停再陷入', min: 0, max: 80, step: 5, defaultValue: GameConfig.cutIn.impactPauseMs },
+  { key: 'afterimageEnabled', label: '衝刺殘影', unit: '', hint: '0 關 / 1 開', min: 0, max: 1, step: 1, defaultValue: GameConfig.dashFx.afterimageEnabled ? 1 : 0 },
+  { key: 'dashStretch', label: '衝刺拉長', unit: '', hint: '越大越有速度感', min: 0, max: 0.3, step: 0.02, defaultValue: GameConfig.dashFx.stretch },
+  { key: 'impactSquash', label: '撞擊壓扁', unit: '', hint: '撞上的反作用力', min: 0, max: 0.4, step: 0.02, defaultValue: GameConfig.dashFx.impactSquash },
+  { key: 'impactSquashMs', label: '壓扁回彈時間', unit: 'ms', hint: '', min: 40, max: 300, step: 10, defaultValue: GameConfig.dashFx.impactSquashMs }
 ];
 
 /** 編輯器分組 */
@@ -62,14 +69,15 @@ export const HIT_FEEL_GROUPS: ReadonlyArray<HitFeelGroup> = [
   { title: '命中凍結', keys: ['hitstopEnabled', 'freezeMs', 'maxFreezeMs', 'freezeCooldownMs'] },
   { title: '受擊反應', keys: ['enemyFlashMs', 'reactionMs', 'squash', 'jitterPx', 'jitterCycles'] },
   { title: '命中火花', keys: ['sparkCount', 'sparkConeDeg', 'sparkSpeedMax', 'sparkLifespanMs', 'sparkScale'] },
-  { title: '衝刺切入', keys: ['cutInEnabled', 'cutInMs', 'cutInSpeedRatio', 'streakEnabled'] }
+  { title: '衝刺切入', keys: ['cutInEnabled', 'cutInMs', 'cutInSpeedRatio', 'streakEnabled'] },
+  { title: '衝刺動態', keys: ['impactPauseMs', 'afterimageEnabled', 'dashStretch', 'impactSquash', 'impactSquashMs'] }
 ];
 
 /** 預設組合：以預設值為底，覆蓋列出的項目 */
 export const HIT_FEEL_PRESETS: ReadonlyArray<{ name: string; values: Partial<HitFeelParams> }> = [
-  { name: '重擊', values: { freezeMs: 80, maxFreezeMs: 160, squash: 0.26, jitterPx: 5, sparkCount: 12, sparkScale: 1.6, cutInMs: 90, cutInSpeedRatio: 0.15 } },
-  { name: '爽快', values: { freezeMs: 40, maxFreezeMs: 100, squash: 0.16, sparkCount: 10, sparkSpeedMax: 480, sparkLifespanMs: 180, cutInMs: 50, cutInSpeedRatio: 0.35 } },
-  { name: '溫和', values: { freezeMs: 30, maxFreezeMs: 80, enemyFlashMs: 80, squash: 0.1, jitterPx: 2, sparkCount: 5, sparkScale: 1, cutInMs: 40, cutInSpeedRatio: 0.4 } }
+  { name: '重擊', values: { freezeMs: 80, maxFreezeMs: 160, squash: 0.26, jitterPx: 5, sparkCount: 12, sparkScale: 1.6, cutInMs: 90, cutInSpeedRatio: 0.15, impactPauseMs: 50, impactSquash: 0.28 } },
+  { name: '爽快', values: { freezeMs: 40, maxFreezeMs: 100, squash: 0.16, sparkCount: 10, sparkSpeedMax: 480, sparkLifespanMs: 180, cutInMs: 50, cutInSpeedRatio: 0.35, impactPauseMs: 20, dashStretch: 0.16 } },
+  { name: '溫和', values: { freezeMs: 30, maxFreezeMs: 80, enemyFlashMs: 80, squash: 0.1, jitterPx: 2, sparkCount: 5, sparkScale: 1, cutInMs: 40, cutInSpeedRatio: 0.4, impactPauseMs: 15, dashStretch: 0.06, impactSquash: 0.1 } }
 ];
 
 /** localStorage 存檔鍵（只存與預設不同的項目；結構或語意大改時升版） */
