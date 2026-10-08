@@ -293,6 +293,8 @@ export class HitFeelEditorPanel {
       const def = HIT_FEEL_PARAM_DEFS.find(d => d.key === key)!;
       this.rows.push(this.buildRow(def, i));
     });
+    // 新建的列要立刻依目前數值擺放滑桿與數字（否則會停在最左、數字空白）
+    this.refresh();
   }
 
   /**

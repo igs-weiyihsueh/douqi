@@ -347,6 +347,7 @@ export class CharacterActionController {
     c.isDashing = false;
     c.dashToItem = false;
     c.cutInUntil = 0;
+    c.cutInTarget = null;
     c.stopMoving();
     c.dashShielded = false;
     c.showDashShield(false);
@@ -366,7 +367,8 @@ export class CharacterActionController {
     }
     // 切入中：以減速繼續陷入敵人，時間到才停下（不再判定撞擊，避免同一次衝刺連打）
     if (c.cutInUntil > 0) {
-      if (time < c.cutInUntil) {
+      const target = c.cutInTarget;
+      if (time < c.cutInUntil && target && target.active && !target.dead) {
         (c.body as Phaser.Physics.Arcade.Body).setVelocity(c.cutInVelocityX, c.cutInVelocityY);
         return;
       }
@@ -415,7 +417,7 @@ export class CharacterActionController {
 
   /**
    * 衝刺撞到敵人：開始「切入」——以減速沿衝刺方向繼續陷入一小段再停（刀切進肉的阻力感），並畫刀光。
-   * 只影響攻擊者自己，且發生在普攻冷卻內，不延遲任何輸入；關閉時立即停下（原行為）
+   * 只影響攻擊者自己，且發生在普攻冷卻內，不延遲任何輸入；關閉時、或這一擊（或切入途中）怪已死亡時立即停下
    *
    * @param c 衝刺中的角色
    * @param hit 撞到的敵人
@@ -426,7 +428,8 @@ export class CharacterActionController {
     const p = hitFeel();
     const angle = Math.atan2(c.dashDestY - c.y, c.dashDestX - c.x);
     if (p.streakEnabled === 1) this.host.spawnSlashStreak(hit.x, hit.y, angle, c.isEmpowered(time));
-    if (p.cutInEnabled !== 1 || p.cutInMs <= 0) {
+    // 關閉切入，或這一擊已把怪打死（沒有東西可陷入）→ 立即停下
+    if (p.cutInEnabled !== 1 || p.cutInMs <= 0 || hit.dead || !hit.active) {
       this.endDashState(c);
       return;
     }
@@ -434,6 +437,7 @@ export class CharacterActionController {
     c.cutInVelocityX = Math.cos(angle) * speed;
     c.cutInVelocityY = Math.sin(angle) * speed;
     c.cutInUntil = time + p.cutInMs;
+    c.cutInTarget = hit;
     (c.body as Phaser.Physics.Arcade.Body).setVelocity(c.cutInVelocityX, c.cutInVelocityY);
   }
 

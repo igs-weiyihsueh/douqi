@@ -52,6 +52,8 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
   /** 切入期間的速度（x / y，px／秒） */
   cutInVelocityX = 0;
   cutInVelocityY = 0;
+  /** 切入的目標：目標死亡 / 消失時立即停下（沒有東西可「陷入」就不滑行） */
+  cutInTarget: { readonly active: boolean; readonly dead: boolean } | null = null;
   /** 目前瞄準角度（弧度） */
   aimAngle = 0;
   /** 畫面上的左右面向（依 aimAngle 由 GameScene 每幀更新；只影響鏡像翻轉） */
@@ -474,6 +476,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
     this.isDashing = false;
     this.dashToItem = false;
     this.cutInUntil = 0;
+    this.cutInTarget = null;
     this.isBursting = false;
     this.dashShielded = false;
     this.skillLockUntil = 0;
@@ -512,6 +515,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
     this.isDashing = false;
     this.dashToItem = false;
     this.cutInUntil = 0;
+    this.cutInTarget = null;
     this.isBursting = false;
     this.dashShielded = false;
     this.skillLockUntil = 0;

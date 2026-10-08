@@ -504,6 +504,15 @@ export class GameScene extends Phaser.Scene {
     return q;
   }
 
+  /**
+   * 演出接管操作期間（事件開場、關卡轉場 / 自動走位）：丟掉排隊中的攻擊、結束進行中的衝刺。
+   * 避免期間按下的攻擊或轉場前的衝刺在交回操作權時才發動（角色突然往前衝一下）
+   */
+  private cancelPlayerActions(): void {
+    this.playerAttackQueued = false;
+    for (const c of this.characters) if (c.isDashing) this.actions.endDashState(c);
+  }
+
   private queuePlayerAttack(): void {
     if (this.gameOver || !this.player.alive) return;
     this.playerAttackQueued = true;
@@ -560,6 +569,7 @@ export class GameScene extends Phaser.Scene {
 
     // 事件開場演出期間鎖操作、事件不計時也不生怪，只推進演出並重繪標記；演出結束（或逾時）才開戰
     if (this.eventCtl.isIntroActive) {
+      this.cancelPlayerActions();
       this.eventCtl.updateIntro(time, delta);
       // 走位段由事件控制器移動角色（不清零速度）；其餘階段角色停在原地
       if (!this.eventCtl.isIntroWalking) {
@@ -576,6 +586,7 @@ export class GameScene extends Phaser.Scene {
 
     // 關卡制：轉場演出（平移、閃黑、自動走位）期間凍結遊戲邏輯，只重繪角色標記（角色被搬動後標記跟著走）
     if (this.levelMode && this.slotWorld.update(time, delta)) {
+      this.cancelPlayerActions();
       this.targeting.drawMarkers();
       this.syncStandingVisuals();
       this.emitAim();
