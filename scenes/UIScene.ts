@@ -72,7 +72,6 @@ interface StatsPayload {
   /** 波次進度 HUD(關卡制) */
   levelMode?: boolean;
   currentLevel?: number;
-  currentSub?: string;
   subWavesDone?: number;
   subWavesTarget?: number;
   /** 小關卡卷軸 HUD：目前關卡編號、擊殺進度、本關起的寶箱階級（長度 = waveHud.visibleStages） */
