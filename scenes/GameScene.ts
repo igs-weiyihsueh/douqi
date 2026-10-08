@@ -16,16 +16,18 @@ import { HiddenGateController } from '../controllers/HiddenGateController';
 import { TreasureRoomController } from '../controllers/TreasureRoomController';
 import { SlotWorldController, type AreaTransition, type Side, type SlotWorldHost } from '../controllers/SlotWorldController';
 import { PerfOverlay } from '../controllers/PerfOverlay';
+import { TargetingController, type TargetingHost } from '../controllers/TargetingController';
+import { CharacterActionController, type CharacterActionHost, type SlowMoveKeys } from '../controllers/CharacterActionController';
 import { SkillController, type SkillHost } from '../controllers/SkillController';
 import { EventController, type EventHost, type EventKind } from '../controllers/EventController';
 import { pointInOrientedRect } from '../systems/geometry';
 import {
   applyEnemySeparationSteering, bounceEnemyOffBounds, joinsEnemySeparation,
   pushBreakablesFromCharacter, pushBreakablesFromEnemy, pushCharacterOutOfStructures, pushEnemiesAwayFromCharacter,
-  pushEnemiesOutOfNpc, pushEnemyOutOfStructures, resolveEnemyOverlap, standCharacterOutside, updateBreakableMotion
+  pushEnemiesOutOfNpc, pushEnemyOutOfStructures, resolveEnemyOverlap, updateBreakableMotion
 } from '../systems/bodySeparation';
 import { drawEnemyChargeWarnings } from '../systems/enemyWarnings';
-import { isFixedEnemy, isRegularEnemy, isStructureEnemy } from '../systems/enemyKinds';
+import { isFixedEnemy, isRegularEnemy } from '../systems/enemyKinds';
 
 /**
  * GameScene：
@@ -49,8 +51,6 @@ export class GameScene extends Phaser.Scene {
   private bullets!: Phaser.Physics.Arcade.Group;
   private breakables!: Phaser.GameObjects.Group;
   private chargeWarnGfx!: Phaser.GameObjects.Graphics;
-  /** 鎖定標記繪圖層（P1 當前鎖定目標） */
-  private lockGfx!: Phaser.GameObjects.Graphics;
 
   /** F4 新舊美術切換（背景圖、P1 皮膚與覆蓋 UI、一般怪外觀），每次 create() 重建 */
   private artStyle!: ArtStyleController;
@@ -141,16 +141,11 @@ export class GameScene extends Phaser.Scene {
   /** 角色編輯器的參數（慢速模式套用於 P1 與 BOT）；每次開局從存檔讀取 */
   private charParams: CharacterParams = loadCharacterParams();
   /** slow：八方向移動鍵（方向鍵 + WASD） */
-  private slowKeys?: {
-    up: Phaser.Input.Keyboard.Key; down: Phaser.Input.Keyboard.Key;
-    left: Phaser.Input.Keyboard.Key; right: Phaser.Input.Keyboard.Key;
-    w: Phaser.Input.Keyboard.Key; a: Phaser.Input.Keyboard.Key;
-    s: Phaser.Input.Keyboard.Key; d: Phaser.Input.Keyboard.Key;
-  };
-  /** 滑鼠最後移動時間（判定 aimActive） */
-  private lastPointerMoveAt = -Infinity;
-  /** P1 當前鎖定目標 */
-  private lockedTarget: Enemy | Item | null = null;
+  private slowKeys?: SlowMoveKeys;
+  /** 鎖定與瞄準（P1 鎖定目標、BOT 選目標、鎖定標記），每次 create() 重建 */
+  private targeting!: TargetingController;
+  /** 角色行動（出手、衝刺、慢速移動、BOT AI），每次 create() 重建 */
+  private actions!: CharacterActionController;
   /** 本幀道具互搶候選（道具 → 目前最近的碰觸角色），update() 末端結算 */
   private pendingPickups = new Map<Item, Character>();
   /** 目前存活中的視覺特效物件數（節流用，超過 maxActiveFx 就略過新視覺） */
@@ -270,7 +265,8 @@ export class GameScene extends Phaser.Scene {
       runChildUpdate: false
     });
     this.chargeWarnGfx = this.add.graphics().setDepth(2);
-    this.lockGfx = this.add.graphics().setDepth(12);
+    this.targeting = new TargetingController(this.createTargetingHost());
+    this.actions = new CharacterActionController(this.createActionHost());
 
     // 開場只有 P1 一人。BOT 由按 B 逐一加入（見 tryAddBot）。
     this.createCharacter(0, false);
@@ -376,7 +372,7 @@ export class GameScene extends Phaser.Scene {
         pointer.worldX,
         pointer.worldY
       );
-      this.lastPointerMoveAt = this.time.now;
+      this.targeting.markPointerMoved(this.time.now);
     });
 
     this.game.events.on('ui-attack', this.queuePlayerAttack, this);
@@ -416,8 +412,6 @@ export class GameScene extends Phaser.Scene {
     this.spawnAccumulator = 0;
     this.currentSpawnInterval = GameConfig.spawn.initialIntervalMs;
     this.itemDropAccumulator = 0;
-    this.lastPointerMoveAt = -Infinity;
-    this.lockedTarget = null;
     this.pendingPickups = new Map();
     this.activeFxCount = 0;
     this.timeStopped = false;
@@ -575,14 +569,14 @@ export class GameScene extends Phaser.Scene {
           (c.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
         }
       }
-      this.drawLockMarkers();
+      this.targeting.drawMarkers();
       this.emitAim();
       return;
     }
 
     // 關卡制：轉場演出（平移、閃黑、自動走位）期間凍結遊戲邏輯，只重繪角色標記（角色被搬動後標記跟著走）
     if (this.levelMode && this.slotWorld.update(time, delta)) {
-      this.drawLockMarkers();
+      this.targeting.drawMarkers();
       this.emitAim();
       return;
     }
@@ -661,12 +655,12 @@ export class GameScene extends Phaser.Scene {
     this.updateChargerCollisions(time);
 
     // slow：先更新 P1 面向(aimAngle)+鍵盤八方向移動，再算鎖定/處理攻擊（同幀用最新面向，無延遲）。
-    if (this.controlMode === 'slow') this.handleSlowMovement(time);
+    if (this.controlMode === 'slow') this.actions.handleSlowMovement(time);
 
     // P1：更新自動鎖定目標（滑鼠只選鎖誰，方向由目標決定）
-    this.updateLockTarget(time);
+    this.targeting.update(time);
     // 把 P1 鎖定鏡射到角色上，供多色點標記統一繪製
-    this.player.lockedTarget = this.lockedTarget as unknown as
+    this.player.lockedTarget = this.targeting.lockedTarget as unknown as
       (Phaser.GameObjects.GameObject & { x: number; y: number }) | null;
 
     // P1：玩家輸入（招式演出鎖定中忽略輸入，角色不受玩家操控）
@@ -675,7 +669,7 @@ export class GameScene extends Phaser.Scene {
       this.playerAttackQueued = false;
       if (!this.player.isSkillLocked(time) && !this.isFrozenByTimestop(this.player)) {
         if (this.bossCtl.isTransformed) this.bossCtl.formAttack(time); // 變身 BOSS：攻擊鍵改放 BOSS 招式
-        else this.tryAct(this.player, time);
+        else this.actions.tryAct(this.player, time);
       }
     }
     // BOT：AI 決策（招式演出鎖定中略過）時停期間非 owner 的 BOT 被凍→停速度、不跑 AI。
@@ -683,22 +677,20 @@ export class GameScene extends Phaser.Scene {
       const bot = this.characters[i];
       if (!bot.alive) continue;
       if (this.isFrozenByTimestop(bot)) { (bot.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0); continue; }
-      if (!bot.isSkillLocked(time)) this.updateBot(bot, time);
+      if (!bot.isSkillLocked(time)) this.actions.updateBot(bot, time);
     }
 
-    // slow：P1 鍵盤八方向持續移動 + 更新面向已在上方(updateLockTarget 前)處理。
-
-    // 角色推進：招式演出鎖定中不跑 handleDash（角色由演出 tween 驅動），仍夾在場內 + 標籤跟隨
+    // 角色推進：招式演出鎖定中不推進衝刺（角色由演出 tween 驅動），仍夾在場內 + 標籤跟隨
     for (const c of this.characters) {
       if (!c.alive) continue;
       // 時停期間非 owner 角色【完全凍結】(停速度、不衝刺推進),owner 不受影響。
       if (this.isFrozenByTimestop(c)) {
         (c.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
-        this.clampToArena(c);
+        this.actions.clampToArena(c);
         c.syncLabel();
         continue;
       }
-      if (!c.isSkillLocked(time)) this.handleDash(c, time);
+      if (!c.isSkillLocked(time)) this.actions.handleDash(c, time);
       // 人型面朝方向（招式演出/爆發期間由各自 tween 控制，不覆蓋）
       // 衝刺中面朝「固定衝刺終點方向」，避免換鎖定(改 aimAngle)讓角色亂轉；否則面朝 aimAngle
       if (!c.isSkillLocked(time) && !c.isBursting) {
@@ -714,860 +706,23 @@ export class GameScene extends Phaser.Scene {
       if (!c.isDashing && !c.isSkillLocked(time)) pushBreakablesFromCharacter(c, this.breakables);
       // 塔/BOSS 實體碰撞:角色不可穿過塔/BOSS 本體(含衝刺中也擋,不讓穿王/塔身)
       pushCharacterOutOfStructures(c, this.enemies);
-      this.clampToArena(c);
+      this.actions.clampToArena(c);
       c.syncLabel();
     }
 
     // 結算本幀道具互搶（位置近者得、原子拿取、避免雙重觸發）
     this.resolvePickups();
 
-    this.drawLockMarkers();
+    this.targeting.drawMarkers();
     this.emitStats();
     this.emitAim();
   }
 
-  // ---------------------------------------------------------------------------
-  // 自動鎖定
-  // ---------------------------------------------------------------------------
-  /** 鎖定目標是否為道具 */
-  private isItem(t: Enemy | Item | null): t is Item {
-    return t instanceof Item;
-  }
-
-  /** 鎖定目標目前是否有效（敵人=可傷、道具=場上存在） */
-  private isLockValid(t: Enemy | Item | null): boolean {
-    if (!t || !t.active) return false;
-    if (this.isItem(t)) return true;
-    const e = t as Enemy;
-    if (e.enemyType === 'npc') return false; // 守護 NPC 不可鎖定
-    if (e.enemyType === 'anchor') return true; // BOSS 戰錨點【可鎖定】（走位落點），雖不可被玩家傷害
-    return e.isVulnerable();
-  }
-
-  /** 敵人是否可被鎖定/瞄準候選——可傷的怪 或 anchor（可鎖走位點）；排除 npc 與不可傷者。 */
-  private isLockableEnemy(e: Enemy): boolean {
-    if (!e.active) return false;
-    if (e.enemyType === 'npc') return false;
-    if (e.enemyType === 'anchor') return true;
-    return e.isVulnerable();
-  }
-
-  private updateLockTarget(time: number): void {
-    // slow 鎖定【重做】：純鍵盤——面向 aimAngle + 範圍圈 lockRadius。
-    //   用戶需求：只要藍圈內有敵人，按空白就一定鎖去打——面向【對著】的敵人(35°錐內)優先；面向沒對著
-    //   任何敵人但圈內有敵→鎖【圈內最近】的；圈內完全無敵→不鎖(按空白朝面向衝一段)。
-    //   避免 箭頭翻轉 bug：用【黏著式】——已鎖且目標存活在圈內就【維持】，不每幀重搶、也【不因面向
-    //   轉離而脫鎖】。只有目標死/離圈才重新取得。玩家主動把
-    //   面向對準另一隻更接近面向的敵(35°錐內)才切換目標。→ 鎖定穩定、面向箭頭單一不閃。
-    if (this.controlMode === 'slow') {
-      if (!this.player.alive) { this.lockedTarget = null; return; }
-      const R = this.slowTuning.lockRadius;
-      const cur = this.lockedTarget;
-      const curValid = this.isLockValid(cur) &&
-        Phaser.Math.Distance.Between(this.player.x, this.player.y, cur!.x, cur!.y) <= R;
-      if (curValid) {
-        // 黏著維持當前鎖定(存活+在圈內)——不因面向轉離脫鎖(用戶要「圈內有敵就保持鎖」)。
-        // 但若玩家主動把面向對準【另一隻在 35°錐內、且比當前更接近面向】的敵→切換到那隻(主動換目標，指哪打哪)。
-        const aimTarget = this.pickAimConeTarget(this.player, R, true);
-        if (aimTarget && aimTarget !== cur) {
-          const toCur = Phaser.Math.Angle.Between(this.player.x, this.player.y, cur!.x, cur!.y);
-          const curDiff = Math.abs(Phaser.Math.Angle.Wrap(toCur - this.player.aimAngle));
-          const toAim = Phaser.Math.Angle.Between(this.player.x, this.player.y, aimTarget.x, aimTarget.y);
-          const aimDiff = Math.abs(Phaser.Math.Angle.Wrap(toAim - this.player.aimAngle));
-          if (aimDiff < curDiff) this.lockedTarget = aimTarget; // 面向對準的新目標更準才切
-        }
-        return;
-      }
-      // 無有效鎖定(初始/目標死/離圈)：① 面向錐形(35°)有對著的→鎖那隻(對準優先)；
-      //   ② 面向沒對著但圈內有敵→鎖【圈內最近】的(不限角度，用戶要範圍內有就鎖)；③ 圈內無敵→null(朝面向衝)。
-      this.lockedTarget = this.pickAimConeTarget(this.player, R, true)
-        ?? this.pickNearestInCircle(this.player, R);
-      return;
-    }
-    // 融合模式（autoLock=false）：鎖定 = 滑鼠方向錐形內最接近的怪（給鎖定框顯示 + actByAim 用）；
-    // 錐形內無怪則 null（朝空地走位、不畫框）。
-    if (!GameConfig.aim.autoLock) {
-      if (!this.player.alive) { this.lockedTarget = null; return; }
-      let t = this.pickAimConeTarget(this.player);
-      // 滑鼠靜止且沒指到目標 → HUD 也顯示自動鎖最近的怪（與 actByAim 一致）
-      if (!t && time - this.lastPointerMoveAt > GameConfig.lock.aimActiveWindowMs) {
-        t = this.findNearestDamageableEnemy(this.player);
-      }
-      this.lockedTarget = t;
-      return;
-    }
-    if (!this.player.alive) {
-      this.lockedTarget = null;
-      return;
-    }
-
-    const cur = this.lockedTarget;
-    const curValid = this.isLockValid(cur);
-
-    // 目標失效（敵人死亡 / 道具撿到或逾時消失 / 離場太遠）→ 立即改鎖新目標
-    if (curValid) {
-      const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, cur!.x, cur!.y);
-      if (dist > GameConfig.lock.loseTargetRadius) {
-        this.lockedTarget = this.acquireTarget(time);
-        return;
-      }
-    } else {
-      this.lockedTarget = this.acquireTarget(time);
-      return;
-    }
-
-    // 黏著：已鎖且有效 → 預設保持；只有滑鼠移動(活躍)且「箭頭方向」與「當前鎖定目標方向」
-    // 夾角超過門檻才重選（可能換成別的道具或敵人）。
-    const aimActive = time - this.lastPointerMoveAt <= GameConfig.lock.aimActiveWindowMs;
-    if (aimActive) {
-      const toCur = Phaser.Math.Angle.Between(this.player.x, this.player.y, cur!.x, cur!.y);
-      const diff = Math.abs(Phaser.Math.Angle.Wrap(toCur - this.player.aimAngle));
-      if (diff > Phaser.Math.DegToRad(GameConfig.lock.switchAngleDeg)) {
-        const next = this.pickTargetByAim(this.player);
-        if (next) this.lockedTarget = next;
-      }
-    }
-    // 否則（滑鼠不動或小幅抖動）→ 維持當前鎖定，不亂跳。
-  }
-
-  /** 無鎖定/失效時取得新目標：滑鼠活躍用箭頭方向選，否則選最近（皆含道具） */
-  private acquireTarget(time: number): Enemy | Item | null {
-    const aimActive = time - this.lastPointerMoveAt <= GameConfig.lock.aimActiveWindowMs;
-    return aimActive ? this.pickTargetByAim(this.player) : this.findNearestLockable(this.player);
-  }
-
-  /**
-   * 依「與 aimAngle 夾角 + 距離」評分，選箭頭方向最合適的候選（敵人 + 道具平等參與）。
-   * 滑鼠指向誰就鎖誰，不強制道具優先。
-   */
-  private pickTargetByAim(c: Character): Enemy | Item | null {
-    const maxR = GameConfig.lock.searchRadius;
-    let best: Enemy | Item | null = null;
-    let bestScore = Infinity;
-    const consider = (obj: Enemy | Item): void => {
-      const dist = Phaser.Math.Distance.Between(c.x, c.y, obj.x, obj.y);
-      if (dist > maxR) return;
-      const toObj = Phaser.Math.Angle.Between(c.x, c.y, obj.x, obj.y);
-      const angleDiff = Math.abs(Phaser.Math.Angle.Wrap(toObj - c.aimAngle)); // 0~π
-      const score = dist + angleDiff * GameConfig.lock.angleWeight; // 越小越好
-      if (score < bestScore) {
-        bestScore = score;
-        best = obj;
-      }
-    };
-    for (const child of this.enemies.getChildren()) {
-      const e = child as Enemy;
-      if (this.isLockableEnemy(e)) consider(e);
-    }
-    for (const child of this.items.getChildren()) {
-      const it = child as Item;
-      if (it.active) consider(it);
-    }
-    return best;
-  }
-
-  /** 選最近的候選（敵人 + 道具），供滑鼠靜止時鎖定 */
-  private findNearestLockable(c: Character): Enemy | Item | null {
-    const maxR = GameConfig.lock.searchRadius;
-    let best: Enemy | Item | null = null;
-    let bestDist = Infinity;
-    const consider = (obj: Enemy | Item): void => {
-      const dist = Phaser.Math.Distance.Between(c.x, c.y, obj.x, obj.y);
-      if (dist <= maxR && dist < bestDist) {
-        bestDist = dist;
-        best = obj;
-      }
-    };
-    for (const child of this.enemies.getChildren()) {
-      const e = child as Enemy;
-      if (this.isLockableEnemy(e)) consider(e);
-    }
-    for (const child of this.items.getChildren()) {
-      const it = child as Item;
-      if (it.active) consider(it);
-    }
-    return best;
-  }
-
-  /**
-   * 多角色鎖定標記——同一目標(敵人或道具)只畫「一個共用框」，
-   * 框上緣排開多個小色點，每點代表一個正鎖定此目標的角色(各自代表色)。
-   * 支援 P1 + 多 BOT(未來多真人)鎖同目標而不重疊；目標消失/沒人鎖即不畫。
-   */
-  private drawLockMarkers(): void {
-    this.lockGfx.clear();
-    const m = GameConfig.lock.marker;
-
-    // slow：原本的【自動鎖定範圍圈】已移除，避免與內層圓盤重疊
-    // 專注於瞄準框功能，不再顯示範圍圈
-
-    // 收集：目標 → 鎖定它的角色 index 列表（依角色順序，色點才穩定）
-    const groups = new Map<Enemy | Item, number[]>();
-    for (const c of this.characters) {
-      if (!c.alive) continue;
-      const t = c.lockedTarget as unknown as Enemy | Item | null;
-      if (!this.isLockValid(t)) continue;
-      const arr = groups.get(t!);
-      if (arr) arr.push(c.index);
-      else groups.set(t!, [c.index]);
-    }
-
-    for (const [t, indices] of groups) {
-      // 一個共用框
-      this.lockGfx.lineStyle(m.thickness, m.color, 0.95);
-      this.lockGfx.strokeCircle(t.x, t.y, m.radius);
-      const r = m.radius;
-      const s = 6;
-      const corners = [
-        [-1, -1],
-        [1, -1],
-        [-1, 1],
-        [1, 1]
-      ];
-      for (const [sx, sy] of corners) {
-        this.lockGfx.lineBetween(t.x + sx * r, t.y + sy * r, t.x + sx * (r - s), t.y + sy * r);
-        this.lockGfx.lineBetween(t.x + sx * r, t.y + sy * r, t.x + sx * r, t.y + sy * (r - s));
-      }
-
-      // 框上緣排開多個角色代表色小色點（置中排列，不重疊）
-      const n = indices.length;
-      const spacing = m.dotSpacing;
-      const startX = t.x - ((n - 1) * spacing) / 2;
-      const dotY = t.y - m.dotOrbit;
-      for (let k = 0; k < n; k++) {
-        const color = GameConfig.characters.colors[indices[k]] ?? 0xffffff;
-        const dx = startX + k * spacing;
-        this.lockGfx.fillStyle(color, 1);
-        this.lockGfx.fillCircle(dx, dotY, m.dotRadius);
-        this.lockGfx.lineStyle(1, 0x000000, 0.8);
-        this.lockGfx.strokeCircle(dx, dotY, m.dotRadius);
-      }
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // BOT AI：代打玩家操作（選方向、衝刺攻擊、集鬥氣、滿了爆發）
-  // ---------------------------------------------------------------------------
-  private updateBot(bot: Character, time: number): void {
-    if (!bot.alive) return;
-
-    // 衝刺/爆發進行中不打斷
-    if (bot.isDashing || bot.isBursting) return;
-
-    // BOT 目標 = 最近敵人 或「範圍內、越稀有越想搶」的道具（積極度中等，不為遠道具送死）
-    const target = this.pickBotTarget(bot);
-    bot.lockedTarget = target as unknown as
-      (Phaser.GameObjects.GameObject & { x: number; y: number }) | null;
-
-    if (target) {
-      bot.aimAngle = Phaser.Math.Angle.Between(bot.x, bot.y, target.x, target.y);
-    } else {
-      // 沒目標：朝敵群中心游走，避免呆站
-      const center = this.getEnemyClusterCenter();
-      if (center) {
-        const a = Phaser.Math.Angle.Between(bot.x, bot.y, center.x, center.y);
-        bot.aimAngle = a;
-        const body = bot.body as Phaser.Physics.Arcade.Body;
-        body.setVelocity(
-          Math.cos(a) * GameConfig.bot.wanderSpeed,
-          Math.sin(a) * GameConfig.bot.wanderSpeed
-        );
-      } else {
-        bot.stopMoving();
-      }
-    }
-
-    // 到出手時間才行動
-    if (time < bot.nextBotActAt) return;
-    const jitter = Phaser.Math.Between(
-      -GameConfig.bot.attackJitterMs,
-      GameConfig.bot.attackJitterMs
-    );
-    bot.nextBotActAt = time + GameConfig.bot.attackIntervalMs + jitter;
-
-    // BOT 與 P1 無差異——爆發不再靠舊 spiritFull,改由連段技系統(onComboHit combo 達門檻9)自動觸發,同 P1。
-    // 有目標才出手（近了扇形、遠了衝撞、道具則衝去搶，與 P1 共用 tryAct;命中→onComboHit 累積 combo→達門檻放圓/直/爆發）
-    if (target) {
-      this.tryAct(bot, time);
-    }
-  }
-
-  /**
-   * BOT 目標選擇——比較「最近敵人」與「範圍內最誘人的道具」，取較優者。
-   * 道具吸引力：等效距離 = 實際距離 × distanceBias × (dropWeight)^rarityExponent（越稀有值越小=越想去）。
-   * 只考慮 greedRadius 內的道具，避免為遠道具放棄戰鬥送死。
-   */
-  private pickBotTarget(bot: Character): Enemy | Item | null {
-    const enemy = this.findNearestEnemyTo(bot, GameConfig.bot.targetSearchRadius);
-    const enemyDist = enemy ? Phaser.Math.Distance.Between(bot.x, bot.y, enemy.x, enemy.y) : Infinity;
-
-    const cfg = GameConfig.bot.item;
-    const w = GameConfig.items.weights;
-    let bestItem: Item | null = null;
-    let bestItemScore = Infinity;
-    for (const child of this.items.getChildren()) {
-      const it = child as Item;
-      if (!it.active || it.taken) continue;
-      const dist = Phaser.Math.Distance.Between(bot.x, bot.y, it.x, it.y);
-      if (dist > cfg.greedRadius) continue; // 超出貪婪範圍不搶
-      // 稀有加權：權重越低(越稀有) → rarityFactor 越小 → 等效距離越小 → 越想搶
-      const rarityFactor = Math.pow(w[it.skill] ?? 1, cfg.rarityExponent);
-      const score = dist * cfg.distanceBias * rarityFactor;
-      if (score < bestItemScore) {
-        bestItemScore = score;
-        bestItem = it;
-      }
-    }
-
-    if (!bestItem) return enemy;
-    if (!enemy) return bestItem;
-    // 道具等效分數 vs 敵人實際距離：較小者勝（道具已含 bias/稀有加權）
-    return bestItemScore <= enemyDist ? bestItem : enemy;
-  }
-
-  // ---------------------------------------------------------------------------
-  // 角色行動（P1 與 BOT 共用）：朝「鎖定目標」帶位移的一擊（可追砍）
-  // ---------------------------------------------------------------------------
-  /** 不可推動的大型「不動」目標(BOSS/塔)——攻擊這些時停外緣原地揮、不衝進中心避免重疊。
-   *  (anchor 是走位落點、玩家本就要衝過去，不算此類；一般怪可推動維持衝上去打。) */
-  private isImmovableLargeTarget(e: Enemy | null): boolean {
-    return !!e && e.active && isStructureEnemy(e);
-  }
-
-  /**
-   * 對 BOSS/塔停外緣原地揮擊——把角色移到目標外緣 standoff(目標半徑+玩家半徑+margin)一次(若比現在近才移，
-   * 不往裡擠)，面朝目標，performMeleeArc 打。反覆攻擊都停同一外緣、不重疊、不逐次內擠。
-   */
-  private standoffMeleeAttack(c: Character, target: Enemy, time: number): void {
-    const standoff = target.getBodyRadius() + GameConfig.player.radius + 6;
-    c.aimAngle = Phaser.Math.Angle.Between(c.x, c.y, target.x, target.y);
-    const dist = Phaser.Math.Distance.Between(c.x, c.y, target.x, target.y);
-    // 若已在攻擊範圍內(melee.range)：只在「比 standoff 更近(重疊/太貼)」時推到外緣，否則原地不動(不往裡衝)。
-    if (dist <= GameConfig.melee.range) {
-      if (dist < standoff) {
-        // 太近/重疊 → 沿「目標→角色」方向退到外緣站定(不疊)
-        const ang = dist > 0.001 ? Math.atan2(c.y - target.y, c.x - target.x) : c.aimAngle + Math.PI;
-        const r = GameConfig.player.radius;
-        const nx = Phaser.Math.Clamp(target.x + Math.cos(ang) * standoff, this.arena.left + r, this.arena.right - r);
-        const ny = Phaser.Math.Clamp(target.y + Math.sin(ang) * standoff, this.arena.top + r, this.arena.bottom - r);
-        c.setPosition(nx, ny);
-      }
-      this.performMeleeArc(c, time);
-      c.nextAttackAllowedAt = time + this.attackCooldownMs();
-      return;
-    }
-    // 還在攻擊範圍外 → 朝目標衝，但終點設在【外緣 standoff】而非中心 → 衝到外緣停、不穿進去
-    const destX = target.x - Math.cos(c.aimAngle) * standoff;
-    const destY = target.y - Math.sin(c.aimAngle) * standoff;
-    this.beginDash(c, destX, destY, time, false);
-  }
-
-  private tryAct(c: Character, time: number): void {
-    if (c.isBursting || c.isDashing) return;
-    if (c.isRooted(time)) return; // 定身中不能行動（攻擊會位移）
-    if (time < c.nextAttackAllowedAt) return;
-
-    // 階段4:slow 模式 P1 強化(empowered)期間【唯一招=遠距圓範圍AOE】——
-    //   Space 放【以角色為中心的圓 AOE】(不衝刺)、禁用普攻/連段;放完進冷卻。強化結束恢復正常攻擊。
-    if (c === this.player && this.controlMode === 'slow' && c.empowered) {
-      this.empowerAoe(c, time);
-      return;
-    }
-
-    // 移除舊「BOT spiritFull→原地爆發」——BOT 已與 P1 無差異,爆發由連段技系統(onComboHit combo 達9)觸發。
-
-    // 滑鼠方向優先模式（僅 P1）——攻擊方向直接用 aimAngle，不被自動鎖定綁死
-    // slow 模式不走 actByAim（那含滑鼠靜止自動鎖/mouse 邏輯）；改走下方「用 this.lockedTarget」通用路徑——
-    //      lockedTarget 已由 updateLockTarget 的 slow 分支(面向+範圍圈)每幀算好：有鎖→衝去打、無鎖→朝面向衝一段。
-    if (c === this.player && this.controlMode !== 'slow' && !GameConfig.aim.autoLock) {
-      this.actByAim(c, time);
-      return;
-    }
-
-    // 決定目標：P1 用自動鎖定目標（敵人或道具）；BOT 用最近敵人（等於自動鎖定）
-    // 決定目標：P1 用場景鎖定；BOT 用 updateBot 選好的 bot.lockedTarget（含道具搶奪）
-    const target: Enemy | Item | null =
-      c === this.player
-        ? this.lockedTarget
-        : (c.lockedTarget as unknown as Enemy | Item | null);
-
-    // 無鎖定目標 → 朝目前 aimAngle 空揮小衝
-    if (!this.isLockValid(target)) {
-      // A 修:crossing 走廊無目標時,衝刺【朝角色當前面向 aimAngle】(面向左往左、面向右往右)——
-      //   不再固定導向右(0)。之前導向右是為修「fast aimAngle 殘留反向往回衝」,但過度修正成面向左也往右。
-      //   直接用玩家目前 aimAngle 即可(面向哪就往哪衝),不覆蓋。
-      this.startDirectionDash(c, time);
-      return;
-    }
-
-    // 鎖定的是道具 → 朝道具衝撞位移過去（碰到由 overlap 觸發拾取）
-    if (this.isItem(target)) {
-      c.aimAngle = Phaser.Math.Angle.Between(c.x, c.y, target.x, target.y);
-      this.startDirectionDashTo(c, target.x, target.y, time);
-      return;
-    }
-
-    // 鎖定的是【不可推動的大型不動目標(BOSS/塔)】→ 不衝進中心(會重疊)，改停外緣原地揮擊。
-    //   反覆攻擊時穩定停在 standoff 外緣、不逐次往裡擠、不重疊。快速+慢速共用此路徑。
-    if (this.isImmovableLargeTarget(target as Enemy)) {
-      this.standoffMeleeAttack(c, target as Enemy, time);
-      return;
-    }
-
-    // 方向一律朝「角色→鎖定目標」（不用滑鼠裸方向 → 不打架）
-    c.aimAngle = Phaser.Math.Angle.Between(c.x, c.y, target!.x, target!.y);
-    const dist = Phaser.Math.Distance.Between(c.x, c.y, target!.x, target!.y);
-
-    if (dist <= GameConfig.melee.range) {
-      // 近：朝目標小位移貼身 + 扇形劍氣
-      const step = Math.min(GameConfig.lock.meleeStep, Math.max(0, dist - GameConfig.player.radius));
-      const r = GameConfig.player.radius;
-      const nx = Phaser.Math.Clamp(c.x + Math.cos(c.aimAngle) * step, this.arena.left + r, this.arena.right - r);
-      const ny = Phaser.Math.Clamp(c.y + Math.sin(c.aimAngle) * step, this.arena.top + r, this.arena.bottom - r);
-      c.setPosition(nx, ny);
-      this.performMeleeArc(c, time);
-      c.nextAttackAllowedAt = time + this.attackCooldownMs();
-      return;
-    }
-    // 遠：朝目標衝撞位移（衝刺遇敵停下打 + 衝擊特效）
-    this.startDirectionDash(c, time);
-  }
-
-  /**
-   * 融合瞄準（僅 P1，autoLock=false 為融合模式預設）：
-   * 在滑鼠 aimAngle 方向的「錐形範圍(±aimConeDeg, searchRadius 內)」找可傷敵人：
-   * · 找得到 → 選最接近滑鼠方向的那隻當鎖定目標，攻擊朝它（自動鎖定黏敵；近則原地扇形、遠則衝刺遇敵停）。
-   * · 錐形內無怪（滑鼠指空方向）→ 朝滑鼠 aimAngle 自由衝刺位移（走位，不被拉回最近怪）。
-   */
-  private actByAim(c: Character, time: number): void {
-    let target = this.pickAimConeTarget(c);
-    // 滑鼠【靜止】(超過 aimActiveWindowMs 沒動)且錐形內沒指到目標 → 自動鎖【最近的可傷怪】(不鎖 anchor)，
-    //         讓玩家不動滑鼠猛按也能自動掃怪；滑鼠【活躍】時維持指哪打哪/指空地走位。
-    const aimActive = time - this.lastPointerMoveAt <= GameConfig.lock.aimActiveWindowMs;
-    if (!target && !aimActive && c === this.player) {
-      target = this.findNearestDamageableEnemy(c);
-    }
-    if (target) {
-      // 鎖定：方向朝該目標；記錄鎖定供畫框
-      this.lockedTarget = target;
-      c.lockedTarget = target as unknown as
-        (Phaser.GameObjects.GameObject & { x: number; y: number }) | null;
-      c.aimAngle = Phaser.Math.Angle.Between(c.x, c.y, target.x, target.y);
-      // 鎖定的是道具 → 朝道具位置衝過去撿（碰到由 overlap 觸發拾取，無磁吸）
-      if (this.isItem(target)) {
-        this.startDirectionDashTo(c, target.x, target.y, time);
-        return;
-      }
-      const dist = Phaser.Math.Distance.Between(c.x, c.y, target.x, target.y);
-      // 鎖定的是 anchor（走位落點）→ 一律衝過去(不管遠近)，衝到停外緣不攻擊不傷害（handleDash 的 anchor 分支）
-      if ((target as Enemy).enemyType === 'anchor') {
-        this.startDirectionDash(c, time);
-        return;
-      }
-      // 鎖定 BOSS/塔(不可推動大型不動目標)→ 停外緣原地揮擊、不衝進中心重疊(快速模式路徑)。
-      if (this.isImmovableLargeTarget(target as Enemy)) {
-        this.standoffMeleeAttack(c, target as Enemy, time);
-        return;
-      }
-      if (dist <= GameConfig.melee.range) {
-        // 近：貼身小位移 + 原地扇形劍氣
-        const step = Math.min(GameConfig.lock.meleeStep, Math.max(0, dist - GameConfig.player.radius));
-        const r = GameConfig.player.radius;
-        const nx = Phaser.Math.Clamp(c.x + Math.cos(c.aimAngle) * step, this.arena.left + r, this.arena.right - r);
-        const ny = Phaser.Math.Clamp(c.y + Math.sin(c.aimAngle) * step, this.arena.top + r, this.arena.bottom - r);
-        c.setPosition(nx, ny);
-        this.performMeleeArc(c, time);
-        c.nextAttackAllowedAt = time + this.attackCooldownMs();
-      } else {
-        // 遠：朝該怪衝刺（沿用遇敵停下）
-        this.startDirectionDash(c, time);
-      }
-      return;
-    }
-    // 錐形內無怪：清鎖定 + 朝面向自由衝刺位移
-    this.lockedTarget = null;
-    c.lockedTarget = null;
-    // A 修:crossing 走廊無敵人按攻擊→【朝角色當前面向 aimAngle 衝】(面向左往左、右往右),
-    //   不再固定導向右(0)。移除過度修正(原為修 fast 反向往回衝,但造成面向左也往右)。
-    this.startDirectionDash(c, time);
-  }
-
-  /**
-   * slow：在 lockRadius 圈內找【最近】的可鎖敵人(不限角度)——面向沒對著任何敵人但圈內有敵時，
-   * 鎖圈內最近的那隻(用戶要「範圍內有敵人就鎖去打」)。只含敵人(isLockableEnemy)，不含道具/anchor。無則 null。
-   */
-  private pickNearestInCircle(c: Character, R: number): Enemy | null {
-    let best: Enemy | null = null;
-    let bestDistSq = R * R;
-    for (const child of this.enemies.getChildren()) {
-      const e = child as Enemy;
-      if (!this.isLockableEnemy(e)) continue;
-      const dx = e.x - c.x, dy = e.y - c.y;
-      const distSq = dx * dx + dy * dy;
-      if (distSq <= bestDistSq) { bestDistSq = distSq; best = e; }
-    }
-    return best;
-  }
-
-  /**
-   * 在 c.aimAngle 方向的錐形(±aimConeDeg, searchR 內)找「最接近方向」的可鎖目標(敵/anchor/道具)。
-   * 錐形外的不鎖（才能朝空地走位）。無則回 null。
-   * 道具納入候選(略優先)。
-   * 參數化——searchR 預設 fast 的 lock.searchRadius；slow 傳 slow.lockRadius(範圍圈)。
-   *      limitAnchors=true 時 anchor 也受 searchR 限制(slow 範圍圈內才鎖 anchor)；fast 維持 anchor 不受 searchRadius 限。
-   *      方向源永遠是 c.aimAngle——fast=滑鼠、slow=鍵盤面向，下游無感。
-   */
-  private pickAimConeTarget(
-    c: Character,
-    searchR: number = GameConfig.lock.searchRadius,
-    limitAnchors = false
-  ): Enemy | Item | null {
-    const cone = Phaser.Math.DegToRad(GameConfig.aim.aimConeDeg);
-    // 玩家「腳下」很近的目標(尤其站在錨點上時距≈0)方向不穩定、又因距離小恆被選，
-    // 會黏死在腳下錨點/目標導致切不到 BOSS。低於此距離的候選一律排除，讓滑鼠能指向他處。
-    const underfootR = GameConfig.player.radius + 12;
-    let best: Enemy | Item | null = null;
-    let bestScore = Infinity; // 已套用道具優惠後的「有效角度差」
-    for (const child of this.enemies.getChildren()) {
-      const enemy = child as Enemy;
-      if (!this.isLockableEnemy(enemy)) continue; // 含 anchor（可鎖）、排除 npc/不可傷
-      const dist = Phaser.Math.Distance.Between(c.x, c.y, enemy.x, enemy.y);
-      if (dist <= underfootR) continue; // 腳下目標排除（不能瞄、避免黏死）
-      // fast 下 anchor 不受 searchRadius 限制(BOSS 四錨點需自由切換)；slow(limitAnchors)則一律受範圍圈限制
-      if ((limitAnchors || enemy.enemyType !== 'anchor') && dist > searchR) continue;
-      const toE = Phaser.Math.Angle.Between(c.x, c.y, enemy.x, enemy.y);
-      const diff = Math.abs(Phaser.Math.Angle.Wrap(toE - c.aimAngle));
-      if (diff > cone) continue; // 錐形外不鎖
-      if (diff < bestScore) {
-        bestScore = diff;
-        best = enemy;
-      }
-    }
-    // 道具納入候選（滑鼠/面向指向道具方向可鎖它去撿）；角度差打折 → 略優先於敵人。
-    const itemMult = GameConfig.aim.itemAimPriorityMult;
-    for (const child of this.items.getChildren()) {
-      const item = child as Item;
-      if (!item.active) continue;
-      const dist = Phaser.Math.Distance.Between(c.x, c.y, item.x, item.y);
-      if (dist <= underfootR) continue;
-      if (dist > searchR) continue;
-      const toI = Phaser.Math.Angle.Between(c.x, c.y, item.x, item.y);
-      const diff = Math.abs(Phaser.Math.Angle.Wrap(toI - c.aimAngle));
-      if (diff > cone) continue; // 錐形外不鎖（實際角度差要在錐內）
-      const score = diff * itemMult; // 道具優惠：有效角度差打折
-      if (score < bestScore) {
-        bestScore = score;
-        best = item;
-      }
-    }
-    return best;
-  }
-
-  /**
-   * 找最近的「可傷怪」（供滑鼠靜止時自動鎖）。排除 anchor/npc/不可傷者——
-   * 靜止自動鎖只鎖真正能打的怪，不鎖走位錨點（避免站錨點附近一直空揮）。
-   */
-  private findNearestDamageableEnemy(c: Character): Enemy | null {
-    const searchR = GameConfig.lock.searchRadius;
-    let best: Enemy | null = null;
-    let bestD = Infinity;
-    for (const child of this.enemies.getChildren()) {
-      const e = child as Enemy;
-      if (!e.isVulnerable()) continue;            // 可傷（自動排除 anchor/npc，因其 isVulnerable=false）
-      const d = Phaser.Math.Distance.Between(c.x, c.y, e.x, e.y);
-      if (d > searchR || d >= bestD) continue;
-      bestD = d; best = e;
-    }
-    return best;
-  }
-
-  /** 扇形劍氣：朝 aimAngle 劈出扇形，範圍內敵人受普攻傷害+擊退 */
-  private performMeleeArc(c: Character, time: number): void {
-    const cfg = GameConfig.melee;
-    // 扇形半徑/角度隨等級變大
-    const emp = c.isEmpowered(time);
-    const rangeMult = emp ? GameConfig.combo.empower.rangeMult : 1;
-    const radius = cfg.radius * rangeMult;
-    const arcDeg = cfg.arcDeg;
-    const half = Phaser.Math.DegToRad(arcDeg) / 2;
-    // 普攻傷害隨等級
-    const atk = this.curAttackDamage() * (emp ? GameConfig.combo.empower.damageMult : 1);
-    let hitCount = 0;
-    for (const child of this.enemies.getChildren()) {
-      const enemy = child as Enemy;
-      if (!enemy.isVulnerable()) continue;
-      const dist = Phaser.Math.Distance.Between(c.x, c.y, enemy.x, enemy.y);
-      if (dist > radius) continue;
-      const toEnemy = Phaser.Math.Angle.Between(c.x, c.y, enemy.x, enemy.y);
-      const diff = Math.abs(Phaser.Math.Angle.Wrap(toEnemy - c.aimAngle));
-      if (diff <= half) {
-        this.damageEnemy(c, enemy, atk, GameConfig.player.knockback, time);
-        hitCount++;
-      }
-    }
-    // 普攻揮擊範圍(扇形)內順手打破可打破物件(不鎖定、不算 combo)
-    this.hitBreakablesInRange(c, radius, half, true, atk, time);
-    // 這次攻擊命中(≥1隻) → combo/鬥氣累積（P1 走連段系統、BOT 走舊鬥氣）
-    if (hitCount > 0) {
-      this.onComboHit(c, time);
-      // 階段三：觸發COMBO獎勵系統（改為命中觸發而非擊殺觸發）
-      this.triggerComboHit(c);
-    }
-    this.flashWhite(c);
-    this.spawnMeleeArcEffect(c.x, c.y, c.aimAngle);
-  }
-
-  /**
-   * slow：P1 鍵盤八方向持續移動（正常速度走，非瞬移）+ 更新面向 aimAngle。
-   * 只在【非衝刺、非招式鎖定、非定身】時跑；衝刺中由 handleDash 控速度(共用 fast)。
-   * 對角線正規化(不 √2 倍速)；有輸入才更新 aimAngle(無輸入維持最後面向)。邊界由 clampToArena 共用。
-   */
   /** 時停道具期間,此角色是否【被凍結】(非撿到者 owner 的角色都凍;owner 能動)。 */
   private isFrozenByTimestop(c: Character): boolean {
     return this.timeStopped && c !== this.timeStopOwner;
   }
 
-  private handleSlowMovement(time: number): void {
-    const p = this.player;
-    if (!p.alive) return;
-    const body = p.body as Phaser.Physics.Arcade.Body;
-    // 時停道具期間,非 owner 的角色(此處 P1)【被凍結不能操控移動】(owner 才能動)。
-    if (this.isFrozenByTimestop(p)) { body.setVelocity(0, 0); return; }
-    // 衝刺/招式演出/定身 → 不接管移動（velocity 由各自邏輯控；定身直接停）
-    if (p.isDashing || p.isSkillLocked(time) || p.isBursting) return;
-    if (p.isRooted(time)) { body.setVelocity(0, 0); return; }
-    const k = this.slowKeys!;
-    let dx = 0, dy = 0;
-    if (k.left.isDown || k.a.isDown) dx -= 1;
-    if (k.right.isDown || k.d.isDown) dx += 1;
-    if (k.up.isDown || k.w.isDown) dy -= 1;
-    if (k.down.isDown || k.s.isDown) dy += 1;
-    if (dx === 0 && dy === 0) {
-      body.setVelocity(0, 0);
-      return;
-    }
-    // 正規化對角線 → 速度一致
-    const len = Math.hypot(dx, dy);
-    const nx = dx / len, ny = dy / len;
-    const spd = this.charParams.moveSpeed; // 角色編輯器可調
-    body.setVelocity(nx * spd, ny * spd);
-    // 面向 = 移動方向（決定攻擊/鎖定方向）
-    p.aimAngle = Math.atan2(ny, nx);
-  }
-
-  /** 普攻冷卻（毫秒）：慢速模式讀角色編輯器參數，快速模式讀 config */
-  private attackCooldownMs(): number {
-    return this.controlMode === 'slow' ? this.charParams.attackCooldownMs : GameConfig.player.attackCooldownMs;
-  }
-
-  private startDirectionDash(c: Character, time: number): void {
-    // 強化期間走位/衝刺距離加大
-    // slow 模式衝刺距離改讀即時可調 slowTuning.dashDistance；fast 讀 config 常數不變。
-    // 用戶追加:slow 模式【所有角色含 BOT】都用短的 slowTuning.dashDistance(原本只 P1);fast 兩者都用 aim.dashDistance。
-    const baseDist = (this.controlMode === 'slow')
-      ? this.slowTuning.dashDistance
-      : GameConfig.aim.dashDistance;
-    const emp = c.isEmpowered(time);
-    const dist = baseDist * (emp ? GameConfig.combo.empower.moveMult : 1);
-    const destX = c.x + Math.cos(c.aimAngle) * dist;
-    const destY = c.y + Math.sin(c.aimAngle) * dist;
-    // 無鎖朝面向衝——若面向【對著場邊牆】(夾在場內後幾乎到不了任何地方)，衝刺會被 clamp 成原地=「按空白沒動作」。
-    //   慢速模式常被逼到邊緣、面向朝外(牆)，此時 dest clamp≈原地 → 玩家覺得「沒衝」。改：偵測夾牆後實際
-    //   可移動距離極小 → 改【原地揮擊(performMeleeArc)】，讓按空白一定有攻擊動作(不會像死鍵)。開曠處仍正常衝。
-    //   只限 slow 模式(fast 維持原樣、byte 不變)。
-    if (c === this.player && this.controlMode === 'slow') {
-      const r = GameConfig.player.radius;
-      const cx = Phaser.Math.Clamp(destX, this.arena.left + r, this.arena.right - r);
-      const cy = Phaser.Math.Clamp(destY, this.arena.top + r, this.arena.bottom - r);
-      const reach = Phaser.Math.Distance.Between(c.x, c.y, cx, cy);
-      if (reach < GameConfig.player.radius) {
-        // 面向被牆擋住、衝不出去 → 原地揮擊(仍有攻擊/命中判定)，按空白不落空。
-        this.performMeleeArc(c, time);
-        c.nextAttackAllowedAt = time + this.attackCooldownMs();
-        return;
-      }
-    }
-    this.beginDash(c, destX, destY, time, false);
-  }
-
-  /** 朝指定點（道具位置）衝撞位移過去，途中不因撞敵中止，碰到道具由 overlap 拾取 */
-  private startDirectionDashTo(c: Character, x: number, y: number, time: number): void {
-    this.beginDash(c, x, y, time, true);
-  }
-
-  /** 共用衝刺啟動：設定終點（夾在場內）、衝刺狀態、護盾、是否為撿道具衝刺 */
-  private beginDash(c: Character, destX: number, destY: number, time: number, toItem: boolean): void {
-    const r = GameConfig.player.radius;
-    // 左右出口開放時 P1 的衝刺終點可以落到開放側（否則會被夾回中央移動區，衝不出去）
-    const bnd = c === this.player ? this.slotWorld.walkBounds : this.arena;
-    c.dashDestX = Phaser.Math.Clamp(destX, bnd.left + r, bnd.right - r);
-    c.dashDestY = Phaser.Math.Clamp(destY, bnd.top + r, bnd.bottom - r);
-    c.isDashing = true;
-    c.dashToItem = toItem;
-    c.nextAttackAllowedAt = time + this.attackCooldownMs();
-    // 衝刺期間賦予護盾（無敵）+ 視覺光環，衝刺結束消失
-    if (GameConfig.player.dashShieldInvuln) {
-      c.dashShielded = true;
-    }
-    c.showDashShield(true);
-  }
-
-  /** 結束衝刺：關閉衝刺狀態、收回護盾（無敵）與視覺 */
-  private endDashState(c: Character): void {
-    c.isDashing = false;
-    c.dashToItem = false;
-    c.stopMoving();
-    c.dashShielded = false;
-    c.showDashShield(false);
-  }
-
-  private handleDash(c: Character, time: number): void {
-    if (!c.isDashing) return;
-
-    // 衝刺撞到可打破物件→【直接打破】(衝刺是攻擊、撞碎它，不被硬擋停)。只 P1；用衝撞半徑當圓形命中。
-    if (c === this.player) {
-      const bkRadius = GameConfig.aim.dashHitRadius;
-      this.hitBreakablesInRange(c, bkRadius + GameConfig.breakable.radius, 0, false, 99999, time); // 大量傷害=一撞即破，衝刺不卡
-    }
-
-    // 衝去撿道具的衝刺，途中不因撞到敵人而中止（確保能撿到）
-    if (!c.dashToItem) {
-      // 衝撞命中半徑隨等級變大
-      const hitRadius = GameConfig.aim.dashHitRadius;
-      const hit = this.findFirstEnemyInRangeOf(c, hitRadius);
-      if (hit) {
-        c.stopMoving();
-        this.performAttackOn(c, hit, time);
-        // 衝向「不可推動」大型敵人(BOSS/塔)時，停在外緣避免重疊卡住
-        if (isStructureEnemy(hit)) standCharacterOutside(c, hit, this.arena);
-        this.endDashState(c);
-        return;
-      }
-      // anchor-like 位移點(NPC/錨點)——衝到附近「停在外緣、不觸發攻擊、不重疊卡住」（走位落點）
-      const anchor = this.findAnchorInDashPath(c, hitRadius);
-      if (anchor) {
-        c.stopMoving();
-        standCharacterOutside(c, anchor, this.arena);
-        this.endDashState(c);
-        return;
-      }
-    }
-
-    // 沒撞到敵人（或撿道具衝刺）→ 繼續朝「固定終點方向」衝；到終點停下。
-    // 修正：衝刺速度方向改用「角色→固定終點(dashDestX/Y)」，而非 live aimAngle。
-    // 之前用 aimAngle 導致：衝刺途中玩家移動滑鼠切換鎖定 → aimAngle 改變 → 衝刺被滑鼠牽著跑，
-    // 因永遠到不了偏離的終點而持續亂飄 = 使用者回報的「換鎖定時大幅位移」。
-    const dx = c.dashDestX - c.x;
-    const dy = c.dashDestY - c.y;
-    const dist = Math.hypot(dx, dy);
-    if (dist <= 12) {
-      c.stopMoving();
-      this.endDashState(c);
-      return;
-    }
-    const dashAngle = Math.atan2(dy, dx);
-    const body = c.body as Phaser.Physics.Arcade.Body;
-    // 強化期間衝向敵人速度加快
-    // slow 模式衝刺速度改讀 slowTuning.dashSpeed（角色編輯器可調，P1 與 BOT 都套用）；fast 讀 config 常數不變。
-    const baseDashSpeed = (this.controlMode === 'slow')
-      ? this.slowTuning.dashSpeed
-      : GameConfig.player.dashSpeed;
-    const dashSpeed = baseDashSpeed * (c.isEmpowered(time) ? GameConfig.combo.empower.dashSpeedMult : 1);
-    // 結束門檻隨速度放大，避免高速(強化)衝刺 overshoot 過終點 → 反向 → 牆邊來回震盪。
-    //          剩餘距離 < 這一步會走的量(≈speed×一幀16ms×2 緩衝) 就直接視為到點、停下，不再設反向速度。
-    const stopDist = Math.max(12, dashSpeed * 0.032);
-    if (dist <= stopDist) {
-      c.stopMoving();
-      this.endDashState(c);
-      return;
-    }
-    body.setVelocity(
-      Math.cos(dashAngle) * dashSpeed,
-      Math.sin(dashAngle) * dashSpeed
-    );
-  }
-
-  private clampToArena(c: Character): void {
-    const r = GameConfig.player.radius;
-    // 左右出口開放時可活動範圍放寬到開放側
-    const bnd = this.slotWorld.walkBounds;
-    const cx = Phaser.Math.Clamp(c.x, bnd.left + r, bnd.right - r);
-    const cy = Phaser.Math.Clamp(c.y, bnd.top + r, bnd.bottom - r);
-    const clamped = (cx !== c.x || cy !== c.y);
-    if (clamped) {
-      c.setPosition(cx, cy);
-      // 衝刺中撞到牆界被夾回 → 直接結束衝刺(速度歸零)，避免「clamp 拉回 vs 高速外衝」牆邊來回震盪、
-      //          以及卡在 isDashing 狀態導致按攻擊衝不出去。
-      if (c.isDashing) this.endDashState(c);
-    }
-  }
-
-  /**
-   * 找出衝刺路徑上「即將重疊到的 anchor-like 位移點」(NPC/錨點)。
-   * 用「角色與其中心距離 ≤ 敵半徑 + 玩家半徑 + 邊界」判定重疊在即，回傳最近的一個。
-   * anchor-like 不可被玩家傷害，這裡只用來讓衝刺停在外緣（走位落點），不攻擊。
-   */
-  private findAnchorInDashPath(c: Character, extra: number): Enemy | null {
-    // 只在「往該 anchor 方向衝」時才停下——避免站在某 anchor 上往別處(BOSS/別錨點)衝時，
-    // 腳下的 anchor 立刻把衝刺攔停（造成「黏在錨點、衝不出去打王」）。
-    const dashDX = c.dashDestX - c.x;
-    const dashDY = c.dashDestY - c.y;
-    const dashLen = Math.hypot(dashDX, dashDY);
-    const underfootR = GameConfig.player.radius + 12;
-    let best: Enemy | null = null;
-    let bestD = Infinity;
-    for (const child of this.enemies.getChildren()) {
-      const e = child as Enemy;
-      if (!e.active || !e.isAnchorLike()) continue;
-      // 守護目標 NPC 可被衝刺【穿越】——不當作攔停落點（其他 anchor：塔走位錨點/佔領錨點 維持攔停）。
-      //      讓玩家站 NPC 一側、敵人在另一側時，瞄敵人衝刺能穿過 NPC 打到後方的敵人，而非被 NPC 外緣攔停。
-      if (e === this.eventCtl.guardNpc) continue;
-      const reach = e.getBodyRadius() + GameConfig.player.radius + extra;
-      const d = Phaser.Math.Distance.Between(c.x, c.y, e.x, e.y);
-      // 站在(或極貼近)某 anchor 上時，該 anchor 不當作攔停點——玩家正要離開它衝往他處
-      if (d <= underfootR) continue;
-      if (d > reach || d >= bestD) continue;
-      // 方向過濾：衝刺方向 與 (角色→anchor) 同向(dot>0) 才算「衝向它」；背向/側向的 anchor 不攔停
-      if (dashLen > 1) {
-        const dot = (dashDX * (e.x - c.x) + dashDY * (e.y - c.y)) / (dashLen * d);
-        if (dot <= 0.2) continue; // 非朝向該 anchor → 不攔
-      }
-      bestD = d; best = e;
-    }
-    return best;
-  }
-
-  // ---------------------------------------------------------------------------
-  // 目標搜尋
-  // ---------------------------------------------------------------------------
-  private findFirstEnemyInRangeOf(c: Character, radius: number): Enemy | null {
-    const children = this.enemies.getChildren();
-    let best: Enemy | null = null;
-    // bug修:命中判定納入【敵人體型半徑】(edge-to-center),否則大體型(BOSS radius42/塔34)站著時,
-    //   玩家衝到其外緣中心距離 > radius → 判定不到 → 撞外緣停下卻沒觸發攻擊 = BOSS/塔沒扣血。
-    //   改成「衝撞半徑 + 敵人 body 半徑」為命中門檻;小怪 body 小、原本就在範圍內,加上只更容易命中不影響。
-    //   以「超出各自命中門檻的量(dist - reach)」挑最近的一隻(貼身/重疊者最優先)。
-    let bestExcess = Infinity;
-    for (const child of children) {
-      const enemy = child as Enemy;
-      if (!enemy.isVulnerable()) continue;
-      const dx = enemy.x - c.x;
-      const dy = enemy.y - c.y;
-      const dist = Math.hypot(dx, dy);
-      const reach = radius + enemy.getBodyRadius();
-      if (dist <= reach) {
-        const excess = dist - reach; // 越小(越貼/越重疊)越優先
-        if (excess < bestExcess) { bestExcess = excess; best = enemy; }
-      }
-    }
-    return best;
-  }
-
-  private findNearestEnemyTo(c: Character, maxRadius: number): Enemy | null {
-    return this.findFirstEnemyInRangeOf(c, maxRadius);
-  }
-
-  /** 找最近的存活角色（敵人鎖定用） */
   /** 黏著目標:回傳離 (x,y) 最近存活角色的 seat(在 characters 的 index);找不到回 -1。 */
   private nearestSeat(x: number, y: number): number {
     let seat = -1, bestSq = Infinity;
@@ -1620,22 +775,6 @@ export class GameScene extends Phaser.Scene {
       enemy.stickyOutOfRangeSince = 0; // 回到範圍內→清超距計時
     }
     return bound;
-  }
-
-  private getEnemyClusterCenter(): { x: number; y: number } | null {
-    const children = this.enemies.getChildren();
-    let sumX = 0;
-    let sumY = 0;
-    let count = 0;
-    for (const child of children) {
-      const enemy = child as Enemy;
-      if (!enemy.isVulnerable()) continue;
-      sumX += enemy.x;
-      sumY += enemy.y;
-      count++;
-    }
-    if (count === 0) return null;
-    return { x: sumX / count, y: sumY / count };
   }
 
   /**
@@ -2071,9 +1210,52 @@ export class GameScene extends Phaser.Scene {
    */
   private resetCharacterMotion(): void {
     for (const c of this.characters) {
-      if (c.isDashing) this.endDashState(c);
+      if (c.isDashing) this.actions.endDashState(c);
       else c.stopMoving();
     }
+  }
+
+  /**
+   * 建立 TargetingController 需要的場景能力
+   */
+  private createTargetingHost(): TargetingHost {
+    return {
+      scene: this,
+      enemies: () => this.enemies,
+      items: () => this.items,
+      characters: () => this.characters,
+      player: () => this.player,
+      isSlowMode: () => this.controlMode === 'slow',
+      slowLockRadius: () => this.slowTuning.lockRadius
+    };
+  }
+
+  /**
+   * 建立 CharacterActionController 需要的場景能力
+   */
+  private createActionHost(): CharacterActionHost {
+    return {
+      enemies: () => this.enemies,
+      player: () => this.player,
+      arena: () => this.arena,
+      walkBounds: () => this.slotWorld.walkBounds,
+      targeting: () => this.targeting,
+      isSlowMode: () => this.controlMode === 'slow',
+      slowTuning: () => this.slowTuning,
+      charParams: () => this.charParams,
+      slowKeys: () => this.slowKeys!,
+      isFrozenByTimestop: (c) => this.isFrozenByTimestop(c),
+      guardNpc: () => this.eventCtl.guardNpc,
+      attackDamage: () => this.curAttackDamage(),
+      damageEnemy: (actor, enemy, damage, knockback, time) => this.damageEnemy(actor, enemy, damage, knockback, time),
+      hitBreakablesInRange: (c, radius, half, useArc, damage, time) => this.hitBreakablesInRange(c, radius, half, useArc, damage, time),
+      performAttackOn: (actor, primary, time) => this.performAttackOn(actor, primary, time),
+      onComboHit: (c, time) => this.onComboHit(c, time),
+      triggerComboHit: (c) => this.triggerComboHit(c),
+      empowerAoe: (c, time) => this.empowerAoe(c, time),
+      flashWhite: (c) => this.flashWhite(c),
+      spawnMeleeArcEffect: (x, y, angle) => this.spawnMeleeArcEffect(x, y, angle)
+    };
   }
 
   /**
@@ -3518,10 +2700,10 @@ export class GameScene extends Phaser.Scene {
       for (const ch of this.characters) {
         if (ch.lockedTarget === (item as unknown as Phaser.GameObjects.GameObject)) {
           ch.lockedTarget = null;
-          if (ch.dashToItem && ch.isDashing) this.endDashState(ch);
+          if (ch.dashToItem && ch.isDashing) this.actions.endDashState(ch);
         }
       }
-      if (this.lockedTarget === item) this.lockedTarget = null;
+      if (this.targeting.lockedTarget === item) this.targeting.lockedTarget = null;
       item.despawn();
       // 補血道具(H) → 只補撿到的角色，不走招式演出；其餘照觸發招式
       if (skill === 'H') this.applyHeal(c);
@@ -3806,11 +2988,11 @@ export class GameScene extends Phaser.Scene {
     //   優先鎖【當前自動鎖定目標(若它是圈內敵人)】以維持一致,否則圈內最近的敵人。
     const R = (this.controlMode === 'slow') ? this.slowTuning.lockRadius : GameConfig.lock.searchRadius;
     let target: Enemy | null = null;
-    const cur = this.lockedTarget;
+    const cur = this.targeting.lockedTarget;
     // 當前鎖定目標:必須是敵人(非道具)、可傷、且在圓圈內才沿用
-    if (cur && !this.isItem(cur)) {
+    if (cur && !this.targeting.isItem(cur)) {
       const e = cur as Enemy;
-      if (typeof e.isVulnerable === 'function' && this.isLockableEnemy(e) &&
+      if (typeof e.isVulnerable === 'function' && this.targeting.isLockableEnemy(e) &&
           Phaser.Math.Distance.Between(c.x, c.y, e.x, e.y) <= R) {
         target = e;
       }
@@ -4524,7 +3706,7 @@ export class GameScene extends Phaser.Scene {
   /** 除錯：模擬滑鼠指向某點（設 aimAngle + 標記活躍），用來測鎖定評分 */
   debugAimToward(x: number, y: number): void {
     this.player.aimAngle = Phaser.Math.Angle.Between(this.player.x, this.player.y, x, y);
-    this.lastPointerMoveAt = this.time.now;
+    this.targeting.markPointerMoved(this.time.now);
   }
 
   /** 除錯：加一個 BOT（同 B 鍵） */
@@ -4537,7 +3719,7 @@ export class GameScene extends Phaser.Scene {
     const bot = this.characters[index];
     if (!bot) return false;
     this.dropItemAt(bot.x + offset, bot.y + offset, this.time.now);
-    const t = this.pickBotTarget(bot);
+    const t = this.targeting.pickBotTarget(bot);
     return t instanceof Item;
   }
 
@@ -4601,10 +3783,10 @@ export class GameScene extends Phaser.Scene {
 
   /** 除錯：回傳目前鎖定狀態（是否鎖到道具） */
   debugLockInfo(): Record<string, unknown> {
-    const t = this.lockedTarget;
+    const t = this.targeting.lockedTarget;
     return {
       hasLock: !!t,
-      lockIsItem: this.isItem(t),
+      lockIsItem: this.targeting.isItem(t),
       lockX: t ? Math.round(t.x) : null,
       lockY: t ? Math.round(t.y) : null,
       itemsAlive: this.items ? this.items.countActive(true) : null,
@@ -4625,13 +3807,9 @@ export class GameScene extends Phaser.Scene {
     }
     // 指示線方向若有鎖定目標（敵人或道具）則指向目標，否則沿用瞄準角
     let ang = this.player.aimAngle;
-    if (this.isLockValid(this.lockedTarget)) {
-      ang = Phaser.Math.Angle.Between(
-        this.player.x,
-        this.player.y,
-        this.lockedTarget!.x,
-        this.lockedTarget!.y
-      );
+    const lock = this.targeting.lockedTarget;
+    if (this.targeting.isLockValid(lock)) {
+      ang = Phaser.Math.Angle.Between(this.player.x, this.player.y, lock!.x, lock!.y);
     }
     this.game.events.emit('aim', {
       alive: true,
