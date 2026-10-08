@@ -9,6 +9,7 @@
 - [戰鬥系統技術文檔](./systems/combat-system.md) - 多角色系統、敵人AI、波次控制、技能系統
 - [UI系統實作細節](./systems/ui-implementation.md) - COMBO獎勵UI、角色狀態面板、頭上UI系統
 - [效能和配置管理](./systems/performance-config.md) - GameConfig架構、效能優化、建構部署
+- [bodySeparation系統](./systems/body-separation.md) - 推擠分離+真空圈系統 (真空圈4bfddb9+e732e52新增)
 
 ### 📋 [Conventions](./conventions/) - 開發規範流程
 - [H5程式碼規範](./conventions/h5-coding-standards.md) - TypeScript + Phaser開發規範
