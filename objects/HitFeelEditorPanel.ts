@@ -11,6 +11,7 @@ import {
   type HitFeelParams,
   type HitFeelGroup
 } from '../systems/hitFeelParams';
+import { HitFeelPreview } from './HitFeelPreview';
 
 /** 面板版面與配色（畫面座標；面板置中於畫面） */
 const LAYOUT = {
@@ -99,7 +100,7 @@ export class HitFeelEditorPanel {
   private readonly scene: Phaser.Scene;
   private container: Phaser.GameObjects.Container | null = null;
   private dim: Phaser.GameObjects.Rectangle | null = null;
-  private preview: any | null = null; // TODO: HitFeelPreview 類型
+  private preview: HitFeelPreview | null = null;
   private groups: HitFeelGroup[] = [];
   private currentGroupIndex = 0;
   private rows: ParamRow[] = [];
@@ -251,8 +252,7 @@ export class HitFeelEditorPanel {
 
   /** 建立預覽區域 */
   private buildPreview(): void {
-    // TODO: 接預覽
-    // this.preview = new HitFeelPreview(this.scene, this.container!, LAYOUT.PREVIEW_X, LAYOUT.PREVIEW_Y, LAYOUT.DEPTH);
+    this.preview = new HitFeelPreview(this.scene, this.container!, LAYOUT.PREVIEW_X, LAYOUT.PREVIEW_Y, LAYOUT.DEPTH);
   }
 
   /** 切換到指定分組 */
