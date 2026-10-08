@@ -17,6 +17,7 @@ import { TreasureRoomController } from '../controllers/TreasureRoomController';
 import { TreasureEnemyController, type TreasureEnemyHost } from '../controllers/TreasureEnemyController';
 import { BreakableController, type BreakableHost } from '../controllers/BreakableController';
 import { ComboRewardController } from '../controllers/ComboRewardController';
+import { ComboSkillController, type ComboSkillHost } from '../controllers/ComboSkillController';
 import { SlotWorldController, type AreaTransition, type Side, type SlotWorldHost } from '../controllers/SlotWorldController';
 import { PerfOverlay } from '../controllers/PerfOverlay';
 import { GameDebugApi, type GameDebugHost } from '../controllers/GameDebugApi';
@@ -58,6 +59,8 @@ export class GameScene extends Phaser.Scene {
   private breakableCtl!: BreakableController;
   /** COMBO 連擊獎勵（頭上 UI 連擊數與彩票），每次 create() 重建 */
   private comboReward!: ComboRewardController;
+  /** 連段技、強化、爆發與命中頓感，每次 create() 重建 */
+  private comboSkills!: ComboSkillController;
   private chargeWarnGfx!: Phaser.GameObjects.Graphics;
 
   /** F4 新舊美術切換（背景圖、P1 皮膚與覆蓋 UI、一般怪外觀），每次 create() 重建 */
@@ -271,6 +274,7 @@ export class GameScene extends Phaser.Scene {
     });
     this.breakableCtl = new BreakableController(this.createBreakableHost());
     this.comboReward = new ComboRewardController(this, () => this.characters);
+    this.comboSkills = new ComboSkillController(this.createComboSkillHost());
     this.chargeWarnGfx = this.add.graphics().setDepth(2);
     this.targeting = new TargetingController(this.createTargetingHost());
     this.actions = new CharacterActionController(this.createActionHost());
@@ -315,7 +319,7 @@ export class GameScene extends Phaser.Scene {
     // 靠近 BOSS 屍體時 Z 優先變身 BOSS；變身期間 Z 無作用
     this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.Z).on('down', () => {
       if (this.bossCtl.isTransformed) return;
-      if (!this.bossCtl.tryTransform()) this.tryManualEmpower();
+      if (!this.bossCtl.tryTransform()) this.comboSkills.tryManualEmpower();
     });
 
     // R 鍵：P1 原地滿血復活（無限次）
@@ -1117,6 +1121,32 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
+   * 建立 ComboSkillController 需要的場景能力
+   */
+  private createComboSkillHost(): ComboSkillHost {
+    return {
+      scene: this,
+      enemies: () => this.enemies,
+      player: () => this.player,
+      isGameOver: () => this.gameOver,
+      isSlowMode: () => this.controlMode === 'slow',
+      slowLockRadius: () => this.slowTuning.lockRadius,
+      targeting: () => this.targeting,
+      damageEnemyFrom: (actor, enemy, damage, knockback, fromX, fromY, time) => this.damageEnemyFrom(actor, enemy, damage, knockback, fromX, fromY, time),
+      damageEnemy: (actor, enemy, damage, knockback, time) => this.damageEnemy(actor, enemy, damage, knockback, time),
+      breakInCircle: (x, y, radius, time) => this.breakableCtl.breakInCircle(x, y, radius, time),
+      breakInRect: (ox, oy, dir, back, length, width, time) => this.breakableCtl.breakInRect(ox, oy, dir, back, length, width, time),
+      comboRewardHit: (c) => this.comboReward.hit(c),
+      countP1AttackHit: () => { this.p1AttackHits++; },
+      spawnExpandingRing: (x, y, radius, color, ms) => this.spawnExpandingRing(x, y, radius, color, ms),
+      shakeOnce: (duration, intensity) => this.shakeOnce(duration, intensity),
+      flashWhite: (c) => this.flashWhite(c),
+      spawnSlashEffect: (x, y) => this.spawnSlashEffect(x, y),
+      emitStats: () => this.emitStats()
+    };
+  }
+
+  /**
    * 建立 BreakableController 需要的場景能力
    */
   private createBreakableHost(): BreakableHost {
@@ -1229,9 +1259,9 @@ export class GameScene extends Phaser.Scene {
       damageEnemy: (actor, enemy, damage, knockback, time) => this.damageEnemy(actor, enemy, damage, knockback, time),
       hitBreakablesInRange: (c, radius, half, useArc, damage, time) => this.breakableCtl.hitInRange(c, radius, half, useArc, damage, time),
       performAttackOn: (actor, primary, time) => this.performAttackOn(actor, primary, time),
-      onComboHit: (c, time) => this.onComboHit(c, time),
+      onComboHit: (c, time) => this.comboSkills.onComboHit(c, time),
       triggerComboHit: (c) => this.comboReward.hit(c),
-      empowerAoe: (c, time) => this.empowerAoe(c, time),
+      empowerAoe: (c, time) => this.comboSkills.empowerAoe(c, time),
       flashWhite: (c) => this.flashWhite(c),
       spawnMeleeArcEffect: (x, y, angle) => this.spawnMeleeArcEffect(x, y, angle)
     };
@@ -1354,10 +1384,7 @@ export class GameScene extends Phaser.Scene {
   /** 通關（打倒第 8 關壓軸 BOSS）——顯示通關結算畫面（可重開）。仿 triggerGameOver 但 won=true。 */
   private triggerClear(): void {
     this.gameOver = true;
-    if (this.hitstopActive) {
-      try { this.physics.world.resume(); } catch (_e) { /* ignore */ }
-      this.hitstopActive = false;
-    }
+    this.comboSkills.releaseHitstop();
     for (const c of this.characters) c.stopMoving();
     const stats = {
       teamKills: this.teamKills(),
@@ -2294,7 +2321,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
     // 衝撞命中(必中 primary) → combo/鬥氣累積
-    this.onComboHit(actor, time);
+    this.comboSkills.onComboHit(actor, time);
     // 衝刺命中也算一次 COMBO 連擊
     this.comboReward.hit(actor);
 
@@ -2351,403 +2378,6 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ---------------------------------------------------------------------------
-  // 爆發連招
-  // ---------------------------------------------------------------------------
-  /**
-   * 普攻命中一次的 combo/鬥氣累積。
-   * P1：走連段系統（combo++、達 4/8/12 觸發已解鎖的圓形/直線/強化爆發、到 12 歸零）+ p1AttackHits 統計。
-   * BOT：維持舊鬥氣（gainSpiritHit，滿了在 tryAct 觸發舊爆發）。
-   */
-  /** slow：combo 歸零門檻/上限 = 直線招式門檻。 */
-  private slowComboCap(): number {
-    const cfg = GameConfig.combo;
-    return cfg.slowThresholds.line; // 8
-  }
-
-  private onComboHit(c: Character, time: number): void {
-    // BOT 與 P1 無差異——連段技 combo 系統對所有角色生效(原本 BOT 只走舊 gainSpiritHit 只累積爆發鬥氣)。
-    const isP1 = c === this.player;
-    if (isP1) this.p1AttackHits++;
-    const cfg = GameConfig.combo;
-
-    // ── 慢速模式：COMBO 與能量【兩套獨立系統】，同一次命中兩條各 +1 ──
-    if (this.controlMode === 'slow') {
-      // 【A. COMBO(招式)】歸零門檻 cap = 目前【已解鎖最高階招】的門檻(無空白浪費、低階招頻繁觸發)。
-      const cap = this.slowComboCap();
-      c.spirit = Math.min(cap, c.spirit + 1);
-      const combo = c.spirit;
-      // 各招在自身門檻觸發：4圓/8氣波（爆發改為變身專屬，見 registerEmpowerAoeHit）
-      if (combo === cfg.slowThresholds.circle) this.comboCircle(c, time);
-      if (combo === cfg.slowThresholds.line) this.comboLine(c, time);
-      // 達已解鎖最高招門檻(cap) → 該輪最高招已在上面觸發 → 歸零重來
-      if (combo >= cap) c.spirit = 0;
-      // 【B. 能量(強化)】能量改【擊殺獲得】(見 grantKillEnergy),此處【不再命中+1】。
-      // 保留:被打中 -1(Character.takeDamage)、滿 trigger 改【按 Z 手動觸發】(見 tryManualEmpower),非自動。
-      if (isP1) this.emitStats();
-      return;
-    }
-
-    // ── 快速模式：一條 combo，3圓/6直/9爆發/10強化，到10歸零 ──
-    c.spirit = Math.min(cfg.max, c.spirit + 1);
-    const combo = c.spirit;
-    if (combo === cfg.thresholds.circle) {
-      this.comboCircle(c, time);
-    }
-    if (combo === cfg.thresholds.line) {
-      this.comboLine(c, time);
-    }
-    if (combo === cfg.thresholds.burst) {
-      this.triggerBurst(c, time);
-    }
-    if (combo >= cfg.thresholds.empower) {
-      this.comboEmpower(c, time);
-      c.spirit = 0;
-    }
-    if (isP1) this.emitStats();
-  }
-
-  /**
-   * 【實驗性】進入招式「表演時間」:設 skillLockUntil = now + ms → 角色定身(fast衝刺/slow走位輸入全鎖)+無敵(isInvulnerable含skillLockUntil)。
-   * enabled=false 直接跳過(整組拔掉→維持原本瞬發不鎖)。用 Math.max 避免縮短既有更長的鎖(如爆發連打)。
-   */
-  private enterPerformance(c: Character, ms: number, time: number): void {
-    if (!GameConfig.performanceTime.enabled) return;
-    c.skillLockUntil = Math.max(c.skillLockUntil, time + ms);
-    c.stopMoving();
-  }
-
-  /** 能量增加(夾在 0~max);強化期間不加(純倒退)。slow 能量系統用。 */
-  private gainEnergy(c: Character, amount: number): void {
-    if (c.empowered) return; // 強化期間純倒退,不加
-    const ecfg = GameConfig.energy;
-    c.energy = Math.min(ecfg.max, c.energy + amount);
-    if (c === this.player) this.emitStats();
-  }
-
-  /** 擊殺獲得能量——依怪種 perKill 表給量(未列用 default)。 */
-  private grantKillEnergy(c: Character, etype: string): void {
-    const ecfg = GameConfig.energy;
-    const amount = ecfg.perKill[etype] ?? ecfg.perKill.default;
-    this.gainEnergy(c, amount);
-  }
-
-  /** 按 Z 手動觸發強化(slow P1、能量滿 trigger、非強化中才可)。回傳是否觸發。 */
-  private tryManualEmpower(): boolean {
-    if (this.controlMode !== 'slow') return false;
-    const c = this.player;
-    const ecfg = GameConfig.energy;
-    if (!c || !c.alive || c.empowered) return false;
-    if (c.energy < ecfg.trigger) return false;
-    this.comboEmpower(c, this.time.now);
-    return true;
-  }
-
-  /**
-   * 階段4(改):強化期唯一招——【用現有自動鎖定選目標→打攻擊過去→以目標為中心炸圓AOE】。
-   * (a)沿用平常自動鎖定(this.lockedTarget / findNearestDamageableEnemy,同 searchRadius 範圍)選目標;無怪→不放(不進冷卻,可再按)。
-   * (b)朝目標射出衝擊投射視覺(projSpeed);(c)到達目標→以【目標位置】為中心炸圓AOE(radius,縮小)傷周圍敵人。
-   * 角色不位移(不衝刺)。
-   */
-  private empowerAoe(c: Character, time: number): void {
-    const cfg = GameConfig.combo.empower.aoe;
-    // AOE 鎖定【限角色圓圈(slow 藍圈 lockRadius)內、且只鎖敵人(徹底排除道具/非敵人)】。
-    //   ①徹底排除道具:不直接用 this.lockedTarget(那可能是道具);改自己掃 this.enemies 只取【可傷敵人】。
-    //   ②限圓圈:只考慮【距角色 ≤ lockRadius(藍圈半徑)】的敵人,圈外不鎖不打(不再用 searchRadius520)。
-    //   優先鎖【當前自動鎖定目標(若它是圈內敵人)】以維持一致,否則圈內最近的敵人。
-    const R = (this.controlMode === 'slow') ? this.slowTuning.lockRadius : GameConfig.lock.searchRadius;
-    let target: Enemy | null = null;
-    const cur = this.targeting.lockedTarget;
-    // 當前鎖定目標:必須是敵人(非道具)、可傷、且在圓圈內才沿用
-    if (cur && !this.targeting.isItem(cur)) {
-      const e = cur as Enemy;
-      if (typeof e.isVulnerable === 'function' && this.targeting.isLockableEnemy(e) &&
-          Phaser.Math.Distance.Between(c.x, c.y, e.x, e.y) <= R) {
-        target = e;
-      }
-    }
-    // 否則:掃圓圈內最近的【可傷敵人】(只敵人,絕不道具)
-    if (!target) {
-      let bestD = R * R;
-      for (const child of this.enemies.getChildren()) {
-        const e = child as Enemy;
-        if (!e.active || e.dead || !e.isVulnerable()) continue; // isVulnerable 已排除 anchor/npc;敵人群本就無道具
-        const dx = e.x - c.x, dy = e.y - c.y;
-        const d2 = dx * dx + dy * dy;
-        if (d2 <= bestD) { bestD = d2; target = e; }
-      }
-    }
-    if (!target || !target.active || target.dead) return; // 圓圈內無敵→不放(不進冷卻,可再按)
-    c.nextAttackAllowedAt = time + cfg.cooldownMs; // 放了才進冷卻
-    c.aimAngle = Phaser.Math.Angle.Between(c.x, c.y, target.x, target.y); // 面向目標
-    const tx = target.x, ty = target.y;
-    // (b) 攻擊投射視覺:從角色飛向目標
-    const proj = this.add.circle(c.x, c.y, 10, cfg.projColor, 0.95).setDepth(16);
-    proj.setStrokeStyle(3, 0xffffff, 0.9);
-    const dist = Phaser.Math.Distance.Between(c.x, c.y, tx, ty);
-    const dur = Math.max(60, (dist / cfg.projSpeed) * 1000);
-    this.tweens.add({
-      targets: proj, x: tx, y: ty, duration: dur, ease: 'Quad.easeIn',
-      onComplete: () => {
-        proj.destroy();
-        this.empowerAoeBurst(c, tx, ty, time); // (c) 目標處炸 AOE
-      }
-    });
-  }
-
-  /** 以(tx,ty)【目標位置】為中心炸圓 AOE——傷該圓內所有可傷敵人 + 擴張圈視覺 + 輕震。 */
-  private empowerAoeBurst(c: Character, tx: number, ty: number, time: number): void {
-    const cfg = GameConfig.combo.empower.aoe;
-    const radius = cfg.radius;
-    const dmg = cfg.damage * GameConfig.combo.empower.damageMult;
-    this.spawnExpandingRing(tx, ty, radius, cfg.color, cfg.ringMs);
-    this.spawnExpandingRing(tx, ty, radius * 0.6, 0xfff2a8, cfg.ringMs * 0.8);
-    this.shakeOnce(GameConfig.juice.burstShakeDuration, GameConfig.juice.burstShakeIntensity * 0.5);
-    let hitAny = false;
-    for (const child of this.enemies.getChildren()) {
-      const enemy = child as Enemy;
-      if (!enemy.isVulnerable()) continue;
-      if (Phaser.Math.Distance.Between(tx, ty, enemy.x, enemy.y) <= radius) {
-        this.damageEnemyFrom(c, enemy, dmg, cfg.knockback, tx, ty, time); // 以目標為爆心
-        hitAny = true;
-      }
-    }
-    if (hitAny) {
-      this.comboReward.hit(c); // COMBO 獎勵：變身 AOE 命中算 1 下
-      this.registerEmpowerAoeHit(c, time);
-    }
-  }
-
-  /**
-   * 慢速變身專屬爆發：記一次 AOE 命中，每滿 burstEveryAoeHits 次觸發一次爆發亂打（可重複）。
-   *
-   * @param c 施放 AOE 的角色
-   * @param time 目前時間
-   */
-  private registerEmpowerAoeHit(c: Character, time: number): void {
-    const cfg = GameConfig.combo;
-    c.empowerAoeHits++;
-    if (c.empowerAoeHits % cfg.empower.burstEveryAoeHits !== 0) return;
-    if (c.isBursting) return;
-    this.triggerBurst(c, time);
-  }
-
-  /** 連段①圓形範圍技（combo4, Lv3）：以角色為中心瞬發圓形 AOE + 擴張環（不鎖角色） */
-  private comboCircle(c: Character, time: number): void {
-    const cfg = GameConfig.combo.circle;
-    const radius = cfg.radius;
-    const dmg = cfg.damage * (c.isEmpowered(time) ? GameConfig.combo.empower.damageMult : 1);
-    this.spawnExpandingRing(c.x, c.y, radius, 0x00e5ff, 280);
-    let hitAny = false;
-    for (const child of this.enemies.getChildren()) {
-      const enemy = child as Enemy;
-      if (!enemy.isVulnerable()) continue;
-      if (Phaser.Math.Distance.Between(c.x, c.y, enemy.x, enemy.y) <= radius) {
-        this.damageEnemyFrom(c, enemy, dmg, cfg.knockback, c.x, c.y, time);
-        hitAny = true;
-      }
-    }
-    if (hitAny) this.comboReward.hit(c); // COMBO 獎勵：連段技命中算 1 下
-    this.breakableCtl.breakInCircle(c.x, c.y, radius, time); // 圓形斬掃到木箱也打破
-    this.shakeOnce(80, 0.006);
-    this.enterPerformance(c, GameConfig.performanceTime.circle, time); // 表演時間:定身無敵
-  }
-
-  /** 連段②直線範圍技（combo8, Lv6）：朝 aimAngle 瞬發直線矩形貫穿 */
-  private comboLine(c: Character, time: number): void {
-    const cfg = GameConfig.combo.line;
-    const length = cfg.length;
-    const width = cfg.width;
-    const dmg = cfg.damage * (c.isEmpowered(time) ? GameConfig.combo.empower.damageMult : 1);
-    const dir = c.aimAngle;
-    const ox = c.x;
-    const oy = c.y;
-    // 視覺：一道旋轉矩形斬擊帶
-    const band = this.add
-      .rectangle(ox + Math.cos(dir) * length / 2, oy + Math.sin(dir) * length / 2, length, width, 0xff4d6d, 0.4)
-      .setRotation(dir)
-      .setDepth(20);
-    band.setStrokeStyle(2, 0xffccd5, 0.7);
-    this.tweens.add({ targets: band, alpha: 0, duration: 300, onComplete: () => band.destroy() });
-    let hitAny = false;
-    for (const child of this.enemies.getChildren()) {
-      const enemy = child as Enemy;
-      if (!enemy.isVulnerable()) continue;
-      if (pointInOrientedRect(enemy.x, enemy.y, ox, oy, dir, 0, length, width)) {
-        this.damageEnemyFrom(c, enemy, dmg, cfg.knockback, ox, oy, time);
-        hitAny = true;
-      }
-    }
-    if (hitAny) this.comboReward.hit(c); // COMBO 獎勵：連段技命中算 1 下
-    this.breakableCtl.breakInRect(ox, oy, dir, 0, length, width, time); // 直線氣波掃到木箱也打破
-    this.shakeOnce(80, 0.006);
-    this.enterPerformance(c, GameConfig.performanceTime.line, time); // 表演時間:定身無敵
-  }
-
-  /**
-   * 限時強化。fast：empowerUntil=time+durationMs(固定時間)、光環到時自清。
-   * slow：empowered=true(能量驅動)、光環綁旗標，能量倒退到0(update)才解除。
-   */
-  private comboEmpower(c: Character, time: number): void {
-    // BOT 也用能量驅動強化(slow)——slow 判定改成「模式=slow」(不再限 P1),BOT 在 slow 也走 empowered 旗標+能量倒退解除。
-    const slow = this.controlMode === 'slow';
-    if (slow) {
-      if (c.empowered) return;
-      c.empowered = true;
-      c.empowerAoeHits = 0; // 變身專屬爆發計數：每次變身重新累積
-    } else {
-      c.empowerUntil = time + GameConfig.combo.empower.durationMs;
-    }
-    // 觸發瞬間演出
-    this.shakeOnce(GameConfig.juice.burstShakeDuration, GameConfig.juice.burstShakeIntensity);
-    this.spawnExpandingRing(c.x, c.y, 120, 0xffd700, 400);
-    // 持續整段強化的金色光環（跟隨角色、脈動），強化解除時(empowered=false)自清。
-    const aura = this.add.circle(c.x, c.y, GameConfig.player.radius + 16, 0xffd700, 0.22).setDepth(8);
-    aura.setStrokeStyle(3, 0xffe066, 0.9);
-    const pulse = this.tweens.add({
-      targets: aura,
-      scale: { from: 1, to: 1.25 },
-      alpha: 0.12,
-      duration: 400,
-      yoyo: true,
-      repeat: -1
-    });
-    // 每幀跟隨角色；強化結束(fast:empowerUntil過期 / slow:empowered=false / 角色死)自清
-    const follow = this.time.addEvent({
-      delay: 16,
-      loop: true,
-      callback: () => {
-        if (!c.isEmpowered(this.time.now) || !c.alive) {
-          pulse.remove();
-          follow.remove();
-          aura.destroy();
-          return;
-        }
-        aura.setPosition(c.x, c.y);
-      }
-    });
-    if (c === this.player) this.game.events.emit('empower-start', {});
-    this.emitStats();
-  }
-
-  private triggerBurst(c: Character, time: number): void {
-    c.isBursting = true;
-    if (GameConfig.burst.invuln) {
-      c.invulnUntil = time + GameConfig.burst.hits * GameConfig.burst.intervalMs + 300;
-    }
-    // 表演時間:爆發鎖定+無敵延長到 performanceTime.burst(如2秒)——連打(~880ms)結束後仍站著定身無敵至2秒。
-    this.enterPerformance(c, GameConfig.performanceTime.burst, time);
-    c.stopMoving();
-
-    if (c === this.player) {
-      this.game.events.emit('burst-start');
-    }
-    // 只有爆發時震動，且同時間最多一個（guarded）
-    this.shakeOnce(
-      GameConfig.juice.burstShakeDuration,
-      GameConfig.juice.burstShakeIntensity
-    );
-
-    let hitCount = 0;
-    let comboCounted = false; // COMBO 獎勵：爆發整招只算 1 下（第一次有段命中時計入）
-    const burstTimer = this.time.addEvent({
-      delay: GameConfig.burst.intervalMs,
-      repeat: GameConfig.burst.hits - 1,
-      callback: () => {
-        if (this.burstTick(c) && !comboCounted) {
-          comboCounted = true;
-          this.comboReward.hit(c);
-        }
-        hitCount++;
-        if (hitCount >= GameConfig.burst.hits) this.endBurst(c);
-      }
-    });
-
-    this.time.delayedCall(
-      GameConfig.burst.hits * GameConfig.burst.intervalMs + 500,
-      () => {
-        if (c.isBursting) {
-          burstTimer.remove(false);
-          this.endBurst(c);
-        }
-      }
-    );
-  }
-
-  /** 爆發的單段攻擊。@returns 這段是否命中至少一隻敵人 */
-  private burstTick(c: Character): boolean {
-    if (this.gameOver || !c.alive) return false;
-    const time = this.time.now;
-    const radius = GameConfig.burst.radius;
-    const children = this.enemies.getChildren();
-    let hitAny = false;
-    for (const child of children) {
-      const enemy = child as Enemy;
-      if (!enemy.isVulnerable()) continue;
-      const dist = Phaser.Math.Distance.Between(c.x, c.y, enemy.x, enemy.y);
-      if (dist <= radius) {
-        this.damageEnemy(c, enemy, GameConfig.burst.damagePerHit, GameConfig.burst.knockback, time);
-        hitAny = true;
-      }
-    }
-    this.breakableCtl.breakInCircle(c.x, c.y, radius, time); // 爆發掃到木箱也打破
-    // 這段有打中敵人 → 觸發極短 hitstop（破頓）+ 命中閃白/小震動強化打擊感
-    // hitstop=physics.world.pause() 全域暫停物理(含P1)→只在【施放者=P1】時觸發,
-    //   否則 BOT 爆發的 hitstop 會反覆 pause 物理把 P1 也凍住(=「BOT爆發停P1」bug)。
-    //   P1 自己爆發時本在定身表演中,hitstop 只給 P1 打擊手感、不影響操控。閃白/震動維持(純視覺)。
-    if (hitAny) {
-      if (c === this.player) this.triggerHitstop(GameConfig.burst.hitstopMs);
-      this.flashWhite(c);
-      this.shakeOnce(60, 0.006);
-    }
-    const ox = Phaser.Math.Between(-radius / 2, radius / 2);
-    const oy = Phaser.Math.Between(-radius / 2, radius / 2);
-    this.spawnSlashEffect(c.x + ox, c.y + oy);
-    return hitAny;
-  }
-
-  /**
-   * 極短命中頓感（hitstop）——短暫暫停物理世界(敵人/位移凝滯)，用真實時鐘(setTimeout)恢復，
-   * 不動 time.timeScale（避免拖慢爆發本身的 delayedCall 節奏），不會卡死。重疊呼叫只延長恢復時間。
-   */
-  private hitstopRestoreAt = 0;
-  private hitstopActive = false;
-  private triggerHitstop(ms: number): void {
-    if (ms <= 0 || this.gameOver) return;
-    if (!this.hitstopActive) {
-      this.hitstopActive = true;
-      this.physics.world.pause();
-    }
-    const until = Date.now() + ms;
-    if (until > this.hitstopRestoreAt) this.hitstopRestoreAt = until;
-    const restore = (): void => {
-      const remain = this.hitstopRestoreAt - Date.now();
-      if (remain > 0) {
-        setTimeout(restore, remain);
-        return;
-      }
-      try {
-        if (this.hitstopActive && this.physics && this.physics.world) {
-          this.physics.world.resume();
-        }
-      } catch (_e) {
-        /* scene 可能已停用，忽略 */
-      }
-      this.hitstopActive = false;
-    };
-    setTimeout(restore, ms);
-  }
-
-  private endBurst(c: Character): void {
-    if (!c.isBursting) return;
-    c.isBursting = false;
-    // P1 的 combo 由 onComboHit 管理(到10才歸零)，爆發(combo9)結束不可清 combo，
-    // 否則永遠到不了 combo10 的限時強化。只有 BOT(舊鬥氣爆發)在此歸零。
-    if (c !== this.player) c.spirit = 0;
-    c.stopMoving();
-    if (c === this.player) this.game.events.emit('burst-end');
-  }
-
-  // ---------------------------------------------------------------------------
   // 傷害 / 擊殺
   // ---------------------------------------------------------------------------
   /**
@@ -2787,7 +2417,7 @@ export class GameScene extends Phaser.Scene {
       this.bossCtl.onBossHit(actor, enemy, dmg, time);
       if (this.controlMode === 'slow' && !enemy.dead) {
         const ecfg = GameConfig.energy;
-        if (!this.player.empowered && Math.random() < ecfg.bossHitChance) this.gainEnergy(this.player, ecfg.bossHitAmount);
+        if (!this.player.empowered && Math.random() < ecfg.bossHitChance) this.comboSkills.gainEnergy(this.player, ecfg.bossHitAmount);
       }
     }
     enemy.applyKnockback(fromX, fromY, knockback, time);
@@ -2809,7 +2439,7 @@ export class GameScene extends Phaser.Scene {
       actor.kills++;
       this.onWaveKill();
       this.spawnDeathBurst(dx, dy);
-      if (this.controlMode === 'slow') this.grantKillEnergy(this.player, etype);
+      if (this.controlMode === 'slow') this.comboSkills.grantKillEnergy(this.player, etype);
       if (Math.random() < GameConfig.items.dropChance) this.dropItemAt(dx, dy, time);
     }
   }
@@ -2914,10 +2544,7 @@ export class GameScene extends Phaser.Scene {
   private triggerGameOver(): void {
     this.gameOver = true;
     // 確保 hitstop 沒把物理留在暫停狀態
-    if (this.hitstopActive) {
-      try { this.physics.world.resume(); } catch (_e) { /* ignore */ }
-      this.hitstopActive = false;
-    }
+    this.comboSkills.releaseHitstop();
     for (const c of this.characters) c.stopMoving();
 
     const stats = {
@@ -3039,7 +2666,7 @@ export class GameScene extends Phaser.Scene {
       controlMode: this.controlMode,
       combo: this.player.spirit,
       // slow：combo 上限=已解鎖最高招門檻(3/6/9)；fast=10
-      comboMax: this.controlMode === 'slow' ? this.slowComboCap() : GameConfig.combo.max,
+      comboMax: this.controlMode === 'slow' ? this.comboSkills.slowComboCap : GameConfig.combo.max,
       comboThresholds: GameConfig.combo.thresholds,
       // fast 強化倒數(slow 不用)
       empowerRemainMs: Math.max(0, this.player.empowerUntil - this.time.now),
