@@ -2083,22 +2083,27 @@ export class GameScene extends Phaser.Scene {
     // 開放側的走廊(填滿不露黑)
     if (openR) this.drawCorridorScene('R');
     if (openL) this.drawCorridorScene('L');
-    if (openL) this.goIndicator.show('L');
-    if (openR) this.goIndicator.show('R');
     // 引導箭頭(純視覺提示往左/右可走;非碰箭頭觸發——玩家仍需走到 A 左/右緣才觸發過場)。
     this.drawCrossingArrows();
   }
 
-  /** 左右引導箭頭(純視覺):比照【出口 showExit 的 drawArrow 表現】(適中三角+白圈,size34,統一風格),A 左右緣左/右箭頭。觸發鎖定側後隱藏。 */
+  /** 畫 A 左右緣開放方向的引導箭頭（純視覺，玩家仍需走到邊緣才觸發）並在箭頭上方顯示 GO；開始平移時隱藏 */
   private drawCrossingArrows(): void {
     this.clearCrossArrows();
     const g = this.add.graphics().setDepth(20).setScrollFactor(1);
     const a = this.arena;
     const midY = a.centerY;
     const inset = GameConfig.stage.arrowInset;
-    // 比照 showExit:同一個 drawArrow(三角 s34 + 白描邊圈 r48),風格一致、適中大小。
-    if (this.crossAllowed.L) this.drawArrow(g, a.left + inset, midY, -1, 0x7affc0);   // 左箭頭指左(同出口色系)
-    if (this.crossAllowed.R) this.drawArrow(g, a.right - inset, midY, +1, 0x7affc0);  // 右箭頭指右
+    // 與上方出口共用 drawArrow 樣式；箭頭正上方顯示 GO
+    const ring = GameConfig.stage.guideArrow.size + GameConfig.stage.guideArrow.ringPad;
+    if (this.crossAllowed.L) {
+      this.drawArrow(g, a.left + inset, midY, Math.PI);
+      this.goIndicator.show('L', a.left + inset, midY, ring);
+    }
+    if (this.crossAllowed.R) {
+      this.drawArrow(g, a.right - inset, midY, 0);
+      this.goIndicator.show('R', a.right - inset, midY, ring);
+    }
     this.choiceGfx = g;
   }
 
@@ -2421,21 +2426,31 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  /** 畫一個三角箭頭(dir=+1 右 / -1 左)。 */
-  private drawArrow(g: Phaser.GameObjects.Graphics, x: number, y: number, dir: number, color: number): void {
+  /**
+   * 畫一個出口引導箭頭（左 / 右 / 上共用樣式）：三角形 + 白色外圈
+   *
+   * @param g 畫在哪個 graphics
+   * @param x 圓心 x
+   * @param y 圓心 y
+   * @param angle 箭頭指向（弧度；0 = 右、π = 左、-π/2 = 上）
+   */
+  private drawArrow(g: Phaser.GameObjects.Graphics, x: number, y: number, angle: number): void {
+    const { size: s, ringPad, color } = GameConfig.stage.guideArrow;
+    const c = Math.cos(angle), sn = Math.sin(angle);
+    // 尖端朝 angle；底邊在反方向 s 處，沿垂直方向 ±s
+    const bx = x - c * s, by = y - sn * s;
     g.fillStyle(color, 0.9);
-    const s = 34;
     g.beginPath();
-    g.moveTo(x + dir * s, y);
-    g.lineTo(x - dir * s, y - s);
-    g.lineTo(x - dir * s, y + s);
+    g.moveTo(x + c * s, y + sn * s);
+    g.lineTo(bx + sn * s, by - c * s);
+    g.lineTo(bx - sn * s, by + c * s);
     g.closePath();
     g.fillPath();
     g.lineStyle(4, 0xffffff, 0.8);
-    g.strokeCircle(x, y, s + 14);
+    g.strokeCircle(x, y, s + ringPad);
   }
 
-  /** 開上方出口：玩家走進 → 閃黑到新區域（畫面上緣顯示 GO） */
+  /** 開上方出口：玩家走進 → 閃黑到新區域（門下方畫與左右相同樣式的向上引導箭頭，箭頭上方顯示 GO） */
   private showExit(): void {
     if (this.exitGfx) this.exitGfx.destroy();
     const g = this.add.graphics().setDepth(20);
@@ -2447,16 +2462,12 @@ export class GameScene extends Phaser.Scene {
     g.fillRect(a.centerX - 60, ey - 16, 120, 32);
     g.lineStyle(4, 0xffffff, 0.8);
     g.strokeRect(a.centerX - 60, ey - 16, 120, 32);
-    // 向上箭頭（門的下方，指向門）
-    g.fillStyle(0x7affc0, 0.9);
-    g.beginPath();
-    g.moveTo(a.centerX, ey + 30);
-    g.lineTo(a.centerX - 22, ey + 58);
-    g.lineTo(a.centerX + 22, ey + 58);
-    g.closePath();
-    g.fillPath();
+    // 向上引導箭頭（門的下方，指向門）
+    const arrow = GameConfig.stage.guideArrow;
+    const ay = ey + arrow.exitArrowOffset;
+    this.drawArrow(g, a.centerX, ay, -Math.PI / 2);
     this.exitGfx = g;
-    this.goIndicator.show('U');
+    this.goIndicator.show('U', a.centerX, ay, arrow.size + arrow.ringPad);
   }
 
   /** choosing 階段每幀:偵測玩家走到左/右箭頭 → 記錄選邊 → 平移到 B。 */

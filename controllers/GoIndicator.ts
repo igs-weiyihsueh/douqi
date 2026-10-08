@@ -5,8 +5,8 @@ import { GameConfig } from '../config';
 export type GoDirection = 'L' | 'R' | 'U';
 
 /**
- * 出口開啟時的「GO」指示：固定在畫面邊緣（左 / 右 / 上，對應開啟的出口），隨鏡頭移動永遠在視野內，
- * 持續閃動發光吸引玩家注意。開始轉場時由場景隱藏
+ * 出口開啟時的「GO」指示：顯示在對應方向引導箭頭的正上方（世界座標，跟著箭頭），
+ * 文字本身持續閃動發光吸引玩家注意。開始轉場時由場景隱藏
  */
 export class GoIndicator {
   private readonly labels = new Map<GoDirection, Phaser.GameObjects.Text>();
@@ -14,22 +14,24 @@ export class GoIndicator {
   constructor(private readonly scene: Phaser.Scene) {}
 
   /**
-   * 顯示某方向的 GO（已顯示則不重建）
+   * 在引導箭頭正上方顯示某方向的 GO（已顯示則不重建）
    *
    * @param dir 出口方向
+   * @param arrowX 引導箭頭圓心 x（世界座標）
+   * @param arrowY 引導箭頭圓心 y（世界座標）
+   * @param arrowRadius 引導箭頭外圈半徑
    */
-  show(dir: GoDirection): void {
+  show(dir: GoDirection, arrowX: number, arrowY: number, arrowRadius: number): void {
     if (this.labels.has(dir)) return;
     const cfg = GameConfig.stage.goIndicator;
-    const pos = dir === 'L' ? { x: cfg.edgeInset, y: GameConfig.height / 2 }
-      : dir === 'R' ? { x: GameConfig.width - cfg.edgeInset, y: GameConfig.height / 2 }
-        : { x: GameConfig.width / 2, y: cfg.topY };
-    const label = this.scene.add.text(pos.x, pos.y, 'GO', {
+    // 文字畫布四周留出光暈半徑的空間，避免陰影被畫布邊界切掉而出現方框
+    const pad = cfg.glowBlur + cfg.strokeThickness;
+    const label = this.scene.add.text(arrowX, arrowY - arrowRadius - cfg.gapAboveArrow + pad, 'GO', {
       fontFamily: 'monospace', fontSize: cfg.fontSize, color: cfg.color,
-      stroke: cfg.strokeColor, strokeThickness: cfg.strokeThickness, fontStyle: 'bold'
+      stroke: cfg.strokeColor, strokeThickness: cfg.strokeThickness, fontStyle: 'bold',
+      padding: { x: pad, y: pad }
     })
-      .setOrigin(0.5)
-      .setScrollFactor(0) // 固定在畫面上，鏡頭移動時仍在同一個螢幕位置
+      .setOrigin(0.5, 1) // 底部置中對齊箭頭上方（底部 padding 已算進位置）
       .setDepth(cfg.depth)
       .setShadow(0, 0, cfg.glowColor, cfg.glowBlur, true, true);
     // 閃動發光：透明度與大小同步脈動
