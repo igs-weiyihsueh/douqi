@@ -17,6 +17,7 @@ import { HiddenGateController } from '../controllers/HiddenGateController';
 import { TreasureRoomController } from '../controllers/TreasureRoomController';
 import { PerfOverlay } from '../controllers/PerfOverlay';
 import { SkillController, type SkillHost } from '../controllers/SkillController';
+import { EventController, type EventHost, type EventKind } from '../controllers/EventController';
 import { pointInOrientedRect } from '../systems/geometry';
 import {
   applyEnemySeparationSteering, bounceEnemyOffBounds, joinsEnemySeparation,
@@ -145,46 +146,15 @@ export class GameScene extends Phaser.Scene {
   private corridorGfxL: Phaser.GameObjects.Graphics | null = null;
   private levelBanner: Phaser.GameObjects.Text | null = null;     // 關卡標題
   private treasureBanner: Phaser.GameObjects.Text | null = null;  // 寶箱怪出現提示橫幅
-  // 事件波開場宣告(階段1):雙段大字+右滑出+時序gate+鎖操作。
-  private eventIntroActive = false;
-  private eventIntroStage: 'introMove' | 'unified' | 'perEvent' | 'done' = 'done';
-  private eventIntroStageEndsAt = 0;   // 當前段(顯示滿)結束時間戳→觸發滑出
-  private eventIntroSlideDone = false; // 當前段是否已觸發滑出
-  private eventIntroHardEndsAt = 0;    // 逾時保底:整段開場強制結束時間戳
-  private eventIntroBanner: Phaser.GameObjects.Text | null = null;
-  private pendingEventKind: 'tower' | 'guard' | 'capture' | null = null;
-  // 階段3:角色自動走位到目標(introMove,仿 updateLevelEnter)
-  private eventIntroWalkEndsAt = 0;    // 走位逾時保底時間戳(到時 snap 到位推進)
-  // 階段2:聚焦(pan+壓黑+凍敵定格)
-  private eventFocusPause = false;                       // 獨立凍敵定格旗標(不借 timeStopped)
-  private eventFocusPanning = false;                     // pan 進行中(pan 完才開壓黑/開始 focus 計時)
-  private eventFocusDim: Phaser.GameObjects.Rectangle | null = null;   // 全螢幕壓黑遮罩
-  private eventFocusGlow: Phaser.GameObjects.Arc | null = null;        // 目標亮暈(暖光暈)
-  private eventFocusTarget: Phaser.GameObjects.Components.Depth | null = null; // 被聚焦目標(提 depth)
-  private eventFocusTargetDepth = 0;                     // 目標原 depth(還原用)
   private sceneLayers: Phaser.GameObjects.GameObject[] = [];      // 第二階段:場景繪製物件(重繪時清掉)
 
   /** BOSS 系統（登場 / 招式 / 亂入離場 / 屍體 / 變身），每次 create() 重建 */
   private bossCtl!: BossController;
   /** 一次性招式（撿道具觸發），每次 create() 重建 */
   private skillCtl!: SkillController;
+  /** 限時事件（塔 / 守護 / 佔領，含開場演出），每次 create() 重建 */
+  private eventCtl!: EventController;
 
-  // 事件系統
-  private eventKind: 'tower' | 'guard' | 'capture' | null = null;
-  private tower: Enemy | null = null;  private towerNextBlastAt = 0;
-  private towerNextSpawnAt = 0;
-  private towerBeamGroup = 0; // 塔光束交替兩組方向（0/1）
-  private towerEndsAt = 0; // 塔事件限時倒數截止時間戳(限時內未打掉塔=失敗進下一波)
-  private guardNpc: Enemy | null = null;
-  private guardHighlight: Phaser.GameObjects.Graphics | null = null;
-  private guardEndsAt = 0;
-  private guardNextSpawnAt = 0;
-  /** 守護【純時間間隔+循環】:guardWaveIdx 只用來選波種(% waves.length),不當結束依據。 */
-  private guardWaveIdx = 0;
-  /** 混合出波:當前波是否已生成(true=已生,才啟動清空判定,防生成幀 countGuardWaveAlive==0 誤觸)。 */
-  private guardWaveActive = false;
-  /** 線性遞增:全場累計出波次數(不重置);spawnGuardWave 用來算 perSide 加成。 */
-  private guardGlobalWaveCount = 0;
   // 寶箱怪:場上同時只 1 隻(有則不再生);null=場上無寶箱怪
   private treasureEnemy: Enemy | null = null;
   /** 獎勵關中的寶箱怪（可同時多隻、不限時，時間到統一離場），每次 create() 重建 */
@@ -192,13 +162,6 @@ export class GameScene extends Phaser.Scene {
   // ③ 寶箱怪金光加強:發光圈(脈動 halo)+ 金色粒子環繞
   private treasureGlow: Phaser.GameObjects.Graphics | null = null;
   private treasureEmitter: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
-  private captureProgress = 0; // 0~100
-  private captureGfx: Phaser.GameObjects.Graphics | null = null;
-  private captureCx = 0;
-  private captureCy = 0;
-  private captureWaveActive = false; // 目前是否有一波怪在場上待清
-  private captureNextWaveAt = 0;     // 清完一波後、下一波生成時間
-  private captureEndsAt = 0;         // 佔領時限截止時間
 
   // 玩家輸入
   private attackKey!: Phaser.Input.Keyboard.Key;
@@ -241,10 +204,6 @@ export class GameScene extends Phaser.Scene {
   private timeStopOwner: Character | null = null;
   /** 時停開始時間戳，用於解除時把敵人蓄力時間戳整批後移（凍結進度不流失） */
   private timeStopStartedAt = 0;
-  
-  /** 事件系統動態難度調整 - 進入事件時鎖定的玩家數量和難度係數 */
-  private eventPlayerCount = 1;
-  private eventDifficultyMultiplier = 1.0;
   
   /**
    * 場景層級蓄力/預警特效登記表（塔扇形、BOSS 招 fill）。
@@ -340,6 +299,7 @@ export class GameScene extends Phaser.Scene {
     });
     this.bossCtl = new BossController(this.createBossHost());
     this.skillCtl = new SkillController(this.createSkillHost());
+    this.eventCtl = new EventController(this.createEventHost());
     this.goIndicator = new GoIndicator(this);
     new PerfOverlay(this); // 除錯 F9：實機效能監控（自行註冊熱鍵與場景關閉時的清理）
     this.hiddenGate = new HiddenGateController(this);
@@ -556,30 +516,10 @@ export class GameScene extends Phaser.Scene {
     if (this.exitGfx) { this.exitGfx.destroy(); this.exitGfx = null; }
     this.clearCrossArrows();
     if (this.levelBanner) { this.levelBanner.destroy(); this.levelBanner = null; }
-    this.eventKind = null;
-    // 事件開場宣告狀態重置(防殘留/鎖操作卡死)
-    this.eventIntroActive = false;
-    this.eventIntroStage = 'done';
-    this.eventIntroSlideDone = false;
-    this.pendingEventKind = null;
-    if (this.eventIntroBanner) { this.eventIntroBanner.destroy(); this.eventIntroBanner = null; }
-    // 階段2聚焦殘留清除
-    this.eventFocusPause = false;
-    this.eventFocusPanning = false;
-    this.eventFocusTarget = null;
-    if (this.eventFocusDim) { this.eventFocusDim.destroy(); this.eventFocusDim = null; }
-    if (this.eventFocusGlow) { this.eventFocusGlow.destroy(); this.eventFocusGlow = null; }
-    this.tower = null;
     this.treasureEnemy = null; // 寶箱怪:重開清參照(敵人群由 resetState 其他處清)
     if (this.treasureBanner) { this.treasureBanner.destroy(); this.treasureBanner = null; }
     this.pendingEventComplete = false;
     this.pendingSubZoneComplete = false; // 重開清延後切換旗標
-    this.guardNpc = null;
-    if (this.guardHighlight) { this.guardHighlight.destroy(); this.guardHighlight = null; }
-    if (this.captureGfx) { this.captureGfx.destroy(); this.captureGfx = null; }
-    this.captureProgress = 0;
-    this.captureWaveActive = false; // v39
-    this.towerBeamGroup = 0;        // v39
   }
 
   /** 本波是否為 BOSS 波 */
@@ -610,7 +550,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** 本波輪到哪個事件——第3關→tower、第5關→guard、第7關→capture（依 eventWaves 順序輪替） */
-  private eventKindForWave(wave: number): 'tower' | 'guard' | 'capture' {
+  private eventKindForWave(wave: number): EventKind {
     const per = GameConfig.wave.wavesPerCycle;
     const pos = ((wave - 1) % per) + 1;
     const idx = Math.max(0, (GameConfig.wave.eventWaves as readonly number[]).indexOf(pos));
@@ -687,17 +627,6 @@ export class GameScene extends Phaser.Scene {
     this.createCharacter(index, true);
   }
 
-  /** 事件系統：偵測目前存活的角色數量（用於動態難度調整） */
-  private getAliveCharacterCount(): number {
-    return this.characters.filter(c => c.alive).length;
-  }
-
-  /** 事件系統：根據玩家數量計算難度係數 */
-  private calculateEventDifficultyMultiplier(playerCount: number): number {
-    const multipliers = GameConfig.event.dynamicDifficulty.playerCountMultipliers;
-    return multipliers[playerCount] ?? multipliers[1] ?? 1.0; // 預設單人難度
-  }
-
   update(time: number, delta: number): void {
     if (this.gameOver) return;
 
@@ -709,12 +638,11 @@ export class GameScene extends Phaser.Scene {
     // 階段三：更新COMBO計時系統
     this.updateComboTimers();
 
-    // 事件波開場宣告(階段1):eventIntroActive 期間【鎖操作+凍事件生怪】,只跑開場大字時序 + 標記重繪。
-    //   序列跑完(或逾時保底)finishEventIntro→beginEventCombat 才啟動事件計時/生怪。
-    if (this.eventIntroActive) {
-      this.updateEventIntro(time, delta);
-      // 階段3:introMove 走位段由 updateEventIntroWalk 驅動位置(不清零覆蓋);其餘段角色停在原地(鎖操作)。
-      if (this.eventIntroStage !== 'introMove') {
+    // 事件開場演出期間鎖操作、事件不計時也不生怪，只推進演出並重繪標記；演出結束（或逾時）才開戰
+    if (this.eventCtl.isIntroActive) {
+      this.eventCtl.updateIntro(time, delta);
+      // 走位段由事件控制器移動角色（不清零速度）；其餘階段角色停在原地
+      if (!this.eventCtl.isIntroWalking) {
         for (const c of this.characters) {
           if (!c.alive) continue;
           (c.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
@@ -780,9 +708,7 @@ export class GameScene extends Phaser.Scene {
         }
         for (const fx of this.telegraphFx) fx.tween?.resume();
         // 塔/BOSS 場景層發招排程時間戳後移
-        if (this.towerNextBlastAt > 0) this.towerNextBlastAt += frozenDur;
-        if (this.towerNextSpawnAt > 0) this.towerNextSpawnAt += frozenDur;
-        if (this.guardNextSpawnAt > 0) this.guardNextSpawnAt += frozenDur;
+        this.eventCtl.onTimeStopEnd(frozenDur);
         this.bossCtl.onTimeStopEnd(frozenDur); // 亂入 BOSS 的離場倒數也凍結
         this.treasureRoom.onTimeStopEnd(frozenDur); // 獎勵關倒數也凍結
         // ④ 寶箱怪時間戳(跑點停頓/出生限時)也後移,凍結期間不流失(否則暫停後跑點/限時錯亂)
@@ -830,7 +756,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.handleSpawning(delta);
-    if (this.waveState === 'event') this.updateEvent(time);
+    if (this.waveState === 'event') this.eventCtl.update(time);
     this.bossCtl.update(time);
     this.treasureRoom.update(time);
     this.updateEnemies(time);
@@ -838,7 +764,8 @@ export class GameScene extends Phaser.Scene {
     this.updateRoomTreasures(time);
     this.finishPendingSubZoneIfTreasureGone(); // 延後的場景切換:寶箱怪死/離場後才開啟
     // 守護事件——怪移動後把怪推回守護目標外圈(不疊上去);玩家仍可穿越。放 updateEnemies 之後→怪這幀先移動再被推出,渲染前已在外緣。
-    if (this.waveState === 'event' && this.eventKind === 'guard' && this.guardNpc) pushEnemiesOutOfNpc(this.guardNpc, this.enemies, this.arena);
+    const guardNpc = this.eventCtl.guardNpc;
+    if (this.waveState === 'event' && this.eventCtl.kind === 'guard' && guardNpc) pushEnemiesOutOfNpc(guardNpc, this.enemies, this.arena);
     this.updateItems(delta, time);
     updateBreakableMotion(this.breakables, this.arena, delta); // 可推動物件的位移 / 摩擦 / 邊界 / 互推
     this.updateBullets(time);
@@ -1714,7 +1641,7 @@ export class GameScene extends Phaser.Scene {
       if (!e.active || !e.isAnchorLike()) continue;
       // 守護目標 NPC 可被衝刺【穿越】——不當作攔停落點（其他 anchor：塔走位錨點/佔領錨點 維持攔停）。
       //      讓玩家站 NPC 一側、敵人在另一側時，瞄敵人衝刺能穿過 NPC 打到後方的敵人，而非被 NPC 外緣攔停。
-      if (e === this.guardNpc) continue;
+      if (e === this.eventCtl.guardNpc) continue;
       const reach = e.getBodyRadius() + GameConfig.player.radius + extra;
       const d = Phaser.Math.Distance.Between(c.x, c.y, e.x, e.y);
       // 站在(或極貼近)某 anchor 上時，該 anchor 不當作攔停點——玩家正要離開它衝往他處
@@ -1782,9 +1709,10 @@ export class GameScene extends Phaser.Scene {
    */
   private resolveEnemyTarget(enemy: Enemy, time: number): Character | { x: number; y: number } | null {
     // ① 事件覆寫(最高優先):守護事件期間一般怪打 NPC
-    if (this.waveState === 'event' && this.eventKind === 'guard' && this.guardNpc && this.guardNpc.active &&
+    const guardNpc = this.eventCtl.guardNpc;
+    if (this.waveState === 'event' && this.eventCtl.kind === 'guard' && guardNpc && guardNpc.active &&
         !isFixedEnemy(enemy)) {
-      return this.guardNpc;
+      return guardNpc;
     }
     // ② 黏著綁定
     const cfg = GameConfig.enemySticky;
@@ -2015,7 +1943,7 @@ export class GameScene extends Phaser.Scene {
       } else if (this.isEventWave(this.currentWave)) {
         // 事件波：小怪清完 → 啟動事件（完成才過關）
         this.waveState = 'event';
-        this.startEvent(this.eventKindForWave(this.currentWave));
+        this.eventCtl.start(this.eventKindForWave(this.currentWave));
       } else {
         this.enterIntermission();
       }
@@ -3043,315 +2971,68 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ===========================================================================
-  // 事件系統（塔 / 守護 / 佔領）——仿 BOSS 波：清完小怪→啟動事件→完成才過關
+  // 限時事件（塔 / 守護 / 佔領）：事件本身在 EventController，這裡是場景提供的能力與事件結束後的接續
   // ===========================================================================
-  private startEvent(kind: 'tower' | 'guard' | 'capture'): void {
-    this.eventKind = kind;
-    const now = this.time.now;
-    
-    // 人數偵測與難度設定 - 在事件開始時鎖定難度，中途不再調整
-    this.eventPlayerCount = this.getAliveCharacterCount();
-    this.eventDifficultyMultiplier = this.calculateEventDifficultyMultiplier(this.eventPlayerCount);
-    
-    if (kind === 'tower') {
-      const cfg = GameConfig.event.tower;
-      // 塔血量根據人數調整
-      const baseHpMult = 1 + (this.currentWave - 1) * cfg.hpGrowthPerWave;
-      const adjustedHpMult = baseHpMult * this.eventDifficultyMultiplier;
-      const tx = this.arena.centerX;
-      const ty = this.arena.centerY;
-      const t = this.enemies.get(tx, ty) as Enemy | null;
-      if (t) {
-        this.wireEnemyCallbacks(t);
-        t.spawn(tx, ty, now, 'tower', adjustedHpMult);
-        (t as unknown as { telegraphing: boolean }).telegraphing = false;
-        (t.body as Phaser.Physics.Arcade.Body).enable = true;
-        t.setAlpha(1);
-        this.tower = t;
-      }
-      this.towerBeamGroup = 0;
-    } else if (kind === 'guard') {
-      const nx = this.arena.centerX;
-      const ny = this.arena.centerY;
-      const n = this.enemies.get(nx, ny) as Enemy | null;
-      if (n) {
-        this.wireEnemyCallbacks(n);
-        n.spawn(nx, ny, now, 'npc', 1);
-        (n as unknown as { telegraphing: boolean }).telegraphing = false;
-        (n.body as Phaser.Physics.Arcade.Body).enable = true;
-        n.setAlpha(1);
-        n.setDepth(11); // 守護NPC depth 提到怪(depth5)之上→被怪群包圍時仍看得到,不被貼圖蓋住
-        this.guardNpc = n;
-        // 守護NPC高亮環(青色描邊,每幀跟隨),被包圍也一眼可辨
-        if (this.guardHighlight) this.guardHighlight.destroy();
-        this.guardHighlight = this.add.graphics().setDepth(10);
-      }
-    } else {
-      this.captureCx = this.arena.centerX;
-      this.captureCy = this.arena.centerY;
-      this.captureProgress = 0;
-      this.captureWaveActive = false;   // v39
-      this.captureGfx = this.add.graphics().setDepth(3);
-    }
-    // 事件開場宣告序列:生目標後【先跑開場(雙段大字+滑出),不啟動事件計時/生怪】,序列結束才 beginEventCombat。
-    this.startEventIntro(kind);
-  }
 
   /**
-   * 事件波開場宣告(階段1):雙段大字+右滑出+鎖操作 gate。
-   * 第一段統一大字「限時事件來了!」→顯示→右滑出;第二段各事件訊息(聚焦stub計時)→顯示→右滑出;
-   * 兩段完 finishEventIntro→beginEventCombat(啟動計時/生怪)。逾時保底 eventIntroHardEndsAt 防卡死。
+   * 建立 EventController 需要的場景能力（只開放事件系統用得到的部分）
    */
-  private startEventIntro(kind: 'tower' | 'guard' | 'capture'): void {
-    const cfg = GameConfig.event.intro;
-    const now = this.time.now;
-    this.pendingEventKind = kind;
-    this.eventIntroActive = true;
-    this.eventIntroHardEndsAt = now + cfg.maxIntroSec * 1000; // 逾時保底
-    this.emitEventHud(); // 清 HUD(事件尚未真正開始)
-    this.startEventIntroWalk(); // 階段3:先角色自動走到目標周圍→再大字/聚焦
+  private createEventHost(): EventHost {
+    return {
+      scene: this,
+      enemies: this.enemies,
+      arena: () => this.arena,
+      currentSlot: () => this.currentSlotRect(),
+      characters: () => this.characters,
+      player: () => this.player,
+      currentWave: () => this.currentWave,
+      isGameOver: () => this.gameOver,
+      wireEnemyCallbacks: (e) => this.wireEnemyCallbacks(e),
+      addTelegraph: (fx) => { this.telegraphFx.push(fx); },
+      removeTelegraph: (fx) => this.removeTelegraphFx(fx),
+      clearTelegraphsOf: (owner) => this.clearTelegraphsOf(owner),
+      damageCharacter: (c, amount, fromX, fromY, rootMs) => this.damageCharacterFrom(c, amount, fromX, fromY, rootMs),
+      spawnSummonAt: (x, y, time, forceType, leashImmune, forceChase) => this.spawnSummonAt(x, y, time, forceType, leashImmune, forceChase),
+      flashEnemy: (e) => this.flashEnemy(e),
+      dropItemAt: (x, y, time) => this.dropItemAt(x, y, time),
+      shakeOnce: (duration, intensity) => this.shakeOnce(duration, intensity),
+      showEventBanner: (text) => this.showEventBanner(text),
+      enableFollow: (slot) => this.enableFollow(slot),
+      onEventEnded: () => this.onEventEnded()
+    };
   }
 
-  /** 階段3:進 introMove 走位段——全隊自動走到目標(arena.center)周圍定位;到位/逾時→進統一大字。 */
-  private startEventIntroWalk(): void {
-    const cfg = GameConfig.event.intro;
-    this.eventIntroStage = 'introMove';
-    this.eventIntroSlideDone = false;
-    this.eventIntroWalkEndsAt = this.time.now + cfg.maxWalkSec * 1000; // 走位逾時保底
-  }
-
-  /** 階段3每幀:全隊朝目標(arena.center)周圍環狀定位走(仿 updateLevelEnter);全到位 or 逾時→snap→進統一大字。 */
-  private updateEventIntroWalk(delta: number): void {
-    const cfg = GameConfig.event.intro;
-    const speed = cfg.walkSpeed;
-    const step = speed * (delta / 1000);
-    const cx = this.arena.centerX, cy = this.arena.centerY; // 目標=事件目標物(生在 arena 中心)
-    const R = cfg.walkRingPx;
-    const slotOf = (i: number) => { const ang = -Math.PI / 2 + i * (Math.PI / 2); return { x: cx + Math.cos(ang) * R, y: cy + Math.sin(ang) * R }; };
-    const timedOut = this.time.now >= this.eventIntroWalkEndsAt;
-    let allArrived = true;
-    for (let i = 0; i < this.characters.length; i++) {
-      const c = this.characters[i];
-      if (!c.alive) continue;
-      const t = slotOf(i); // 全員環繞目標 R,正中心留給目標物
-      const dx = t.x - c.x, dy = t.y - c.y;
-      const dist = Math.hypot(dx, dy);
-      if (timedOut) { c.x = t.x; c.y = t.y; c.aimAngle = Math.atan2(cy - c.y || -1, cx - c.x || 0); } // 逾時 snap 到位
-      else if (dist > 4) {
-        allArrived = false;
-        const mv = Math.min(step, dist);
-        c.x += (dx / dist) * mv; c.y += (dy / dist) * mv;
-        c.setRotation(Math.atan2(dy, dx)); c.aimAngle = Math.atan2(dy, dx); // 走路面向移動方向
-      } else { c.x = t.x; c.y = t.y; }
-      (c.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
-    }
-    if (allArrived || timedOut) {
-      // 全員面向目標中心,進統一大字段
-      for (const c of this.characters) if (c.alive) c.aimAngle = Phaser.Math.Angle.Between(c.x, c.y, cx, cy);
-      this.startEventIntroStage('unified');
-    }
-  }
-
-  /** 開始開場某一段:顯示對應大字,設本段「顯示滿」時間戳(到時觸發右滑出)。 */
-  private startEventIntroStage(stage: 'unified' | 'perEvent'): void {
-    const cfg = GameConfig.event.intro;
-    const now = this.time.now;
-    this.eventIntroStage = stage;
-    this.eventIntroSlideDone = false;
-    const holdSec = stage === 'unified' ? cfg.unifiedHoldSec : cfg.focusHoldSec;
-    // 顯示滿 = 淡入 + hold(到時觸發滑出)
-    this.eventIntroStageEndsAt = now + (cfg.fadeInSec + holdSec) * 1000;
-    const text = stage === 'unified'
-      ? cfg.unifiedText
-      : ((cfg.perEventText as Record<string, string>)[this.pendingEventKind ?? 'tower'] ?? '');
-    this.showEventIntroBanner(text);
-    // 階段2:第二段=真聚焦——先 pan 鏡頭到目標置中,pan 完才開壓黑+開始 focus 計時(pan 期間不計時)。
-    if (stage === 'perEvent') this.beginEventFocus();
-  }
-
-  /** 階段2:開始聚焦——camera pan 到目標物置中(複用 crossing 的 stopFollow+pan 手法),pan 完 onFocusPanComplete。 */
-  private beginEventFocus(): void {
-    const cfg = GameConfig.event.intro;
-    const cam = this.cameras.main;
-    // 目標世界座標=arena.center(三種事件目標都生在中心)
-    const tx = this.arena.centerX, ty = this.arena.centerY;
-    this.eventFocusPanning = true; // pan 期間 updateEventIntro 不推進 hold 計時
-    cam.stopFollow();
-    const halfW = cam.width / 2, halfH = cam.height / 2;
-    // clamp 到當前 slot(避免 pan 出界露黑);用當前 arena 對應 slot
-    const slot = this.currentSlotRect();
-    const cx = Phaser.Math.Clamp(tx, slot.left + halfW, slot.right - halfW);
-    const cy = Phaser.Math.Clamp(ty, slot.top + halfH, slot.bottom - halfH);
-    cam.pan(cx, cy, cfg.panMs, 'Sine.easeInOut', false, (_c, progress) => {
-      if (progress >= 1 && this.eventFocusPanning) this.onFocusPanComplete();
-    });
-  }
-
-  /** 當前 arena 對應的 slot 矩形(pan clamp / follow 還原用)。 */
+  /** 目前移動區所在的整格（事件聚焦的鏡頭夾限與恢復跟隨用） */
   private currentSlotRect(): Phaser.Geom.Rectangle {
     if (this.arena === this.zoneBLeft) return this.slotBLeft;
     if (this.arena === this.zoneBRight) return this.slotBRight;
     return this.slotA;
   }
 
-  /** pan 完:開壓黑聚光 + 目標提 depth 露出 + 凍敵定格(eventFocusPause)+ 開始 focus hold 計時。 */
-  private onFocusPanComplete(): void {
-    const cfg = GameConfig.event.intro;
-    this.eventFocusPanning = false;
-    this.eventFocusPause = true; // 獨立凍敵定格旗標(非借 timeStopped);開場 gate 本已凍全場,此旗標語意明確+供事件邏輯查用
-    // 目標物提 depth(高於遮罩)——三型別:tower/guard=Enemy、capture=captureGfx(Graphics)
-    const target = this.getEventFocusTarget();
-    this.eventFocusTarget = target;
-    if (target) {
-      this.eventFocusTargetDepth = (target as unknown as { depth: number }).depth ?? 0;
-      target.setDepth(cfg.focusTargetDepth);
-    }
-    // 佔領事件:聚焦時【先把據點圈畫出來】(combat 才每幀畫,聚焦期間沒畫→只有空中心)。
-    //   畫在 captureGfx(已提 depth972 露出遮罩之上),讓玩家在聚焦時就看到「要守的據點圈」,與聚光圈對齊。
-    if (this.pendingEventKind === 'capture' && this.captureGfx) {
-      const R = GameConfig.event.capture.captureRadius;
-      this.captureGfx.clear();
-      this.captureGfx.lineStyle(3, 0xffd166, 0.9);
-      this.captureGfx.strokeCircle(this.captureCx, this.captureCy, R);
-      this.captureGfx.fillStyle(0xffd166, 0.06);
-      this.captureGfx.fillCircle(this.captureCx, this.captureCy, R);
-    }
-    // 壓黑遮罩(全螢幕黑,setScrollFactor0 釘螢幕)——depth 在目標之下、遊戲物件之上
-    const dim = this.add.rectangle(GameConfig.width / 2, GameConfig.height / 2, GameConfig.width, GameConfig.height, 0x000000, 0)
-      .setScrollFactor(0).setDepth(cfg.focusTargetDepth - 2);
-    this.eventFocusDim = dim;
-    this.tweens.add({ targets: dim, fillAlpha: cfg.dimAlpha, duration: cfg.dimFadeSec * 1000 });
-    // 目標亮暈(暖光暈,ADD):目標已被 pan 置中→用螢幕中央座標,setScrollFactor0。
-    // 佔領事件:聚光圈半徑依【實際據點圈半徑 captureRadius × 倍率】對齊玩家看到的據點(無鏡頭縮放→世界半徑=螢幕px);塔/守護維持固定 spotlightRadiusPx。
-    const glowRadius = this.pendingEventKind === 'capture'
-      ? GameConfig.event.capture.captureRadius * cfg.captureSpotlightMult
-      : cfg.spotlightRadiusPx;
-    const glow = this.add.circle(GameConfig.width / 2, GameConfig.height / 2, glowRadius, cfg.spotlightColor, 0)
-      .setScrollFactor(0).setDepth(cfg.focusTargetDepth - 1).setBlendMode(Phaser.BlendModes.ADD);
-    this.eventFocusGlow = glow;
-    // 佔領大圈用較低 alpha(避免大範圍 ADD 洗掉壓黑),塔/守護小圈維持 spotlightAlpha。
-    const glowAlpha = this.pendingEventKind === 'capture' ? cfg.captureSpotlightAlpha : cfg.spotlightAlpha;
-    this.tweens.add({ targets: glow, fillAlpha: glowAlpha, duration: cfg.dimFadeSec * 1000 });
-    // pan 完才開始 focus hold 計時(第二段顯示滿=淡入已完+hold)
-    this.eventIntroStageEndsAt = this.time.now + cfg.focusHoldSec * 1000;
-  }
-
-  /** 取得當前事件的聚焦目標物(tower/guard=Enemy,capture=captureGfx)。 */
-  private getEventFocusTarget(): Phaser.GameObjects.Components.Depth | null {
-    if (this.pendingEventKind === 'tower') return this.tower as unknown as Phaser.GameObjects.Components.Depth;
-    if (this.pendingEventKind === 'guard') return this.guardNpc as unknown as Phaser.GameObjects.Components.Depth;
-    if (this.pendingEventKind === 'capture') return this.captureGfx as unknown as Phaser.GameObjects.Components.Depth;
-    return null;
-  }
-
-  /** 聚焦結束:壓黑/亮暈 fadeOut、目標 depth 還原、eventFocusPause=false、鏡頭恢復 follow 當前 slot。 */
-  private endEventFocus(): void {
-    const cfg = GameConfig.event.intro;
-    this.eventFocusPause = false;
-    this.eventFocusPanning = false;
-    // 目標 depth 還原
-    if (this.eventFocusTarget) { this.eventFocusTarget.setDepth(this.eventFocusTargetDepth); this.eventFocusTarget = null; }
-    // 壓黑/亮暈 fadeOut 後銷毀
-    const dim = this.eventFocusDim; this.eventFocusDim = null;
-    if (dim) this.tweens.add({ targets: dim, fillAlpha: 0, duration: cfg.dimFadeSec * 1000, onComplete: () => dim.destroy() });
-    const glow = this.eventFocusGlow; this.eventFocusGlow = null;
-    if (glow) this.tweens.add({ targets: glow, fillAlpha: 0, duration: cfg.dimFadeSec * 1000, onComplete: () => glow.destroy() });
-    // 鏡頭恢復 follow 當前 slot
-    this.enableFollow(this.currentSlotRect());
-  }
-
-  /** 開場大字:淡入(fadeInSec)→停在畫面(hold 由 stage 計時控制)→由 slideOutEventIntroBanner 觸發右滑出。 */
-  private showEventIntroBanner(text: string): void {
-    if (this.eventIntroBanner) { this.eventIntroBanner.destroy(); this.eventIntroBanner = null; }
-    const cfg = GameConfig.event.intro;
-    const t = this.add.text(GameConfig.width / 2, GameConfig.height * 0.3, text, {
-      fontFamily: 'monospace', fontSize: '42px', color: '#ffd166', stroke: '#000000', strokeThickness: 7, fontStyle: 'bold'
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(cfg.focusTargetDepth + 5).setAlpha(0); // depth 提到壓黑遮罩(focusTargetDepth-2)之上→聚焦時大字清晰不被壓黑
-    this.eventIntroBanner = t;
-    this.tweens.add({ targets: t, alpha: 1, duration: cfg.fadeInSec * 1000, ease: 'Quad.easeOut' });
-  }
-
-  /** 觸發當前段大字【向右滑出】(x 往右 + alpha 淡出);滑完不自動推進(由狀態機計時推進)。 */
-  private slideOutEventIntroBanner(): void {
-    const cfg = GameConfig.event.intro;
-    const t = this.eventIntroBanner;
-    if (!t) return;
-    this.eventIntroBanner = null;
-    this.tweens.add({
-      targets: t, x: t.x + cfg.slideOutDistPx, alpha: 0,
-      duration: cfg.slideOutSec * 1000, ease: 'Back.easeIn',
-      onComplete: () => t.destroy()
-    });
-  }
-
-  /** 開場每幀:推進雙段大字時序 + 逾時保底。gate 期間玩家鎖操作、事件不生怪。 */
-  private updateEventIntro(time: number, delta: number): void {
-    // 逾時保底:整段開場超時→強制結束解鎖(防卡死,最高風險)
-    if (time >= this.eventIntroHardEndsAt) { this.finishEventIntro(); return; }
-    // 階段3:introMove 走位段——全隊走到目標周圍(到位/逾時→進統一大字)
-    if (this.eventIntroStage === 'introMove') { this.updateEventIntroWalk(delta); return; }
-    // 階段2:pan 進行中→不推進 hold 計時(等 onFocusPanComplete 才開始 focus hold)
-    if (this.eventFocusPanning) return;
-    if (!this.eventIntroSlideDone && time >= this.eventIntroStageEndsAt) {
-      // 本段顯示滿→觸發右滑出;perEvent 段同時結束聚焦(壓黑消/鏡頭回follow/目標depth還原)
-      this.slideOutEventIntroBanner();
-      if (this.eventIntroStage === 'perEvent') this.endEventFocus();
-      this.eventIntroSlideDone = true;
-      this.eventIntroStageEndsAt = time + GameConfig.event.intro.slideOutSec * 1000; // 複用:滑出結束時間
+  /**
+   * 事件結束後的接續：關卡制下場上還有殘留一般怪時先停止生怪、留給玩家打完（清完由 finishPendingEventIfCleared 接續），
+   * 沒有殘留則進入選邊 / 出口；非關卡制直接過關
+   */
+  private onEventEnded(): void {
+    if (this.levelMode) {
+      if (this.countResidualEnemies() > 0) {
+        this.pendingEventComplete = true;
+        this.waveState = 'clearing';
+        this.emitStats();
+        return;
+      }
+      this.onSubZoneComplete();
       return;
     }
-    if (this.eventIntroSlideDone && time >= this.eventIntroStageEndsAt) {
-      // 滑出完成→推進
-      if (this.eventIntroStage === 'unified') {
-        this.startEventIntroStage('perEvent'); // 第一段完→第二段各事件訊息(真聚焦)
-      } else {
-        this.finishEventIntro(); // 第二段完→開場結束,啟動事件
-      }
-    }
+    this.enterIntermission();
   }
 
-  /** 開場結束:清狀態(一定執行,恢復操作)+ 啟動事件計時/生怪。 */
-  private finishEventIntro(): void {
-    this.eventIntroActive = false;
-    this.eventIntroStage = 'done';
-    this.eventIntroSlideDone = false;
-    if (this.eventIntroBanner) { this.eventIntroBanner.destroy(); this.eventIntroBanner = null; }
-    // 逾時保底:確保聚焦殘留(壓黑/亮暈/目標depth/凍敵/pan/follow)一定清乾淨,防卡死/畫面殘留黑幕。
-    this.eventFocusPause = false;
-    this.eventFocusPanning = false;
-    if (this.eventFocusTarget) { this.eventFocusTarget.setDepth(this.eventFocusTargetDepth); this.eventFocusTarget = null; }
-    if (this.eventFocusDim) { this.eventFocusDim.destroy(); this.eventFocusDim = null; }
-    if (this.eventFocusGlow) { this.eventFocusGlow.destroy(); this.eventFocusGlow = null; }
-    // 若聚焦被中途強制結束(仍在 pan/未 endFocus)→恢復鏡頭 follow 當前 slot
-    this.enableFollow(this.currentSlotRect());
-    const kind = this.pendingEventKind;
-    this.pendingEventKind = null;
-    if (kind) this.beginEventCombat(kind);
-  }
-
-  /** 開場宣告結束後才啟動:事件計時 + 首波生怪排程 + HUD(目標物此刻起才攻擊/生怪)。舊登場橫幅已移除(與新開場宣告重疊)。 */
-  private beginEventCombat(kind: 'tower' | 'guard' | 'capture'): void {
-    const now = this.time.now;
-    if (kind === 'tower') {
-      const cfg = GameConfig.event.tower;
-      this.towerNextBlastAt = now + 800; // 首次光束延遲
-      this.towerNextSpawnAt = now + 500;
-      this.towerBeamGroup = 0;
-      this.towerEndsAt = now + cfg.timeLimitMs; // 限時倒數:此時間到仍未打掉塔→失敗進下一波
-    } else if (kind === 'guard') {
-      const cfg = GameConfig.event.guard;
-      this.guardEndsAt = now + cfg.durationMs; // 純時間制:撐滿 durationMs(60s)=守護成功(唯一成功時限)
-      this.guardNextSpawnAt = now + 500;
-      // 守護【混合制+循環】:guardWaveIdx 選波種,guardWaveActive 防誤判,guardGlobalWaveCount 遞增計數
-      this.guardWaveIdx = 0;
-      this.guardWaveActive = false;
-      this.guardGlobalWaveCount = 0;
-    } else {
-      this.captureNextWaveAt = now + 600; // 首波稍後生
-      this.captureEndsAt = now + GameConfig.event.capture.timeLimitMs; // 時限
-    }
-    // 用戶調整:開戰不再跳舊事件橫幅(塔事件/守護NPC/佔領據點)——與新開場宣告重疊。HUD/計時保留。
-    this.emitEventHud();
+  /** 事件後殘留怪清完的收尾(由 onWaveKill 在 pendingEventComplete 時偵測 countResidualEnemies=0 呼叫)。 */
+  private finishPendingEventIfCleared(): void {
+    if (!this.pendingEventComplete) return;
+    if (this.countResidualEnemies() > 0) return; // 還有殘留怪→繼續給玩家打
+    this.pendingEventComplete = false;
+    this.onSubZoneComplete(); // 殘留清完→真正進下一步(選邊/轉場)
   }
 
   /** 掛上敵人回呼（生成點共用） */
@@ -3371,129 +3052,6 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(0.5).setScrollFactor(0).setDepth(60).setAlpha(0); // 固定畫面:鏡頭捲動時仍置中
     this.tweens.add({ targets: txt, alpha: 1, scale: { from: 0.6, to: 1.1 }, duration: 400, yoyo: true, hold: 900, onComplete: () => txt.destroy() });
     this.shakeOnce(180, 0.008);
-  }
-
-  /** 事件 HUD 更新（label/ratio/remainMs） */
-  private emitEventHud(): void {
-    if (this.eventKind === 'tower') {
-      this.game.events.emit('event-hud', { active: true, label: '塔 HP', ratio: this.tower ? this.tower.hpRatio() : 0, remainMs: Math.max(0, this.towerEndsAt - this.time.now) });
-    } else if (this.eventKind === 'guard') {
-      // 純時間制:HUD 顯示【守護目標 + 剩餘倒數(UIScene 依 remainMs 補「Xs」後綴)】,不再顯示「第X/4波」(波次已循環)。
-      this.game.events.emit('event-hud', { active: true, label: '守護目標', ratio: this.guardNpc ? this.guardNpc.hpRatio() : 0, remainMs: Math.max(0, this.guardEndsAt - this.time.now) });
-    } else if (this.eventKind === 'capture') {
-      this.game.events.emit('event-hud', { active: true, label: '佔領', ratio: this.captureProgress / 100, remainMs: Math.max(0, this.captureEndsAt - this.time.now) });
-    } else {
-      this.game.events.emit('event-hud', { active: false, label: '', ratio: 0, remainMs: 0 });
-    }
-  }
-
-  /** 每幀事件更新（waveState==='event' 時由 update 呼叫） */
-  private updateEvent(time: number): void {
-    if (this.eventKind === 'tower') this.updateTowerEvent(time);
-    else if (this.eventKind === 'guard') this.updateGuardEvent(time);
-    else if (this.eventKind === 'capture') this.updateCaptureEvent(time);
-    this.emitEventHud();
-  }
-
-  private updateTowerEvent(time: number): void {
-    const cfg = GameConfig.event.tower;
-    if (!this.tower || !this.tower.active || this.tower.dead) {
-      return; // 塔被打掉的完成在 kill 路徑處理
-    }
-    // 限時到仍未打掉塔 → 失敗(比照其他事件結束):completeEvent(false) 撤塔/清扇形/停出怪/不給獎勵→進下一波。
-    if (time >= this.towerEndsAt) {
-      this.clearTelegraphsOf('tower'); // 清塔蓄力中的扇形預警 + 取消發射
-      this.completeEvent(false);
-      return;
-    }
-    // 塔事件持續出怪（無視波次配額，直到塔被打掉），根據人數調整生怪數量
-    if (time >= this.towerNextSpawnAt) {
-      this.towerNextSpawnAt = time + cfg.spawnIntervalMs;
-      const adjustedSpawnBatch = Math.max(1, Math.round(cfg.spawnBatch * this.eventDifficultyMultiplier));
-      for (let k = 0; k < adjustedSpawnBatch; k++) {
-        const ang = Math.random() * Math.PI * 2;
-        this.spawnSummonAt(
-          Phaser.Math.Clamp(this.tower.x + Math.cos(ang) * 300, this.arena.left + 30, this.arena.right - 30),
-          Phaser.Math.Clamp(this.tower.y + Math.sin(ang) * 300, this.arena.top + 30, this.arena.bottom - 30),
-          time
-        );
-      }
-    }
-    // 每 cycleMs 發一組「4 大扇形」，正十字組(0/90/180/270)↔斜十字組(45/135/225/315)交替
-    if (time >= this.towerNextBlastAt) {
-      const fb = cfg.fanBlast;
-      this.towerNextBlastAt = time + fb.cycleMs;
-      const ox = this.tower.x;
-      const oy = this.tower.y;
-      // towerBeamGroup 0=正十字(baseAngle 0)、1=斜十字(baseAngle 45)
-      const baseDeg = this.towerBeamGroup === 0 ? 0 : 45;
-      this.towerBeamGroup = 1 - this.towerBeamGroup;
-      const arc = Phaser.Math.DegToRad(fb.arcDeg);
-      for (let i = 0; i < fb.count; i++) {
-        const centerAng = Phaser.Math.DegToRad(baseDeg + i * 90);
-        this.towerFanTelegraph(ox, oy, centerAng, arc, fb.radius, fb.fillMs, fb.damage);
-      }
-    }
-  }
-
-  /**
-   * 塔的單個大扇形——以塔為圓心、中心角 centerAng、張角 arc、半徑 radius。
-   * 先「填滿式預警」(半徑 0→radius 漸長 + 漸顯)，填滿瞬間發射並判定命中：
-   * 角色距塔 ≤ radius(+玩家半徑) 且 角度落在 [centerAng ± arc/2] 內 → damageCharacterFrom(無敵可擋)。
-   * 玩家站【兩扇形之間的縫隙】可閃；正十字↔斜十字交替剛好逼玩家換位。
-   */
-  private towerFanTelegraph(ox: number, oy: number, centerAng: number, arc: number, radius: number, fillMs: number, dmg: number): void {
-    const g = this.add.graphics().setDepth(4);
-    const half = arc / 2;
-    const a0 = centerAng - half, a1 = centerAng + half;
-    const drawFan = (gfx: Phaser.GameObjects.Graphics, r: number) => {
-      gfx.beginPath();
-      gfx.moveTo(ox, oy);
-      gfx.arc(ox, oy, r, a0, a1, false);
-      gfx.closePath();
-    };
-    // 登記此預警特效（供時停暫停 + 塔死亡強制清除）
-    const fx: { owner: 'tower' | 'boss'; gfx: Phaser.GameObjects.Graphics; tween?: Phaser.Tweens.Tween; fired: boolean } =
-      { owner: 'tower', gfx: g, fired: false };
-    this.telegraphFx.push(fx);
-    const p = { t: 0 };
-    fx.tween = this.tweens.add({
-      targets: p, t: 1, duration: fillMs,
-      onUpdate: () => {
-        g.clear();
-        // 外框（完整扇形輪廓）
-        g.lineStyle(2, 0xff5555, 0.5);
-        drawFan(g, radius); g.strokePath();
-        // 由塔往外填滿（半徑漸長）
-        g.fillStyle(0xff5555, 0.30);
-        drawFan(g, radius * p.t); g.fillPath();
-      },
-      onComplete: () => {
-        fx.fired = true;
-        this.removeTelegraphFx(fx);
-        g.destroy();
-        if (this.gameOver || !this.tower || !this.tower.active) return; // 塔已死 → 不發射
-        // 發射視覺（亮扇形一閃）
-        const blast = this.add.graphics().setDepth(20);
-        blast.fillStyle(0xff3344, 0.5);
-        blast.beginPath(); blast.moveTo(ox, oy); blast.arc(ox, oy, radius, a0, a1, false); blast.closePath(); blast.fillPath();
-        this.tweens.add({ targets: blast, alpha: 0, duration: 260, onComplete: () => blast.destroy() });
-        this.shakeOnce(90, 0.006);
-        // 命中判定：角色距塔 ≤ radius 且 角度落扇形內
-        for (const c of this.characters) {
-          if (!c.alive) continue;
-          const rx = c.x - ox, ry = c.y - oy;
-          const dist = Math.hypot(rx, ry);
-          if (dist > radius + GameConfig.player.radius) continue;
-          const ang = Math.atan2(ry, rx);
-          const diff = Math.abs(Phaser.Math.Angle.Wrap(ang - centerAng));
-          if (diff <= half) {
-            // 塔扇形命中 → 扣血 + 定身 2 秒
-            this.damageCharacterFrom(c, dmg, ox, oy, GameConfig.event.tower.fanBlast.rootMs);
-          }
-        }
-      }
-    });
   }
 
   /** 從登記表移除一筆（不 destroy graphics，呼叫端自理） */
@@ -3517,230 +3075,9 @@ export class GameScene extends Phaser.Scene {
     this.telegraphFx = this.telegraphFx.filter((e) => e.owner !== owner);
   }
 
-  private updateGuardEvent(time: number): void {
-    const cfg = GameConfig.event.guard;
-    if (!this.guardNpc || !this.guardNpc.active || this.guardNpc.dead) {
-      // NPC 死亡 → 事件失敗（仍過關但無獎勵）
-      this.completeEvent(false);
-      return;
-    }
-    // 守護NPC高亮環——被怪群包圍也一眼可辨(NPC depth11在怪之上、環depth10、脈動閃爍)
-    if (this.guardHighlight) {
-      const npcRef = this.guardNpc;
-      const hr = npcRef.getBodyRadius() + 10;
-      const blink = Math.floor(time / 200) % 2 === 0;
-      this.guardHighlight.clear();
-      this.guardHighlight.lineStyle(3, 0x00e5ff, blink ? 0.95 : 0.55);
-      this.guardHighlight.strokeCircle(npcRef.x, npcRef.y, hr);
-      this.guardHighlight.lineStyle(2, 0xffffff, 0.5);
-      this.guardHighlight.strokeCircle(npcRef.x, npcRef.y, hr + 4);
-    }
-
-    // 守護【混合制+循環】:「清空 OR 8秒」較早者出下一波;4波循環重複;每波數量線性遞增(C點)。
-    //   guardWaveActive=true 代表當前波已生成(才啟動清空判定,防生成幀 countGuardWaveAlive==0 誤觸)。
-    const waves = cfg.waves;
-    if (!this.guardWaveActive && time >= this.guardNextSpawnAt) {
-      // 出下一波
-      this.spawnGuardWave(this.guardWaveIdx % waves.length, time);
-      this.guardWaveIdx++;
-      this.guardGlobalWaveCount++;
-      this.guardWaveActive = true;
-      this.guardNextSpawnAt = time + cfg.waveSpawnIntervalMs; // 8秒上限
-    } else if (this.guardWaveActive) {
-      // 清空 OR 8秒到 → 準備出下一波
-      const allGone = this.countGuardWaveAlive() === 0;
-      if (allGone || time >= this.guardNextSpawnAt) {
-        this.guardWaveActive = false;
-        // 若清空提前→立刻出(guardNextSpawnAt=now),否則已到 8 秒也馬上觸發上面的生波
-        if (allGone) this.guardNextSpawnAt = time; // 立即觸發下波
-      }
-    }
-
-    // 敵人接觸 NPC → NPC 扣血(邏輯不動)
-    const npc = this.guardNpc;
-    const contactR = npc.getBodyRadius() + cfg.contactRange;
-    for (const child of this.enemies.getChildren()) {
-      const e = child as Enemy;
-      if (!e.active || e === npc || e.enemyType === 'tower' || e.enemyType === 'npc') continue;
-      if (!e.isVulnerable()) continue;
-      if (Phaser.Math.Distance.Between(e.x, e.y, npc.x, npc.y) <= contactR) {
-        // v37fix(A)：每隻怪對 NPC 的接觸傷害有攻擊冷卻，不再每幀扣血（配合 npcHp 能撐時間）
-        if (time < e.nextNpcHitAt) continue;
-        e.nextNpcHitAt = time + cfg.npcAttackCooldownMs;
-        const dead = npc.takeDamage(Math.max(1, Math.round(cfg.npcContactDamage)));
-        this.flashEnemy(npc);
-        if (dead) { npc.kill(); this.guardNpc = null; this.completeEvent(false); return; }
-      }
-    }
-    // 純時間制:撐滿 durationMs(60s)→ 守護成功。
-    if (time >= this.guardEndsAt) {
-      this.completeEvent(true);
-    }
-  }
-
-  /** 守護波:場上活躍的守護波怪數(排除 NPC/tower/anchor/treasure/BOSS);==0=清空可出下一波。 */
-  private countGuardWaveAlive(): number {
-    let n = 0;
-    for (const child of this.enemies.getChildren()) {
-      const e = child as Enemy;
-      if (!e.active || e.dead) continue;
-      if (!isRegularEnemy(e)) continue;
-      n++;
-    }
-    return n;
-  }
-
-  /**
-   * 守護波腳本:在【左右兩側】各生該波指定怪種(perSide 隻),y 在場內均分散開。守護波怪免疫 leash(一直衝 NPC)。
-   */
-  private spawnGuardWave(waveIdx: number, time: number): void {
-    const cfg = GameConfig.event.guard;
-    const wave = cfg.waves[waveIdx];
-    if (!wave) return;
-    const inset = GameConfig.spawn.edgeInset;
-    const leftX = this.arena.left + cfg.sideMargin;
-    const rightX = this.arena.right - cfg.sideMargin;
-    const yTop = this.arena.top + inset;
-    const yBot = this.arena.bottom - inset;
-    
-    // 改進的守護怪物遞增：每循環一輪(4波)後才+1/側，根據人數調整
-    const cyclesDone = Math.floor((this.guardGlobalWaveCount - 1) / cfg.wavesPerCycle);
-    const bonus = Math.max(0, cyclesDone) * cfg.waveCountStep;
-    // 根據事件難度係數調整怪物數量
-    const difficultyAdjustedBonus = Math.round(bonus * this.eventDifficultyMultiplier);
-    
-    for (const side of [leftX, rightX]) {
-      // 該側總隻數 = 各怪種 clamp(基準 perSide + bonus, 1, waveCountCap) 相加
-      const entries: string[] = [];
-      for (const spec of wave) {
-        const baseCount = Math.round(spec.perSide * this.eventDifficultyMultiplier);
-        const n = Phaser.Math.Clamp(baseCount + difficultyAdjustedBonus, 1, cfg.waveCountCap);
-        for (let i = 0; i < n; i++) entries.push(spec.type);
-      }
-      const n = entries.length;
-      for (let i = 0; i < n; i++) {
-        // y 均分散開(n 隻沿該側縱向鋪開,加點抖動避免完全重疊)
-        const t = n > 1 ? i / (n - 1) : 0.5;
-        const y = Phaser.Math.Clamp(yTop + (yBot - yTop) * t + Phaser.Math.Between(-20, 20), yTop, yBot);
-        this.spawnSummonAt(side, y, time, entries[i] as EnemyType, true, true); // leashImmune=true, forceChase=true
-      }
-    }
-  }
-
-  private updateCaptureEvent(time: number): void {
-    const cfg = GameConfig.event.capture;
-    const cx = this.captureCx;
-    const cy = this.captureCy;
-    const R = cfg.captureRadius;
-
-    // 圈內存活怪數
-    let enemiesIn = 0;
-    for (const child of this.enemies.getChildren()) {
-      const e = child as Enemy;
-      if (!e.active || !e.isVulnerable()) continue;
-      if (Phaser.Math.Distance.Between(e.x, e.y, cx, cy) <= R) enemiesIn++;
-    }
-
-    // 一波一波出——【圈內存活怪==0】就出下一波（不管殺死或被推/擊退出圈外，圈外的不算）
-    if (this.captureWaveActive) {
-      if (enemiesIn === 0) {
-        // 圈內已無怪 → 排程下一波
-        this.captureWaveActive = false;
-        this.captureNextWaveAt = time + cfg.waveGapMs;
-      }
-    } else if (time >= this.captureNextWaveAt) {
-      // 生下一波：全部生在【佔領圈內】，根據事件難度係數調整數量
-      const adjustedWaveSize = Math.max(1, Math.round(cfg.waveSize * this.eventDifficultyMultiplier));
-      for (let i = 0; i < adjustedWaveSize; i++) {
-        const a = Math.random() * Math.PI * 2;
-        const rr = Math.sqrt(Math.random()) * R * cfg.spawnInsideRatio; // 均勻分佈於圈內
-        this.spawnSummonAt(
-          Phaser.Math.Clamp(cx + Math.cos(a) * rr, this.arena.left + 30, this.arena.right - 30),
-          Phaser.Math.Clamp(cy + Math.sin(a) * rr, this.arena.top + 30, this.arena.bottom - 30),
-          time
-        );
-      }
-      this.captureWaveActive = true;
-    }
-
-    // 玩家是否在圈內
-    const p = this.player;
-    const playerIn = p.alive && Phaser.Math.Distance.Between(p.x, p.y, cx, cy) <= R;
-    // 圈內【無怪】且【玩家在圈內】→ 進度增加；有怪則停住
-    if (playerIn && enemiesIn === 0) {
-      this.captureProgress = Math.min(100, this.captureProgress + cfg.progressPerSec * (1 / 60));
-    }
-    // 畫佔領圈：綠=可推進(玩家在圈+無怪)、黃=玩家在圈但有怪、灰=玩家不在圈
-    if (this.captureGfx) {
-      this.captureGfx.clear();
-      const col = (playerIn && enemiesIn === 0) ? 0x7bed9f : (playerIn ? 0xffd166 : 0x888888);
-      this.captureGfx.lineStyle(3, col, 0.85);
-      this.captureGfx.strokeCircle(cx, cy, R);
-      this.captureGfx.fillStyle(col, 0.08);
-      this.captureGfx.fillCircle(cx, cy, R);
-    }
-    if (this.captureProgress >= 100) {
-      this.completeEvent(true);
-      return;
-    }
-    // 時限到、進度未滿 → 失敗（過關無獎勵，比照守護失敗）
-    if (time >= this.captureEndsAt) {
-      this.completeEvent(false);
-    }
-  }
-
-  /** 事件完成/失敗：清理 + (成功給獎勵) + 過關進下一波 */
-  private completeEvent(success: boolean): void {
-    const kind = this.eventKind;
-    this.eventKind = null;
-    // 清理事件物件
-    if (this.tower) { if (this.tower.active) this.tower.kill(); this.tower = null; }
-    if (this.guardNpc) { if (this.guardNpc.active) this.guardNpc.kill(); this.guardNpc = null; }
-    if (this.guardHighlight) { this.guardHighlight.destroy(); this.guardHighlight = null; } // 清高亮環
-    if (this.captureGfx) { this.captureGfx.destroy(); this.captureGfx = null; }
-    this.captureProgress = 0;
-    this.game.events.emit('event-hud', { active: false, label: '', ratio: 0, remainMs: 0 });
-    // 成功給獎勵
-    if (success) {
-      const rw = GameConfig.event.rewards;
-      const cx = this.arena.centerX;
-      const cy = this.arena.centerY;
-      for (let i = 0; i < rw.dropCount; i++) {
-        const ang = (i / rw.dropCount) * Math.PI * 2;
-        this.dropItemAt(cx + Math.cos(ang) * 60, cy + Math.sin(ang) * 60, this.time.now);
-      }
-      this.showEventBanner(`${kind === 'tower' ? '塔' : kind === 'guard' ? '守護' : '佔領'} 成功！獎勵發放`);
-    } else {
-      this.showEventBanner('事件失敗…');
-    }
-    // 關卡制:A/B 子區事件完成/時間到→接 onSubZoneComplete(A→出左右箭頭選邊、B→出上下出口);否則舊無限波次進 intermission。
-    if (this.levelMode) {
-      // 新增:事件結束時若【場上還有殘留一般怪】→不立刻收尾,留著給玩家打完(進 clearingResidual),
-      //   停生新怪、事件目標/UI已收(上面清了),等殘留清完(countResidualEnemies=0)才真正進下一步。
-      if (this.countResidualEnemies() > 0) {
-        this.pendingEventComplete = true;
-        this.waveState = 'clearing'; // 停生新怪、等清完;殘留怪留著可打
-        this.emitStats();
-        return;
-      }
-      this.onSubZoneComplete();
-      return;
-    }
-    // 過關進下一波
-    this.enterIntermission();
-  }
-
-  /** 事件後殘留怪清完的收尾(由 onWaveKill 在 pendingEventComplete 時偵測 countResidualEnemies=0 呼叫)。 */
-  private finishPendingEventIfCleared(): void {
-    if (!this.pendingEventComplete) return;
-    if (this.countResidualEnemies() > 0) return; // 還有殘留怪→繼續給玩家打
-    this.pendingEventComplete = false;
-    this.onSubZoneComplete(); // 殘留清完→真正進下一步(選邊/轉場)
-  }
-
   private clearWaveByCheat(): void {
     if (this.gameOver) return;
-    // 事件進行中 → 直接完成事件（清理由 completeEvent 處理）
+    // 事件進行中 → 直接完成事件（清理由事件控制器處理）
     if (this.waveState === 'event') {
       // 清掉場上小怪
       for (const child of this.enemies.getChildren()) {
@@ -3750,7 +3087,7 @@ export class GameScene extends Phaser.Scene {
           e.kill();
         }
       }
-      this.completeEvent(true);
+      this.eventCtl.complete(true);
       return;
     }
     // 清除場上所有存活敵人（直接移除，不計殺、不給經驗、不掉落）——不含 treasure(波次清場不清寶箱怪)
@@ -3782,7 +3119,7 @@ export class GameScene extends Phaser.Scene {
   /**
    * M 鍵：清掉場上小怪，並「走正常過關判定」觸發當前波該有的事件/BOSS。
    * - spawning/clearing：清小怪 → waveKilled 補到 quota → 依 onWaveKill 達標邏輯：
-   *   BOSS 波召喚 BOSS、事件波 startEvent、否則 enterIntermission。
+   *   BOSS 波召喚 BOSS、事件波啟動事件、否則 enterIntermission。
    * - event/boss 進行中：等同 N，直接完成（避免卡）。
    */
   private clearWaveAndTrigger(): void {
@@ -3921,7 +3258,7 @@ export class GameScene extends Phaser.Scene {
   /** 寶箱怪:每次波次生怪時 roll 機率出現;場上已有一隻則不再生。生在場內隨機點、避開角色。 */
   private trySpawnTreasure(time: number): void {
     // ② 限時事件(塔/守護/佔領)期間【不生寶箱怪】
-    if (this.eventKind !== null || this.waveState === 'event') return;
+    if (this.eventCtl.kind !== null || this.waveState === 'event') return;
     if (this.treasureEnemy && this.treasureEnemy.active && !this.treasureEnemy.dead) return; // 只1隻
     // ④ 不在波次【首次生怪】那刻出現。修:用【本波隊形次數】為主判準——
     //   waveFormations<=1(=第一次隊形,即首次生怪)一律不出;第2次隊形起、且已生成 ~35% 配額後才可能 roll。
@@ -4283,8 +3620,8 @@ export class GameScene extends Phaser.Scene {
       const enemy = child as Enemy;
       if (!enemy.active) continue;
 
-      // 時間暫停中，敵人凍結（停速度、不跑 AI）;階段2:事件聚焦定格(eventFocusPause)也凍敵。
-      if (this.timeStopped || this.eventFocusPause) {
+      // 時間暫停中，敵人凍結（停速度、不跑 AI）；事件聚焦定格時也凍結。
+      if (this.timeStopped || this.eventCtl.isFocusPaused) {
         (enemy.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
       } else {
         // 黏著目標(階段1):追【綁定目標】(生成時綁最近、黏著不亂換),事件覆寫>黏著>就近重綁。
@@ -4307,7 +3644,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     // 敵人↔敵人碰撞分離(異靈藍圖):時停/事件聚焦定格中不跑(怪凍結)。
-    if (GameConfig.enemySeparation.enabled && !this.timeStopped && !this.eventFocusPause) {
+    if (GameConfig.enemySeparation.enabled && !this.timeStopped && !this.eventCtl.isFocusPaused) {
       const separators: Enemy[] = [];
       for (const child of children) {
         const e = child as Enemy;
@@ -4413,15 +3750,11 @@ export class GameScene extends Phaser.Scene {
       }
     }
     // 守護事件:雷射也對 guardNpc 判傷(per-enemy 冷卻,同近戰路徑)
-    if (this.waveState === 'event' && this.eventKind === 'guard' && this.guardNpc && this.guardNpc.active && !this.guardNpc.dead) {
-      if (pointInOrientedRect(this.guardNpc.x, this.guardNpc.y, ox, oy, angle, 0, cfg.laserLength, cfg.laserWidth)) {
-        if (now >= enemy.nextNpcHitAt) {
-          enemy.nextNpcHitAt = now + GameConfig.event.guard.npcAttackCooldownMs;
-          const gcfg = GameConfig.event.guard;
-          const dead = this.guardNpc.takeDamage(Math.max(1, Math.round(gcfg.npcContactDamage)));
-          this.flashEnemy(this.guardNpc);
-          if (dead) { this.guardNpc.kill(); this.guardNpc = null; this.completeEvent(false); }
-        }
+    const laserNpc = this.waveState === 'event' ? this.eventCtl.hittableGuardNpc : null;
+    if (laserNpc && pointInOrientedRect(laserNpc.x, laserNpc.y, ox, oy, angle, 0, cfg.laserLength, cfg.laserWidth)) {
+      if (now >= enemy.nextNpcHitAt) {
+        enemy.nextNpcHitAt = now + GameConfig.event.guard.npcAttackCooldownMs;
+        this.eventCtl.hitGuardNpc();
       }
     }
 
@@ -4482,15 +3815,11 @@ export class GameScene extends Phaser.Scene {
           }
         }
         // 守護事件:炸彈爆炸也對 guardNpc 判傷(per-enemy 冷卻,同近戰路徑)
-        if (this.waveState === 'event' && this.eventKind === 'guard' && this.guardNpc && this.guardNpc.active && !this.guardNpc.dead) {
-          if (Phaser.Math.Distance.Between(this.guardNpc.x, this.guardNpc.y, tx, ty) <= cfg.bombRadius) {
-            if (now >= enemy.nextNpcHitAt) {
-              enemy.nextNpcHitAt = now + GameConfig.event.guard.npcAttackCooldownMs;
-              const gcfg = GameConfig.event.guard;
-              const dead = this.guardNpc.takeDamage(Math.max(1, Math.round(gcfg.npcContactDamage)));
-              this.flashEnemy(this.guardNpc);
-              if (dead) { this.guardNpc.kill(); this.guardNpc = null; this.completeEvent(false); }
-            }
+        const bombNpc = this.waveState === 'event' ? this.eventCtl.hittableGuardNpc : null;
+        if (bombNpc && Phaser.Math.Distance.Between(bombNpc.x, bombNpc.y, tx, ty) <= cfg.bombRadius) {
+          if (now >= enemy.nextNpcHitAt) {
+            enemy.nextNpcHitAt = now + GameConfig.event.guard.npcAttackCooldownMs;
+            this.eventCtl.hitGuardNpc();
           }
         }
         // 爆炸視覺
@@ -4511,16 +3840,14 @@ export class GameScene extends Phaser.Scene {
       }
       bullet.tick(time, this.arena);
       // 守護事件:子彈命中 guardNpc 判傷(NPC 全域冷卻 bulletNpcHitAt;子彈命中後回收)
-      if (this.waveState === 'event' && this.eventKind === 'guard' && this.guardNpc && this.guardNpc.active && !this.guardNpc.dead && bullet.active) {
-        const hitR = GameConfig.enemy.shooter.bulletRadius + this.guardNpc.getBodyRadius();
-        if (Phaser.Math.Distance.Between(bullet.x, bullet.y, this.guardNpc.x, this.guardNpc.y) <= hitR) {
+      const npc = this.waveState === 'event' ? this.eventCtl.hittableGuardNpc : null;
+      if (npc && bullet.active) {
+        const hitR = GameConfig.enemy.shooter.bulletRadius + npc.getBodyRadius();
+        if (Phaser.Math.Distance.Between(bullet.x, bullet.y, npc.x, npc.y) <= hitR) {
           bullet.recycle();
-          if (time >= this.guardNpc.bulletNpcHitAt) {
-            const gcfg = GameConfig.event.guard;
-            this.guardNpc.bulletNpcHitAt = time + gcfg.npcAttackCooldownMs;
-            const dead = this.guardNpc.takeDamage(Math.max(1, Math.round(gcfg.npcContactDamage)));
-            this.flashEnemy(this.guardNpc);
-            if (dead) { this.guardNpc.kill(); this.guardNpc = null; this.completeEvent(false); }
+          if (time >= npc.bulletNpcHitAt) {
+            npc.bulletNpcHitAt = time + GameConfig.event.guard.npcAttackCooldownMs;
+            this.eventCtl.hitGuardNpc();
           }
         }
       }
@@ -5589,10 +4916,8 @@ export class GameScene extends Phaser.Scene {
       actor.kills++;
       this.bossCtl.onBossKilled(dx, dy); // 大爆炸 + 掉落（波次 BOSS 再回呼 onWaveBossDefeated）
     } else if (etype === 'tower') {
-      this.tower = null;
-      this.clearTelegraphsOf('tower'); // 取消塔蓄力中的扇形預警
       this.spawnExpandingRing(dx, dy, 120, 0xff8844, 400);
-      this.completeEvent(true);
+      this.eventCtl.onTowerDestroyed(); // 取消塔蓄力中的扇形預警，事件成功
     } else if (etype !== 'npc' && etype !== 'anchor') {
       actor.kills++;
       this.onWaveKill();
@@ -5832,9 +5157,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** 除錯：直接觸發指定事件（測塔/守護/佔領） */
-  debugTriggerEvent(kind: 'tower' | 'guard' | 'capture'): void {
+  debugTriggerEvent(kind: EventKind): void {
     this.waveState = 'event';
-    this.startEvent(kind);
+    this.eventCtl.start(kind);
     this.emitStats();
   }
 
@@ -5860,11 +5185,7 @@ export class GameScene extends Phaser.Scene {
   debugEventState(): Record<string, unknown> {
     return {
       waveState: this.waveState,
-      eventKind: this.eventKind,
-      towerHp: this.tower ? this.tower.hp : null,
-      npcHp: this.guardNpc ? this.guardNpc.hp : null,
-      guardRemainMs: this.guardNpc ? Math.max(0, this.guardEndsAt - this.time.now) : null,
-      captureProgress: Math.round(this.captureProgress)
+      ...this.eventCtl.debugState()
     };
   }
 
