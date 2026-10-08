@@ -222,6 +222,9 @@ export const GameConfig = {
     vacuumRadius: 65,
     /** 真空圈的上下壓扁比例（地盤畫法與判定共用） */
     vacuumFlatten: 0.45,
+    /** 真空圈中心相對角色腳底的偏移（px）；X 正值往右、Y 正值往下 */
+    vacuumOffsetX: 0,
+    vacuumOffsetY: 0,
     /** 近戰怪在真空邊緣再往外多少像素內開始蓄力 */
     vacuumEngageMargin: 10,
     /** 近戰怪出手時，離真空邊緣多少像素內的角色會被打中（比蓄力餘量大，角色稍微退開仍打得到） */

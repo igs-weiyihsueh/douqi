@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { GameConfig } from '../config';
+import { visibleBottomOffset } from '../systems/spriteFeet';
 import {
   CHARACTER_PARAM_DEFS,
   clampCharacterParam,
@@ -12,7 +14,7 @@ import {
 /** 面板版面與配色（畫面座標；面板置中於畫面） */
 const LAYOUT = {
   WIDTH: 720,
-  HEIGHT: 470,
+  HEIGHT: 620,
   DEPTH: 100,
   BG_COLOR: 0x111827,
   BG_ALPHA: 0.96,
@@ -20,11 +22,11 @@ const LAYOUT = {
   BORDER_WIDTH: 2,
   /** 遮罩：面板開啟時壓暗背後的主選單 */
   DIM_ALPHA: 0.55,
-  TITLE_Y: -195,
-  SUBTITLE_Y: -160,
+  TITLE_Y: -245,
+  SUBTITLE_Y: -210,
   /** 第一列參數的 y 與列距 */
-  ROW_START_Y: -100,
-  ROW_GAP: 72,
+  ROW_START_Y: -150,
+  ROW_GAP: 60,
   LABEL_X: -320,
   TRACK_X: -60,
   TRACK_WIDTH: 260,
@@ -37,11 +39,15 @@ const LAYOUT = {
   /** 選中列的底色條 */
   ROW_HIGHLIGHT_WIDTH: 680,
   ROW_HIGHLIGHT_HEIGHT: 56,
-  BUTTON_Y: 185,
+  BUTTON_Y: 235,
   BUTTON_WIDTH: 150,
   BUTTON_HEIGHT: 40,
   BUTTON_GAP: 175,
-  HELP_Y: 140,
+  HELP_Y: 190,
+  /** 預覽區域 */
+  PREVIEW_X: 450,
+  PREVIEW_Y: -50,
+  PREVIEW_SCALE: 0.8,
   COLORS: {
     TEXT: '#e5e7eb',
     HINT: '#94a3b8',
@@ -80,6 +86,9 @@ export class CharacterEditorPanel {
   private rows: ParamRow[] = [];
   private values: CharacterParams = defaultCharacterParams();
   private selected = 0;
+  /** 預覽相關 */
+  private previewCharacter: Phaser.GameObjects.Image | null = null;
+  private previewVacuum: Phaser.GameObjects.Graphics | null = null;
   private readonly onKeyDown = (e: KeyboardEvent): void => this.handleKey(e);
 
   /** @param scene 所在場景（主選單）；主選單以 isOpen 判斷是否暫停自己的操作 */
@@ -136,6 +145,9 @@ export class CharacterEditorPanel {
     c.add(this.scene.add.text(0, LAYOUT.HELP_Y, '↑↓ 選擇　←→ 調整　Enter 儲存　Esc 取消', {
       fontFamily: 'monospace', fontSize: '14px', color: colors.HINT
     }).setOrigin(0.5));
+
+    // 預覽區域
+    this.buildPreview(c);
   }
 
   /**
@@ -242,9 +254,22 @@ export class CharacterEditorPanel {
    * @param def 參數定義
    * @param value 目標值
    */
+  /** 依據step的小數位數四捨五入，避免浮點誤差 */
+  private roundByStep(value: number, step: number): number {
+    const decimalPlaces = step.toString().split('.')[1]?.length || 0;
+    return Math.round(value * Math.pow(10, decimalPlaces)) / Math.pow(10, decimalPlaces);
+  }
+
+  /** 依據step的小數位數格式化數值顯示 */
+  private formatByStep(value: number, step: number): string {
+    const decimalPlaces = step.toString().split('.')[1]?.length || 0;
+    return value.toFixed(decimalPlaces);
+  }
+
   private setValue(def: CharacterParamDef, value: number): void {
     const snapped = def.min + Math.round((value - def.min) / def.step) * def.step;
-    this.values[def.key] = clampCharacterParam(def, snapped);
+    const rounded = this.roundByStep(snapped, def.step);
+    this.values[def.key] = clampCharacterParam(def, rounded);
     this.refresh();
   }
 
@@ -268,8 +293,63 @@ export class CharacterEditorPanel {
       const ratio = (value - def.min) / (def.max - def.min);
       row.fill.width = LAYOUT.TRACK_WIDTH * ratio;
       row.handle.x = LAYOUT.TRACK_X + LAYOUT.TRACK_WIDTH * ratio;
-      row.valueText.setText(def.unit ? `${value}${def.unit}` : `${value}`);
+      const formattedValue = this.formatByStep(value, def.step);
+      row.valueText.setText(def.unit ? `${formattedValue}${def.unit}` : formattedValue);
       row.highlight.setVisible(i === this.selected);
     });
+    this.updatePreview();
+  }
+
+  /** 建立預覽區域 */
+  private buildPreview(container: Phaser.GameObjects.Container): void {
+    const skinTextureKey = 'character-goku-skin'; // 依ArtStyleController的SKIN_TEXTURE常數
+    
+    // 預覽角色圖片
+    if (this.scene.textures.exists(skinTextureKey)) {
+      this.previewCharacter = this.scene.add.image(LAYOUT.PREVIEW_X, LAYOUT.PREVIEW_Y, skinTextureKey)
+        .setScale(LAYOUT.PREVIEW_SCALE)
+        .setDepth(LAYOUT.DEPTH + 1);
+      container.add(this.previewCharacter);
+    }
+
+    // 真空圈預覽
+    this.previewVacuum = this.scene.add.graphics().setDepth(LAYOUT.DEPTH + 1);
+    container.add(this.previewVacuum);
+  }
+
+  /** 更新預覽顯示 */
+  private updatePreview(): void {
+    if (!this.previewVacuum) return;
+
+    const vacuum = this.previewVacuum;
+    vacuum.clear();
+
+    if (this.previewCharacter) {
+      const scale = LAYOUT.PREVIEW_SCALE;
+      const charX = LAYOUT.PREVIEW_X;
+      const charY = LAYOUT.PREVIEW_Y;
+      
+      // 計算腳底位置
+      const skinTextureKey = 'character-goku-skin';
+      const bottomOffset = visibleBottomOffset(this.scene.textures, skinTextureKey);
+      const footY = charY + bottomOffset * scale;
+
+      // 真空圈參數
+      const radius = this.values.vacuumRadius;
+      const flatten = this.values.vacuumFlatten;
+      const offsetX = this.values.vacuumOffsetX;
+      const offsetY = this.values.vacuumOffsetY;
+
+      // 真空圈尺寸和位置
+      const ellipseWidth = radius * 2 * scale;
+      const ellipseHeight = radius * flatten * 2 * scale;
+      const ellipseCenterX = charX + offsetX * scale;
+      const ellipseCenterY = footY + offsetY * scale;
+
+      // 繪製真空圈橢圓
+      const aimConfig = GameConfig.aim;
+      vacuum.lineStyle(aimConfig.ringThickness, aimConfig.ringColor, aimConfig.ringAlpha);
+      vacuum.strokeEllipse(ellipseCenterX, ellipseCenterY, ellipseWidth, ellipseHeight);
+    }
   }
 }
