@@ -30,6 +30,9 @@
 ### 📖 [Guides](./guides/) - 操作指南
 - [開發環境設定](./guides/development-setup.md) - 環境配置與開發流程
 
+### 🔬 [Technical Reserves](./technical-reserves/) - 技術儲備
+- [bodySeparation系統改進方案](./technical-reserves/body-separation-improvement.md) - 基於Miraculous技術的推擠系統優化
+
 ### 📚 [術語表](./glossary.md) - 專案術語對照
 統一專案核心概念和程式碼對照，便於開發團隊和AI理解專案架構
 
