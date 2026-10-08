@@ -53,9 +53,9 @@ scene: [
 | `MinigameMenuScene` | 5KB | 小遊戲選單導航 | 小 | - |
 
 **方案B+C重構加速** (commits 7bb93c4+cc7a433+b7e9a77+3c143c8+10f4af8+ede39c8):
-- **GameScene**: 422KB→160KB，8,408行→3,200行 (-62%)
-- **十Controller**: BreakableController新增，C-3完成後預期2,685行
-- **架構成就**: 極致模組化重構展現驚人效率，向2,155行終極目標邁進
+- **GameScene**: 315KB→160KB，6,301行→3,200行 (-49%，數據已更正)
+- **十Controller**: BreakableController新增，C-3完成後預期2,685行 (-57%)
+- **架構成就**: 極致模組化重構展現驚人效率
 
 ### 場景間通訊
 ```typescript
