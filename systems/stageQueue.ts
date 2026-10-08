@@ -6,7 +6,7 @@ import { GameConfig } from '../config';
  * - 每個節點是低階 / 高階 / 問號寶箱；問號在玩家進入該關時才揭曉為低階或高階
  * - 保證：任意連續 visibleStages(4) 個節點中至少有 1 個「確定的」高階（問號不算），也至少有 1 個問號
  *   （兩者同時需要補時高階優先，問號順延到下一格）
- * - 問號不連續出現
+ * - 問號不連續出現，開局第一格也不會是問號（第一關一定是確定的寶箱）
  */
 
 /** 寶箱階級 */
@@ -29,7 +29,7 @@ export type RandomFn = () => number;
  * 產生接在 prev 後面的下一個節點
  *
  * 規則：前 visibleStages-1 個節點都沒有確定高階 → 強制高階；都沒有問號 → 強制問號；
- * 否則依 chestOdds 抽（抽到問號但上一個也是問號時改為低階）
+ * 否則依 chestOdds 抽（抽到問號但上一個也是問號、或這是開局第一格時改為低階）
  *
  * @param prev 目前佇列（最後一個是最右邊的節點）
  * @param rand 隨機數來源
@@ -45,8 +45,9 @@ export function nextStageNode(prev: ReadonlyArray<StageNode>, rand: RandomFn = M
   const odds = GameConfig.stage.chestOdds;
   const r = rand();
   if (r < odds.high) return { kind: 'high', revealed: null };
-  const lastIsMystery = prev.length > 0 && prev[prev.length - 1].kind === 'mystery';
-  if (r < odds.high + odds.mystery && !lastIsMystery) return { kind: 'mystery', revealed: null };
+  const isFirst = prev.length === 0;
+  const lastIsMystery = !isFirst && prev[prev.length - 1].kind === 'mystery';
+  if (r < odds.high + odds.mystery && !lastIsMystery && !isFirst) return { kind: 'mystery', revealed: null };
   return { kind: 'low', revealed: null };
 }
 

@@ -885,8 +885,8 @@ export const GameConfig = {
       gapAboveArrow: 10, blinkMs: 420, blinkMinAlpha: 0.35, pulseScale: 1.15,
       edgeInset: 90, edgeMinY: 210, edgeBottomMargin: 180, hysteresisPx: 40, followMs: 120
     },
-    /** 出口引導箭頭（左 / 右 / 上共用同一樣式）：三角形半邊長 size、外圈半徑 = size + ringPad；上方箭頭在出口門下方 exitArrowOffset */
-    guideArrow: { size: 34, ringPad: 14, color: 0x7affc0, exitArrowOffset: 140 },
+    /** 出口引導箭頭（左 / 右 / 上共用同一樣式）：三角形半邊長 size、外圈半徑 = size + ringPad */
+    guideArrow: { size: 34, ringPad: 14, color: 0x7affc0 },
     /** 問號關前的出口組合（隨機挑一組；L 左、R 右、U 上方）；含回頭方向（與 dirLock 相反）的組合會被排除 */
     mysteryExitCombos: [['L', 'R'], ['L', 'U'], ['R', 'U']] as ReadonlyArray<ReadonlyArray<'L' | 'R' | 'U'>>,
     /** 寶箱獎勵：完成小關卡直接發給每位存活玩家的彩票張數 */
@@ -940,10 +940,8 @@ export const GameConfig = {
     panMs: 900,
     /** 閃黑轉場淡出/淡入時間(毫秒) */
     fadeMs: 500,
-    /** 箭頭距場地左右邊緣的內縮 */
+    /** 出口引導箭頭距場地邊緣的內縮（左右箭頭距左右緣、上方箭頭距上緣） */
     arrowInset: 70,
-    /** 出口距場地上/下邊緣的內縮 */
-    exitInset: 60,
     /** 玩家走到箭頭/出口的觸發距離 */
     triggerDist: 46,
     /** 階段2:crossing 開放後短暫緩衝(毫秒)內不觸發邊界過場——讓玩家看引導箭頭、不貼邊秒觸發。 */

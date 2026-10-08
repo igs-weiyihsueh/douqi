@@ -2451,24 +2451,23 @@ export class GameScene extends Phaser.Scene {
     g.strokeCircle(x, y, s + ringPad);
   }
 
-  /** 開上方出口：玩家走進 → 閃黑到新區域（門下方畫與左右相同樣式的向上引導箭頭，箭頭上方顯示 GO） */
+  /**
+   * 開上方出口：在場地上緣中央畫向上的引導箭頭（與左右箭頭同樣式、同樣距邊 arrowInset），箭頭旁顯示 GO；
+   * 玩家走到箭頭 → 閃黑到新區域
+   */
   private showExit(): void {
     if (this.exitGfx) this.exitGfx.destroy();
     const g = this.add.graphics().setDepth(20);
-    const a = this.arena;
-    const inset = GameConfig.stage.exitInset;
-    const ey = a.top + inset;
-    // 出口：上方發光門（高階寶箱 → 閃黑進新區域）
-    g.fillStyle(0x7affc0, 0.85);
-    g.fillRect(a.centerX - 60, ey - 16, 120, 32);
-    g.lineStyle(4, 0xffffff, 0.8);
-    g.strokeRect(a.centerX - 60, ey - 16, 120, 32);
-    // 向上引導箭頭（門的下方，指向門）
-    const arrow = GameConfig.stage.guideArrow;
-    const ay = ey + arrow.exitArrowOffset;
-    this.drawArrow(g, a.centerX, ay, -Math.PI / 2);
+    const { x, y } = this.topExitPoint();
+    this.drawArrow(g, x, y, -Math.PI / 2);
     this.exitGfx = g;
-    this.goIndicator.show('U', a.centerX, ay, arrow.size + arrow.ringPad);
+    const arrow = GameConfig.stage.guideArrow;
+    this.goIndicator.show('U', x, y, arrow.size + arrow.ringPad);
+  }
+
+  /** 上方出口的位置（引導箭頭圓心，也是觸發點）：場地上緣中央往內 arrowInset */
+  private topExitPoint(): { x: number; y: number } {
+    return { x: this.arena.centerX, y: this.arena.top + GameConfig.stage.arrowInset };
   }
 
   /** choosing 階段每幀:偵測玩家走到左/右箭頭 → 記錄選邊 → 平移到 B。 */
@@ -2600,12 +2599,10 @@ export class GameScene extends Phaser.Scene {
     uiScene?.playComboRewardFx?.(c.index, tickets, tickets);
   }
 
-  /** exiting 階段每幀:偵測玩家走進下方出口 → 閃黑轉場到下一關 A。 */
+  /** exiting 階段每幀：玩家走到上方出口箭頭 → 閃黑轉場到新區域 */
   private updateExiting(): void {
-    const a = this.arena;
-    const inset = GameConfig.stage.exitInset;
-    const ey = a.top + inset;
-    if (Phaser.Math.Distance.Between(this.player.x, this.player.y, a.centerX, ey) <= GameConfig.stage.triggerDist + 20) {
+    const { x, y } = this.topExitPoint();
+    if (Phaser.Math.Distance.Between(this.player.x, this.player.y, x, y) <= GameConfig.stage.triggerDist + 20) {
       this.startTransition();
     }
   }
