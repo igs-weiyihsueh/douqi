@@ -391,8 +391,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.chargeStartAt = time;
     this.chargeUntil = time + GameConfig.enemy.chargeMs;
     (this.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
-    // 預警改由 GameScene 畫「由內而外填滿」的範圍圈；此處僅輕微紅 tint，不再放大脈動
-    this.setTint(0xff5555);
+    // 蓄力預警只靠 GameScene 畫的「由內而外填滿」範圍圈；身體不染色
   }
 
   private fireAttack(time: number): void {
