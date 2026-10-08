@@ -18,6 +18,8 @@ import { BreakableController, type BreakableHost } from '../controllers/Breakabl
 import { ComboRewardController } from '../controllers/ComboRewardController';
 import { ComboSkillController, type ComboSkillHost } from '../controllers/ComboSkillController';
 import { SpawnController, type SpawnHost } from '../controllers/SpawnController';
+import { CombatFx } from '../controllers/CombatFx';
+import { EnemyAttackController, type EnemyAttackHost } from '../controllers/EnemyAttackController';
 import { SlotWorldController, type AreaTransition, type Side, type SlotWorldHost } from '../controllers/SlotWorldController';
 import { PerfOverlay } from '../controllers/PerfOverlay';
 import { GameDebugApi, type GameDebugHost } from '../controllers/GameDebugApi';
@@ -25,7 +27,6 @@ import { TargetingController, type TargetingHost } from '../controllers/Targetin
 import { CharacterActionController, type CharacterActionHost, type SlowMoveKeys } from '../controllers/CharacterActionController';
 import { SkillController, type SkillHost } from '../controllers/SkillController';
 import { EventController, type EventHost, type EventKind } from '../controllers/EventController';
-import { pointInOrientedRect } from '../systems/geometry';
 import {
   applyEnemySeparationSteering, bounceEnemyOffBounds, joinsEnemySeparation,
   pushBreakablesFromCharacter, pushBreakablesFromEnemy, pushCharacterOutOfStructures, pushEnemiesAwayFromCharacter,
@@ -71,6 +72,10 @@ export class GameScene extends Phaser.Scene {
 
   /** 波次生怪（補生閘門、隊形、近身 / 場上組、召喚怪），每次 create() 重建 */
   private spawner!: SpawnController;
+  /** 戰鬥視覺回饋（特效、閃白、震動），每次 create() 重建 */
+  private fx!: CombatFx;
+  /** 敵人的攻擊（近戰、子彈、雷射、投彈、衝鋒撞擊），每次 create() 重建 */
+  private enemyAttacks!: EnemyAttackController;
   /** 道具定時保底掉落計時 */
   private itemDropAccumulator = 0;
 
@@ -146,8 +151,6 @@ export class GameScene extends Phaser.Scene {
   private actions!: CharacterActionController;
   /** 本幀道具互搶候選（道具 → 目前最近的碰觸角色），update() 末端結算 */
   private pendingPickups = new Map<Item, Character>();
-  /** 目前存活中的視覺特效物件數（節流用，超過 maxActiveFx 就略過新視覺） */
-  private activeFxCount = 0;
   /** 時間暫停中（全場敵人 + BOT 凍結；施展者不受影響，因其處於 skillLock） */
   private timeStopped = false;
   private timeStopUntil = 0;
@@ -177,6 +180,8 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     this.resetState();
+    this.fx = new CombatFx(this);
+    this.enemyAttacks = new EnemyAttackController(this.createEnemyAttackHost());
 
     // 固定視角競技場
     const pad = GameConfig.arena.padding;
@@ -414,7 +419,6 @@ export class GameScene extends Phaser.Scene {
     this.gameOver = false;
     this.itemDropAccumulator = 0;
     this.pendingPickups = new Map();
-    this.activeFxCount = 0;
     this.timeStopped = false;
     this.timeStopUntil = 0;
     this.timeStopOwner = null;
@@ -529,7 +533,7 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.overlap(
       c,
       this.bullets,
-      this.onBulletHitCharacter as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
+      this.enemyAttacks.onBulletHitCharacter as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
       undefined,
       this
     );
@@ -643,8 +647,8 @@ export class GameScene extends Phaser.Scene {
     if (this.waveState === 'event' && this.eventCtl.kind === 'guard' && guardNpc) pushEnemiesOutOfNpc(guardNpc, this.enemies, this.arena);
     this.updateItems(delta, time);
     updateBreakableMotion(this.breakables, this.arena, delta); // 可推動物件的位移 / 摩擦 / 邊界 / 互推
-    this.updateBullets(time);
-    this.updateChargerCollisions(time);
+    this.enemyAttacks.updateBullets(time);
+    this.enemyAttacks.updateChargerCollisions();
 
     // slow：先更新 P1 面向(aimAngle)+鍵盤八方向移動，再算鎖定/處理攻擊（同幀用最新面向，無延遲）。
     if (this.controlMode === 'slow') this.actions.handleSlowMovement(time);
@@ -1041,6 +1045,25 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
+   * 建立 EnemyAttackController 需要的場景能力
+   */
+  private createEnemyAttackHost(): EnemyAttackHost {
+    return {
+      scene: this,
+      characters: () => this.characters,
+      enemies: () => this.enemies,
+      bullets: () => this.bullets,
+      arena: () => this.arena,
+      isGameOver: () => this.gameOver,
+      isTimeStopped: () => this.timeStopped,
+      hittableGuardNpc: () => (this.waveState === 'event' ? this.eventCtl.hittableGuardNpc : null),
+      hitGuardNpc: () => { this.eventCtl.hitGuardNpc(); },
+      damageCharacter: (c, amount, fromX, fromY) => this.damageCharacterFrom(c, amount, fromX, fromY),
+      fx: () => this.fx
+    };
+  }
+
+  /**
    * 建立 SpawnController 需要的場景能力
    */
   private createSpawnHost(): SpawnHost {
@@ -1079,10 +1102,10 @@ export class GameScene extends Phaser.Scene {
       breakInRect: (ox, oy, dir, back, length, width, time) => this.breakableCtl.breakInRect(ox, oy, dir, back, length, width, time),
       comboRewardHit: (c) => this.comboReward.hit(c),
       countP1AttackHit: () => { this.p1AttackHits++; },
-      spawnExpandingRing: (x, y, radius, color, ms) => this.spawnExpandingRing(x, y, radius, color, ms),
-      shakeOnce: (duration, intensity) => this.shakeOnce(duration, intensity),
-      flashWhite: (c) => this.flashWhite(c),
-      spawnSlashEffect: (x, y) => this.spawnSlashEffect(x, y),
+      spawnExpandingRing: (x, y, radius, color, ms) => this.fx.expandingRing(x, y, radius, color, ms),
+      shakeOnce: (duration, intensity) => this.fx.shake(duration, intensity),
+      flashWhite: (c) => this.fx.flashWhite(c),
+      spawnSlashEffect: (x, y) => this.fx.slash(x, y),
       emitStats: () => this.emitStats()
     };
   }
@@ -1101,10 +1124,10 @@ export class GameScene extends Phaser.Scene {
       isLevelMode: () => this.levelMode,
       damageEnemyFrom: (actor, enemy, damage, knockback, fromX, fromY, time) => this.damageEnemyFrom(actor, enemy, damage, knockback, fromX, fromY, time),
       damageCharacterFrom: (c, amount, fromX, fromY) => this.damageCharacterFrom(c, amount, fromX, fromY),
-      flashHurt: (c) => this.flashHurt(c),
+      flashHurt: (c) => this.fx.flashHurt(c),
       dropItemAt: (x, y, time) => this.dropItemAt(x, y, time),
-      spawnExpandingRing: (x, y, radius, color, ms) => this.spawnExpandingRing(x, y, radius, color, ms),
-      shakeOnce: (duration, intensity) => this.shakeOnce(duration, intensity)
+      spawnExpandingRing: (x, y, radius, color, ms) => this.fx.expandingRing(x, y, radius, color, ms),
+      shakeOnce: (duration, intensity) => this.fx.shake(duration, intensity)
     };
   }
 
@@ -1120,10 +1143,10 @@ export class GameScene extends Phaser.Scene {
       isTimeStopped: () => this.timeStopped,
       isEventActive: () => this.eventCtl.kind !== null || this.waveState === 'event',
       waveProgress: () => ({ formations: this.spawner.formationCount, quota: this.waveQuota, spawned: this.waveSpawned }),
-      flashEnemy: (e) => this.flashEnemy(e),
-      spawnDamageText: (x, y, amount) => this.spawnDamageText(x, y, amount),
-      spawnExpandingRing: (x, y, radius, color, ms) => this.spawnExpandingRing(x, y, radius, color, ms),
-      shakeOnce: (duration, intensity) => this.shakeOnce(duration, intensity)
+      flashEnemy: (e) => this.fx.flashEnemy(e),
+      spawnDamageText: (x, y, amount) => this.fx.damageText(x, y, amount),
+      spawnExpandingRing: (x, y, radius, color, ms) => this.fx.expandingRing(x, y, radius, color, ms),
+      shakeOnce: (duration, intensity) => this.fx.shake(duration, intensity)
     };
   }
 
@@ -1146,7 +1169,7 @@ export class GameScene extends Phaser.Scene {
       isGameOver: () => this.gameOver,
       isTimeStopped: () => this.timeStopped,
       maxAlive: () => this.curMaxAlive(),
-      activeFxCount: () => this.activeFxCount,
+      activeFxCount: () => this.fx.activeCount,
       attackDamage: () => this.curAttackDamage(),
       p1AttackHits: () => this.p1AttackHits,
       waveSnapshot: () => ({
@@ -1203,8 +1226,8 @@ export class GameScene extends Phaser.Scene {
       onComboHit: (c, time) => this.comboSkills.onComboHit(c, time),
       triggerComboHit: (c) => this.comboReward.hit(c),
       empowerAoe: (c, time) => this.comboSkills.empowerAoe(c, time),
-      flashWhite: (c) => this.flashWhite(c),
-      spawnMeleeArcEffect: (x, y, angle) => this.spawnMeleeArcEffect(x, y, angle)
+      flashWhite: (c) => this.fx.flashWhite(c),
+      spawnMeleeArcEffect: (x, y, angle) => this.fx.meleeArc(x, y, angle)
     };
   }
 
@@ -1282,9 +1305,9 @@ export class GameScene extends Phaser.Scene {
       damageEnemy: (actor, enemy, damage, knockback, time) => this.damageEnemy(actor, enemy, damage, knockback, time),
       triggerComboHit: (actor) => this.comboReward.hit(actor),
       dropItemAt: (x, y, time) => this.dropItemAt(x, y, time),
-      spawnExpandingRing: (x, y, radius, color, ms) => this.spawnExpandingRing(x, y, radius, color, ms),
-      shakeOnce: (duration, intensity) => this.shakeOnce(duration, intensity),
-      spawnDeathBurst: (x, y) => this.spawnDeathBurst(x, y),
+      spawnExpandingRing: (x, y, radius, color, ms) => this.fx.expandingRing(x, y, radius, color, ms),
+      shakeOnce: (duration, intensity) => this.fx.shake(duration, intensity),
+      spawnDeathBurst: (x, y) => this.fx.deathBurst(x, y),
       showEventBanner: (text) => this.showEventBanner(text),
       emitStats: () => this.emitStats(),
       onWaveBossDefeated: () => this.onWaveBossDefeated()
@@ -1351,9 +1374,9 @@ export class GameScene extends Phaser.Scene {
       clearTelegraphsOf: (owner) => this.clearTelegraphsOf(owner),
       damageCharacter: (c, amount, fromX, fromY, rootMs) => this.damageCharacterFrom(c, amount, fromX, fromY, rootMs),
       spawnSummonAt: (x, y, time, forceType, leashImmune, forceChase) => this.spawner.spawnSummonAt(x, y, time, forceType, leashImmune, forceChase),
-      flashEnemy: (e) => this.flashEnemy(e),
+      flashEnemy: (e) => this.fx.flashEnemy(e),
       dropItemAt: (x, y, time) => this.dropItemAt(x, y, time),
-      shakeOnce: (duration, intensity) => this.shakeOnce(duration, intensity),
+      shakeOnce: (duration, intensity) => this.fx.shake(duration, intensity),
       showEventBanner: (text) => this.showEventBanner(text),
       enableFollow: (slot) => this.slotWorld.enableFollow(slot),
       onEventEnded: () => this.onEventEnded()
@@ -1388,10 +1411,7 @@ export class GameScene extends Phaser.Scene {
 
   /** 掛上敵人回呼（生成點共用） */
   private wireEnemyCallbacks(e: Enemy): void {
-    e.onAttackFire = this.onEnemyAttackFire;
-    e.onShoot = this.onEnemyShoot;
-    e.onLaserFire = this.onEnemyLaserFire;
-    e.onBombThrow = this.onEnemyBombThrow;
+    this.enemyAttacks.wire(e);
   }
 
   /** 事件登場提示（仿 BOSS 出現） */
@@ -1402,7 +1422,7 @@ export class GameScene extends Phaser.Scene {
       })
       .setOrigin(0.5).setScrollFactor(0).setDepth(60).setAlpha(0); // 固定畫面:鏡頭捲動時仍置中
     this.tweens.add({ targets: txt, alpha: 1, scale: { from: 0.6, to: 1.1 }, duration: 400, yoyo: true, hold: 900, onComplete: () => txt.destroy() });
-    this.shakeOnce(180, 0.008);
+    this.fx.shake(180, 0.008);
   }
 
   /** 從登記表移除一筆（不 destroy graphics，呼叫端自理） */
@@ -1434,7 +1454,7 @@ export class GameScene extends Phaser.Scene {
       for (const child of this.enemies.getChildren()) {
         const e = child as Enemy;
         if (e.active && !e.dead && e.enemyType !== 'tower' && e.enemyType !== 'npc') {
-          this.spawnDeathBurst(e.x, e.y);
+          this.fx.deathBurst(e.x, e.y);
           e.kill();
         }
       }
@@ -1445,7 +1465,7 @@ export class GameScene extends Phaser.Scene {
     for (const child of this.enemies.getChildren()) {
       const e = child as Enemy;
       if (e.active && !e.dead && e.enemyType !== 'treasure') {
-        this.spawnDeathBurst(e.x, e.y);
+        this.fx.deathBurst(e.x, e.y);
         e.kill();
       }
     }
@@ -1485,7 +1505,7 @@ export class GameScene extends Phaser.Scene {
     for (const child of this.enemies.getChildren()) {
       const e = child as Enemy;
       if (e.active && !e.dead && e.enemyType !== 'tower' && e.enemyType !== 'npc' && e.enemyType !== 'treasure') {
-        this.spawnDeathBurst(e.x, e.y);
+        this.fx.deathBurst(e.x, e.y);
         e.kill();
       }
     }
@@ -1606,27 +1626,6 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  /** 敵人蓄力發動：對 attackRadius 內「所有存活角色」判定扣血 */
-  private onEnemyAttackFire = (enemy: Enemy): void => {
-    if (this.gameOver) return;
-    const time = this.time.now;
-    this.spawnAttackFlash(enemy.x, enemy.y);
-
-    for (const c of this.characters) {
-      if (!c.alive) continue;
-      const dist = Phaser.Math.Distance.Between(enemy.x, enemy.y, c.x, c.y);
-      if (dist > GameConfig.enemy.attackRadius) continue;
-      // 敵人傷害隨等級成長（Lv1 較低 → Lv10 = 現值）
-      const dmg = Math.max(1, Math.round(GameConfig.enemy.attackDamage));
-      const applied = c.takeDamage(dmg, time);
-      if (applied) {
-        this.flashHurt(c);
-        // 受擊不再震動（只有爆發震動）
-        if (c.hp <= 0) this.killCharacter(c);
-      }
-    }
-  };
-
   private killCharacter(c: Character): void {
     c.die();
     // GameOver 僅在「全員陣亡且場上不只 P1（有 BOT 一起團滅）」時觸發。
@@ -1674,156 +1673,6 @@ export class GameScene extends Phaser.Scene {
     return this.characters.reduce((n, c) => n + (c.alive ? 1 : 0), 0);
   }
 
-  // --- shooter 子彈 ---
-  /** shooter 發射子彈 */
-  private onEnemyShoot = (enemy: Enemy, angle: number): void => {
-    if (this.gameOver) return;
-    const bullet = this.bullets.get(enemy.x, enemy.y) as Bullet | null;
-    if (!bullet) return;
-    bullet.fire(enemy.x, enemy.y, angle, this.time.now);
-  };
-
-  /** 遠程兵雷射填滿發射：以怪為起點朝鎖定方向的直線 AOE，命中存活角色扣血 + 短暫雷射演出 */
-  private onEnemyLaserFire = (enemy: Enemy, angle: number): void => {
-    if (this.gameOver || !enemy.active) return;
-    const cfg = GameConfig.enemy.shooter;
-    const ox = enemy.x;
-    const oy = enemy.y;
-    const now = this.time.now;
-
-    // 直線 AOE：對每個存活角色，判定其是否在「以怪為起點、朝 angle、長 laserLength、寬 laserWidth」矩形內
-    for (const c of this.characters) {
-      if (!c.alive) continue;
-      if (c.isInvulnerable(now)) continue;
-      if (pointInOrientedRect(c.x, c.y, ox, oy, angle, 0, cfg.laserLength, cfg.laserWidth)) {
-        this.damageCharacterFrom(c, cfg.laserDamage, ox, oy);
-      }
-    }
-    // 守護事件:雷射也對 guardNpc 判傷(per-enemy 冷卻,同近戰路徑)
-    const laserNpc = this.waveState === 'event' ? this.eventCtl.hittableGuardNpc : null;
-    if (laserNpc && pointInOrientedRect(laserNpc.x, laserNpc.y, ox, oy, angle, 0, cfg.laserLength, cfg.laserWidth)) {
-      if (now >= enemy.nextNpcHitAt) {
-        enemy.nextNpcHitAt = now + GameConfig.event.guard.npcAttackCooldownMs;
-        this.eventCtl.hitGuardNpc();
-      }
-    }
-
-    // 演出：一道亮綠雷射（旋轉矩形），短暫存在後淡出
-    const ex = ox + Math.cos(angle) * cfg.laserLength;
-    const ey = oy + Math.sin(angle) * cfg.laserLength;
-    const beam = this.add
-      .rectangle((ox + ex) / 2, (oy + ey) / 2, cfg.laserLength, cfg.laserWidth, 0x44ff77, 0.85)
-      .setRotation(angle)
-      .setDepth(19);
-    beam.setStrokeStyle(2, 0xccffdd, 0.9);
-    this.tweens.add({
-      targets: beam,
-      alpha: 0,
-      duration: cfg.laserOnDurationMs,
-      onComplete: () => beam.destroy()
-    });
-  };
-
-  /** 投射兵投彈：炸彈飛向鎖定落點(tx,ty)，落點顯示預警圈，到點爆炸對半徑內存活角色扣血 */
-  private onEnemyBombThrow = (enemy: Enemy, tx: number, ty: number): void => {
-    if (this.gameOver || !enemy.active) return;
-    const cfg = GameConfig.enemy.bomber;
-    const sx = enemy.x;
-    const sy = enemy.y;
-
-    // 落點預警圈（紅圈，飛行期間存在）
-    const warn = this.add.circle(tx, ty, cfg.bombRadius, 0xff4d4d, 0.15).setDepth(3);
-    warn.setStrokeStyle(2, 0xff4d4d, 0.7);
-    const warnTween = this.tweens.add({
-      targets: warn,
-      alpha: 0.3,
-      duration: 200,
-      yoyo: true,
-      repeat: -1
-    });
-
-    // 炸彈飛行物（紫色小球，從怪拋向落點）
-    const bomb = this.add.circle(sx, sy, 8, 0xe0b0ff, 1).setDepth(21);
-    bomb.setStrokeStyle(2, 0x7a3fb0, 1);
-    this.tweens.add({
-      targets: bomb,
-      x: tx,
-      y: ty,
-      duration: cfg.bombFlightMs,
-      ease: 'Sine.easeIn',
-      onComplete: () => {
-        bomb.destroy();
-        warnTween.remove();
-        warn.destroy();
-        if (this.gameOver) return;
-        // 落地爆炸：半徑內存活角色扣血
-        const now = this.time.now;
-        for (const c of this.characters) {
-          if (!c.alive || c.isInvulnerable(now)) continue;
-          if (Phaser.Math.Distance.Between(c.x, c.y, tx, ty) <= cfg.bombRadius) {
-            this.damageCharacterFrom(c, cfg.bombDamage, tx, ty);
-          }
-        }
-        // 守護事件:炸彈爆炸也對 guardNpc 判傷(per-enemy 冷卻,同近戰路徑)
-        const bombNpc = this.waveState === 'event' ? this.eventCtl.hittableGuardNpc : null;
-        if (bombNpc && Phaser.Math.Distance.Between(bombNpc.x, bombNpc.y, tx, ty) <= cfg.bombRadius) {
-          if (now >= enemy.nextNpcHitAt) {
-            enemy.nextNpcHitAt = now + GameConfig.event.guard.npcAttackCooldownMs;
-            this.eventCtl.hitGuardNpc();
-          }
-        }
-        // 爆炸視覺
-        this.spawnExpandingRing(tx, ty, cfg.bombRadius, 0xff6a3a, 260);
-        this.shakeOnce(80, 0.006);
-      }
-    });
-  };
-
-  private updateBullets(time: number): void {
-    for (const child of this.bullets.getChildren()) {
-      const bullet = child as Bullet;
-      if (!bullet.active) continue;
-      // 時間暫停中，子彈也凍結（停速度、不計逾時）
-      if (this.timeStopped) {
-        (bullet.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
-        continue;
-      }
-      bullet.tick(time, this.arena);
-      // 守護事件:子彈命中 guardNpc 判傷(NPC 全域冷卻 bulletNpcHitAt;子彈命中後回收)
-      const npc = this.waveState === 'event' ? this.eventCtl.hittableGuardNpc : null;
-      if (npc && bullet.active) {
-        const hitR = GameConfig.enemy.shooter.bulletRadius + npc.getBodyRadius();
-        if (Phaser.Math.Distance.Between(bullet.x, bullet.y, npc.x, npc.y) <= hitR) {
-          bullet.recycle();
-          if (time >= npc.bulletNpcHitAt) {
-            npc.bulletNpcHitAt = time + GameConfig.event.guard.npcAttackCooldownMs;
-            this.eventCtl.hitGuardNpc();
-          }
-        }
-      }
-    }
-  }
-
-  /** 子彈命中角色：扣血、回收子彈 */
-  private onBulletHitCharacter = (
-    charObj: Phaser.Types.Physics.Arcade.GameObjectWithBody,
-    bulletObj: Phaser.Types.Physics.Arcade.GameObjectWithBody
-  ): void => {
-    if (this.gameOver) return;
-    const c = charObj as unknown as Character;
-    const bullet = bulletObj as unknown as Bullet;
-    if (!c.alive || !bullet.active) return;
-    bullet.recycle();
-    const applied = c.takeDamage(
-      Math.max(1, Math.round(GameConfig.enemy.shooter.bulletDamage)),
-      this.time.now
-    );
-    if (applied) {
-      this.flashHurt(c);
-      if (c.hp <= 0) this.killCharacter(c);
-    }
-  };
-
   /** 直線雷射等來源對角色扣血（含 enemyDamageScale），從 (fromX,fromY) 方向做受傷回饋。
    *  rootMs>0 時，命中後定身該角色 rootMs 毫秒（禁移動+禁攻擊；塔扇形/BOSS招用 2000）。 */
   private damageCharacterFrom(c: Character, amount: number, _fromX: number, _fromY: number, rootMs = 0): void {
@@ -1833,48 +1682,13 @@ export class GameScene extends Phaser.Scene {
       this.time.now
     );
     if (applied) {
-      this.flashHurt(c);
+      this.fx.flashHurt(c);
       // 塔扇形/BOSS 招命中 → 定身 2 秒（取現有與新值較大者，避免縮短既有定身）
       if (rootMs > 0) {
         c.rootedUntil = Math.max(c.rootedUntil, this.time.now + rootMs);
       }
       if (c.hp <= 0) this.killCharacter(c);
     }
-  }
-
-  // --- charger 衝刺撞擊：衝刺中的衝鋒怪撞到角色造成傷害 ---
-  private updateChargerCollisions(time: number): void {
-    for (const child of this.enemies.getChildren()) {
-      const enemy = child as Enemy;
-      if (!enemy.active || !enemy.isChargerDashing()) continue;
-      const hitR = GameConfig.enemy.charger.dashHitRadius + GameConfig.player.radius;
-      for (const c of this.characters) {
-        if (!c.alive) continue;
-        if (Phaser.Math.Distance.Between(enemy.x, enemy.y, c.x, c.y) <= hitR) {
-          const applied = c.takeDamage(
-            Math.max(1, Math.round(GameConfig.enemy.charger.dashDamage)),
-            time
-          );
-          if (applied) {
-            this.flashHurt(c);
-            if (c.hp <= 0) this.killCharacter(c);
-          }
-        }
-      }
-    }
-  }
-
-  private spawnAttackFlash(x: number, y: number): void {
-    const ring = this.add
-      .circle(x, y, GameConfig.enemy.attackRadius, 0xff3344, 0.35)
-      .setDepth(3);
-    this.tweens.add({
-      targets: ring,
-      alpha: 0,
-      scale: 1.15,
-      duration: 160,
-      onComplete: () => ring.destroy()
-    });
   }
 
   // ---------------------------------------------------------------------------
@@ -2036,8 +1850,8 @@ export class GameScene extends Phaser.Scene {
       breakBreakablesInCircle: (x, y, radius, _damage, time) => this.breakableCtl.breakInCircle(x, y, radius, time),
       breakBreakablesInRect: (ox, oy, dir, nearOffset, length, width, _damage, time) =>
         this.breakableCtl.breakInRect(ox, oy, dir, nearOffset, length, width, time),
-      spawnExpandingRing: (x, y, radius, color, ms) => this.spawnExpandingRing(x, y, radius, color, ms),
-      shakeOnce: (duration, intensity) => this.shakeOnce(duration, intensity),
+      spawnExpandingRing: (x, y, radius, color, ms) => this.fx.expandingRing(x, y, radius, color, ms),
+      shakeOnce: (duration, intensity) => this.fx.shake(duration, intensity),
       beginTimeStop: (owner, time, durationMs) => this.beginTimeStop(owner, time, durationMs)
     };
   }
@@ -2057,21 +1871,6 @@ export class GameScene extends Phaser.Scene {
     this.timeStopOwner = owner;
     for (const ch of this.enemies.getChildren()) (ch as Enemy).pauseChargeTweens(true);
     for (const fx of this.telegraphFx) fx.tween?.pause();
-  }
-
-  // 招式視覺占位特效
-  private spawnExpandingRing(x: number, y: number, radius: number, color: number, ms = 300): void {
-    const ring = this.add.circle(x, y, 10, color, 0.35).setDepth(20);
-    ring.setStrokeStyle(4, color, 0.9);
-    this.tweens.add({
-      targets: ring,
-      radius,
-      alpha: 0,
-      duration: ms,
-      ease: 'Cubic.easeOut',
-      onUpdate: () => ring.setRadius(ring.radius),
-      onComplete: () => ring.destroy()
-    });
   }
 
   // ---------------------------------------------------------------------------
@@ -2096,56 +1895,11 @@ export class GameScene extends Phaser.Scene {
     // 衝刺命中也算一次 COMBO 連擊
     this.comboReward.hit(actor);
 
-    this.flashWhite(actor);
+    this.fx.flashWhite(actor);
     // 一般攻擊命中不再震動（只保留閃白/傷害數字/擊退）
-    this.spawnSlashEffect(primary.x, primary.y);
+    this.fx.slash(primary.x, primary.y);
     // 遠距衝撞命中的明顯衝擊特效
-    this.spawnImpactEffect(primary.x, primary.y);
-  }
-
-  /** 衝撞命中衝擊特效：衝擊圈 + 命中點亮閃 */
-  private spawnImpactEffect(x: number, y: number): void {
-    const cfg = GameConfig.impact;
-    const ring = this.add.circle(x, y, 8, cfg.ringColor, 0).setDepth(41);
-    ring.setStrokeStyle(5, cfg.ringColor, 0.95);
-    this.tweens.add({
-      targets: ring,
-      radius: cfg.ringRadius,
-      alpha: 0,
-      duration: cfg.ringMs,
-      ease: 'Cubic.easeOut',
-      onUpdate: () => ring.setRadius(ring.radius),
-      onComplete: () => ring.destroy()
-    });
-    const core = this.add.circle(x, y, cfg.ringRadius * 0.35, cfg.coreColor, 0.9).setDepth(42);
-    this.tweens.add({
-      targets: core,
-      alpha: 0,
-      scale: 1.4,
-      duration: cfg.ringMs * 0.7,
-      onComplete: () => core.destroy()
-    });
-  }
-
-  /** 原地扇形劍氣特效：朝 aimAngle 畫一個淡出扇形 */
-  private spawnMeleeArcEffect(x: number, y: number, angle: number): void {
-    const cfg = GameConfig.melee;
-    const half = Phaser.Math.DegToRad(cfg.arcDeg) / 2;
-    const g = this.add.graphics().setDepth(41);
-    g.fillStyle(cfg.arcColor, cfg.arcAlpha);
-    g.slice(x, y, cfg.radius, angle - half, angle + half, false);
-    g.fillPath();
-    // 外弧亮線
-    g.lineStyle(3, cfg.arcColor, Math.min(1, cfg.arcAlpha + 0.4));
-    g.beginPath();
-    g.arc(x, y, cfg.radius, angle - half, angle + half);
-    g.strokePath();
-    this.tweens.add({
-      targets: g,
-      alpha: 0,
-      duration: cfg.arcFadeMs,
-      onComplete: () => g.destroy()
-    });
+    this.fx.impact(primary.x, primary.y);
   }
 
   // ---------------------------------------------------------------------------
@@ -2192,8 +1946,8 @@ export class GameScene extends Phaser.Scene {
       }
     }
     enemy.applyKnockback(fromX, fromY, knockback, time);
-    this.spawnDamageText(enemy.x, enemy.y, dmg);
-    this.flashEnemy(enemy);
+    this.fx.damageText(enemy.x, enemy.y, dmg);
+    this.fx.flashEnemy(enemy);
     // 擊殺只結算一次：takeDamage 判定死亡、且尚未被標記 dead 的才處理
     if (!dead || enemy.dead) return;
     const dx = enemy.x, dy = enemy.y;
@@ -2204,109 +1958,15 @@ export class GameScene extends Phaser.Scene {
       actor.kills++;
       this.bossCtl.onBossKilled(dx, dy); // 大爆炸 + 掉落（波次 BOSS 再回呼 onWaveBossDefeated）
     } else if (etype === 'tower') {
-      this.spawnExpandingRing(dx, dy, 120, 0xff8844, 400);
+      this.fx.expandingRing(dx, dy, 120, 0xff8844, 400);
       this.eventCtl.onTowerDestroyed(); // 取消塔蓄力中的扇形預警，事件成功
     } else if (etype !== 'npc' && etype !== 'anchor') {
       actor.kills++;
       this.onWaveKill();
-      this.spawnDeathBurst(dx, dy);
+      this.fx.deathBurst(dx, dy);
       if (this.controlMode === 'slow') this.comboSkills.grantKillEnergy(this.player, etype);
       if (Math.random() < GameConfig.items.dropChance) this.dropItemAt(dx, dy, time);
     }
-  }
-
-  // ---------------------------------------------------------------------------
-  // 打擊感 / 特效
-  // ---------------------------------------------------------------------------
-  /**
-   * 螢幕震動：同時間最多一個。若鏡頭已在震動則忽略新的（不疊加）。
-   * 目前僅爆發連招會呼叫此函式；一般命中不再震動。
-   */
-  private shakeOnce(duration: number, intensity: number): void {
-    const fx = this.cameras.main;
-    // Phaser 的 shake effect 有 isRunning 旗標；正在震動就不再疊加
-    if (fx.shakeEffect && fx.shakeEffect.isRunning) return;
-    fx.shake(duration, intensity);
-  }
-
-  private flashWhite(c: Character): void {
-    c.setTintFill(0xffffff);
-    this.time.delayedCall(GameConfig.juice.flashMs, () => {
-      if (c.active && c.alive) c.clearTint();
-    });
-  }
-
-  private flashHurt(c: Character): void {
-    c.setTint(0xff4444);
-    this.time.delayedCall(120, () => {
-      if (c.active && c.alive) c.clearTint();
-    });
-  }
-
-  private flashEnemy(enemy: Enemy): void {
-    enemy.setTintFill(0xffffff);
-    this.time.delayedCall(GameConfig.juice.flashMs, () => {
-      if (enemy.active) enemy.clearTint();
-    });
-  }
-
-  private spawnDamageText(x: number, y: number, amount: number): void {
-    // 節流：特效已達上限就略過視覺（傷害/計殺不受影響）
-    if (this.activeFxCount >= GameConfig.juice.maxActiveFx) return;
-    this.activeFxCount++;
-    const text = this.add
-      .text(x, y - 10, `${amount}`, {
-        fontFamily: 'monospace',
-        fontSize: '18px',
-        color: '#ffe66d',
-        stroke: '#000000',
-        strokeThickness: 3
-      })
-      .setOrigin(0.5)
-      .setDepth(50);
-    this.tweens.add({
-      targets: text,
-      y: y - 48,
-      alpha: 0,
-      duration: GameConfig.juice.damageTextMs,
-      ease: 'Cubic.easeOut',
-      onComplete: () => {
-        text.destroy();
-        this.activeFxCount--;
-      }
-    });
-  }
-
-  private spawnSlashEffect(x: number, y: number): void {
-    const ring = this.add.circle(x, y, 6, 0xffffff, 0.9).setDepth(40);
-    this.tweens.add({
-      targets: ring,
-      radius: 42,
-      alpha: 0,
-      duration: 200,
-      ease: 'Cubic.easeOut',
-      onUpdate: () => ring.setRadius(ring.radius),
-      onComplete: () => ring.destroy()
-    });
-  }
-
-  private spawnDeathBurst(x: number, y: number): void {
-    // 節流：特效已達上限就略過死亡粒子（計殺/掉落不受影響）
-    if (this.activeFxCount >= GameConfig.juice.maxActiveFx) return;
-    this.activeFxCount++;
-    const emitter = this.add.particles(x, y, 'spark', {
-      speed: { min: 60, max: 220 },
-      angle: { min: 0, max: 360 },
-      scale: { start: 1, end: 0 },
-      lifespan: 300,
-      quantity: GameConfig.juice.deathBurstParticles,
-      tint: 0xff5a6e
-    });
-    emitter.setDepth(45);
-    this.time.delayedCall(320, () => {
-      emitter.destroy();
-      this.activeFxCount--;
-    });
   }
 
   // ---------------------------------------------------------------------------
@@ -2342,8 +2002,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ---------------------------------------------------------------------------
-
-  /** 難度成長：目前等級對應的敵人生成量上限 */
+  // 怪量縮放
+  // ---------------------------------------------------------------------------
   /** 怪量隨場上存活角色數縮放（1人0.4 → 4人1.0） */
   private curAliveScale(): number {
     const n = this.aliveCount();
