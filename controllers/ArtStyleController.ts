@@ -34,6 +34,8 @@ const UI_OVERLAY_DEPTH = 20;
 /** P1 皮膚紋理：一般 / 強化 */
 export const SKIN_TEXTURE = 'character-goku-skin';
 const SKIN_EMPOWERED_TEXTURE = 'character-goku-skin-2';
+/** 原圖面向左的紋理（悟空皮膚）；其餘紋理視為面向右 */
+const TEXTURES_FACING_LEFT: ReadonlySet<string> = new Set([SKIN_TEXTURE, SKIN_EMPOWERED_TEXTURE]);
 /** P1 頭上覆蓋圖（1P 與積分），與頭上 UI 系統使用相同的垂直偏移 */
 const UI_OVERLAY_TEXTURE = 'character-ui-overlay';
 const UI_OVERLAY_OFFSET_Y = -130;
@@ -114,9 +116,22 @@ export class ArtStyleController {
     this.uiOverlay?.setPosition(p.x, p.y + UI_OVERLAY_OFFSET_Y);
   }
 
-  /** P1 皮膚疊在 P1 本體正上方（P1 的深度由 Y-sorting 每幀更新後呼叫） */
-  followPlayerDepth(): void {
-    this.skin?.setDepth(this.host.player().depth + OVERLAY_DEPTH_STEP);
+  /**
+   * 依面向鏡像圖像：原圖面向與要的面向相反時 flipX
+   *
+   * @param img 角色 / 敵人 / 皮膚圖像
+   * @param facingRight 要面向右
+   */
+  applyFacing(img: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite, facingRight: boolean): void {
+    img.setFlipX(TEXTURES_FACING_LEFT.has(img.texture.key) === facingRight);
+  }
+
+  /** P1 皮膚疊在 P1 本體正上方、面向與 P1 相同（P1 的深度與面向每幀更新後呼叫） */
+  syncSkinToPlayer(): void {
+    if (!this.skin) return;
+    const p = this.host.player();
+    this.skin.setDepth(p.depth + OVERLAY_DEPTH_STEP);
+    this.applyFacing(this.skin, p.facingRight);
   }
 
   /**

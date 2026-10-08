@@ -36,6 +36,7 @@ import { isFixedEnemy, isRegularEnemy } from '../systems/enemyKinds';
 import { visibleBottomOffset } from '../systems/spriteFeet';
 import { drawFootDisc, FOOT_DISC_DEPTH, type VacuumDisk } from '../systems/footDisc';
 import { standingDepth } from '../systems/standingDepth';
+import { facingRightFrom } from '../systems/facing';
 
 /**
  * GameScene：
@@ -562,7 +563,7 @@ export class GameScene extends Phaser.Scene {
         }
       }
       this.targeting.drawMarkers();
-      this.sortStandingDepths();
+      this.syncStandingVisuals();
       this.emitAim();
       return;
     }
@@ -570,7 +571,7 @@ export class GameScene extends Phaser.Scene {
     // 關卡制：轉場演出（平移、閃黑、自動走位）期間凍結遊戲邏輯，只重繪角色標記（角色被搬動後標記跟著走）
     if (this.levelMode && this.slotWorld.update(time, delta)) {
       this.targeting.drawMarkers();
-      this.sortStandingDepths();
+      this.syncStandingVisuals();
       this.emitAim();
       return;
     }
@@ -702,21 +703,29 @@ export class GameScene extends Phaser.Scene {
 
     this.targeting.drawMarkers();
     this.emitStats();
-    this.sortStandingDepths();
+    this.syncStandingVisuals();
     this.emitAim();
   }
 
   /**
-   * Y-sorting：角色、P1 皮膚、一般怪、可破壞物件依腳底 y 設定深度（越前面畫在越上層）。
-   * 只改畫面前後順序，不影響任何判定；固定目標（塔 / BOSS / NPC）與寶箱怪維持各自的固定深度
+   * 站立物件的畫面同步（只改畫面，不影響任何判定）：
+   * - Y-sorting：角色、P1 皮膚、一般怪、可破壞物件依腳底 y 設定深度（越前面畫在越上層）
+   * - 左右面向：角色依 aimAngle、一般怪依 facing 鏡像翻轉（P1 皮膚跟著 P1）
+   * 固定目標（塔 / BOSS / NPC）與寶箱怪維持各自的固定深度與原圖面向
    */
-  private sortStandingDepths(): void {
-    for (const c of this.characters) c.setDepth(standingDepth(c.y + this.artStyle.characterFootOffset(c)));
-    this.artStyle.followPlayerDepth();
+  private syncStandingVisuals(): void {
+    for (const c of this.characters) {
+      c.setDepth(standingDepth(c.y + this.artStyle.characterFootOffset(c)));
+      c.facingRight = facingRightFrom(c.aimAngle, c.facingRight);
+      this.artStyle.applyFacing(c, c.facingRight);
+    }
+    this.artStyle.syncSkinToPlayer();
     for (const child of this.enemies.getChildren()) {
       const e = child as Enemy;
       if (!e.active || !isRegularEnemy(e)) continue;
       e.setDepth(standingDepth(e.y + visibleBottomOffset(this.textures, e.texture.key) * e.scaleY));
+      e.facingRight = facingRightFrom(e.facing, e.facingRight);
+      this.artStyle.applyFacing(e, e.facingRight);
     }
     for (const child of this.breakables.getChildren()) {
       const b = child as Breakable;

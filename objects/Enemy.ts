@@ -26,6 +26,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   /** 面向（弧度）：朝目標角色方向 */
   facing = 0;
+  /** 畫面上的左右面向（依 facing 由 GameScene 每幀更新；只影響鏡像翻轉） */
+  facingRight = true;
 
   // 寶箱怪:被命中次數(累積到 hitsToKill 死)、跑點狀態、出現時間戳(限時跑走用)。public 供 GameScene.updateTreasure 讀寫。
   treasureHits = 0;
@@ -218,6 +220,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.bombChargeStartAt = 0;
     this.nextBombAt = time + Phaser.Math.Between(400, 1400);
     this.facing = 0;
+    this.facingRight = true;
     // 寶箱怪狀態重置
     this.treasureHits = 0;
     this.treasureSpawnAt = time;

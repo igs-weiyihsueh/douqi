@@ -47,6 +47,8 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
   dashToItem = false;
   /** 目前瞄準角度（弧度） */
   aimAngle = 0;
+  /** 畫面上的左右面向（依 aimAngle 由 GameScene 每幀更新；只影響鏡像翻轉） */
+  facingRight = true;
   nextAttackAllowedAt = 0;
 
   // 爆發
