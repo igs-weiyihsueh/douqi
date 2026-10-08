@@ -4,7 +4,8 @@ import { GameConfig } from '../config';
  * 角色參數（主選單「角色編輯器」可調整，慢速模式套用於 P1 與 BOT）。
  *
  * - 預設值取自 config 的 slow.attackCooldownMs / moveSpeed / dashSpeed / dashDistance / vacuumRadius / vacuumFlatten / vacuumOffsetX / vacuumOffsetY
- * - 編輯後存在瀏覽器 localStorage，重新整理仍保留；讀取時會夾在合法範圍內，資料損壞則回到預設
+ * - 編輯後只存跟預設不同的項目到瀏覽器 localStorage，重新整理仍保留；讀取時會夾在合法範圍內，資料損壞則回到預設
+ * - 結構或預設語意大改時升版，舊存檔自動失效
  * - 快速模式不受影響（仍讀 config 常數）
  */
 
@@ -67,8 +68,11 @@ export const CHARACTER_PARAM_DEFS: ReadonlyArray<CharacterParamDef> = [
   }
 ];
 
-/** localStorage 存檔鍵（結構變更時改版號，舊存檔自動失效） */
-const STORAGE_KEY = 'douqi.characterParams.v1';
+/** localStorage 存檔鍵（只存與預設不同的項目；結構或預設語意大改時升版） */
+const STORAGE_KEY = 'douqi.characterParams.v2';
+
+/** 舊版存檔鍵，需要清除避免殘留 */
+const LEGACY_STORAGE_KEYS = ['douqi.characterParams.v1'];
 
 /** 取得一份全部為預設值的角色參數 */
 export function defaultCharacterParams(): CharacterParams {
@@ -100,6 +104,11 @@ export function loadCharacterParams(): CharacterParams {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (raw) saved = JSON.parse(raw) as Record<string, unknown>;
+    
+    // 清除舊版存檔避免殘留
+    for (const legacyKey of LEGACY_STORAGE_KEYS) {
+      window.localStorage.removeItem(legacyKey);
+    }
   } catch {
     return params; // 無痕模式 / 封鎖儲存 / 資料損壞 → 全部用預設
   }
@@ -110,13 +119,29 @@ export function loadCharacterParams(): CharacterParams {
 }
 
 /**
- * 儲存角色參數到 localStorage（無法存取時忽略，參數仍在本次遊戲有效）
+ * 儲存角色參數到 localStorage（只存與預設不同的項目；全部等於預設時移除存檔）
  *
  * @param params 要儲存的角色參數
  */
 export function saveCharacterParams(params: CharacterParams): void {
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(params));
+    const toSave: Record<string, number> = {};
+    let hasChanges = false;
+    
+    // 只存跟預設不同的項目
+    for (const def of CHARACTER_PARAM_DEFS) {
+      if (params[def.key] !== def.defaultValue) {
+        toSave[def.key] = params[def.key];
+        hasChanges = true;
+      }
+    }
+    
+    // 全部等於預設時直接移除存檔鍵（等同 clearCharacterParams）
+    if (!hasChanges) {
+      window.localStorage.removeItem(STORAGE_KEY);
+    } else {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+    }
   } catch {
     // 無法寫入（無痕模式 / 封鎖儲存）：不影響遊戲
   }

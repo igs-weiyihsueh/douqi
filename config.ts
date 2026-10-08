@@ -220,12 +220,12 @@ export const GameConfig = {
      * 大小 / 扁度 / 偏移為預設值，實際值取自角色編輯器（systems/characterParams）。
      * 一般怪會被推到「圈 + 自身半徑」之外（身體邊緣停在圈上）；近戰怪改在圈邊緣蓄力、出手
      */
-    vacuumRadius: 65,
+    vacuumRadius: 70,
     /** 真空圈的上下壓扁比例（地盤畫法與判定共用） */
     vacuumFlatten: 0.45,
     /** 真空圈中心相對角色腳底的偏移（px）；X 正值往右、Y 正值往下 */
-    vacuumOffsetX: 0,
-    vacuumOffsetY: 0,
+    vacuumOffsetX: 4,
+    vacuumOffsetY: -12,
     /** 近戰怪在真空邊緣再往外多少像素內開始蓄力 */
     vacuumEngageMargin: 10,
     /** 近戰怪出手時，離真空邊緣多少像素內的角色會被打中（比蓄力餘量大，角色稍微退開仍打得到） */
