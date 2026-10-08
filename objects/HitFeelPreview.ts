@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { GameConfig } from '../config';
 import { SKIN_TEXTURE } from '../controllers/ArtStyleController';
 import { CombatFx } from '../controllers/CombatFx';
 import { HitSparks, hitPoseAt } from '../controllers/HitReactionFx';
@@ -130,8 +131,11 @@ export class HitFeelPreview {
       this.hitFired = true;
       const wx = this.container.x + enemyX;
       const wy = this.container.y + groundY - this.enemy.displayHeight / 2;
-      if (p.streakEnabled === 1) this.fx.slashStreak(wx, wy, 0, false, this.depth + 3);
-      this.sparks.emit(wx, wy, 0, false);
+      // 與遊戲中 F4 骷髏相同的特效放大規則（依顯示高度）
+      const j = GameConfig.juice;
+      const sizeMult = Phaser.Math.Clamp(Math.sqrt(this.enemy.displayHeight / j.fxReferenceHeight), 1, j.fxMaxScale);
+      if (p.streakEnabled === 1) this.fx.slashStreak(wx, wy, 0, false, this.depth + 3, sizeMult);
+      this.sparks.emit(wx, wy, 0, false, sizeMult);
       if (p.enemyFlashMs > 0) this.enemy.setTintFill(FLASH_COLOR);
     }
     if (this.hitFired && t >= hitAt + p.enemyFlashMs) this.enemy.clearTint();

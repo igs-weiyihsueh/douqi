@@ -1362,6 +1362,12 @@ export const GameConfig = {
       /** 深度：在站立物件與斬擊圈之上、傷害數字之下 */
       depth: 44
     },
+    /**
+     * F4 新美術的命中特效放大：火花與刀光尺寸 × √(怪的顯示高度 / fxReferenceHeight)，上限 fxMaxScale。
+     * 特效原本依舊美術小怪（約 32px）設計；舊美術外觀維持 1 倍
+     */
+    fxReferenceHeight: 32,
+    fxMaxScale: 2.5,
     /** 敵人受擊反應（純視覺：繪製前套用、繪製後還原，不影響判定）；全部為打擊感編輯器的預設值 */
     hitReaction: {
       /** 反應時間（毫秒） */

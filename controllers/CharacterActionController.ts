@@ -62,8 +62,8 @@ export interface CharacterActionHost {
   empowerAoe(c: Character, time: number): void;
   flashWhite(c: Character): void;
   spawnMeleeArcEffect(x: number, y: number, angle: number): void;
-  /** 衝刺切入的刀光（穿過命中點、沿衝刺方向的斬痕） */
-  spawnSlashStreak(x: number, y: number, angle: number, empowered: boolean): void;
+  /** 衝刺切入的刀光（穿過被砍的怪、沿衝刺方向的斬痕；大小依怪的顯示尺寸） */
+  spawnSlashStreak(target: Enemy, angle: number, empowered: boolean): void;
 }
 
 /** 對 BOSS / 塔停外緣時，與目標外緣多留的距離 */
@@ -427,7 +427,7 @@ export class CharacterActionController {
   private beginCutIn(c: Character, hit: Enemy, dashSpeed: number, time: number): void {
     const p = hitFeel();
     const angle = Math.atan2(c.dashDestY - c.y, c.dashDestX - c.x);
-    if (p.streakEnabled === 1) this.host.spawnSlashStreak(hit.x, hit.y, angle, c.isEmpowered(time));
+    if (p.streakEnabled === 1) this.host.spawnSlashStreak(hit, angle, c.isEmpowered(time));
     // 關閉切入，或這一擊已把怪打死（沒有東西可陷入）→ 立即停下
     if (p.cutInEnabled !== 1 || p.cutInMs <= 0 || hit.dead || !hit.active) {
       this.endDashState(c);

@@ -41,9 +41,8 @@ export function hitPoseAt(elapsedMs: number): HitPose | null {
  * 主遊戲與打擊感編輯器預覽共用
  */
 export class HitSparks {
-  private emitter: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
-  /** 目前發射器建立時用的火花大小（大小改變時重建：縮放的起訖值建立後無法修改） */
-  private emitterScale = 0;
+  /** 依火花大小分開的發射器（縮放的起訖值建立後無法修改，大小不同就用不同發射器） */
+  private readonly emitters = new Map<number, Phaser.GameObjects.Particles.ParticleEmitter>();
 
   /**
    * @param scene 所在場景
@@ -58,13 +57,14 @@ export class HitSparks {
    * @param y 命中點 y
    * @param angle 噴發方向（弧度）
    * @param empowered 強化攻擊（金色、數量 × empoweredCountMult）
+   * @param sizeMult 尺寸倍率（大小與飛行速度一起放大；F4 大圖用）
    */
-  emit(x: number, y: number, angle: number, empowered: boolean): void {
+  emit(x: number, y: number, angle: number, empowered: boolean, sizeMult = 1): void {
     const p = hitFeel();
     const cfg = GameConfig.juice.hitSpark;
     const count = Math.round(p.sparkCount * (empowered ? cfg.empoweredCountMult : 1));
     if (count <= 0) return;
-    const emitter = this.ensureEmitter(p.sparkScale);
+    const emitter = this.emitterFor(p.sparkScale * sizeMult);
     emitter.setParticleLifespan(p.sparkLifespanMs);
     const colors = empowered ? cfg.empoweredColors : cfg.colors;
     const speedMin = Math.min(cfg.speedMin, p.sparkSpeedMax);
@@ -73,24 +73,23 @@ export class HitSparks {
       const t = (i + 0.5) / count; // 0~1，錐形內平均分佈
       const speedT = (i * GOLDEN_FRACTION) % 1;
       emitter.setEmitterAngle(baseDeg + (t - 0.5) * p.sparkConeDeg);
-      emitter.setParticleSpeed(speedMin + (p.sparkSpeedMax - speedMin) * speedT);
+      emitter.setParticleSpeed((speedMin + (p.sparkSpeedMax - speedMin) * speedT) * sizeMult);
       emitter.setParticleTint(colors[i % colors.length]);
       emitter.emitParticle(1, x, y);
     }
   }
 
-  /** 銷毀發射器（編輯器預覽關閉時） */
+  /** 銷毀所有發射器（編輯器預覽關閉時） */
   destroy(): void {
-    this.emitter?.destroy();
-    this.emitter = null;
+    for (const e of this.emitters.values()) e.destroy();
+    this.emitters.clear();
   }
 
-  /** 取得（必要時重建）指定火花大小的發射器 */
-  private ensureEmitter(scale: number): Phaser.GameObjects.Particles.ParticleEmitter {
-    if (this.emitter && this.emitterScale === scale) return this.emitter;
-    this.emitter?.destroy();
-    this.emitterScale = scale;
-    this.emitter = this.scene.add.particles(0, 0, SPARK_TEXTURE, {
+  /** 取得（必要時建立）指定火花大小的發射器 */
+  private emitterFor(scale: number): Phaser.GameObjects.Particles.ParticleEmitter {
+    const existing = this.emitters.get(scale);
+    if (existing) return existing;
+    const emitter = this.scene.add.particles(0, 0, SPARK_TEXTURE, {
       emitting: false,
       speed: 0,
       angle: 0,
@@ -99,7 +98,8 @@ export class HitSparks {
       alpha: { start: 1, end: 0 },
       blendMode: Phaser.BlendModes.ADD
     }).setDepth(this.depth);
-    return this.emitter;
+    this.emitters.set(scale, emitter);
+    return emitter;
   }
 }
 
@@ -152,9 +152,10 @@ export class HitReactionFx {
    * @param fromX 攻擊來源 x（火花往遠離來源的方向噴）
    * @param fromY 攻擊來源 y
    * @param empowered 是否為強化攻擊（金色、數量加倍）
+   * @param sizeMult 火花尺寸倍率（F4 大圖用，見 GameScene.hitFxScale）
    */
-  onEnemyHit(enemy: Enemy, fromX: number, fromY: number, empowered: boolean): void {
-    this.sparks.emit(enemy.x, enemy.y, Math.atan2(enemy.y - fromY, enemy.x - fromX), empowered);
+  onEnemyHit(enemy: Enemy, fromX: number, fromY: number, empowered: boolean, sizeMult = 1): void {
+    this.sparks.emit(enemy.x, enemy.y, Math.atan2(enemy.y - fromY, enemy.x - fromX), empowered, sizeMult);
     this.reactions.set(enemy, { enemy, startAt: this.scene.time.now });
   }
 

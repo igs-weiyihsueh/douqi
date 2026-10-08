@@ -1262,7 +1262,8 @@ export class GameScene extends Phaser.Scene {
       empowerAoe: (c, time) => this.comboSkills.empowerAoe(c, time),
       flashWhite: (c) => this.fx.flashWhite(c),
       spawnMeleeArcEffect: (x, y, angle) => this.fx.meleeArc(x, y, angle),
-      spawnSlashStreak: (x, y, angle, empowered) => this.fx.slashStreak(x, y, angle, empowered)
+      spawnSlashStreak: (target, angle, empowered) =>
+        this.fx.slashStreak(target.x, target.y, angle, empowered, undefined, this.hitFxScale(target))
     };
   }
 
@@ -1984,7 +1985,7 @@ export class GameScene extends Phaser.Scene {
     enemy.applyKnockback(fromX, fromY, knockback, time);
     this.fx.damageText(enemy.x, enemy.y, dmg);
     this.fx.flashEnemy(enemy);
-    this.hitFx.onEnemyHit(enemy, fromX, fromY, actor.isEmpowered(time));
+    this.hitFx.onEnemyHit(enemy, fromX, fromY, actor.isEmpowered(time), this.hitFxScale(enemy));
     // 擊殺只結算一次：takeDamage 判定死亡、且尚未被標記 dead 的才處理
     if (!dead || enemy.dead) return;
     const dx = enemy.x, dy = enemy.y;
@@ -2103,6 +2104,17 @@ export class GameScene extends Phaser.Scene {
       enemyFoot: (e) => visibleBottomOffset(this.textures, e.texture.key) * e.scaleY,
       enemyFootprint: (e) => this.artStyle.enemyFootprint(e)
     };
+  }
+
+  /**
+   * 命中特效（火花、刀光）的尺寸倍率：F4 新美術外觀的怪依顯示高度放大（√ 比例、有上限），舊美術外觀為 1
+   *
+   * @param enemy 被打的怪
+   */
+  private hitFxScale(enemy: Enemy): number {
+    if (!this.artStyle.enemyFootprint(enemy)) return 1;
+    const j = GameConfig.juice;
+    return Phaser.Math.Clamp(Math.sqrt(enemy.displayHeight / j.fxReferenceHeight), 1, j.fxMaxScale);
   }
 
   /** P1 腳下圓盤要畫的真空圈（只取形狀與位置） */
