@@ -217,6 +217,7 @@ export const GameConfig = {
     attackCooldownMs: 200,
     /**
      * 真空圈（腳下地盤 = 敵人進不來的範圍，P1 與 BOT 都有）：左右半徑 vacuumRadius，上下 = vacuumRadius × vacuumFlatten。
+     * 大小 / 扁度 / 偏移為預設值，實際值取自角色編輯器（systems/characterParams）。
      * 一般怪會被推到「圈 + 自身半徑」之外（身體邊緣停在圈上）；近戰怪改在圈邊緣蓄力、出手
      */
     vacuumRadius: 65,

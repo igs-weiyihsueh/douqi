@@ -1035,8 +1035,8 @@ export class UIScene extends Phaser.Scene {
     angle: number;
     dashDistance: number;
     showDashLine?: boolean;
-    /** 慢速模式真空圈的左右 / 上下半徑與腳底離角色中心的距離；有值時腳下地盤畫成真空圈 */
-    vacuum?: { rx: number; ry: number; footY: number };
+    /** 慢速模式真空圈（圈中心離角色中心的偏移、左右半徑、上下壓扁比例）；有值時腳下地盤畫成真空圈 */
+    vacuum?: { offsetX: number; offsetY: number; radius: number; flatten: number };
   }): void => {
     const g = this.aimGraphics;
     g.clear();
@@ -1067,11 +1067,11 @@ export class UIScene extends Phaser.Scene {
     // 快速模式：放大尺寸的裝飾性圓盤，維持原算法
     let diskX: number, diskY: number, ellipseWidth: number, ellipseHeight: number;
     if (a.vacuum) {
-      // 慢速模式：真空圈以實際顯示圖像的腳底為中心（與推擠 / 近戰判定同一個基準點）
-      diskX = ax;
-      diskY = ay + a.vacuum.footY;
-      ellipseWidth = a.vacuum.rx * 2;
-      ellipseHeight = a.vacuum.ry * 2;
+      // 慢速模式：真空圈中心 = 角色腳底 + 編輯器偏移（與推擠 / 近戰判定同一個形狀與位置）
+      diskX = ax + a.vacuum.offsetX;
+      diskY = ay + a.vacuum.offsetY;
+      ellipseWidth = a.vacuum.radius * 2;
+      ellipseHeight = a.vacuum.radius * a.vacuum.flatten * 2;
     } else {
       // 快速模式：原本的算法
       diskX = ax - 5;

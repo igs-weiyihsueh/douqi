@@ -29,7 +29,7 @@ import { EventController, type EventHost, type EventKind } from '../controllers/
 import {
   applyEnemySeparationSteering, bounceEnemyOffBounds, joinsEnemySeparation,
   pushBreakablesFromCharacter, pushBreakablesFromEnemy, pushCharacterOutOfStructures, pushEnemiesAwayFromCharacter,
-  pushEnemiesOutOfNpc, pushEnemyOutOfStructures, resolveEnemyOverlap, updateBreakableMotion, vacuumGap, type VacuumFeet
+  pushEnemiesOutOfNpc, pushEnemyOutOfStructures, resolveEnemyOverlap, updateBreakableMotion, vacuumGap, type VacuumZone
 } from '../systems/bodySeparation';
 import { drawEnemyChargeWarnings } from '../systems/enemyWarnings';
 import { isFixedEnemy, isRegularEnemy } from '../systems/enemyKinds';
@@ -681,7 +681,7 @@ export class GameScene extends Phaser.Scene {
         }
       }
       // 戰鬥時角色與一般怪輕微分離（不完全重疊）；衝刺中不套用(不影響衝刺打擊貼近手感)
-      if (!c.isDashing && !c.isSkillLocked(time)) pushEnemiesAwayFromCharacter(c, this.enemies, this.arena, this.controlMode === 'slow' ? this.vacuumFeet(c) : null);
+      if (!c.isDashing && !c.isSkillLocked(time)) pushEnemiesAwayFromCharacter(c, this.enemies, this.arena, this.controlMode === 'slow' ? this.vacuumZone(c) : null);
       // 木箱擋角色（不可穿越）——每幀手動把重疊木箱的角色推回木箱外緣(可靠、高速不穿透)；衝刺中不套用(衝刺撞破)
       if (!c.isDashing && !c.isSkillLocked(time)) pushBreakablesFromCharacter(c, this.breakables);
       // 塔/BOSS 實體碰撞:角色不可穿過塔/BOSS 本體(含衝刺中也擋,不讓穿王/塔身)
@@ -2029,27 +2029,32 @@ export class GameScene extends Phaser.Scene {
       dashDistance: GameConfig.aim.dashDistance,
       // slow 模式不畫「衝刺距離延長指示線」(用戶要拿掉那條延長瞄準線)；fast 維持顯示。
       showDashLine: this.controlMode !== 'slow',
-      // slow 模式腳下地盤 = 真空圈（左右 / 上下半徑、腳底離中心的距離）；fast 不帶，地盤維持原樣
-      ...(this.controlMode === 'slow'
-        ? { vacuum: {
-          rx: GameConfig.slow.vacuumRadius,
-          ry: GameConfig.slow.vacuumRadius * GameConfig.slow.vacuumFlatten,
-          footY: this.artStyle.characterFootOffset(this.player)
-        } }
-        : {})
+      // slow 模式腳下地盤 = 真空圈（與判定同一個形狀與位置）；fast 不帶，地盤維持原樣
+      ...(this.controlMode === 'slow' ? { vacuum: this.vacuumDisk() } : {})
     });
   }
 
   /**
-   * 真空圈判定用的腳底位置：角色依目前顯示的圖像（P1 新美術用皮膚）、敵人依自己的紋理與縮放
+   * 角色的真空圈：大小 / 扁度 / 偏移取自角色編輯器參數，中心在角色腳底 + 偏移。
+   * 腳底依目前顯示的圖像（P1 新美術用皮膚）；敵人腳底依自己的紋理與縮放
    *
    * @param c 角色
    */
-  private vacuumFeet(c: Character): VacuumFeet {
+  private vacuumZone(c: Character): VacuumZone {
+    const p = this.charParams;
     return {
-      characterFoot: this.artStyle.characterFootOffset(c),
+      offsetX: p.vacuumOffsetX,
+      offsetY: this.artStyle.characterFootOffset(c) + p.vacuumOffsetY,
+      radius: p.vacuumRadius,
+      flatten: p.vacuumFlatten,
       enemyFoot: (e) => visibleBottomOffset(this.textures, e.texture.key) * e.scaleY
     };
+  }
+
+  /** P1 腳下圓盤要畫的真空圈（只送形狀與位置給 UIScene） */
+  private vacuumDisk(): { offsetX: number; offsetY: number; radius: number; flatten: number } {
+    const { offsetX, offsetY, radius, flatten } = this.vacuumZone(this.player);
+    return { offsetX, offsetY, radius, flatten };
   }
 
   /**
@@ -2062,7 +2067,7 @@ export class GameScene extends Phaser.Scene {
    */
   private vacuumMeleeInRange(enemy: Enemy, target: Character | { x: number; y: number } | null, margin: number): boolean | undefined {
     if (this.controlMode !== 'slow' || !(target instanceof Character)) return undefined;
-    return vacuumGap(target, enemy, this.vacuumFeet(target)).gap <= margin;
+    return vacuumGap(target, enemy, this.vacuumZone(target)).gap <= margin;
   }
 
   private emitStats(): void {

@@ -254,49 +254,59 @@ export function standCharacterOutside(c: Character, e: Enemy, arena: Phaser.Geom
 // ---------------------------------------------------------------------------
 
 /**
- * 慢速模式真空圈：沿 (nx, ny) 方向，敵人中心離角色中心的最小距離。
- * 真空圈是橢圓（左右 vacuumRadius、上下 × vacuumFlatten），敵人的身體半徑也同樣壓扁後加上去，身體邊緣剛好停在圈上
- *
- * @param nx 角色 → 敵人的單位向量 x
- * @param ny 角色 → 敵人的單位向量 y
- * @param enemyRadius 敵人的身體半徑
+ * 慢速模式真空圈的形狀與位置（角色編輯器可調）。圓盤繪製與判定共用，看到的圈就是判定範圍
  */
-export function vacuumBoundaryDistance(nx: number, ny: number, enemyRadius: number): number {
-  const cfg = GameConfig.slow;
-  const a = cfg.vacuumRadius + enemyRadius;
-  const b = a * cfg.vacuumFlatten;
-  return (a * b) / Math.hypot(b * nx, a * ny);
-}
-
-/** 真空圈判定用的腳底位置：角色與敵人的腳底離各自中心的垂直距離（真空圈畫在腳下，判定也以腳底為準） */
-export interface VacuumFeet {
-  characterFoot: number;
+export interface VacuumZone {
+  /** 圈中心離角色中心的水平距離（左右偏移） */
+  offsetX: number;
+  /** 圈中心離角色中心的垂直距離（角色腳底 + 上下偏移） */
+  offsetY: number;
+  /** 左右半徑 */
+  radius: number;
+  /** 上下壓扁比例（上下半徑 = radius × flatten） */
+  flatten: number;
+  /** 敵人腳底離敵人中心的垂直距離 */
   enemyFoot(e: Enemy): number;
 }
 
 /**
- * 地面上「敵人腳底 → 真空圈邊界」還差多少距離（> 0 = 在圈外、≤ 0 = 已踩進圈內），以及從角色腳底指向敵人腳底的方向
+ * 真空圈邊界：沿 (nx, ny) 方向，敵人腳底離圈中心的最小距離。
+ * 敵人的身體半徑也同樣壓扁後加上去，身體邊緣剛好停在圈上
+ *
+ * @param nx 圈中心 → 敵人腳底的單位向量 x
+ * @param ny 圈中心 → 敵人腳底的單位向量 y
+ * @param enemyRadius 敵人的身體半徑
+ * @param zone 真空圈
+ */
+function vacuumBoundaryDistance(nx: number, ny: number, enemyRadius: number, zone: VacuumZone): number {
+  const a = zone.radius + enemyRadius;
+  const b = a * zone.flatten;
+  return (a * b) / Math.hypot(b * nx, a * ny);
+}
+
+/**
+ * 地面上「敵人腳底 → 真空圈邊界」還差多少距離（> 0 = 在圈外、≤ 0 = 已踩進圈內），以及從圈中心指向敵人腳底的方向
  *
  * @param c 角色
  * @param e 敵人
- * @param feet 腳底位置
+ * @param zone 真空圈
  */
-export function vacuumGap(c: Character, e: Enemy, feet: VacuumFeet): { gap: number; nx: number; ny: number } {
-  const { nx, ny, d } = normalBetween(c.x, c.y + feet.characterFoot, e.x, e.y + feet.enemyFoot(e));
-  return { gap: d - vacuumBoundaryDistance(nx, ny, e.getBodyRadius()), nx, ny };
+export function vacuumGap(c: Character, e: Enemy, zone: VacuumZone): { gap: number; nx: number; ny: number } {
+  const { nx, ny, d } = normalBetween(c.x + zone.offsetX, c.y + zone.offsetY, e.x, e.y + zone.enemyFoot(e));
+  return { gap: d - vacuumBoundaryDistance(nx, ny, e.getBodyRadius(), zone), nx, ny };
 }
 
 /**
  * 角色與一般怪不重疊：把重疊的怪推離角色（全額），角色位置不動、保留玩家走位手感。
- * 傳入 vacuum（慢速模式）時改用真空圈：以腳底為準，把踩進圈內的怪沿「角色腳底 → 怪腳底」推回圈邊（見 vacuumGap）。
+ * 傳入 vacuum（慢速模式）時改用真空圈：以腳底為準，把踩進圈內的怪沿「圈中心 → 怪腳底」推回圈邊（見 vacuumGap）。
  * 固定目標跳過（各有站外緣 / 穿越邏輯）；呼叫端在衝刺中不套用，保留衝刺穿怪的打擊感
  *
  * @param c 角色
  * @param enemies 敵人物件池
  * @param arena 移動區
- * @param vacuum 真空圈的腳底位置；null = 不用真空圈（快速模式），以身體半徑分離
+ * @param vacuum 真空圈；null = 不用真空圈（快速模式），以身體半徑分離
  */
-export function pushEnemiesAwayFromCharacter(c: Character, enemies: Phaser.Physics.Arcade.Group, arena: Phaser.Geom.Rectangle, vacuum: VacuumFeet | null): void {
+export function pushEnemiesAwayFromCharacter(c: Character, enemies: Phaser.Physics.Arcade.Group, arena: Phaser.Geom.Rectangle, vacuum: VacuumZone | null): void {
   const pr = GameConfig.player.radius;
   for (const child of enemies.getChildren()) {
     const e = child as Enemy;
