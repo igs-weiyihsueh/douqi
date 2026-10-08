@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { GameConfig } from '../config';
 import { Character } from '../objects/Character';
-import { Enemy, type BossSkillKind, type EnemyType } from '../objects/Enemy';
+import { Enemy, type EnemyType } from '../objects/Enemy';
 import { Item, type SkillType } from '../objects/Item';
 import { updateRefillLatch, shouldSpawnMore, type WaveSpawnState } from '../systems/waveMath';
 import { Bullet } from '../objects/Bullet';
@@ -16,6 +16,7 @@ import { HiddenGateController } from '../controllers/HiddenGateController';
 import { TreasureRoomController } from '../controllers/TreasureRoomController';
 import { SlotWorldController, type AreaTransition, type Side, type SlotWorldHost } from '../controllers/SlotWorldController';
 import { PerfOverlay } from '../controllers/PerfOverlay';
+import { GameDebugApi, type GameDebugHost } from '../controllers/GameDebugApi';
 import { TargetingController, type TargetingHost } from '../controllers/TargetingController';
 import { CharacterActionController, type CharacterActionHost, type SlowMoveKeys } from '../controllers/CharacterActionController';
 import { SkillController, type SkillHost } from '../controllers/SkillController';
@@ -82,6 +83,8 @@ export class GameScene extends Phaser.Scene {
 
   // 關卡系統(第一階段骨架)
   private levelMode = false;               // 是否啟用關卡制
+  /** 除錯 / 自動化測試入口：`getScene('GameScene').debug.X()`，每次 create() 重建 */
+  debug!: GameDebugApi;
   /** 區域世界（移動區、三格佈局、出口與轉場），每次 create() 重建 */
   private slotWorld!: SlotWorldController;
   /** 目前小關卡編號（1 起算、無限遞增） */
@@ -232,6 +235,7 @@ export class GameScene extends Phaser.Scene {
     this.bossCtl = new BossController(this.createBossHost());
     this.skillCtl = new SkillController(this.createSkillHost());
     this.eventCtl = new EventController(this.createEventHost());
+    this.debug = new GameDebugApi(this.createDebugHost());
     this.goIndicator = new GoIndicator(this);
     new PerfOverlay(this); // 除錯 F9：實機效能監控（自行註冊熱鍵與場景關閉時的清理）
     this.hiddenGate = new HiddenGateController(this);
@@ -1213,6 +1217,44 @@ export class GameScene extends Phaser.Scene {
       if (c.isDashing) this.actions.endDashState(c);
       else c.stopMoving();
     }
+  }
+
+  /**
+   * 建立 GameDebugApi 需要的場景能力
+   */
+  private createDebugHost(): GameDebugHost {
+    return {
+      scene: this,
+      characters: () => this.characters,
+      player: () => this.player,
+      enemies: () => this.enemies,
+      items: () => this.items,
+      breakables: () => this.breakables,
+      arena: () => this.arena,
+      boss: () => this.bossCtl,
+      skills: () => this.skillCtl,
+      events: () => this.eventCtl,
+      targeting: () => this.targeting,
+      isGameOver: () => this.gameOver,
+      isTimeStopped: () => this.timeStopped,
+      maxAlive: () => this.curMaxAlive(),
+      activeFxCount: () => this.activeFxCount,
+      attackDamage: () => this.curAttackDamage(),
+      p1AttackHits: () => this.p1AttackHits,
+      waveSnapshot: () => ({
+        wave: this.currentWave, waveKilled: this.waveKilled, waveQuota: this.waveQuota,
+        waveSpawned: this.waveSpawned, waveState: this.waveState
+      }),
+      setWaveState: (state) => { this.waveState = state; },
+      emitStats: () => this.emitStats(),
+      triggerGameOver: () => this.triggerGameOver(),
+      applyHeal: (c) => this.applyHeal(c),
+      addBot: () => this.tryAddBot(),
+      dropItemAt: (x, y, time) => this.dropItemAt(x, y, time),
+      damageEnemy: (actor, enemy, damage, knockback, time) => this.damageEnemy(actor, enemy, damage, knockback, time),
+      teamKills: () => this.teamKills(),
+      wireEnemyCallbacks: (e) => this.wireEnemyCallbacks(e)
+    };
   }
 
   /**
@@ -3496,305 +3538,6 @@ export class GameScene extends Phaser.Scene {
   /** 角色普攻傷害 */
   private curAttackDamage(): number {
     return GameConfig.player.attackDamage;
-  }
-
-  /** 除錯/自動化測試用：立即讓所有角色陣亡以觸發結算（不影響正常玩法） */
-  debugForceGameOver(): void {
-    if (this.gameOver) return;
-    for (const c of this.characters) {
-      c.hp = 0;
-      if (c.alive) c.die();
-    }
-    this.triggerGameOver();
-  }
-
-  /** 除錯/自動化測試用：對 P1 觸發指定招式（不影響正常玩法） */
-  debugTriggerSkill(skill: 'A' | 'B' | 'C' | 'E' | 'T'): void {
-    if (this.gameOver || !this.player.alive) return;
-    this.skillCtl.cast(this.player, skill, this.time.now);
-  }
-
-  /** 除錯：回傳目前關鍵狀態 */
-  debugState(): Record<string, unknown> {
-    return {
-      gameOver: this.gameOver,
-      timeStopped: this.timeStopped,
-      p1SkillLocked: this.player ? this.player.isSkillLocked(this.time.now) : null,
-      p1Invuln: this.player ? this.player.isInvulnerable(this.time.now) : null,
-      enemyCount: this.enemies ? this.enemies.countActive(true) : null,
-      maxAlive: this.curMaxAlive(),
-      activeFxCount: this.activeFxCount,
-      attackDamage: Math.round(this.curAttackDamage()),
-      p1AttackHits: this.p1AttackHits,
-      wave: this.currentWave,
-      waveKilled: this.waveKilled,
-      waveQuota: this.waveQuota,
-      waveSpawned: this.waveSpawned,
-      waveState: this.waveState,
-      combo: this.player.spirit,
-      energy: this.player.energy,
-      p1Empowered: this.player.isEmpowered(this.time.now)
-    };
-  }
-
-  /** 除錯：對 P1 施放補血（測 heal） */
-  debugHealP1(): { before: number; after: number } {
-    const before = this.player.hp;
-    this.applyHeal(this.player);
-    return { before, after: this.player.hp };
-  }
-
-  /** 除錯：直接生成一隻 BOSS（測 BOSS 戰/血條） */
-  debugSpawnBoss(): void {
-    this.waveState = 'boss';
-    this.bossCtl.spawn();
-  }
-
-  /** 除錯：直接生成一隻限時亂入 BOSS（測亂入計時 / 命中掉彩票 / 離場） */
-  debugSpawnIntruderBoss(): void {
-    if (!this.bossCtl.current) this.bossCtl.spawn(true);
-  }
-
-  /** 除錯：直接施放 BOSS 指定招式（a/b/c）——需先有 BOSS 在場 */
-  debugBossSkill(kind: BossSkillKind): void {
-    this.bossCtl.debugCast(kind);
-  }
-
-  /** 除錯：暫停/恢復 BOSS 自動輪替招式（隔離單招測試用） */
-  debugPauseBossSkills(v: boolean): void {
-    this.bossCtl.debugPauseSkills(v);
-  }
-
-  /** 除錯：設定當前波次（測波次/BOSS 觸發） */
-  debugSetWave(n: number): void {
-    this.currentWave = Math.max(1, Math.floor(n));
-    this.waveQuota = this.computeWaveQuota(this.currentWave);
-    this.waveKilled = 0;
-    this.waveSpawned = 0;
-    this.waveState = 'spawning';
-    this.emitStats();
-  }
-
-  /** 除錯：直接觸發指定事件（測塔/守護/佔領） */
-  debugTriggerEvent(kind: EventKind): void {
-    this.waveState = 'event';
-    this.eventCtl.start(kind);
-    this.emitStats();
-  }
-
-  /** 除錯：可打破物件狀態(數量 + 位置 + 種類)。 */
-  debugBreakables(): Record<string, unknown> {
-    const list = this.breakables.getChildren().filter((c) => (c as Breakable).active).map((c) => {
-      const bk = c as Breakable;
-      return { x: Math.round(bk.x), y: Math.round(bk.y), hp: bk.hp, kind: bk.kind };
-    });
-    return { count: list.length, barrels: list.filter((b) => b.kind === 'barrel').length, list };
-  }
-
-  /** 除錯：在指定點(相對玩家偏移)生一個可打破物件(kind 'crate'|'barrel')，回傳其索引。 */
-  debugSpawnBreakableAt(dx: number, dy: number, kind: 'crate' | 'barrel' = 'crate'): number {
-    const x = this.player.x + dx, y = this.player.y + dy;
-    const bk = this.breakables.get(x, y) as Breakable | null;
-    if (!bk) return -1;
-    bk.spawnBreakable(x, y, kind);
-    return this.breakables.getChildren().indexOf(bk);
-  }
-
-  /** 除錯：回傳事件狀態 */
-  debugEventState(): Record<string, unknown> {
-    return {
-      waveState: this.waveState,
-      ...this.eventCtl.debugState()
-    };
-  }
-
-  /** 除錯：壓力測試——在 P1 周圍密集生成 n 隻已實體化(可傷)的一般怪 */
-  debugStressSpawn(n: number): number {
-    const now = this.time.now;
-    let made = 0;
-    for (let i = 0; i < n; i++) {
-      const ang = Math.random() * Math.PI * 2;
-      const rad = 40 + Math.random() * 160;
-      const x = Phaser.Math.Clamp(this.player.x + Math.cos(ang) * rad, this.arena.left + 20, this.arena.right - 20);
-      const y = Phaser.Math.Clamp(this.player.y + Math.sin(ang) * rad, this.arena.top + 20, this.arena.bottom - 20);
-      const e = this.enemies.get(x, y) as Enemy | null;
-      if (!e) break;
-      e.onAttackFire = this.onEnemyAttackFire;
-      e.onAttackFire = this.onEnemyAttackFire;
-      e.onShoot = this.onEnemyShoot;
-      e.onLaserFire = this.onEnemyLaserFire;
-      e.onBombThrow = this.onEnemyBombThrow;
-      e.spawn(x, y, now, 'normal', 1);
-      // 立即實體化(跳過登場提示)，讓時停能吃到、可測結算負載
-      (e as unknown as { telegraphing: boolean }).telegraphing = false;
-      (e.body as Phaser.Physics.Arcade.Body).enable = true;
-      e.setAlpha(1);
-      made++;
-    }
-    return made;
-  }
-
-  /** 除錯：在指定點掉一個道具（測鎖定/衝去撿） */
-  debugDropItem(x: number, y: number): void {
-    this.dropItemAt(x, y, this.time.now);
-  }
-
-  /** 除錯：清空所有敵人，並在距 P1 指定距離處生一隻已實體化的一般怪，回傳其索引狀態 */
-  debugSpawnProbeAt(distFromP1: number): void {
-    for (const ch of this.enemies.getChildren()) {
-      const e = ch as Enemy;
-      if (e.active) e.kill();
-    }
-    const now = this.time.now;
-    const x = Phaser.Math.Clamp(this.player.x + distFromP1, this.arena.left + 30, this.arena.right - 30);
-    const y = this.player.y;
-    const e = this.enemies.get(x, y) as Enemy | null;
-    if (!e) return;
-    e.onAttackFire = this.onEnemyAttackFire;
-    e.onShoot = this.onEnemyShoot;
-    e.onLaserFire = this.onEnemyLaserFire;
-    e.onBombThrow = this.onEnemyBombThrow;
-    e.spawn(x, y, now, 'normal', 1);
-    (e as unknown as { telegraphing: boolean }).telegraphing = false;
-    (e.body as Phaser.Physics.Arcade.Body).enable = true;
-    e.setAlpha(1);
-  }
-
-  /** 除錯：在距 P1 指定距離生一隻指定 type 的已實體化敵人（測 shooter 雷射等） */
-  debugSpawnType(type: EnemyType, distFromP1: number): void {
-    const now = this.time.now;
-    const x = Phaser.Math.Clamp(this.player.x + distFromP1, this.arena.left + 30, this.arena.right - 30);
-    const y = this.player.y;
-    const e = this.enemies.get(x, y) as Enemy | null;
-    if (!e) return;
-    e.onAttackFire = this.onEnemyAttackFire;
-    e.onShoot = this.onEnemyShoot;
-    e.onLaserFire = this.onEnemyLaserFire;
-    e.onBombThrow = this.onEnemyBombThrow;
-    e.spawn(x, y, now, type, 1);
-    (e as unknown as { telegraphing: boolean }).telegraphing = false;
-    (e.body as Phaser.Physics.Arcade.Body).enable = true;
-    e.setAlpha(1);
-  }
-
-  /** 除錯：回傳第一隻活著敵人的 AI 狀態 + 到 P1 距離 */
-  debugProbeState(): Record<string, unknown> {
-    for (const ch of this.enemies.getChildren()) {
-      const e = ch as Enemy;
-      if (e.active && !e.dead) {
-        return {
-          aiState: e.getAiState(),
-          distToP1: Math.round(Phaser.Math.Distance.Between(e.x, e.y, this.player.x, this.player.y)),
-          ex: Math.round(e.x)
-        };
-      }
-    }
-    return { aiState: 'none' };
-  }
-
-  /** 除錯：施放居合並回傳起點；供測試比對結束後是否回到起點附近 */
-  debugIaidoStart(): { x: number; y: number } {
-    const p = this.player;
-    this.skillCtl.cast(p, 'C', this.time.now);
-    return { x: Math.round(p.x), y: Math.round(p.y) };
-  }
-
-  debugP1Pos(): { x: number; y: number } {
-    return { x: Math.round(this.player.x), y: Math.round(this.player.y) };
-  }
-
-  /** 除錯：模擬滑鼠指向某點（設 aimAngle + 標記活躍），用來測鎖定評分 */
-  debugAimToward(x: number, y: number): void {
-    this.player.aimAngle = Phaser.Math.Angle.Between(this.player.x, this.player.y, x, y);
-    this.targeting.markPointerMoved(this.time.now);
-  }
-
-  /** 除錯：加一個 BOT（同 B 鍵） */
-  debugAddBot(): void {
-    this.tryAddBot();
-  }
-
-  /** 除錯：在 BOT(index) 附近 offset 掉道具，立刻回報 pickBotTarget 是否選中該道具 */
-  debugBotWouldGrabItem(index: number, offset = 40): boolean {
-    const bot = this.characters[index];
-    if (!bot) return false;
-    this.dropItemAt(bot.x + offset, bot.y + offset, this.time.now);
-    const t = this.targeting.pickBotTarget(bot);
-    return t instanceof Item;
-  }
-
-  /**
-   * 除錯：測擊殺原子性——挑一隻可傷敵人，把 HP 設到很低，讓兩個角色「同幀」各打一次致命傷，
-   * 回報：kill 前後 team 擊殺數變化、道具數變化、該敵 dead 旗標。應只 +1 kill、最多掉 1 個道具。
-   */
-  debugSimulSameFrameKill(): Record<string, unknown> {
-    // 確保有 2 個角色
-    while (this.characters.length < 2) this.tryAddBot();
-    const a = this.characters[0];
-    const b = this.characters[1];
-    // 找一隻可傷敵人
-    let target: Enemy | null = null;
-    for (const ch of this.enemies.getChildren()) {
-      const e = ch as Enemy;
-      if (e.active && e.isVulnerable() && !e.dead) { target = e; break; }
-    }
-    if (!target) return { error: 'no enemy' };
-    target.hp = 5; // 兩擊都會致命
-    const killsBefore = this.teamKills();
-    const itemsBefore = this.items.countActive(true);
-    const now = this.time.now;
-    // 同幀兩個致命命中（大傷害）
-    this.damageEnemy(a, target, 9999, 0, now);
-    this.damageEnemy(b, target, 9999, 0, now);
-    return {
-      killsBefore,
-      killsAfter: this.teamKills(),
-      killDelta: this.teamKills() - killsBefore,
-      itemsBefore,
-      itemsAfter: this.items.countActive(true),
-      itemDelta: this.items.countActive(true) - itemsBefore,
-      enemyDead: target.dead
-    };
-  }
-
-  /** 除錯：回傳各角色鎖定/位置 + 道具狀態（測互搶/多色點） */
-  debugCharsLock(): Record<string, unknown> {
-    const items = this.items
-      ? this.items.getChildren().map((ch) => {
-          const it = ch as Item;
-          return { skill: it.skill, taken: it.taken, active: it.active, x: Math.round(it.x), y: Math.round(it.y) };
-        })
-      : [];
-    return {
-      chars: this.characters.map((c) => ({
-        index: c.index,
-        alive: c.alive,
-        x: Math.round(c.x),
-        y: Math.round(c.y),
-        lockIsItem: c.lockedTarget instanceof Item,
-        hasLock: !!c.lockedTarget,
-        dashToItem: c.dashToItem,
-        spirit: c.spirit
-      })),
-      items,
-      itemsAlive: this.items ? this.items.countActive(true) : 0
-    };
-  }
-
-  /** 除錯：回傳目前鎖定狀態（是否鎖到道具） */
-  debugLockInfo(): Record<string, unknown> {
-    const t = this.targeting.lockedTarget;
-    return {
-      hasLock: !!t,
-      lockIsItem: this.targeting.isItem(t),
-      lockX: t ? Math.round(t.x) : null,
-      lockY: t ? Math.round(t.y) : null,
-      itemsAlive: this.items ? this.items.countActive(true) : null,
-      p1Dashing: this.player ? this.player.isDashing : null,
-      p1DashToItem: this.player ? this.player.dashToItem : null,
-      p1x: this.player ? Math.round(this.player.x) : null,
-      p1y: this.player ? Math.round(this.player.y) : null
-    };
   }
 
   // ---------------------------------------------------------------------------

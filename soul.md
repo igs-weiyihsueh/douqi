@@ -107,7 +107,7 @@
 - **v61 爆炸桶(barrel)**：橘紅桶+黃危險條紋貼圖(breakable-barrel)。打破→`explodeBarrel`：火光圈+核心+粒子+閃白+強震；範圍(explodeRadius120)內【怪】低傷(explodeDamage26)+朝外一次性強位移擊退(knockback130，炸飛)、boss/tower/anchor/npc不擊退；【玩家】damageCharacterFrom(fast扣血/slow只energy、**不擊退**)；連鎖引爆其他桶(depth上限 maxChainDepth3)；掉道具 barrel.dropChance0.03。
 - **v62 三改**：①桶彼此拉遠 minBarrelSpacing200(幾乎不連鎖)②打破桶→**startBarrelFuse**(fusing旗標+地面紅警示圈填滿閃爍跟隨桶+桶閃紅)→倒數 fuseMs800→才 explodeBarrel(怪/玩家可閃避)③**木箱+桶可推動(反轉 immovable)**：`blockCharacter/EnemyFromBreakables` 改成推【物件】(給 vx/vy)、`updateBreakables(delta)` 每幀速度整合+摩擦(friction6)停+邊界clamp(推到牆停、該軸速度歸零不穿牆)+物件兩兩分離(不疊)。衝刺仍打破(不推)、攻擊命中破，「推」只在非攻擊走路/怪碰。可把爆炸桶推到怪群再打破。
 - **config.breakable**：hp80/radius16/clustersPerWave3/perCluster4/minDistFromCenter150/maxDropPerBreak1/color棕；`.barrel`{hp40,perWave2,explodeRadius120,minBarrelSpacing200,fuseMs800,explodeDamage26,knockback130,maxChainDepth3,dropChance0.03,橘紅色}；`.push`{maxPushSpeed180,friction6}。
-- **debug**：`debugBreakables()`(count/barrels/list含kind)、`debugSpawnBreakableAt(dx,dy,kind)`。
+- **debug**：`debug.breakables()`(count/barrels/list含kind)、`debug.spawnBreakableAt(dx,dy,kind)`。
 
 ### v34 及更早玩法快照（基礎，仍現行）
 - **關鍵檔案**：`src/config.ts`(所有數值)、`src/scenes/GameScene.ts`(主場景/招式/事件/波次/BOSS/雙模式)、`src/objects/Enemy.ts`(敵人狀態機/shiftTimers)、`src/objects/Character.ts`(角色/定身視覺rootMark)、`BootScene.ts`(貼圖)、`UIScene.ts`(HUD/aimGraphics)、`TitleScene.ts`(開始介面鍵盤選模式)、`GameOverScene.ts`(結算/通關,帶controlMode重開)。
@@ -177,8 +177,12 @@
 ## 除錯掛鉤（保留，無害，供自動化測試）
 
 - `window.__game` = Phaser.Game 實例（main.ts 掛上）。
-- 常用：`debugState()`(gameOver/timeStopped/wave/waveState/level/combo/…)、`debugSetWave(n)`、`debugSpawnBoss()`、`debugBossSkill('a'|'c'|'d')`、`debugTriggerEvent('tower'|'guard'|'capture')`、`debugEventState()`、`debugSpawnProbeAt(distFromP1)`(生1隻正確 telegraphing=false 的可傷怪)、`debugTriggerSkill('A'|'B'|'C'|'E'|'T')`、`debugDropItem(x,y)`、`debugLockInfo()`、`debugP1Pos()`、`debugForceGameOver()`。
-- **慢速模式測試**：`controlMode`、`slowTuning{lockRadius,dashDistance,dashSpeed}`、`lockedTarget`、`pickAimConeTarget`/`isLockableEnemy`/`isVulnerable` 可從 GameScene 讀。TitleScene 有 `selected`/`highlightRect`/`hlPos`/`selectMode`。
+- 入口：`window.__game.scene.getScene('GameScene').debug.X()`（controllers/GameDebugApi.ts；2026-10-08 由 `scene.debugX()` 整併，舊的 debugSetWave / debugIaidoStart 已刪除）。
+- 查詢：`state()`(gameOver/timeStopped/敵數/maxAlive/wave/waveState/combo/energy/p1Empowered…)、`eventState()`、`p1Pos()`、`probeState()`、`breakables()`、`lockInfo()`、`charsLock()`。
+- 觸發：`forceGameOver()`、`triggerSkill('A'|'B'|'C'|'E'|'T')`、`healP1()`、`spawnBoss()`、`spawnIntruderBoss()`、`bossSkill(kind)`、`pauseBossSkills(bool)`、`triggerEvent('tower'|'guard'|'capture')`、`addBot()`、`aimToward(x,y)`、`dropItem(x,y)`。
+- 生成：`spawnProbeAt(distFromP1)`(清場後生1隻已實體化的一般怪)、`spawnType(type,dist)`、`stressSpawn(n)`、`spawnBreakableAt(dx,dy,kind)`。
+- 專項測試：`botWouldGrabItem(index,offset)`、`simulSameFrameKill()`。
+- **慢速模式測試**：`controlMode`、`slowTuning{lockRadius,dashDistance,dashSpeed}` 可從 GameScene 讀；鎖定相關在 `targeting.lockedTarget` / `targeting.pickAimConeTarget` / `targeting.isLockableEnemy`，敵人 `isVulnerable()`。TitleScene 有 `selected`/`highlightRect`/`hlPos`/`selectMode`。
 - **測試法**：`npm install --no-save puppeteer@23`(內建 Chromium)、寫短 .cjs、`page.evaluate` 讀 __game。★真實輸入(fleet decision 7a3acdf0)：操作/物理/時序【必須 page.mouse.move(world→screen 映射: setViewport 1280×720 canvas 1:1、rect=canvas.getBoundingClientRect()、sx=rx+wx*(rw/gw)) + page.keyboard】，不可 evaluate 直接 set 狀態繞過(否則 headless PASS 但實機 bug 依舊)。★分短支(一支驗一項)避免 CLI 卡 Thinking。逐幀取樣用頁面內 requestAnimationFrame(避免 puppeteer sleep 錯過幀)。測完 `npm uninstall puppeteer`(package.json 勿留 puppeteer:0)、刪 .cjs/.png。headless `--no-sandbox`、goto `waitUntil:'domcontentloaded'`。
 - **選慢速進遊戲(測試)**：TitleScene 按 ArrowRight(選慢速)→Space；選快速直接 Space。
 
@@ -309,7 +313,7 @@
 - **v21** 普攻傷害隨等級(attackDamageLv1Scale 0.6, curAttackDamage Lv1 15→Lv10 25)+範圍成長確認生效；新增 **H補血道具**(非招式, 撿到只補自己+40不超maxHp, applyHeal, 綠光+跳字, 入掉落池)；F火焰改長方形火道+長方形燒灼區(flameLength340×flameWidth150, burnLength300×burnWidth150, pointInOrientedRect 判定)；居合視覺改寬斬擊帶(spawnSlashBand, 寬=hitRadius×2≈220, 與判定一致)。
 
 ## 除錯掛鉤補充（v14→v21 新增，皆無害保留）
-- GameScene: debugGrantExp, debugStressSpawn, debugSpawnProbeAt, debugProbeState, debugIaidoStart, debugP1Pos, debugAddBot, debugBotWouldGrabItem, debugSimulSameFrameKill, debugDropItem, debugAimToward, debugCharsLock, debugTriggerSkill, debugState(含 level/scale/attackDamage/activeFxCount), debugHealP1。
+- （這批掛鉤已整併到上方〈除錯掛鉤〉，改為 `scene.debug.X()`）
 
 ## 版本沿革（v22 → v34）
 
@@ -328,7 +332,7 @@
 - **v34** 事件/強化/BOSS調整6點: NPC不可鎖(塔可鎖)、守護/塔事件持續生怪(無視配額)、intermission凍結強化&道具倒數、強化角色scale1.4(碰撞不變)、BOSS/塔不被擊退、塔圓環重做(**中空環+由內而外填滿預警+三環依序擴大+環帶命中定身3秒** rootedUntil/isRooted)。
 
 ## 除錯掛鉤補充（v22→v34）
-- debugSetWave(n)、debugSpawnBoss()、debugTriggerEvent('tower'|'guard'|'capture')、debugEventState()、debugSpawnType(type,dist)、debugState 加 wave/combo/empowerRemainMs/p1Empowered 等。
+- （這批掛鉤已整併到上方〈除錯掛鉤〉，改為 `scene.debug.X()`；debugSetWave 隨舊波次模式刪除）
 
 ## 待辦 / 可能的下一步（海牛派）
 
