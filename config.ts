@@ -892,14 +892,14 @@ export const GameConfig = {
     /**
      * 隱藏入口（熔岩拱門）：每區開打時 spawnChance 機率出現在上方邊界（距左右邊 edgeMargin、避開中央上方出口
      * centerExclusion），拱門底部在場地上緣往內 topInset，顯示高度 displayHeight；未開啟時灰暗（closedTint / closedAlpha），
-     * 開啟後洞口中央（自底部算起 glowCenterRatio 高度）出現熔岩光暈，脈動週期 glowPulseMs。
-     * openChance：問號關前出口組合含「上」時改開拱門的機率（第二階段使用）。目前為測試期數值
+     * 開啟後洞口中央（自底部算起 glowCenterRatio 高度、半徑約寬度 × doorwayRadiusRatio）出現熔岩光暈，脈動週期 glowPulseMs。
+     * openChance：問號關前出口組合含「上」且這一區有拱門時，改開拱門取代上方出口的機率。目前為測試期數值
      */
     hiddenGate: {
       spawnChance: 0.7, openChance: 0.5,
       displayHeight: 230, topInset: 40, edgeMargin: 220, centerExclusion: 280, depth: 3,
       closedTint: 0x6b6b6b, closedAlpha: 0.9, openFlickerAlpha: 0.8,
-      glowColor: 0xff7a1a, glowRadius: 120, glowCenterRatio: 0.4, glowPulseMs: 600,
+      glowColor: 0xff7a1a, glowRadius: 120, glowCenterRatio: 0.4, doorwayRadiusRatio: 0.3, glowPulseMs: 600,
       glowMinAlpha: 0.35, glowMaxAlpha: 0.85, glowPulseScale: 1.15
     },
     /**

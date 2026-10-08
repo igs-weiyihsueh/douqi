@@ -32,6 +32,14 @@ export class HiddenGateController {
     return this.gate ? { x: this.gate.x, y: this.gate.y } : null;
   }
 
+  /** 拱門洞口中心與大致半徑（GO 指向的目標）；沒有拱門時為 null */
+  get doorway(): { x: number; y: number; radius: number } | null {
+    const gate = this.gate;
+    if (!gate) return null;
+    const cfg = GameConfig.stage.hiddenGate;
+    return { x: gate.x, y: gate.y - gate.displayHeight * cfg.glowCenterRatio, radius: gate.displayWidth * cfg.doorwayRadiusRatio };
+  }
+
   /**
    * 新區域開打：清掉上一區的拱門，依 spawnChance 決定這一區是否出現
    *
@@ -80,10 +88,13 @@ export class HiddenGateController {
     this.glow = glow;
   }
 
-  /** 除錯：這一區沒有拱門就先生成，然後立刻開啟 */
-  debugOpen(zone: Phaser.Geom.Rectangle): void {
+  /**
+   * 除錯：這一區沒有拱門就先生成（之後由呼叫端開啟）
+   *
+   * @param zone 這一區的移動區
+   */
+  ensureSpawned(zone: Phaser.Geom.Rectangle): void {
     if (!this.gate) this.spawnFor(zone, true);
-    this.open();
   }
 
   /** 移除拱門與光暈 */

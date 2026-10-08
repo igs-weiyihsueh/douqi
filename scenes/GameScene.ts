@@ -402,9 +402,11 @@ export class GameScene extends Phaser.Scene {
     });
 
     // R 鍵：P1 原地滿血復活（無限次）
-    // 除錯 H 鍵：立刻開啟這一區的隱藏入口（沒有拱門就先生成）
+    // 除錯 H 鍵：立刻開啟這一區的隱藏入口（沒有拱門就先生成），可直接走進去
     this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.H).on('down', () => {
-      if (this.levelMode) this.hiddenGate.debugOpen(this.zoneA);
+      if (!this.levelMode || this.hiddenGate.isOpen) return;
+      this.hiddenGate.ensureSpawned(this.zoneA);
+      this.openHiddenGateExit();
     });
 
     this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.R).on('down', () => {
@@ -738,6 +740,7 @@ export class GameScene extends Phaser.Scene {
       }
       if (this.progressPhase === 'choosing') this.updateChoosing();
       else if (this.progressPhase === 'exiting') this.updateExiting();
+      if (this.progressPhase === 'playing' || this.progressPhase === 'exiting') this.updateHiddenGateEntry();
       if (this.choiceGfx || this.exitGfx) this.pulseChoice(time); // 出口標記呼吸閃爍
       // 階段1:crossing 開放期間(progressPhase 仍 'playing',玩家自由走動不凍結)→偵測走進右 B。
       if (this.crossingOpen) this.updateCrossing();
@@ -2054,8 +2057,33 @@ export class GameScene extends Phaser.Scene {
     this.openCrossing({ L, R });
     if (up) {
       this.progressPhase = 'exiting'; // 左右轉場仍在 crossingOpen 下偵測；exiting 另外偵測上方出口
-      this.showExit();
+      // 這一區有隱藏入口時，依機率改開拱門取代上方出口
+      if (this.hiddenGate.exists && Math.random() < GameConfig.stage.hiddenGate.openChance) this.openHiddenGateExit();
+      else this.showExit();
     }
+  }
+
+  /** 開啟隱藏入口作為出口：拱門發光，GO 指向拱門洞口 */
+  private openHiddenGateExit(): void {
+    this.hiddenGate.open();
+    const d = this.hiddenGate.doorway;
+    if (d) this.goIndicator.show('U', d.x, d.y, d.radius);
+  }
+
+  /** 每幀：隱藏入口開啟時，玩家走到拱門入口就進入 */
+  private updateHiddenGateEntry(): void {
+    const e = this.hiddenGate.entrance;
+    if (!this.hiddenGate.isOpen || !e) return;
+    if (this.crossingOpen && this.crossPhase !== 'walk') return; // 已選左右開始轉場就不再判定
+    if (Phaser.Math.Distance.Between(this.player.x, this.player.y, e.x, e.y) <= GameConfig.stage.triggerDist + 20) {
+      this.enterHiddenGate();
+    }
+  }
+
+  /** 進入隱藏入口：閃黑轉場到新區域 */
+  private enterHiddenGate(): void {
+    this.hiddenGate.clear();
+    this.startTransition();
   }
 
   /** 收掉上方出口的圖與 GO（問號關前選了另一條路時用） */
@@ -2606,6 +2634,7 @@ export class GameScene extends Phaser.Scene {
 
   /** exiting 階段每幀：玩家走到上方出口標記 → 閃黑轉場到新區域 */
   private updateExiting(): void {
+    if (!this.exitGfx) return; // 上方出口被隱藏入口取代時沒有出口標記
     const { x, y } = this.topExitPoint();
     if (Phaser.Math.Distance.Between(this.player.x, this.player.y, x, y) <= GameConfig.stage.triggerDist + 20) {
       this.startTransition();
