@@ -3,6 +3,7 @@ import { GameConfig } from '../config';
 import type { Breakable } from '../objects/Breakable';
 import type { Character } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
+import { isFixedEnemy, isStructureEnemy } from './enemyKinds';
 
 /**
  * 角色 / 敵人 / 可推動物件之間的位置分離（無狀態）。
@@ -13,19 +14,6 @@ import type { Enemy } from '../objects/Enemy';
 
 /** 完全重疊時的預設推出方向（避免除以 0） */
 const FALLBACK_NORMAL = { x: 1, y: 0 } as const;
-
-/**
- * 固定不被推的大型 / 位移點敵人：BOSS、塔，以及 NPC、錨點等 anchor-like 位移點。
- * 這些目標各有自己的站位邏輯，一般的推擠分離都會跳過它們
- */
-export function isFixedEnemy(e: Enemy): boolean {
-  return e.isBoss || e.enemyType === 'tower' || e.isAnchorLike();
-}
-
-/** 會擋住角色與一般怪本體的結構：BOSS、塔 */
-export function isStructureEnemy(e: Enemy): boolean {
-  return e.isBoss || e.enemyType === 'tower';
-}
 
 /**
  * 從 from 指向 to 的單位向量與距離；距離近乎 0 時回傳預設方向

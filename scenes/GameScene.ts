@@ -15,11 +15,12 @@ import { ArtStyleController } from '../controllers/ArtStyleController';
 import { SkillController, type SkillHost } from '../controllers/SkillController';
 import { pointInOrientedRect } from '../systems/geometry';
 import {
-  applyEnemySeparationSteering, bounceEnemyOffBounds, isStructureEnemy, joinsEnemySeparation,
+  applyEnemySeparationSteering, bounceEnemyOffBounds, joinsEnemySeparation,
   pushBreakablesFromCharacter, pushBreakablesFromEnemy, pushCharacterOutOfStructures, pushEnemiesAwayFromCharacter,
   pushEnemiesOutOfNpc, pushEnemyOutOfStructures, resolveEnemyOverlap, standCharacterOutside, updateBreakableMotion
 } from '../systems/bodySeparation';
 import { drawEnemyChargeWarnings } from '../systems/enemyWarnings';
+import { isFixedEnemy, isRegularEnemy, isStructureEnemy } from '../systems/enemyKinds';
 
 /**
  * GameScene（v6：本地單機模擬 4 人共玩）：
@@ -1178,8 +1179,7 @@ export class GameScene extends Phaser.Scene {
   /** v51(2)：不可推動的大型「不動」目標(BOSS/塔)——攻擊這些時停外緣原地揮、不衝進中心避免重疊。
    *  (anchor 是走位落點、玩家本就要衝過去，不算此類；一般怪可推動維持衝上去打。) */
   private isImmovableLargeTarget(e: Enemy | null): boolean {
-    if (!e || !e.active) return false;
-    return e.isBoss || e.enemyType === 'tower';
+    return !!e && e.active && isStructureEnemy(e);
   }
 
   /**
@@ -1747,7 +1747,7 @@ export class GameScene extends Phaser.Scene {
   private resolveEnemyTarget(enemy: Enemy, time: number): Character | { x: number; y: number } | null {
     // ① 事件覆寫(最高優先):守護事件期間一般怪打 NPC
     if (this.waveState === 'event' && this.eventKind === 'guard' && this.guardNpc && this.guardNpc.active &&
-        enemy.enemyType !== 'npc' && enemy.enemyType !== 'tower' && enemy.enemyType !== 'anchor' && !enemy.isBoss) {
+        !isFixedEnemy(enemy)) {
       return this.guardNpc;
     }
     // ② 黏著綁定
@@ -1804,7 +1804,7 @@ export class GameScene extends Phaser.Scene {
       const e = child as Enemy;
       if (!e.active || e.dead) continue;
       // ★寶箱怪完全獨立於波次系統:不計 quota(否則活到下波→quota+1→打不掉→卡死)
-      if (e.isBoss || e.enemyType === 'tower' || e.enemyType === 'npc' || e.enemyType === 'treasure' || e.isAnchorLike()) continue;
+      if (!isRegularEnemy(e)) continue;
       n++;
     }
     return n;
@@ -1816,7 +1816,7 @@ export class GameScene extends Phaser.Scene {
     for (const child of this.enemies.getChildren()) {
       const e = child as Enemy;
       if (!e.active || e.dead || e.telegraphing) continue;
-      if (e.isBoss || e.enemyType === 'tower' || e.enemyType === 'npc' || e.enemyType === 'treasure' || e.isAnchorLike()) continue;
+      if (!isRegularEnemy(e)) continue;
       n++;
     }
     return n;
@@ -1828,7 +1828,7 @@ export class GameScene extends Phaser.Scene {
     for (const child of this.enemies.getChildren()) {
       const e = child as Enemy;
       if (!e.active || e.dead || !e.telegraphing) continue;
-      if (e.isBoss || e.enemyType === 'tower' || e.enemyType === 'npc' || e.enemyType === 'treasure' || e.isAnchorLike()) continue;
+      if (!isRegularEnemy(e)) continue;
       n++;
     }
     return n;
@@ -3498,7 +3498,7 @@ export class GameScene extends Phaser.Scene {
     for (const child of this.enemies.getChildren()) {
       const e = child as Enemy;
       if (!e.active || e.dead) continue;
-      if (e.enemyType === 'tower' || e.enemyType === 'npc' || e.enemyType === 'treasure' || e.isAnchorLike() || e.isBoss) continue;
+      if (!isRegularEnemy(e)) continue;
       n++;
     }
     return n;
@@ -4674,8 +4674,7 @@ export class GameScene extends Phaser.Scene {
       if (d > bcfg.explodeRadius + e.getBodyRadius()) continue;
       this.damageEnemyFrom(this.player, e, bcfg.explodeDamage, 0, ex, ey, time); // 低傷(不用內建擊退,下面自訂位移擊退)
       if (!e.active || e.dead) continue;
-      const bigImmovable = e.isBoss || e.enemyType === 'tower' || e.isAnchorLike() || e.enemyType === 'npc';
-      if (!bigImmovable) {
+      if (!isFixedEnemy(e)) {
         const ang = d > 0.001 ? Math.atan2(e.y - ey, e.x - ex) : Math.random() * Math.PI * 2;
         const nx = Phaser.Math.Clamp(e.x + Math.cos(ang) * bcfg.knockback, this.arena.left + e.getBodyRadius(), this.arena.right - e.getBodyRadius());
         const ny = Phaser.Math.Clamp(e.y + Math.sin(ang) * bcfg.knockback, this.arena.top + e.getBodyRadius(), this.arena.bottom - e.getBodyRadius());
@@ -4870,74 +4869,6 @@ export class GameScene extends Phaser.Scene {
     this.timeStopOwner = owner;
     for (const ch of this.enemies.getChildren()) (ch as Enemy).pauseChargeTweens(true);
     for (const fx of this.telegraphFx) fx.tween?.pause();
-  }
-
-  /** 傷害 + 以指定來源點擊退（雷擊落點用） */
-  private damageEnemyFrom(
-    actor: Character,
-    enemy: Enemy,
-    damage: number,
-    knockback: number,
-    fromX: number,
-    fromY: number,
-    time: number
-  ): void {
-    // v15：已被結算死亡/失效的敵人不再受理（防同幀重複命中）
-    if (enemy.dead || !enemy.active) return;
-    // ★寶箱怪:圓/直等 AOE 命中也走命中次數制(計1下+金幣),不走一般扣血。
-    if (enemy.enemyType === 'treasure') { this.hitTreasure(enemy); return; }
-    const dmg = Math.max(1, Math.round(damage * enemy.damageMultiplierFrom(fromX, fromY)));
-    enemy.aggroActive = true; // ★主動仇恨:被玩家攻擊命中→標記主動,不計入被動警戒上限、永遠可追
-    const dead = enemy.takeDamage(dmg);
-    if (enemy.isBoss) {
-      this.bossCtl.onBossHit(actor, enemy, dmg, time); // 噴道具 / 亂入 BOSS 掉彩票
-      // ★v58→v61 修:BOSS 命中給能量也改【隊伍任何人命中 BOSS 都可能給 P1 能量】(同上,避免只 P1 命中才給)。
-      if (this.controlMode === 'slow' && !enemy.dead) {
-        const ecfg = GameConfig.energy;
-        if (!this.player.empowered && Math.random() < ecfg.bossHitChance) {
-          this.gainEnergy(this.player, ecfg.bossHitAmount);
-        }
-      }
-    }
-    enemy.applyKnockback(fromX, fromY, knockback, time);
-    this.spawnDamageText(enemy.x, enemy.y, dmg);
-    this.flashEnemy(enemy);
-    // v15：擊殺原子性——只有「尚未被結算死亡」的敵人才計殺/掉落/kill()，防同幀重複
-    if (dead && !enemy.dead) {
-      const dx = enemy.x;
-      const dy = enemy.y;
-      const wasBoss = enemy.isBoss;
-      const etype = enemy.enemyType;
-      enemy.kill();
-      if (wasBoss) {
-        actor.kills++;
-        // ★移除：COMBO改為命中觸發，不在擊殺時觸發
-        // this.triggerComboHit(actor);  
-        this.bossCtl.onBossKilled(dx, dy); // BOSS 擊殺 → 大爆炸 + 掉落（波次 BOSS 再回呼 onWaveBossDefeated）
-      } else if (etype === 'tower') {
-        this.tower = null; // v33：打掉塔 → 事件完成
-        this.clearTelegraphsOf('tower'); // v45(4)：清掉塔蓄力中的扇形預警特效 + 取消發射
-        this.spawnExpandingRing(dx, dy, 120, 0xff8844, 400);
-        this.completeEvent(true);
-      } else if (etype === 'npc' || etype === 'anchor') {
-        // NPC/錨點為 anchor-like 位移點，玩家傷不到；此分支僅防呆，不計殺
-      } else {
-        actor.kills++;
-        // ★移除：COMBO改為命中觸發，不在擊殺時觸發
-        // this.triggerComboHit(actor);
-        this.onWaveKill();
-        this.spawnDeathBurst(dx, dy);
-        // ★v58→v61 修:能量改【隊伍任何人擊殺都給 P1 能量】(僅 P1 有能量系統)。
-        //   根因:舊版 gate `actor===player` 只在 P1 親自最後一擊才給→有 BOT 隊友時多數怪被 BOT 殺→P1 幾乎集不到能量
-        //   (實測團隊25殺 P1 只親殺7→能量僅24)。用戶「打死怪就獲得能量」的直覺=只要怪死就給 P1。
-        //   BOT 本身無能量系統,給 P1 不影響 BOT。
-        if (this.controlMode === 'slow') {
-          this.grantKillEnergy(this.player, etype);
-        }
-        if (Math.random() < GameConfig.items.dropChance) this.dropItemAt(dx, dy, time);
-      }
-    }
-    // v19：鬥氣改「命中次數」制，改由攻擊動作(performMeleeArc/performAttackOn)一次+1，此處不再逐隻累積
   }
 
   // 招式視覺占位特效
@@ -5429,69 +5360,70 @@ export class GameScene extends Phaser.Scene {
   // ---------------------------------------------------------------------------
   // 傷害 / 擊殺
   // ---------------------------------------------------------------------------
-  private damageEnemy(
-    actor: Character,
-    enemy: Enemy,
-    damage: number,
-    knockback: number,
-    time: number
+  /**
+   * 角色對敵人造成傷害，擊退方向以角色位置為準（見 damageEnemyFrom）
+   */
+  private damageEnemy(actor: Character, enemy: Enemy, damage: number, knockback: number, time: number): void {
+    this.damageEnemyFrom(actor, enemy, damage, knockback, actor.x, actor.y, time);
+  }
+
+  /**
+   * 角色對敵人造成傷害並結算擊殺；擊退、盾怪正面減傷都以 (fromX, fromY) 為來源（AOE 招式傳落點，近戰傳角色位置）。
+   *
+   * - 已死亡 / 失效的敵人不再受理，避免同一幀重複命中；寶箱怪改走命中次數制
+   * - 被打中的怪標記為主動仇恨，不受被動追擊上限限制
+   * - 打中 BOSS：交給 BossController（噴道具、亂入 BOSS 掉彩票）；慢速模式下有機率給 P1 能量
+   * - 擊殺：BOSS → BossController；塔 → 事件完成；NPC / 錨點不會被打死（防呆）；
+   *   一般怪 → 計擊殺、推進關卡、慢速模式給 P1 能量（不論是誰擊殺）、機率掉道具
+   * - COMBO 與鬥氣由攻擊動作本身累積，這裡不處理
+   *
+   * @param actor 攻擊的角色
+   * @param enemy 被打的敵人
+   * @param damage 基礎傷害
+   * @param knockback 擊退力道
+   * @param fromX 傷害來源 x
+   * @param fromY 傷害來源 y
+   * @param time 目前場景時間
+   */
+  private damageEnemyFrom(
+    actor: Character, enemy: Enemy, damage: number, knockback: number, fromX: number, fromY: number, time: number
   ): void {
-    // v15：已被結算死亡/失效的敵人不再受理（防同幀重複命中）
     if (enemy.dead || !enemy.active) return;
-    // ★寶箱怪:走命中次數制(計1下+噴金幣,達20死噴大量),不走一般扣血。普攻/衝刺/連段技命中都經此→都算數。
     if (enemy.enemyType === 'treasure') { this.hitTreasure(enemy); return; }
-    // 盾怪：從正面打大幅減傷（依攻擊者位置判定）
-    const dmg = Math.max(1, Math.round(damage * enemy.damageMultiplierFrom(actor.x, actor.y)));
-    enemy.aggroActive = true; // ★主動仇恨:被玩家攻擊命中→標記主動,不計入被動警戒上限、永遠可追
+    const dmg = Math.max(1, Math.round(damage * enemy.damageMultiplierFrom(fromX, fromY)));
+    enemy.aggroActive = true;
     const dead = enemy.takeDamage(dmg);
     if (enemy.isBoss) {
-      this.bossCtl.onBossHit(actor, enemy, dmg, time); // 噴道具 / 亂入 BOSS 掉彩票
-      // ★v61:BOSS 命中(非擊殺)機率給 P1 能量(與 damageEnemyFrom 一致;普攻/衝刺打BOSS也算)。
+      this.bossCtl.onBossHit(actor, enemy, dmg, time);
       if (this.controlMode === 'slow' && !enemy.dead) {
         const ecfg = GameConfig.energy;
-        if (!this.player.empowered && Math.random() < ecfg.bossHitChance) {
-          this.gainEnergy(this.player, ecfg.bossHitAmount);
-        }
+        if (!this.player.empowered && Math.random() < ecfg.bossHitChance) this.gainEnergy(this.player, ecfg.bossHitAmount);
       }
     }
-    enemy.applyKnockback(actor.x, actor.y, knockback, time);
+    enemy.applyKnockback(fromX, fromY, knockback, time);
     this.spawnDamageText(enemy.x, enemy.y, dmg);
     this.flashEnemy(enemy);
-
-    if (dead && !enemy.dead) {
-      const dx = enemy.x;
-      const dy = enemy.y;
-      const wasBoss = enemy.isBoss;
-      const etype = enemy.enemyType;
-      enemy.kill();
-      if (wasBoss) {
-        actor.kills++;
-        this.bossCtl.onBossKilled(dx, dy);
-      } else if (etype === 'tower') {
-        this.tower = null;
-        this.clearTelegraphsOf('tower'); // v45(4)：清掉塔蓄力中的扇形預警特效 + 取消發射
-        this.spawnExpandingRing(dx, dy, 120, 0xff8844, 400);
-        this.completeEvent(true);
-      } else if (etype === 'npc' || etype === 'anchor') {
-        // v35/36：NPC/錨點為 anchor-like 位移點，玩家傷不到（isVulnerable=false）；此分支僅防呆，不處理
-      } else {
-        actor.kills++;
-        this.onWaveKill();
-        this.spawnDeathBurst(dx, dy);
-        // ★v61 修「能量每5隻才跳」根因:普攻(performMeleeArc→此 damageEnemy)擊殺【原本沒給能量】——
-        //   只有連段技(circle/line/burst 走 damageEnemyFrom)擊殺才給→玩家一般攻擊殺怪不加,直到連段技觸發一次AOE殺多隻才批次跳(≈每幾隻)。
-        //   修:此處(隊伍任何人擊殺)同樣 grantKillEnergy(P1)→每殺一隻立即加、即時反饋。
-        if (this.controlMode === 'slow') {
-          this.grantKillEnergy(this.player, etype);
-        }
-        // 掉落道具（機率）
-        if (Math.random() < GameConfig.items.dropChance) {
-          this.dropItemAt(dx, dy, time);
-        }
-      }
+    // 擊殺只結算一次：takeDamage 判定死亡、且尚未被標記 dead 的才處理
+    if (!dead || enemy.dead) return;
+    const dx = enemy.x, dy = enemy.y;
+    const wasBoss = enemy.isBoss;
+    const etype = enemy.enemyType;
+    enemy.kill();
+    if (wasBoss) {
+      actor.kills++;
+      this.bossCtl.onBossKilled(dx, dy); // 大爆炸 + 掉落（波次 BOSS 再回呼 onWaveBossDefeated）
+    } else if (etype === 'tower') {
+      this.tower = null;
+      this.clearTelegraphsOf('tower'); // 取消塔蓄力中的扇形預警
+      this.spawnExpandingRing(dx, dy, 120, 0xff8844, 400);
+      this.completeEvent(true);
+    } else if (etype !== 'npc' && etype !== 'anchor') {
+      actor.kills++;
+      this.onWaveKill();
+      this.spawnDeathBurst(dx, dy);
+      if (this.controlMode === 'slow') this.grantKillEnergy(this.player, etype);
+      if (Math.random() < GameConfig.items.dropChance) this.dropItemAt(dx, dy, time);
     }
-
-    // v19：鬥氣改「命中次數」制，改由攻擊動作一次+1，此處不再逐隻累積
   }
 
   // ---------------------------------------------------------------------------
