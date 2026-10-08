@@ -670,15 +670,14 @@ export class UIScene extends Phaser.Scene {
   };
 
   private updateStats = (s: StatsPayload): void => {
-    this.teamText.setText(`團隊總擊殺 ${s.teamKills}`);
-    this.timeText.setText(`時間 ${(s.survivalMs / 1000).toFixed(1)}s`);
+    // 隱藏中的文字不更新（setText 內容改變時會重繪文字畫布，時間每幀都變）
+    if (this.teamText.visible) this.teamText.setText(`團隊總擊殺 ${s.teamKills}`);
+    if (this.timeText.visible) this.timeText.setText(`時間 ${(s.survivalMs / 1000).toFixed(1)}s`);
     // 第8項：P1 普攻命中次數
-    this.hitText.setText(`命中 ${s.p1AttackHits ?? 0}`);
+    if (this.hitText.visible) this.hitText.setText(`命中 ${s.p1AttackHits ?? 0}`);
     // 波次：Wave N + 進度；intermission 顯示過關中
-    if (s.waveState === 'intermission') {
-      this.waveText.setText(`WAVE ${s.wave} CLEAR!`);
-    } else {
-      this.waveText.setText(`WAVE ${s.wave}  ${s.waveKilled}/${s.waveQuota}`);
+    if (this.waveText.visible) {
+      this.waveText.setText(s.waveState === 'intermission' ? `WAVE ${s.wave} CLEAR!` : `WAVE ${s.wave}  ${s.waveKilled}/${s.waveQuota}`);
     }
 
     // 頭上UI系統：使用角色索引避免重複創建
@@ -714,13 +713,11 @@ export class UIScene extends Phaser.Scene {
     // 卷軸 HUD：這裡只記錄狀態，實際繪製在 update() 每幀跑（脈動、量條平滑、遞補動畫）
     this.updateStageHudState(s);
 
-    // 加入夥伴提示：滿了改字
-    if (s.count >= s.maxCount) {
-      this.joinHintText.setText(`夥伴已滿 (${s.count}/${s.maxCount})`);
-      this.joinHintText.setColor('#94a3b8');
-    } else {
-      this.joinHintText.setText(`按 B 加入ROBOT (${s.count}/${s.maxCount})`);
-      this.joinHintText.setColor('#7bed9f');
+    // 加入夥伴提示：滿了改字（隱藏中不更新）
+    if (this.joinHintText.visible) {
+      const full = s.count >= s.maxCount;
+      this.joinHintText.setText(full ? `夥伴已滿 (${s.count}/${s.maxCount})` : `按 B 加入ROBOT (${s.count}/${s.maxCount})`);
+      this.setTextColor(this.joinHintText, full ? '#94a3b8' : '#7bed9f');
     }
 
     // 🔄 NEW UI：角色狀態列更新 - 圓形標籤 + 雙欄位系統，完全移除血條系統
@@ -731,11 +728,11 @@ export class UIScene extends Phaser.Scene {
       if (i >= s.chars.length) {
         // 未加入狀態：透明度0.3，灰色標籤
         row.circle.setAlpha(0.3);
-        row.labelText.setColor('#555555').setAlpha(0.3);
+        this.setTextColor(row.labelText, '#555555').setAlpha(0.3);
         row.killIconText.setAlpha(0.3);
-        row.killText.setText('0').setColor('#555555').setAlpha(0.3);
+        this.setTextColor(row.killText.setText('0'), '#555555').setAlpha(0.3);
         row.ticketIconText.setAlpha(0.3);
-        row.ticketText.setText('0').setColor('#555555').setAlpha(0.3);
+        this.setTextColor(row.ticketText.setText('0'), '#555555').setAlpha(0.3);
         // 🎨 背景保持原色不變，用戶要求移除狀態顏色變化
         continue;
       }
@@ -745,24 +742,24 @@ export class UIScene extends Phaser.Scene {
       if (!c.alive) {
         // 死亡狀態：透明度0.5，灰色標籤，擊殺數帶✖
         row.circle.setAlpha(0.5);
-        row.labelText.setColor('#777777').setAlpha(0.5);
+        this.setTextColor(row.labelText, '#777777').setAlpha(0.5);
         row.killIconText.setAlpha(0.5);
-        row.killText.setText(`${c.kills} ✖`).setColor('#777777').setAlpha(0.5);
+        this.setTextColor(row.killText.setText(`${c.kills} ✖`), '#777777').setAlpha(0.5);
         row.ticketIconText.setAlpha(0.5);
         const tickets = Math.floor(c.kills / 2);
-        row.ticketText.setText(`${tickets} ✖`).setColor('#777777').setAlpha(0.5);
+        this.setTextColor(row.ticketText.setText(`${tickets} ✖`), '#777777').setAlpha(0.5);
         // 🎨 背景保持原色不變，用戶要求移除狀態顏色變化
         continue;
       }
       
       // 活躍狀態：完全不透明，白色標籤
       row.circle.setAlpha(1);
-      row.labelText.setColor('#ffffff').setAlpha(1);
+      this.setTextColor(row.labelText, '#ffffff').setAlpha(1);
       row.killIconText.setAlpha(1);
-      row.killText.setText(`${c.kills}`).setColor('#ffffff').setAlpha(1);
+      this.setTextColor(row.killText.setText(`${c.kills}`), '#ffffff').setAlpha(1);
       row.ticketIconText.setAlpha(1);
       const tickets = Math.floor(c.kills / 2);
-      row.ticketText.setText(`${tickets}`).setColor('#ffd700').setAlpha(1); // 彩票數金色
+      this.setTextColor(row.ticketText.setText(`${tickets}`), '#ffd700').setAlpha(1); // 彩票數金色
       // 🎨 背景保持原色不變，用戶要求移除狀態顏色變化
     }
   };
@@ -1267,6 +1264,30 @@ export class UIScene extends Phaser.Scene {
 
 
   /**
+   * 只在顏色改變時才設定文字顏色（Phaser 的 setColor 每次呼叫都會重繪文字畫布，每幀呼叫很耗時）
+   *
+   * @param text 文字物件
+   * @param color 顏色
+   * @returns 同一個文字物件（可接著鏈式呼叫）
+   */
+  private setTextColor(text: Phaser.GameObjects.Text, color: string): Phaser.GameObjects.Text {
+    if (text.style.color !== color) text.setColor(color);
+    return text;
+  }
+
+  /**
+   * 劍圖標只在閃爍狀態切換時重繪（每幀 clear + 重畫 graphics 很耗時）
+   *
+   * @param graphics 劍圖標
+   * @param isFlashing 是否為閃爍狀態
+   */
+  private drawSwordIconIfChanged(graphics: Phaser.GameObjects.Graphics, isFlashing: boolean): void {
+    if (graphics.getData('swordFlashing') === isFlashing) return;
+    graphics.setData('swordFlashing', isFlashing);
+    this.drawSwordIcon(graphics, isFlashing);
+  }
+
+  /**
    * 繪製劍形圖標
    *
    * 使用Graphics API繪製包含劍身、劍尖、護手、劍柄和底部裝飾的完整劍形
@@ -1378,15 +1399,13 @@ export class UIScene extends Phaser.Scene {
       const flashTime = this.time.now % config.CREDIT.FLASH_CYCLE_MS;
       const isFlashing = flashTime < (config.CREDIT.FLASH_CYCLE_MS / 2);
       
-      // 重繪劍圖標（閃爍狀態）
-      this.drawSwordIcon(swordIcon, isFlashing);
-      
-      // 文字顏色同步閃爍
-      creditText.setColor(isFlashing ? config.COLORS.TEXT_FLASH : config.COLORS.WHITE);
+      // 劍圖標與文字顏色同步閃爍（只在閃爍狀態切換時重繪）
+      this.drawSwordIconIfChanged(swordIcon, isFlashing);
+      this.setTextColor(creditText, isFlashing ? config.COLORS.TEXT_FLASH : config.COLORS.WHITE);
     } else {
       // 正常狀態：金色劍圖標和白色文字
-      this.drawSwordIcon(swordIcon, false);
-      creditText.setColor(config.COLORS.WHITE);
+      this.drawSwordIconIfChanged(swordIcon, false);
+      this.setTextColor(creditText, config.COLORS.WHITE);
     }
   }
 
@@ -1833,7 +1852,7 @@ export class UIScene extends Phaser.Scene {
       const blinkOn = this.time.now % cfg.WARNING_BLINK_MS < cfg.WARNING_BLINK_MS / 2;
       color = blinkOn ? colors.COMBO_TEXT_CRITICAL : colors.COMBO_TEXT_WARNING;
     }
-    text.setText(`HIT x${combo.currentStreak}`).setColor(color).setVisible(true);
+    this.setTextColor(text.setText(`HIT x${combo.currentStreak}`), color).setVisible(true);
   }
 
   /**
