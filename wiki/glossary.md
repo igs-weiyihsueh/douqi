@@ -74,6 +74,11 @@
 | **BossController** | BOSS系統控制器類別 (9782518新增) | `controllers/BossController.ts:45` | [BOSS系統](./systems/boss-system.md) |
 | **BossHost** | BOSS控制器場景介面 (9782518新增) | `controllers/BossController.ts:7` | [專案架構](./architecture/project-structure.md) |
 | **TelegraphFx** | 預警特效介面型別 (9782518抽出) | `systems/telegraphFx.ts:5` | [BOSS系統](./systems/boss-system.md) |
+| **SkillController** | 招式系統控制器類別 (7bd6845新增) | `controllers/SkillController.ts:36` | [招式系統](./systems/skill-system.md) |
+| **SkillHost** | 招式控制器場景介面 (7bd6845新增) | `controllers/SkillController.ts:8` | [招式系統](./systems/skill-system.md) |
+| **ArtStyleController** | 美術切換控制器 (82f5fb6新增) | `controllers/ArtStyleController.ts:35` | [專案架構](./architecture/project-structure.md) |
+| **ScenePalette** | 場景配色介面 (fe938ff抽出) | `systems/zoneScenery.ts:12` | [場景渲染](./systems/scene-rendering.md) |
+| **isFixedEnemy** | 固定敵人判斷函式 (55cca6d統一) | `systems/enemyKinds.ts:10` | [專案架構](./architecture/project-structure.md) |
 | **markerDotScale** | 位置標記中心亮點縮放 (05dafae新增) | `config.ts:85` | [關卡系統](./systems/stage-system.md) |
 | **drawStageMarker** | HUD位置標記繪製函式 (05dafae新增) | `UIScene.ts:858` | [關卡系統](./systems/stage-system.md) |
 | **stageCycle** | 無限關卡循環配置 (874b8f9新增) | `config.ts:920` | [關卡系統](./systems/stage-system.md) |
