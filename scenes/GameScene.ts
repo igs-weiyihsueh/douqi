@@ -10,7 +10,7 @@ import { loadCharacterParams, type CharacterParams } from '../systems/characterP
 import { createStageQueue, nextStageNode, revealStageNode, displayKindOf, type StageNode } from '../systems/stageQueue';
 import type { TelegraphFx } from '../systems/telegraphFx';
 import { BossController, type BossHost } from '../controllers/BossController';
-import { drawCorridorScenery, drawZoneScenery } from '../systems/zoneScenery';
+import { destroyZoneScenery, drawCorridorScenery, drawZoneScenery } from '../systems/zoneScenery';
 import { ArtStyleController } from '../controllers/ArtStyleController';
 import { GoIndicator } from '../controllers/GoIndicator';
 import { HiddenGateController } from '../controllers/HiddenGateController';
@@ -2394,7 +2394,7 @@ export class GameScene extends Phaser.Scene {
     const aheadZone = side === 'R' ? this.zoneBRight : this.zoneBLeft;
     // 回收身後最遠 slot 的場景物件
     const removed = new Set(this.slotLayers.get(behindSlot) ?? []);
-    for (const o of removed) o.destroy();
+    destroyZoneScenery(this, removed);
     this.slotLayers.delete(behindSlot);
     this.sceneLayers = this.sceneLayers.filter((o) => !removed.has(o));
     // 新的前方 slot：以抵達的 slot 為基準再往前一格（slot 與 zone 同步）
@@ -2879,7 +2879,7 @@ export class GameScene extends Phaser.Scene {
 
   /** 清掉所有場景繪製物件(重繪關卡時用)。 */
   private clearSceneLayers(): void {
-    for (const o of this.sceneLayers) o.destroy();
+    destroyZoneScenery(this, this.sceneLayers);
     this.sceneLayers = [];
     this.slotLayers.clear();
     // 階段2:切關卡/重繪場景時一併清掉走廊底圖(左右),避免上一關殘留。

@@ -25,6 +25,9 @@ export interface ScenePalette {
 /** 子區變體：A = 荒城遠景，B = 火山遠景 */
 export type ZoneVariant = 'A' | 'B';
 
+/** 每格地面紋理 key 的前綴（每格各自產生一張，回收該格時一併移除） */
+const GROUND_TEXTURE_PREFIX = 'zone-ground-';
+
 /** 場景圖層深度：天空 / 遠景 / 外圍 / 地面 / 圍欄 / 粒子 */
 const DEPTH = { sky: -3, far: -2, outer: -1, ground: 0, border: 1, embers: 2 } as const;
 
@@ -84,6 +87,23 @@ export function drawZoneScenery(
   const embers = createEmbers(scene, slot, level, variant, lv);
   if (embers) objects.push(embers);
   return objects;
+}
+
+/**
+ * 銷毀一組場景物件，並移除其中地面圖使用的動態紋理（每張約 2520×840，不移除會隨世界延伸持續累積記憶體）
+ *
+ * @param scene 物件所屬場景
+ * @param objects 要銷毀的場景物件（drawZoneScenery 的回傳值）
+ */
+export function destroyZoneScenery(scene: Phaser.Scene, objects: Iterable<Phaser.GameObjects.GameObject>): void {
+  const textureKeys: string[] = [];
+  for (const o of objects) {
+    if (o instanceof Phaser.GameObjects.Image && o.texture.key.startsWith(GROUND_TEXTURE_PREFIX)) textureKeys.push(o.texture.key);
+    o.destroy();
+  }
+  for (const key of textureKeys) {
+    if (scene.textures.exists(key)) scene.textures.remove(key);
+  }
 }
 
 /**
@@ -176,7 +196,7 @@ function drawOuterWasteland(
 function makeGroundTexture(
   scene: Phaser.Scene, zone: Phaser.Geom.Rectangle, level: number, variant: ZoneVariant, lv: ScenePalette
 ): string {
-  const key = `zone-ground-L${level}-${variant}-${Math.round(zone.x)}`;
+  const key = `${GROUND_TEXTURE_PREFIX}L${level}-${variant}-${Math.round(zone.x)}`;
   if (scene.textures.exists(key)) scene.textures.remove(key);
   const gt = scene.make.graphics({ x: 0, y: 0 }, false);
   const w = Math.round(zone.width), h = Math.round(zone.height);
