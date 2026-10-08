@@ -15,6 +15,7 @@ import { ArtStyleController } from '../controllers/ArtStyleController';
 import { GoIndicator } from '../controllers/GoIndicator';
 import { HiddenGateController } from '../controllers/HiddenGateController';
 import { TreasureRoomController } from '../controllers/TreasureRoomController';
+import { PerfOverlay } from '../controllers/PerfOverlay';
 import { SkillController, type SkillHost } from '../controllers/SkillController';
 import { pointInOrientedRect } from '../systems/geometry';
 import {
@@ -340,6 +341,7 @@ export class GameScene extends Phaser.Scene {
     this.bossCtl = new BossController(this.createBossHost());
     this.skillCtl = new SkillController(this.createSkillHost());
     this.goIndicator = new GoIndicator(this);
+    new PerfOverlay(this); // 除錯 F9：實機效能監控（自行註冊熱鍵與場景關閉時的清理）
     this.hiddenGate = new HiddenGateController(this);
     this.roomTreasures = new Set();
     this.treasureRoom = new TreasureRoomController({

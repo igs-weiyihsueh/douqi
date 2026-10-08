@@ -7,6 +7,12 @@ export const GameConfig = {
   width: 1920,
   height: 1080,
 
+  /** 除錯工具 */
+  debug: {
+    /** 實機效能監控（F9 開關）：位置、字級、深度；文字每 refreshMs 更新，統計最近 sampleFrames 幀 */
+    perfOverlay: { x: 12, y: 12, fontSize: '16px', depth: 200, refreshMs: 250, sampleFrames: 120 }
+  },
+
   /** 波次進度 HUD(關卡制:節點序列 ●─●─◆);只純波次顯示,事件/BOSS 隱藏 */
   waveHud: {
     enabled: true,
