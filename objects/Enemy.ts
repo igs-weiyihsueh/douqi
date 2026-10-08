@@ -38,6 +38,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   treasureFleeing = false;
 
   private knockbackUntil = 0;
+  /**
+   * 命中凍結（hitstop，只凍結被打的怪）：凍結開始時間與結束時間（0 = 未凍結）。
+   * 凍結期間原地僵住、不跑 AI，擊退延到凍結結束才生效（見 applyKnockback / updateAI）
+   */
+  private hitFreezeStartAt = 0;
+  private hitFreezeUntil = 0;
+  /** 凍結結束後才施加的擊退（以最後一次命中為準） */
+  private pendingKnockback: { angle: number; force: number } | null = null;
+  /** 上一次凍結結束的時間（冷卻用） */
+  private hitFreezeEndedAt = 0;
 
   telegraphing = false;
   private telegraphUntil = 0;
@@ -196,6 +206,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.hp = this.maxHp;
     this.dead = false;
     this.knockbackUntil = 0;
+    this.hitFreezeStartAt = 0;
+    this.hitFreezeUntil = 0;
+    this.pendingKnockback = null;
+    this.hitFreezeEndedAt = 0;
     this.nextNpcHitAt = 0; // v37fix(A)
     // 出生預設巡邏，記住出生點；不再一出生就直衝玩家
     this.aiState = 'patrol';
@@ -279,6 +293,13 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
 
     const body = this.body as Phaser.Physics.Arcade.Body;
+    if (this.hitFreezeUntil > 0) {
+      if (time < this.hitFreezeUntil) {
+        body.setVelocity(0, 0);
+        return;
+      }
+      this.endHitFreeze(time);
+    }
     if (time < this.knockbackUntil) {
       body.velocity.scale(0.92);
       return;
@@ -537,9 +558,13 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (this.isBoss || this.enemyType === 'tower' || this.enemyType === 'npc' || this.enemyType === 'treasure') return;
     const scale = this.enemyType === 'tank' ? 0.5 : 1;
     const angle = Phaser.Math.Angle.Between(fromX, fromY, this.x, this.y);
-    const body = this.body as Phaser.Physics.Arcade.Body;
-    body.setVelocity(Math.cos(angle) * force * scale, Math.sin(angle) * force * scale);
-    this.knockbackUntil = time + GameConfig.enemy.knockbackStunMs;
+    if (this.beginHitFreeze(time)) {
+      // 命中凍結：先原地僵住，擊退記下來等凍結結束（「打中 → 頓一下 → 飛出去」）
+      this.pendingKnockback = { angle, force: force * scale };
+      (this.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
+    } else {
+      this.startKnockback(angle, force * scale, time);
+    }
     // 打斷近戰蓄力
     if (this.aiState === 'charge') {
       this.chargeTween?.remove();
@@ -550,6 +575,41 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
     // 打斷 bomber 投擲蓄力
     this.interruptBomb(time);
+  }
+
+  /** 開始擊退：設定擊退速度與擊退硬直 */
+  private startKnockback(angle: number, force: number, time: number): void {
+    (this.body as Phaser.Physics.Arcade.Body).setVelocity(Math.cos(angle) * force, Math.sin(angle) * force);
+    this.knockbackUntil = time + GameConfig.enemy.knockbackStunMs;
+  }
+
+  /**
+   * 命中凍結：未凍結時開始一段凍結；凍結中再被打只延長（不疊加），總長不超過上限。
+   * 關閉或剛結束凍結（冷卻中）時不凍結
+   *
+   * @param time 目前場景時間
+   * @returns 這次命中是否處於凍結（擊退要延後）
+   */
+  private beginHitFreeze(time: number): boolean {
+    const cfg = GameConfig.hitstop;
+    if (!cfg.enabled || cfg.freezeMs <= 0) return false;
+    if (this.hitFreezeUntil > 0) {
+      this.hitFreezeUntil = Math.min(this.hitFreezeStartAt + cfg.maxFreezeMs, Math.max(this.hitFreezeUntil, time + cfg.freezeMs));
+      return true;
+    }
+    if (this.hitFreezeEndedAt > 0 && time < this.hitFreezeEndedAt + cfg.cooldownMs) return false;
+    this.hitFreezeStartAt = time;
+    this.hitFreezeUntil = time + Math.min(cfg.freezeMs, cfg.maxFreezeMs);
+    return true;
+  }
+
+  /** 命中凍結結束：施加延後的擊退 */
+  private endHitFreeze(time: number): void {
+    this.hitFreezeUntil = 0;
+    this.hitFreezeEndedAt = time;
+    const kb = this.pendingKnockback;
+    this.pendingKnockback = null;
+    if (kb) this.startKnockback(kb.angle, kb.force, time);
   }
 
   takeDamage(amount: number): boolean {
@@ -594,6 +654,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   shiftTimers(delta: number): void {
     const shift = (v: number): number => (v > 0 ? v + delta : v);
     this.knockbackUntil = shift(this.knockbackUntil);
+    this.hitFreezeStartAt = shift(this.hitFreezeStartAt);
+    this.hitFreezeUntil = shift(this.hitFreezeUntil);
+    this.hitFreezeEndedAt = shift(this.hitFreezeEndedAt);
     this.telegraphUntil = shift(this.telegraphUntil);
     this.chargeUntil = shift(this.chargeUntil);
     this.chargeStartAt = shift(this.chargeStartAt);

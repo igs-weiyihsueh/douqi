@@ -80,12 +80,10 @@ const AOE_INNER_RING_COLOR = 0xfff2a8;
  *   慢速模式 COMBO 達門檻放圓形斬、直線氣波（到最高招門檻歸零），能量另外靠擊殺累積、滿了按 Z 手動強化
  * - 強化：快速模式固定時間，慢速模式由能量驅動（能量消退到 0 才解除，在場景 update 處理）；
  *   慢速強化期間攻擊改為以鎖定目標為中心的圓形 AOE，每命中 burstEveryAoeHits 次觸發一次爆發
- * - 爆發：定身無敵連打數段，每段命中時 P1 有極短的命中頓感（暫停物理，用真實時鐘恢復）
+ * - 爆發：定身無敵連打數段（被打中的怪各自有命中凍結，見 config.hitstop / Enemy.applyKnockback）
  * - 招式期間的「表演時間」：定身並無敵一段時間
  */
 export class ComboSkillController {
-  private hitstopRestoreAt = 0;
-  private hitstopActive = false;
 
   constructor(private readonly host: ComboSkillHost) {}
 
@@ -213,15 +211,6 @@ export class ComboSkillController {
         this.empowerAoeBurst(c, tx, ty, time);
       }
     });
-  }
-
-  /**
-   * 命中頓感結束前遊戲結束：立即恢復物理（避免物理停在暫停狀態）
-   */
-  releaseHitstop(): void {
-    if (!this.hitstopActive) return;
-    try { this.scene.physics.world.resume(); } catch (_e) { /* ignore */ }
-    this.hitstopActive = false;
   }
 
   /** 以目標位置為中心炸圓形 AOE：傷圈內所有可傷敵人、擴張環、輕震；命中時算一次 COMBO 並累積變身爆發計數 */
@@ -376,8 +365,7 @@ export class ComboSkillController {
   }
 
   /**
-   * 爆發的一段：範圍內敵人受傷、秒碎物件；命中時閃白、小震動，施放者是 P1 才觸發命中頓感
-   * （頓感暫停的是整個物理世界，BOT 觸發會把 P1 也凍住）
+   * 爆發的一段：範圍內敵人受傷、秒碎物件；命中時閃白、小震動（被打的怪各自命中凍結，不再暫停整個物理世界）
    *
    * @returns 這段是否命中至少一隻敵人
    */
@@ -397,7 +385,6 @@ export class ComboSkillController {
     }
     this.host.breakInCircle(c.x, c.y, radius, time);
     if (hitAny) {
-      if (c === this.host.player()) this.triggerHitstop(cfg.hitstopMs);
       this.host.flashWhite(c);
       this.host.shakeOnce(BURST_TICK_SHAKE_MS, SKILL_SHAKE_INTENSITY);
     }
@@ -417,36 +404,6 @@ export class ComboSkillController {
     if (isP1) this.scene.game.events.emit('burst-end');
   }
 
-  /**
-   * 命中頓感：短暫暫停物理世界，用真實時鐘（setTimeout）恢復——不動 time.timeScale，爆發本身的計時節奏不受影響；
-   * 重疊呼叫只延長恢復時間
-   *
-   * @param ms 頓感時長
-   */
-  private triggerHitstop(ms: number): void {
-    if (ms <= 0 || this.host.isGameOver()) return;
-    const world = this.scene.physics.world;
-    if (!this.hitstopActive) {
-      this.hitstopActive = true;
-      world.pause();
-    }
-    const until = Date.now() + ms;
-    if (until > this.hitstopRestoreAt) this.hitstopRestoreAt = until;
-    const restore = (): void => {
-      const remain = this.hitstopRestoreAt - Date.now();
-      if (remain > 0) {
-        setTimeout(restore, remain);
-        return;
-      }
-      try {
-        if (this.hitstopActive && this.scene.physics && this.scene.physics.world) this.scene.physics.world.resume();
-      } catch (_e) {
-        /* 場景可能已停用，忽略 */
-      }
-      this.hitstopActive = false;
-    };
-    setTimeout(restore, ms);
-  }
 
   /**
    * 表演時間：定身並無敵 ms（不縮短既有更長的鎖定，例如爆發連打）；performanceTime.enabled = false 時不鎖

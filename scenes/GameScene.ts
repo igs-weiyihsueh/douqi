@@ -63,7 +63,7 @@ export class GameScene extends Phaser.Scene {
   private breakableCtl!: BreakableController;
   /** COMBO 連擊獎勵（頭上 UI 連擊數與彩票），每次 create() 重建 */
   private comboReward!: ComboRewardController;
-  /** 連段技、強化、爆發與命中頓感，每次 create() 重建 */
+  /** 連段技、強化與爆發，每次 create() 重建 */
   private comboSkills!: ComboSkillController;
   private chargeWarnGfx!: Phaser.GameObjects.Graphics;
   /** P1 腳下圓盤（地面標記，畫在角色 / 敵人下方） */
@@ -1354,7 +1354,6 @@ export class GameScene extends Phaser.Scene {
   /** 通關（打倒第 8 關壓軸 BOSS）——顯示通關結算畫面（可重開）。仿 triggerGameOver 但 won=true。 */
   private triggerClear(): void {
     this.gameOver = true;
-    this.comboSkills.releaseHitstop();
     for (const c of this.characters) c.stopMoving();
     const stats = {
       teamKills: this.teamKills(),
@@ -1998,8 +1997,6 @@ export class GameScene extends Phaser.Scene {
   // ---------------------------------------------------------------------------
   private triggerGameOver(): void {
     this.gameOver = true;
-    // 確保 hitstop 沒把物理留在暫停狀態
-    this.comboSkills.releaseHitstop();
     for (const c of this.characters) c.stopMoving();
 
     const stats = {

@@ -462,8 +462,6 @@ export const GameConfig = {
     dashSpeed: 900,
     /** 爆發期間無敵 */
     invuln: true,
-    /** 每段命中敵人時的 hitstop（毫秒），畫面極短凝滯強化打擊「破頓」感 */
-    hitstopMs: 55
   },
 
   /** 角色（P1 玩家 + 3 BOT），共用同一套角色類別，差別只在輸入來源 */
@@ -1295,6 +1293,21 @@ export const GameConfig = {
 
 
   /** 打擊感表現 */
+  /**
+   * 命中凍結（hitstop）：只凍結被打的怪——原地僵住 freezeMs、凍結結束才被擊退飛出。
+   * 玩家角色與其他怪完全不受影響（4 人共玩不互相卡頓）。BOSS / 塔 / NPC / 寶箱怪不被擊退，也不凍結
+   */
+  hitstop: {
+    /** 總開關 */
+    enabled: true,
+    /** 每次命中的凍結時間（毫秒） */
+    freezeMs: 60,
+    /** 凍結中再被打只延長；一次凍結的總長上限（毫秒），避免圍毆時被一直定住 */
+    maxFreezeMs: 120,
+    /** 凍結結束後多久內不再凍結（毫秒；0 = 無冷卻）：讓持續被圍毆的怪在凍結到上限後確實被擊退一段，不會一直被定住 */
+    cooldownMs: 100
+  },
+
   juice: {
     /** 爆發螢幕震動 */
     burstShakeDuration: 300,
