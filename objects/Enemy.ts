@@ -146,6 +146,22 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     scene.physics.add.existing(this);
     (this.body as Phaser.Physics.Arcade.Body).setCollideWorldBounds(false);
     this.setDepth(5);
+    this.initRuntimeFields();
+  }
+
+  /**
+   * 建構時就把「之後才會被設定」的欄位都建立好（值與預設相同，畫面不變）：
+   * 攻擊回呼、預告 tween，以及 Phaser 第一次設定才建立的縮放 / 透明度 / 染色 / 翻轉 / 旋轉欄位。
+   * 讓每隻敵人從出生起物件結構一致，不論是物件池預先建好、還是出怪時才建立；
+   * 否則一次預建大量物件時，JS 引擎會依「尚未有這些欄位」的結構定型，之後每隻怪的欄位存取都變慢
+   */
+  private initRuntimeFields(): void {
+    this.onAttackFire = undefined;
+    this.onBombThrow = undefined;
+    this.onBossSkill = undefined;
+    this.telegraphTween = undefined;
+    this.chargeTween = undefined;
+    this.setScale(1).setAlpha(1).clearTint().setFlipX(false).setRotation(0);
   }
 
   spawn(x: number, y: number, time: number, type: EnemyType, hpScale = 1): void {

@@ -691,6 +691,11 @@ export const GameConfig = {
     maxAlive: 416,
     /** 單人存活（僅剩 1 名角色）時的場上敵人硬上限 */
     soloMaxAliveCap: 35,
+    /**
+     * 物件池預熱：開局與每次 BOT 加入時，先把敵人物件池補到「目前人數的場上上限 + poolPrewarmBuffer」，
+     * 第一次大量出怪不必當場建立物件（機台效能較弱時避免出怪瞬間卡頓）；BOSS 召喚、事件怪用緩衝
+     */
+    poolPrewarmBuffer: 20,
     /** 開場立即先丟一組隊形（不必等第一個間隔） */
     spawnOnStart: true,
     /** 登場提示時間（毫秒）：這段期間敵人半透明閃爍，不能傷害玩家、也不能被打 */

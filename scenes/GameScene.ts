@@ -36,7 +36,7 @@ import {
 } from '../systems/bodySeparation';
 import { drawEnemyChargeWarnings } from '../systems/enemyWarnings';
 import { isFixedEnemy, isRegularEnemy } from '../systems/enemyKinds';
-import { visibleBottomOffset } from '../systems/spriteFeet';
+import { visibleBottomOffset, warmFeetMetrics } from '../systems/spriteFeet';
 import { drawFootDisc, FOOT_DISC_DEPTH, type VacuumDisk } from '../systems/footDisc';
 import { standingDepth } from '../systems/standingDepth';
 import { facingRightFrom } from '../systems/facing';
@@ -291,6 +291,7 @@ export class GameScene extends Phaser.Scene {
 
     // F4 用的 P1 皮膚與頭上覆蓋圖（需在 P1 建立後）
     this.artStyle.createPlayerOverlays();
+    this.prewarmEnemyPool();
 
     // 方案e:玩家建立後啟用鏡頭跟隨(限制在 A slot 內、deadzone 緩衝)。
     if (this.levelMode) this.slotWorld.enableFollow(this.slotWorld.centerSlot);
@@ -560,6 +561,21 @@ export class GameScene extends Phaser.Scene {
     if (this.characters.length >= GameConfig.characters.count) return; // 已滿
     const index = this.characters.length; // 下一個索引 = 目前人數
     this.createCharacter(index, true);
+    this.prewarmEnemyPool(); // 人數變多 → 場上上限提高，物件池跟著補足
+  }
+
+  /**
+   * 物件池預熱：把敵人物件池補到「目前人數全部存活時的場上上限 + poolPrewarmBuffer」（不超過池子上限），
+   * 補的是未啟用的空白敵人，出怪時直接取用；並先量好所有敵人圖的腳底，第一次出現時不必當場量
+   */
+  private prewarmEnemyPool(): void {
+    const cfg = GameConfig.spawn;
+    const target = Math.min(cfg.maxAlive, this.maxAliveForParty(this.characters.length) + cfg.poolPrewarmBuffer);
+    while (this.enemies.getLength() < target) {
+      const e = this.enemies.create(0, 0) as Enemy;
+      e.disableBody(true, true);
+    }
+    warmFeetMetrics(this.textures, Object.keys(GameConfig.enemy.types).map((type) => `enemy-${type}`));
   }
 
   update(time: number, delta: number): void {
@@ -2048,16 +2064,31 @@ export class GameScene extends Phaser.Scene {
   // ---------------------------------------------------------------------------
   /** 怪量隨場上存活角色數縮放（1人0.4 → 4人1.0） */
   private curAliveScale(): number {
-    const n = this.aliveCount();
+    return this.aliveScaleFor(this.aliveCount());
+  }
+
+  /**
+   * 依存活人數的怪量縮放（0 ~ 1）：base + (人數 − 1) × perAlive
+   *
+   * @param alive 存活人數
+   */
+  private aliveScaleFor(alive: number): number {
     const cfg = GameConfig.spawn.aliveScale;
-    return Phaser.Math.Clamp(cfg.base + (n - 1) * cfg.perAlive, cfg.base, 1);
+    return Phaser.Math.Clamp(cfg.base + (alive - 1) * cfg.perAlive, cfg.base, 1);
   }
 
   private curMaxAlive(): number {
-    // aliveScale 縮放，移除等級成長
-    let cap = Math.max(1, Math.round(GameConfig.spawn.maxAlive * this.curAliveScale()));
-    // 單人存活時再套硬上限（多人不受影響）
-    if (this.aliveCount() === 1) cap = Math.min(cap, GameConfig.spawn.soloMaxAliveCap);
+    return this.maxAliveForParty(this.aliveCount());
+  }
+
+  /**
+   * 指定存活人數時的場上同時存活上限：maxAlive × aliveScale（依人數），單人時再套硬上限
+   *
+   * @param alive 存活人數
+   */
+  private maxAliveForParty(alive: number): number {
+    let cap = Math.max(1, Math.round(GameConfig.spawn.maxAlive * this.aliveScaleFor(alive)));
+    if (alive === 1) cap = Math.min(cap, GameConfig.spawn.soloMaxAliveCap);
     return cap;
   }
 
