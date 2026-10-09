@@ -126,7 +126,31 @@ export class SlotWorldController {
   private exitGfx: Phaser.GameObjects.Graphics | null = null;
   private levelBanner: Phaser.GameObjects.Text | null = null;
 
-  constructor(private readonly host: SlotWorldHost) {}
+  /**
+   * 鏡頭跟隨的目標點：所有存活角色外框（最左～最右、最上～最下）的中心；只有一人時就是他的位置。
+   * 每次繪製前（PRE_RENDER）更新，鏡頭讀到的值與直接跟隨角色時相同（單人時行為不變）
+   */
+  private readonly followTarget = { x: 0, y: 0 };
+
+  constructor(private readonly host: SlotWorldHost) {
+    host.scene.events.on(Phaser.Scenes.Events.PRE_RENDER, this.updateFollowTarget, this);
+    host.scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      host.scene.events.off(Phaser.Scenes.Events.PRE_RENDER, this.updateFollowTarget, this);
+    });
+  }
+
+  /** 更新鏡頭跟隨目標點為存活角色外框中心（全員陣亡時維持原位） */
+  private updateFollowTarget(): void {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const c of this.host.characters()) {
+      if (!c.alive) continue;
+      minX = Math.min(minX, c.x); maxX = Math.max(maxX, c.x);
+      minY = Math.min(minY, c.y); maxY = Math.max(maxY, c.y);
+    }
+    if (minX === Infinity) return;
+    this.followTarget.x = (minX + maxX) / 2;
+    this.followTarget.y = (minY + maxY) / 2;
+  }
 
   /** 目前的移動區（玩家可活動範圍、生怪與布置的範圍） */
   get arena(): Phaser.Geom.Rectangle {
@@ -247,7 +271,7 @@ export class SlotWorldController {
   }
 
   /**
-   * 啟用鏡頭跟隨玩家，限制在指定格內（不露出相鄰格），帶 deadzone 緩衝
+   * 啟用鏡頭跟隨全隊（存活角色外框中心，單人時即該角色），限制在指定格內（不露出相鄰格），帶 deadzone 緩衝
    *
    * @param slot 跟隨範圍
    * @param keepScroll true = 維持目前鏡頭位置不跳（startFollow 預設會立即置中到玩家）；轉場到位後使用
@@ -257,7 +281,8 @@ export class SlotWorldController {
     const st = GameConfig.stage;
     const sx = cam.scrollX, sy = cam.scrollY;
     cam.setBounds(slot.x, slot.y, slot.width, slot.height);
-    cam.startFollow(this.host.player(), true, st.followLerp, st.followLerpY);
+    this.updateFollowTarget(); // startFollow 會立即對準目標，先更新成目前位置
+    cam.startFollow(this.followTarget, true, st.followLerp, st.followLerpY);
     cam.setDeadzone(st.followDeadzoneW, st.followDeadzoneH);
     if (keepScroll) cam.setScroll(sx, sy);
   }

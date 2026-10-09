@@ -742,6 +742,7 @@ export class GameScene extends Phaser.Scene {
       // 塔/BOSS 實體碰撞:角色不可穿過塔/BOSS 本體(含衝刺中也擋,不讓穿王/塔身)
       pushCharacterOutOfStructures(c, this.enemies);
       this.actions.clampToArena(c);
+      this.clampToTeamView(c);
       c.syncLabel();
     }
 
@@ -779,6 +780,31 @@ export class GameScene extends Phaser.Scene {
       if (!b.active) continue;
       b.setDepth(standingDepth(b.y + visibleBottomOffset(this.textures, b.texture.key) * b.scaleY));
     }
+  }
+
+  /**
+   * 多人時把角色限制在目前鏡頭畫面內（內縮 stage.viewClampInset；已貼鏡頭邊界的那側不內縮），衝刺中被夾回就結束衝刺。
+   * 單人、非關卡制、出口開放或轉場中不限制
+   *
+   * @param c 角色
+   */
+  private clampToTeamView(c: Character): void {
+    if (!this.levelMode || !c.alive || this.aliveCount() < 2 || this.slotWorld.isBetweenAreas) return;
+    const cam = this.cameras.main;
+    const v = cam.worldView;
+    const b = cam.getBounds();
+    const inset = GameConfig.stage.viewClampInset;
+    const r = GameConfig.player.radius;
+    const left = v.left + (v.left > b.left + 1 ? inset : 0) + r;
+    const right = v.right - (v.right < b.right - 1 ? inset : 0) - r;
+    const top = v.top + (v.top > b.top + 1 ? inset : 0) + r;
+    const bottom = v.bottom - (v.bottom < b.bottom - 1 ? inset : 0) - r;
+    if (left >= right || top >= bottom) return;
+    const cx = Phaser.Math.Clamp(c.x, left, right);
+    const cy = Phaser.Math.Clamp(c.y, top, bottom);
+    if (cx === c.x && cy === c.y) return;
+    c.setPosition(cx, cy);
+    if (c.isDashing) this.actions.endDashState(c);
   }
 
   /** 時停道具期間,此角色是否【被凍結】(非撿到者 owner 的角色都凍;owner 能動)。 */
