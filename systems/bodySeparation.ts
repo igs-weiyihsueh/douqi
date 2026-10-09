@@ -79,6 +79,14 @@ export interface GroundFootprint {
 /** 查詢敵人的地面佔位；null = 沿用中心 + 身體半徑的圓（舊美術） */
 export type FootprintOf = (e: Enemy) => GroundFootprint | null;
 
+/** 參與分離的一隻敵人：本幀快取地面佔位、是否像牆（分離過程中不變） */
+interface SepAgent {
+  e: Enemy;
+  /** 地面佔位；null = 中心 + 身體半徑的圓 */
+  fp: GroundFootprint | null;
+  wall: boolean;
+}
+
 /**
  * 兩隻敵人的分離幾何：從 a 指向 b 的方向、距離與不重疊所需的最小距離。
  * 兩隻都沒有地面佔位時 = 中心距離對身體半徑和（原本的圓形判定）；
@@ -86,23 +94,77 @@ export type FootprintOf = (e: Enemy) => GroundFootprint | null;
  *
  * @param a 敵人 a
  * @param b 敵人 b
- * @param footprintOf 地面佔位查詢；省略 = 一律用圓形判定
  */
-function enemyPairSpacing(
-  a: Enemy, b: Enemy, footprintOf?: FootprintOf
-): { nx: number; ny: number; d: number; minDist: number; footprint: boolean } {
-  const fa = footprintOf?.(a) ?? null;
-  const fb = footprintOf?.(b) ?? null;
-  if (!fa && !fb) {
-    const { nx, ny, d } = normalBetween(a.x, a.y, b.x, b.y);
-    return { nx, ny, d, minDist: a.getBodyRadius() + b.getBodyRadius(), footprint: false };
+function enemyPairSpacing(a: SepAgent, b: SepAgent): { nx: number; ny: number; d: number; minDist: number; footprint: boolean } {
+  const ea = a.e, eb = b.e;
+  if (!a.fp && !b.fp) {
+    const { nx, ny, d } = normalBetween(ea.x, ea.y, eb.x, eb.y);
+    return { nx, ny, d, minDist: ea.getBodyRadius() + eb.getBodyRadius(), footprint: false };
   }
-  const ra = a.getBodyRadius(), rb = b.getBodyRadius();
-  const pa = fa ?? { footY: 0, rx: ra, ry: ra };
-  const pb = fb ?? { footY: 0, rx: rb, ry: rb };
-  const { nx, ny, d } = normalBetween(a.x, a.y + pa.footY, b.x, b.y + pb.footY);
+  const ra = ea.getBodyRadius(), rb = eb.getBodyRadius();
+  const pa = a.fp ?? { footY: 0, rx: ra, ry: ra };
+  const pb = b.fp ?? { footY: 0, rx: rb, ry: rb };
+  const { nx, ny, d } = normalBetween(ea.x, ea.y + pa.footY, eb.x, eb.y + pb.footY);
   const A = pa.rx + pb.rx, B = pa.ry + pb.ry;
   return { nx, ny, d, minDist: (A * B) / Math.hypot(B * nx, A * ny), footprint: true };
+}
+
+/** 空間格子 key 的偏移（格子座標可能為負） */
+const GRID_KEY_OFFSET = 32768;
+/** 硬分離格子的額外寬度：同一輪迭代中被推開後仍能找到彼此（推移每次 ≤ maxStepPx） */
+const OVERLAP_GRID_MARGIN = 40;
+
+/**
+ * 空間格子：把每隻敵人的參考點（有佔位用腳底、否則中心）登記到 cellSize 的格子，
+ * 查詢時只看自己與周圍 8 格。cellSize ≥ 最大影響距離時，找出的鄰居與「全部兩兩比對」完全相同
+ */
+class SeparationGrid {
+  private readonly cells = new Map<number, number[]>();
+
+  /**
+   * @param agents 參與分離的敵人（索引即原陣列順序）
+   * @param cellSize 格子邊長
+   */
+  constructor(private readonly agents: ReadonlyArray<SepAgent>, private readonly cellSize: number) {
+    agents.forEach((a, i) => {
+      const key = this.keyOf(a);
+      const list = this.cells.get(key);
+      if (list) list.push(i);
+      else this.cells.set(key, [i]);
+    });
+  }
+
+  /**
+   * 第 i 隻周圍 9 格內的其他敵人索引（由小到大，與原本的兩兩比對同順序）
+   *
+   * @param i 敵人索引
+   * @param after true = 只回傳索引大於 i 的（硬分離每對只處理一次）
+   */
+  neighbors(i: number, after: boolean): number[] {
+    const a = this.agents[i];
+    const cx = this.cellX(a), cy = this.cellY(a);
+    const out: number[] = [];
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const list = this.cells.get((cx + dx + GRID_KEY_OFFSET) * 65536 + (cy + dy + GRID_KEY_OFFSET));
+        if (!list) continue;
+        for (const j of list) if (after ? j > i : j !== i) out.push(j);
+      }
+    }
+    return out.sort((x, y) => x - y);
+  }
+
+  private cellX(a: SepAgent): number {
+    return Math.floor(a.e.x / this.cellSize);
+  }
+
+  private cellY(a: SepAgent): number {
+    return Math.floor((a.e.y + (a.fp ? a.fp.footY : 0)) / this.cellSize);
+  }
+
+  private keyOf(a: SepAgent): number {
+    return (this.cellX(a) + GRID_KEY_OFFSET) * 65536 + (this.cellY(a) + GRID_KEY_OFFSET);
+  }
 }
 
 /** 是否參與敵人間分離（活著、已現身） */
@@ -111,27 +173,48 @@ export function joinsEnemySeparation(e: Enemy): boolean {
 }
 
 /**
- * 軟分離：對 radiusPx 內每個鄰居算遠離向量（越近推力越大，權重 = t²），
+ * 敵人間分離（每幀一次）：先軟分離改移動方向、再硬分離推開殘留重疊。
+ * 地面佔位每隻只算一次；用空間格子只比對附近的敵人（怪多時避免全部兩兩比對），鄰居順序與原本相同
+ *
+ * @param agents 參與分離的敵人
+ * @param arena 移動區
+ * @param footprintOf 地面佔位查詢；省略 = 一律用圓形判定
+ */
+export function separateEnemies(agents: ReadonlyArray<Enemy>, arena: Phaser.Geom.Rectangle, footprintOf?: FootprintOf): void {
+  const cfg = GameConfig.enemySeparation;
+  const list: SepAgent[] = agents.map((e) => ({ e, fp: footprintOf?.(e) ?? null, wall: isWallLike(e) }));
+  // 最大影響距離：圓形對圓形的軟分離範圍 radiusPx；有佔位時 = 兩個最大半軸相加 × footprintSteerScale
+  let maxAxis = 0, anyFootprint = false;
+  for (const a of list) {
+    const r = a.e.getBodyRadius();
+    maxAxis = Math.max(maxAxis, a.fp ? Math.max(a.fp.rx, a.fp.ry, r) : r);
+    if (a.fp) anyFootprint = true;
+  }
+  const steerReach = Math.max(cfg.radiusPx, anyFootprint ? 2 * maxAxis * cfg.footprintSteerScale : 0);
+  const steerGrid = new SeparationGrid(list, Math.max(1, steerReach));
+  list.forEach((a, i) => applySteering(a, steerGrid.neighbors(i, false).map((j) => list[j])));
+  resolveOverlap(list, arena, Math.max(1, 2 * maxAxis + OVERLAP_GRID_MARGIN));
+}
+
+/**
+ * 軟分離：對影響範圍內每個鄰居算遠離向量（越近推力越大，權重 = t²），
  * 與敵人目前的移動方向（先正規化）合成新方向，只改方向、保留速度大小。
  * 移動方向一定要先正規化，否則遠距追擊的速度會蓋過分離力，怪還是疊成一團。
- * 像牆的怪與站定（速度 ≈ 0）的怪不改向，交給硬分離處理
+ * 像牆的怪與站定（速度 ≈ 0）的怪不改向，交給硬分離處理。
+ * 影響範圍：圓形對圓形為 radiusPx；有地面佔位（F4 新美術）時為兩個佔位橢圓相加的邊界 × footprintSteerScale
  *
- * 有地面佔位（F4 新美術）時，影響範圍改為兩個佔位橢圓相加的邊界 × footprintSteerScale
- *
- * @param enemy 要調整方向的敵人
- * @param neighbors 參與分離的所有敵人
- * @param footprintOf 地面佔位查詢；省略 = 一律用中心距離與 radiusPx
+ * @param agent 要調整方向的敵人
+ * @param neighbors 附近的其他敵人（原陣列順序）
  */
-export function applyEnemySeparationSteering(enemy: Enemy, neighbors: ReadonlyArray<Enemy>, footprintOf?: FootprintOf): void {
-  if (isWallLike(enemy)) return;
-  const body = enemy.body as Phaser.Physics.Arcade.Body;
+function applySteering(agent: SepAgent, neighbors: ReadonlyArray<SepAgent>): void {
+  if (agent.wall) return;
+  const body = agent.e.body as Phaser.Physics.Arcade.Body;
   const spd = Math.hypot(body.velocity.x, body.velocity.y);
   if (spd < 1) return;
   const cfg = GameConfig.enemySeparation;
   let sx = 0, sy = 0;
   for (const other of neighbors) {
-    if (other === enemy) continue;
-    const { nx, ny, d, minDist, footprint } = enemyPairSpacing(other, enemy, footprintOf); // 鄰居 → 自己 = 遠離方向
+    const { nx, ny, d, minDist, footprint } = enemyPairSpacing(other, agent); // 鄰居 → 自己 = 遠離方向
     const R = footprint ? minDist * cfg.footprintSteerScale : cfg.radiusPx;
     if (d >= R) continue;
     const t = (R - d) / R; // 0（邊緣）~ 1（貼身）
@@ -147,42 +230,41 @@ export function applyEnemySeparationSteering(enemy: Enemy, neighbors: ReadonlyAr
 }
 
 /**
- * 硬分離：兩兩距離小於半徑和時沿連線推開重疊量，迭代 iterations 次收斂（有地面佔位時改用腳底與佔位橢圓，見 enemyPairSpacing）。
+ * 硬分離：兩兩距離小於最小距離時沿連線推開重疊量，迭代 iterations 次收斂（有地面佔位時改用腳底與佔位橢圓）。
  * 一方像牆時只推另一方（全額），兩方都可動時各推一半；
  * 每次推移量夾在 maxStepPx（分多幀收斂，玩家衝進怪群時怪不會瞬移），位置夾在移動區內。
- * 目前是 O(n²) × iterations，單人場上約 35 隻可接受；多人上百隻時需改空間網格
+ * 每輪依目前位置重建空間格子，只比對附近的敵人，處理順序與全部兩兩比對相同
  *
- * @param agents 參與分離的敵人
+ * @param list 參與分離的敵人
  * @param arena 移動區
- * @param footprintOf 地面佔位查詢；省略 = 一律用圓形判定
+ * @param cellSize 格子邊長（≥ 最大最小距離 + 同輪推移的餘量）
  */
-export function resolveEnemyOverlap(agents: ReadonlyArray<Enemy>, arena: Phaser.Geom.Rectangle, footprintOf?: FootprintOf): void {
+function resolveOverlap(list: ReadonlyArray<SepAgent>, arena: Phaser.Geom.Rectangle, cellSize: number): void {
   const cfg = GameConfig.enemySeparation;
   const place = (e: Enemy, x: number, y: number): void => {
     const r = e.getBodyRadius();
     e.setPosition(Phaser.Math.Clamp(x, arena.left + r, arena.right - r), Phaser.Math.Clamp(y, arena.top + r, arena.bottom - r));
   };
   for (let iter = 0; iter < cfg.iterations; iter++) {
-    for (let i = 0; i < agents.length; i++) {
-      const a = agents[i];
-      if (!a.active || a.dead) continue;
-      const aWall = isWallLike(a);
-      for (let j = i + 1; j < agents.length; j++) {
-        const b = agents[j];
-        if (!b.active || b.dead) continue;
-        const { nx, ny, d, minDist } = enemyPairSpacing(a, b, footprintOf); // a → b
+    const grid = new SeparationGrid(list, cellSize);
+    for (let i = 0; i < list.length; i++) {
+      const a = list[i];
+      if (!a.e.active || a.e.dead) continue;
+      for (const j of grid.neighbors(i, true)) {
+        const b = list[j];
+        if (!b.e.active || b.e.dead) continue;
+        const { nx, ny, d, minDist } = enemyPairSpacing(a, b); // a → b
         if (d >= minDist) continue;
         const overlap = Math.min(minDist - d, cfg.maxStepPx);
-        const bWall = isWallLike(b);
-        if (aWall && bWall) continue;
-        if (aWall) {
-          place(b, b.x + nx * overlap, b.y + ny * overlap);
-        } else if (bWall) {
-          place(a, a.x - nx * overlap, a.y - ny * overlap);
+        if (a.wall && b.wall) continue;
+        if (a.wall) {
+          place(b.e, b.e.x + nx * overlap, b.e.y + ny * overlap);
+        } else if (b.wall) {
+          place(a.e, a.e.x - nx * overlap, a.e.y - ny * overlap);
         } else {
           const half = overlap * 0.5;
-          place(a, a.x - nx * half, a.y - ny * half);
-          place(b, b.x + nx * half, b.y + ny * half);
+          place(a.e, a.e.x - nx * half, a.e.y - ny * half);
+          place(b.e, b.e.x + nx * half, b.e.y + ny * half);
         }
       }
     }
