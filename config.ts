@@ -833,6 +833,20 @@ export const GameConfig = {
       edgeInset: 30, edgeMinY: 150, edgeBottomMargin: 180, hysteresisPx: 40, followMs: 120
     },
     /**
+     * 清場輔助：清場階段（本波已生滿、等清完）時，畫面外還活著的一般怪以畫面邊緣的箭頭指示方向。
+     * 依畫面中心往外分成 sectors 個方向，每個方向一支箭頭指向該方向最近的怪，同方向多隻時顯示 ×N。
+     * 箭頭貼邊範圍與 GO 指示相同（避開上方 HUD / 下方面板）
+     */
+    offscreenIndicator: {
+      sectors: 8, depth: 54,
+      arrowSize: 16, arrowColor: 0xff8a65, arrowGlowColor: 0xff3d3d, arrowGlowSpread: 10, arrowGlowLayers: 4, arrowGlowAlpha: 0.5,
+      fontSize: '22px', textColor: '#ffe0d6', textStroke: '#5a0a00', textStrokeThickness: 4, countGap: 6,
+      edgeInset: 30, edgeMinY: 150, edgeBottomMargin: 180,
+      /** 怪的身體超出畫面多少才算「在畫面外」（px） */
+      viewMargin: 8,
+      blinkMs: 480, blinkMinAlpha: 0.45, followMs: 120
+    },
+    /**
      * 隱藏入口（熔岩拱門）：每區開打時 spawnChance 機率出現在上方邊界（距左右邊 edgeMargin、避開中央上方出口
      * centerExclusion），拱門底部在場地上緣往內 topInset，顯示高度 displayHeight；未開啟時灰暗（closedTint / closedAlpha），
      * 開啟後洞口中央（自底部算起 glowCenterRatio 高度、半徑約寬度 × doorwayRadiusRatio）出現熔岩光暈，脈動週期 glowPulseMs。

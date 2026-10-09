@@ -11,6 +11,7 @@ import type { TelegraphFx } from '../systems/telegraphFx';
 import { BossController, type BossHost } from '../controllers/BossController';
 import { ArtStyleController } from '../controllers/ArtStyleController';
 import { GoIndicator } from '../controllers/GoIndicator';
+import { OffscreenEnemyIndicator } from '../controllers/OffscreenEnemyIndicator';
 import { HiddenGateController } from '../controllers/HiddenGateController';
 import { TreasureRoomController } from '../controllers/TreasureRoomController';
 import { TreasureEnemyController, type TreasureEnemyHost } from '../controllers/TreasureEnemyController';
@@ -118,6 +119,8 @@ export class GameScene extends Phaser.Scene {
   private pendingSubZoneComplete = false;
   /** 出口開啟時畫面邊緣的 GO 指示，每次 create() 重建 */
   private goIndicator!: GoIndicator;
+  /** 清場輔助：畫面外剩餘一般怪的方向箭頭 */
+  private offscreenIndicator!: OffscreenEnemyIndicator;
   /** 隱藏入口（熔岩拱門），每次 create() 重建 */
   private hiddenGate!: HiddenGateController;
   /** 隱藏入口後的獎勵關（寶藏密室），每次 create() 重建 */
@@ -253,6 +256,10 @@ export class GameScene extends Phaser.Scene {
     this.eventCtl = new EventController(this.createEventHost());
     this.debug = new GameDebugApi(this.createDebugHost());
     this.goIndicator = new GoIndicator(this);
+    this.offscreenIndicator = new OffscreenEnemyIndicator(this, {
+      enemies: () => this.enemies,
+      isActive: () => this.waveState === 'clearing' && !this.gameOver
+    });
     new PerfOverlay(this); // 除錯 F9：實機效能監控（自行註冊熱鍵與場景關閉時的清理）
     this.hiddenGate = new HiddenGateController(this);
     this.treasures = new TreasureEnemyController(this.createTreasureHost());
@@ -585,6 +592,7 @@ export class GameScene extends Phaser.Scene {
 
     this.artStyle.update(time);
     this.goIndicator.update(delta);
+    this.offscreenIndicator.update(delta);
 
     // COMBO 連擊計時（警告 / 中斷）
     this.comboReward.update();
