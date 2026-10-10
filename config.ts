@@ -691,12 +691,15 @@ export const GameConfig = {
     /**
      * 配置：quota 擊殺數；maxAlive 同時在場上限（單人值，每多一人再加 perExtraPlayer）；
      * phases 依擊殺進度分段（untilProgress 前套用）：weights 怪種比例、intervalMs 補怪間隔、
-     * nearBatch / fieldBatch 近身組 / 場上組每批隻數 [最少, 最多]、nearShare 近身組占比
+     * nearBatch / fieldBatch 近身組 / 場上組每批隻數 [最少, 最多]、nearShare 近身組占比；
+     * surge 二段變身即時補怪：在變身的玩家身旁環狀補 count 隻（依 weights 抽怪種），不計擊殺數、受同時在場上限保護，
+     * 每位玩家各自冷卻 cooldownMs
      */
     profiles: {
       /** 蜂群：小怪一直湧上來，快節奏割草 */
       swarm: {
         name: '蜂群', quota: 25, maxAlive: { solo: 22, perExtraPlayer: 18 },
+        surge: { count: [6, 10], weights: { normal: 90, tank: 10, bomber: 0 }, cooldownMs: 10000 },
         phases: [
           { untilProgress: 0.5, weights: { normal: 100, tank: 0, bomber: 0 }, intervalMs: 800, nearBatch: [2, 4], fieldBatch: [4, 7], nearShare: 0.6 },
           { untilProgress: 1, weights: { normal: 90, tank: 10, bomber: 0 }, intervalMs: 700, nearBatch: [3, 5], fieldBatch: [5, 8], nearShare: 0.6 }
@@ -705,6 +708,7 @@ export const GameConfig = {
       /** 重甲：坦克當肉牆，怪少但硬，慢節奏 */
       armor: {
         name: '重甲', quota: 25, maxAlive: { solo: 22, perExtraPlayer: 18 },
+        surge: { count: [6, 10], weights: { normal: 90, tank: 10, bomber: 0 }, cooldownMs: 10000 },
         phases: [
           { untilProgress: 0.4, weights: { normal: 80, tank: 20, bomber: 0 }, intervalMs: 1600, nearBatch: [3, 5], fieldBatch: [6, 9], nearShare: 0.4 },
           { untilProgress: 1, weights: { normal: 55, tank: 45, bomber: 0 }, intervalMs: 1500, nearBatch: [3, 5], fieldBatch: [6, 10], nearShare: 0.4 }
@@ -713,6 +717,7 @@ export const GameConfig = {
       /** 砲火：投擲怪在遠處轟炸（只出在場上組），要衝過去清 */
       artillery: {
         name: '砲火', quota: 25, maxAlive: { solo: 22, perExtraPlayer: 18 },
+        surge: { count: [6, 10], weights: { normal: 90, tank: 10, bomber: 0 }, cooldownMs: 10000 },
         phases: [
           { untilProgress: 0.3, weights: { normal: 85, tank: 0, bomber: 15 }, intervalMs: 1100, nearBatch: [2, 4], fieldBatch: [5, 8], nearShare: 0.4 },
           { untilProgress: 1, weights: { normal: 70, tank: 5, bomber: 25 }, intervalMs: 1000, nearBatch: [2, 4], fieldBatch: [5, 9], nearShare: 0.35 }

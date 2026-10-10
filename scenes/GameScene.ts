@@ -96,6 +96,8 @@ export class GameScene extends Phaser.Scene {
   private waveKilled = 0;
   /** 目前小關卡抽到的怪物配置（關卡制且 stageMonsters.enabled 時；否則 null = 舊的全域出怪參數） */
   private monsterProfile: MonsterProfile | null = null;
+  /** 各座位下次可觸發二段變身即時補怪的時間（每位玩家各自冷卻） */
+  private surgeReadyAt: number[] = [];
   private waveSpawned = 0;
   private waveState: 'spawning' | 'clearing' | 'intermission' | 'boss' | 'event' = 'spawning';
   private intermissionUntil = 0;
@@ -1209,8 +1211,25 @@ export class GameScene extends Phaser.Scene {
       shakeOnce: (duration, intensity) => this.fx.shake(duration, intensity),
       flashWhite: (c) => this.fx.flashWhite(c),
       spawnSlashEffect: (x, y) => this.fx.slash(x, y),
-      emitStats: () => this.emitStats()
+      emitStats: () => this.emitStats(),
+      onEmpower: (c) => this.surgeOnEmpower(c)
     };
+  }
+
+  /**
+   * 二段變身即時補怪：小關卡進行中（生怪 / 清場階段）依目前配置在變身的玩家身旁補一批（不計擊殺數），
+   * 每位玩家各自冷卻；場上已滿而一隻都沒補到時不進冷卻
+   *
+   * @param c 剛進入強化的角色
+   */
+  private surgeOnEmpower(c: Character): void {
+    const profile = this.monsterProfile;
+    if (!profile || !this.stageInProgress || this.pendingSubZoneComplete) return;
+    if (this.waveState !== 'spawning' && this.waveState !== 'clearing') return;
+    const seat = this.characters.indexOf(c);
+    const now = this.time.now;
+    if (seat < 0 || now < (this.surgeReadyAt[seat] ?? 0)) return;
+    if (this.spawner.spawnSurge(seat, profile.surge) > 0) this.surgeReadyAt[seat] = now + profile.surge.cooldownMs;
   }
 
   /**
@@ -2059,6 +2078,7 @@ export class GameScene extends Phaser.Scene {
     const dx = enemy.x, dy = enemy.y;
     const wasBoss = enemy.isBoss;
     const etype = enemy.enemyType;
+    const countsTowardQuota = !enemy.quotaExempt;
     enemy.kill();
     if (wasBoss) {
       actor.kills++;
@@ -2068,7 +2088,7 @@ export class GameScene extends Phaser.Scene {
       this.eventCtl.onTowerDestroyed(); // 取消塔蓄力中的扇形預警，事件成功
     } else if (etype !== 'npc') {
       actor.kills++;
-      this.onWaveKill();
+      if (countsTowardQuota) this.onWaveKill(); // 即時補怪不推進關卡進度
       this.fx.deathBurst(dx, dy);
       if (this.controlMode === 'slow') this.comboSkills.grantKillEnergy(this.player, etype);
       if (Math.random() < GameConfig.items.dropChance) this.dropItemAt(dx, dy, time);

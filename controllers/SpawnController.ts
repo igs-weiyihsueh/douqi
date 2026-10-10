@@ -4,7 +4,7 @@ import type { Character } from '../objects/Character';
 import type { Enemy, EnemyType } from '../objects/Enemy';
 import { isRegularEnemy } from '../systems/enemyKinds';
 import { shouldSpawnMore, updateRefillLatch, type WaveSpawnState } from '../systems/waveMath';
-import type { MonsterKind, MonsterPhase } from '../systems/stageMonsters';
+import type { MonsterKind, MonsterPhase, MonsterSurge } from '../systems/stageMonsters';
 
 /** 本波擊殺進度 */
 export interface WaveKillProgress {
@@ -98,16 +98,17 @@ export class SpawnController {
     const alive = this.countAlive();
     const pending = this.countPending();
     const occupancy = alive + pending;
+    const quotaExempt = this.countQuotaExempt();
     const spawnThreshold = Math.round(maxAlive * GameConfig.wave.drip.spawnThresholdRatio);
     this.refilling = updateRefillLatch(occupancy, maxAlive, spawnThreshold, this.refilling);
     const progress = this.host.waveProgress();
     const ws: WaveSpawnState = {
       progress: progress.killed,
       targetProgress: progress.quota,
-      alive, pending, maxAlive, spawnThreshold,
+      alive, pending, quotaExempt, maxAlive, spawnThreshold,
       refilling: this.refilling
     };
-    if (progress.killed + occupancy >= progress.quota) return true;
+    if (progress.killed + occupancy - quotaExempt >= progress.quota) return true;
     this.accumulator += delta;
     if (this.accumulator < this.interval) return false;
     if (!shouldSpawnMore(ws)) return false;
@@ -164,6 +165,30 @@ export class SpawnController {
     enemy.targetSeat = this.host.nearestSeat(x, y); // 守護事件中會被改成攻擊守護目標
     if (leashImmune) { enemy.leashRadius = Infinity; enemy.leashTravelDist = Infinity; }
     if (forceChase) enemy.forceChase = true;
+  }
+
+  /**
+   * 即時補怪（二段變身）：在指定玩家身旁 nearRingRadius 的環上補一批，綁定該玩家；
+   * 不計本波配額（不佔生產總量、擊殺不推進進度），但受同時在場上限保護，滿了就少補或不補
+   *
+   * @param seat 觸發的玩家座位
+   * @param rule 補怪規則（數量、怪種比例）
+   * @returns 實際補了幾隻
+   */
+  spawnSurge(seat: number, rule: MonsterSurge): number {
+    const focus = this.host.characters()[seat];
+    if (!focus?.alive) return 0;
+    const time = this.host.scene.time.now;
+    const ringRadius = GameConfig.spawnAlloc.nearRingRadius;
+    const room = this.host.maxAlive() - this.countAlive() - this.countPending();
+    const n = Math.min(room, Phaser.Math.Between(rule.count[0], rule.count[1]));
+    const start = Math.random() * Math.PI * 2;
+    for (let i = 0; i < n; i++) {
+      const a = start + (i / n) * Math.PI * 2;
+      const enemy = this.placeEnemy(focus.x + Math.cos(a) * ringRadius, focus.y + Math.sin(a) * ringRadius, time, this.pickByWeights(rule.weights), seat);
+      if (enemy) enemy.quotaExempt = true;
+    }
+    return Math.max(0, n);
   }
 
   /**
@@ -263,14 +288,24 @@ export class SpawnController {
    * @param assignSeat 綁定的座位；-1 = 就近
    */
   private spawnEnemyAt(x: number, y: number, time: number, pool?: EnemyType[], assignSeat = -1): void {
-    const type = this.pickEnemyType(pool);
+    if (this.placeEnemy(x, y, time, this.pickEnemyType(pool), assignSeat)) this.host.onWaveEnemySpawned();
+  }
+
+  /**
+   * 在 (x, y)（夾進移動區）生成一隻指定種類的怪，設定綁定目標與活動範圍（不計本波已生成數）
+   *
+   * @param type 敵種
+   * @param assignSeat 綁定的座位；-1 = 就近
+   * @returns 生成的怪；物件池用完時為 null
+   */
+  private placeEnemy(x: number, y: number, time: number, type: EnemyType, assignSeat: number): Enemy | null {
     const a = this.host.arena();
     const inset = GameConfig.spawn.edgeInset;
     const r = GameConfig.enemy.types[type].radius;
     const cx = Phaser.Math.Clamp(x, a.left + inset + r, a.right - inset - r);
     const cy = Phaser.Math.Clamp(y, a.top + inset + r, a.bottom - inset - r);
     const enemy = this.host.enemies().get(cx, cy) as Enemy | null;
-    if (!enemy) return;
+    if (!enemy) return null;
     this.host.wireEnemyCallbacks(enemy);
     enemy.spawn(cx, cy, time, type);
     enemy.targetSeat = enemy.isBoss ? 0 : (assignSeat >= 0 ? assignSeat : this.host.nearestSeat(cx, cy));
@@ -280,18 +315,18 @@ export class SpawnController {
     const near = assignSeat >= 0;
     enemy.leashRadius = unleashed ? Infinity : (near ? alloc.nearLeashRadius : alloc.fieldLeashRadius);
     enemy.leashTravelDist = unleashed ? Infinity : (near ? alloc.nearLeashTravelDist : alloc.fieldLeashTravelDist);
-    this.host.onWaveEnemySpawned();
+    return enemy;
   }
 
   /**
-   * 每隻生成前的封頂檢查：場上（含預告中）已達上限，或生產總量（已擊殺 + 場上 + 預告中）已達本波配額就不生
+   * 每隻生成前的封頂檢查：場上（含預告中）已達上限，或生產總量（已擊殺 + 場上 + 預告中，不含即時補怪）已達本波配額就不生
    */
   private isBlocked(): boolean {
     const alive = this.countAlive();
     const pending = this.countPending();
     if (alive + pending >= this.host.maxAlive()) return true;
     const progress = this.host.waveProgress();
-    return progress.killed + alive + pending >= progress.quota;
+    return progress.killed + alive + pending - this.countQuotaExempt() >= progress.quota;
   }
 
   /**
@@ -300,7 +335,7 @@ export class SpawnController {
    */
   private pickEnemyType(restrictPool?: EnemyType[]): EnemyType {
     const phase = this.host.monsterPhase();
-    if (phase) return this.pickByPhaseWeights(phase, restrictPool);
+    if (phase) return this.pickByWeights(phase.weights, restrictPool);
     const types = GameConfig.enemy.types;
     const unlock = GameConfig.enemy.unlockByWave as Record<string, number>;
     const wave = this.host.currentWave();
@@ -332,14 +367,14 @@ export class SpawnController {
   }
 
   /**
-   * 依關卡怪物配置目前階段的比例抽怪種（不看波次解鎖）；restrictPool 有指定時只在其交集中抽
+   * 依關卡怪物配置的比例（目前階段 / 即時補怪）抽怪種（不看波次解鎖）；restrictPool 有指定時只在其交集中抽
    * （例如近身組只出近戰），交集內權重全為 0 時退回全部有權重的種類
    *
-   * @param phase 目前階段
+   * @param weights 怪種比例
    * @param restrictPool 限定的敵種
    */
-  private pickByPhaseWeights(phase: MonsterPhase, restrictPool?: EnemyType[]): EnemyType {
-    const all = (Object.keys(phase.weights) as MonsterKind[]).filter((k) => phase.weights[k] > 0);
+  private pickByWeights(weights: Record<MonsterKind, number>, restrictPool?: EnemyType[]): EnemyType {
+    const all = (Object.keys(weights) as MonsterKind[]).filter((k) => weights[k] > 0);
     let pool = all;
     if (restrictPool && restrictPool.length > 0) {
       const restricted = all.filter((k) => restrictPool.includes(k));
@@ -347,10 +382,10 @@ export class SpawnController {
     }
     if (pool.length === 0) return 'normal';
     let total = 0;
-    for (const k of pool) total += phase.weights[k];
+    for (const k of pool) total += weights[k];
     let roll = Math.random() * total;
     for (const k of pool) {
-      roll -= phase.weights[k];
+      roll -= weights[k];
       if (roll <= 0) return k;
     }
     return pool[0];
@@ -364,6 +399,16 @@ export class SpawnController {
   /** 場上預告中（尚未實體化）的波次一般怪數（算進總量，防超生） */
   private countPending(): number {
     return this.countRegular(true);
+  }
+
+  /** 場上（含預告中）不計配額的即時補怪數 */
+  private countQuotaExempt(): number {
+    let n = 0;
+    for (const child of this.host.enemies().getChildren()) {
+      const e = child as Enemy;
+      if (e.active && !e.dead && e.quotaExempt && isRegularEnemy(e)) n++;
+    }
+    return n;
   }
 
   private countRegular(telegraphing: boolean): number {

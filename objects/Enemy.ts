@@ -85,6 +85,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
    * 且不因 leash/loseRadius 回巡邏(一直咬住目標=NPC)。由 GameScene 生成守護波怪時設定。
    */
   forceChase = false;
+  /** 不計本關擊殺數（二段變身即時補怪）：擊殺不推進關卡進度，也不佔本關配額；仍計入同時在場上限 */
+  quotaExempt = false;
   /**
    * 主動仇恨:被玩家攻擊命中/鎖定過→true。主動怪不計入「單角色被動警戒上限」、永遠可追。
    * 被動怪(aggroActive=false 因 alertRadius 自己進 chase)才計入上限。
@@ -242,6 +244,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.leashRadius = Infinity;      // 預設不套用;GameScene 指派場上組=config、近身組=大值
     this.travelAccum = 0; this.leashTravelDist = Infinity; this.lastChaseX = x; this.lastChaseY = y; // leash 第二條:路程重置
     this.forceChase = false;   // 守護波怪由 GameScene 生成後指派;預設一般怪不強制追
+    this.quotaExempt = false;  // 即時補怪由 SpawnController 生成後指派
     this.aggroActive = false;  // 主動仇恨:生成時未被玩家打過
     this.chaseBlocked = false; // 被動追擊封鎖:每幀由 GameScene 依上限重算
     this.chargeUntil = 0;

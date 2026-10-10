@@ -25,6 +25,16 @@ export interface MonsterPhase {
   nearShare: number;
 }
 
+/** 二段變身即時補怪：在變身的玩家身旁環狀補一批，不計擊殺數、受同時在場上限保護 */
+export interface MonsterSurge {
+  /** 每次補幾隻 [最少, 最多] */
+  count: readonly [number, number];
+  /** 怪種比例（權重） */
+  weights: Record<MonsterKind, number>;
+  /** 每位玩家各自的冷卻（毫秒） */
+  cooldownMs: number;
+}
+
 /** 一份關卡怪物配置 */
 export interface MonsterProfile {
   id: string;
@@ -35,6 +45,7 @@ export interface MonsterProfile {
   /** 同時在場上限：單人值，每多一位存活玩家再加 perExtraPlayer */
   maxAlive: { solo: number; perExtraPlayer: number };
   phases: ReadonlyArray<MonsterPhase>;
+  surge: MonsterSurge;
 }
 
 /**

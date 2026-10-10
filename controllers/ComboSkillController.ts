@@ -38,6 +38,8 @@ export interface ComboSkillHost {
   flashWhite(c: Character): void;
   spawnSlashEffect(x: number, y: number): void;
   emitStats(): void;
+  /** 角色剛進入強化（二段變身）：場景依關卡怪物配置做即時補怪 */
+  onEmpower(c: Character): void;
 }
 
 /** 連段技與強化的震動 */
@@ -299,6 +301,7 @@ export class ComboSkillController {
     }
     this.host.shakeOnce(GameConfig.juice.burstShakeDuration, GameConfig.juice.burstShakeIntensity);
     this.host.spawnExpandingRing(c.x, c.y, EMPOWER_RING_RADIUS, EMPOWER_RING_COLOR, EMPOWER_RING_MS);
+    this.host.onEmpower(c);
     const aura = this.scene.add.circle(c.x, c.y, GameConfig.player.radius + AURA_EXTRA_RADIUS, AURA_COLOR, 0.22).setDepth(AURA_DEPTH);
     aura.setStrokeStyle(3, AURA_STROKE, 0.9);
     const pulse = this.scene.tweens.add({
