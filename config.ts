@@ -179,6 +179,26 @@ export const GameConfig = {
     stickyBreakSec: 1
   },
 
+  /**
+   * 召集：玩家身邊完全沒有怪（engagedRadius 內沒有、也沒有怪正在追他或被召集去找他）持續 lonelyMs，
+   * 就從 recruitRange 內挑最近的 recruitCount 隻閒置的怪去找他（原速，不加速）。只在小關卡進行中（生怪 / 清場）啟用。
+   * - checkIntervalMs：評估間隔；cooldownMs：同一位玩家兩次召集的間隔
+   * - excludeNearOtherPlayer：在其他玩家這個距離內的怪不召集（不搶別人的怪）
+   * - 被召集的怪不受活動範圍限制、不換目標，走進 arriveRadius（投擲怪：投擲射程）或 maxRallyMs 到就結束，以當下位置為新的出生點
+   */
+  enemyRally: {
+    enabled: true,
+    checkIntervalMs: 500,
+    engagedRadius: 350,
+    lonelyMs: 1500,
+    recruitCount: 3,
+    recruitRange: 1000,
+    excludeNearOtherPlayer: 350,
+    cooldownMs: 3000,
+    maxRallyMs: 15000,
+    arriveRadius: 300
+  },
+
   player: {
     maxHp: 100,
     /** 半徑（碰撞用） */

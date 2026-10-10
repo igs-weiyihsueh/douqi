@@ -13,6 +13,7 @@ import { BossController, type BossHost } from '../controllers/BossController';
 import { ArtStyleController } from '../controllers/ArtStyleController';
 import { GoIndicator } from '../controllers/GoIndicator';
 import { OffscreenEnemyIndicator } from '../controllers/OffscreenEnemyIndicator';
+import { EnemyRallyController } from '../controllers/EnemyRallyController';
 import { HiddenGateController } from '../controllers/HiddenGateController';
 import { TreasureRoomController } from '../controllers/TreasureRoomController';
 import { TreasureEnemyController, type TreasureEnemyHost } from '../controllers/TreasureEnemyController';
@@ -128,6 +129,7 @@ export class GameScene extends Phaser.Scene {
   private goIndicator!: GoIndicator;
   /** 清場輔助：畫面外剩餘一般怪的方向箭頭 */
   private offscreenIndicator!: OffscreenEnemyIndicator;
+  private enemyRally!: EnemyRallyController;
   /** 隱藏入口（熔岩拱門），每次 create() 重建 */
   private hiddenGate!: HiddenGateController;
   /** 隱藏入口後的獎勵關（寶藏密室），每次 create() 重建 */
@@ -266,6 +268,12 @@ export class GameScene extends Phaser.Scene {
     this.offscreenIndicator = new OffscreenEnemyIndicator(this, {
       enemies: () => this.enemies,
       isActive: () => this.waveState === 'clearing' && !this.gameOver
+    });
+    this.enemyRally = new EnemyRallyController({
+      enemies: () => this.enemies,
+      characters: () => this.characters,
+      isActive: () => this.levelMode && this.stageInProgress && !this.gameOver && !this.slotWorld.isBetweenAreas &&
+        (this.waveState === 'spawning' || this.waveState === 'clearing')
     });
     new PerfOverlay(this, () => this.monsterProfileDebugLines()); // 除錯 F9：實機效能監控（自行註冊熱鍵與場景關閉時的清理）
     this.hiddenGate = new HiddenGateController(this);
@@ -602,6 +610,7 @@ export class GameScene extends Phaser.Scene {
     this.artStyle.update(time);
     this.goIndicator.update(delta);
     this.offscreenIndicator.update(delta);
+    this.enemyRally.update(time);
 
     // COMBO 連擊計時（警告 / 中斷）
     this.comboReward.update();
@@ -851,14 +860,17 @@ export class GameScene extends Phaser.Scene {
     const cfg = GameConfig.enemySticky;
     let seat = enemy.targetSeat;
     let bound: Character | null = (seat >= 0 && seat < this.characters.length) ? this.characters[seat] : null;
-    // 目標死/移除 → 立即重綁最近
+    // 目標死/移除 → 立即重綁最近（召集中的怪結束召集）
     if (!bound || !bound.alive) {
+      enemy.endRally();
       seat = this.nearestSeat(enemy.x, enemy.y);
       enemy.targetSeat = seat;
       enemy.stickyOutOfRangeSince = 0;
       bound = (seat >= 0) ? this.characters[seat] : null;
       return bound;
     }
+    // 召集中：一路追綁定的玩家，不重綁
+    if (enemy.isRallying()) return bound;
     // 目標存活但超距(>stickyBreakRadius)持續 stickyBreakSec → 才重綁(防抖);否則黏著
     const dist = Phaser.Math.Distance.Between(enemy.x, enemy.y, bound.x, bound.y);
     if (dist > cfg.stickyBreakRadius) {

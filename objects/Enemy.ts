@@ -113,6 +113,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   leashTravelDist = Infinity;
   private lastChaseX = 0;
   private lastChaseY = 0;
+  /**
+   * 召集（config.enemyRally）截止時間：> 0 = 被召集去找身邊沒怪的玩家。召集期間不受活動範圍限制、不脫離追擊、
+   * 不重綁目標；走進 arriveRadius（投擲怪：投擲射程）或時間到就結束，並以當下位置為新的出生點
+   */
+  rallyUntil = 0;
 
   /** bomber 投擲狀態機：idle → charging(鎖定玩家落點) → 投出後回 idle+冷卻 */
   private bombState: 'idle' | 'charging' = 'idle';
@@ -243,6 +248,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.spawnX = x; this.spawnY = y; // leash:記穩定出生點(leashRadius 由 GameScene 生成後指派)
     this.leashRadius = Infinity;      // 預設不套用;GameScene 指派場上組=config、近身組=大值
     this.travelAccum = 0; this.leashTravelDist = Infinity; this.lastChaseX = x; this.lastChaseY = y; // leash 第二條:路程重置
+    this.rallyUntil = 0;
     this.forceChase = false;   // 守護波怪由 GameScene 生成後指派;預設一般怪不強制追
     this.quotaExempt = false;  // 即時補怪由 SpawnController 生成後指派
     this.aggroActive = false;  // 主動仇恨:生成時未被玩家打過
@@ -374,6 +380,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       }
       case 'chase': {
         this.facing = Phaser.Math.Angle.Between(this.x, this.y, targetX, targetY);
+        if (this.rallyUntil > 0 && (time >= this.rallyUntil || dist <= GameConfig.enemyRally.arriveRadius)) this.endRally();
+        const rallying = this.rallyUntil > 0;
         // leash 第二條:累積本次追擊移動路程(每幀加位移)。繞圈拉也會累積→拉不動。
         this.travelAccum += Phaser.Math.Distance.Between(this.x, this.y, this.lastChaseX, this.lastChaseY);
         this.lastChaseX = this.x; this.lastChaseY = this.y;
@@ -381,7 +389,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         //   ① 直線:離【出生點】> leashRadius(防拉遠) ② 路程:travelAccum > leashTravelDist(防繞圈拉串)。
         //   (loseRadius 算離目標、leash 算離出生點/路程。近身組 leashRadius/leashTravelDist=大值≈不套用。)
         const distFromSpawn = Phaser.Math.Distance.Between(this.x, this.y, this.spawnX, this.spawnY);
-        if (!this.forceChase && (distFromSpawn > this.leashRadius || this.travelAccum > this.leashTravelDist)) {
+        if (!this.forceChase && !rallying && (distFromSpawn > this.leashRadius || this.travelAccum > this.leashTravelDist)) {
           this.aiState = 'patrol';
           this.homeX = this.spawnX; // 回出生點附近巡邏(緩慢走回)
           this.homeY = this.spawnY;
@@ -393,7 +401,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
           break;
         }
         // 脫離判定：目標超出 loseRadius 持續 loseGraceMs → 回巡邏(forceChase 怪不脫離,一直咬住)
-        if (!this.forceChase && dist > cfg.loseRadius) {
+        if (!this.forceChase && !rallying && dist > cfg.loseRadius) {
           if (this.outOfRangeSince === 0) this.outOfRangeSince = time;
           else if (time - this.outOfRangeSince >= cfg.loseGraceMs) {
             this.aiState = 'patrol';
@@ -425,6 +433,39 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         else body.setVelocity(Math.cos(this.facing) * this.moveSpeed * 0.5, Math.sin(this.facing) * this.moveSpeed * 0.5);
         break;
     }
+  }
+
+  /**
+   * 被召集去找指定座位的玩家：綁定該玩家、標為主動仇恨（不受被動追擊上限）、近戰怪巡邏中就直接轉追擊
+   *
+   * @param seat 目標座位
+   * @param until 召集截止時間
+   */
+  startRally(seat: number, until: number): void {
+    this.targetSeat = seat;
+    this.stickyOutOfRangeSince = 0;
+    this.aggroActive = true;
+    this.chaseBlocked = false;
+    this.rallyUntil = until;
+    if (this.aiState === 'patrol') {
+      this.aiState = 'chase';
+      this.outOfRangeSince = 0;
+    }
+    this.travelAccum = 0; this.lastChaseX = this.x; this.lastChaseY = this.y;
+  }
+
+  /** 是否在召集中 */
+  isRallying(): boolean {
+    return this.rallyUntil > 0;
+  }
+
+  /** 結束召集：以當下位置為新的出生點（否則活動範圍會立刻把怪拉回原本的出生點） */
+  endRally(): void {
+    if (this.rallyUntil === 0) return;
+    this.rallyUntil = 0;
+    this.spawnX = this.x; this.spawnY = this.y;
+    this.travelAccum = 0; this.lastChaseX = this.x; this.lastChaseY = this.y;
+    this.outOfRangeSince = 0;
   }
 
   private beginCharge(time: number): void {
@@ -479,6 +520,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       return;
     }
 
+    if (this.rallyUntil > 0 && (time >= this.rallyUntil || dist <= cfg.throwRange)) this.endRally();
     // 射程內且冷卻好 → 停下開始蓄力投擲（鎖定玩家「當下位置」當落點）；走位時太近（retreatRange 內）先退開不投
     const canThrow = dist <= cfg.throwRange && time >= this.nextBombAt && (!cfg.moveEnabled || dist >= cfg.retreatRange);
     if (cfg.moveEnabled && !canThrow) this.moveBomber(targetX, targetY, dist);
@@ -510,9 +552,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const ang = Phaser.Math.Angle.Between(this.x, this.y, targetX, targetY);
     const vx = Math.cos(ang) * this.moveSpeed * dir;
     const vy = Math.sin(ang) * this.moveSpeed * dir;
-    // 活動範圍：已在範圍外且這一步會離出生點更遠 → 不走
+    // 活動範圍：已在範圍外且這一步會離出生點更遠 → 不走（召集中不受限）
     const ox = this.x - this.spawnX, oy = this.y - this.spawnY;
-    const outsideLeash = ox * ox + oy * oy > this.leashRadius * this.leashRadius;
+    const outsideLeash = this.rallyUntil === 0 && ox * ox + oy * oy > this.leashRadius * this.leashRadius;
     if (dir === 0 || (outsideLeash && ox * vx + oy * vy > 0)) body.setVelocity(0, 0);
     else body.setVelocity(vx, vy);
   }
