@@ -85,7 +85,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
    * 且不因 leash/loseRadius 回巡邏(一直咬住目標=NPC)。由 GameScene 生成守護波怪時設定。
    */
   forceChase = false;
-  /** 不計本關擊殺數（二段變身即時補怪）：擊殺不推進關卡進度，也不佔本關配額；仍計入同時在場上限 */
+  /** 不計本關擊殺數（二段變身即時補怪）：擊殺不推進關卡進度，也不佔本關配額；仍算在場上數量內（在場時一般補怪會等它們被清掉才補） */
   quotaExempt = false;
   /**
    * 主動仇恨:被玩家攻擊命中/鎖定過→true。主動怪不計入「單角色被動警戒上限」、永遠可追。

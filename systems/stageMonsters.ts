@@ -25,7 +25,7 @@ export interface MonsterPhase {
   nearShare: number;
 }
 
-/** 二段變身即時補怪：在變身的玩家身旁環狀補一批，不計擊殺數、受同時在場上限保護 */
+/** 二段變身即時補怪：在變身的玩家身旁環狀補一批，不計擊殺數、不受同時在場上限限制 */
 export interface MonsterSurge {
   /** 每次補幾隻 [最少, 最多] */
   count: readonly [number, number];

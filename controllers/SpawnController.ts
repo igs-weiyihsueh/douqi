@@ -169,7 +169,8 @@ export class SpawnController {
 
   /**
    * 即時補怪（二段變身）：在指定玩家身旁 nearRingRadius 的環上補一批，綁定該玩家；
-   * 不計本波配額（不佔生產總量、擊殺不推進進度），但受同時在場上限保護，滿了就少補或不補
+   * 不計本波配額（不佔生產總量、擊殺不推進進度），也不受同時在場上限限制：場上已滿也照補（可暫時超出上限），
+   * 只受物件池大小（spawn.maxAlive）限制。超出期間一般補怪因場上已達上限而暫停，等清掉後才恢復
    *
    * @param seat 觸發的玩家座位
    * @param rule 補怪規則（數量、怪種比例）
@@ -180,15 +181,17 @@ export class SpawnController {
     if (!focus?.alive) return 0;
     const time = this.host.scene.time.now;
     const ringRadius = GameConfig.spawnAlloc.nearRingRadius;
-    const room = this.host.maxAlive() - this.countAlive() - this.countPending();
-    const n = Math.min(room, Phaser.Math.Between(rule.count[0], rule.count[1]));
+    const n = Phaser.Math.Between(rule.count[0], rule.count[1]);
     const start = Math.random() * Math.PI * 2;
+    let spawned = 0;
     for (let i = 0; i < n; i++) {
       const a = start + (i / n) * Math.PI * 2;
       const enemy = this.placeEnemy(focus.x + Math.cos(a) * ringRadius, focus.y + Math.sin(a) * ringRadius, time, this.pickByWeights(rule.weights), seat);
-      if (enemy) enemy.quotaExempt = true;
+      if (!enemy) break; // 物件池用完
+      enemy.quotaExempt = true;
+      spawned++;
     }
-    return Math.max(0, n);
+    return spawned;
   }
 
   /**

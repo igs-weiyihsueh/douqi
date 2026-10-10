@@ -703,7 +703,7 @@ export const GameConfig = {
      * 配置：quota 擊殺數；maxAlive 同時在場上限（單人值，每多一人再加 perExtraPlayer）；
      * phases 依擊殺進度分段（untilProgress 前套用）：weights 怪種比例、intervalMs 補怪間隔、
      * nearBatch / fieldBatch 近身組 / 場上組每批隻數 [最少, 最多]、nearShare 近身組占比；
-     * surge 二段變身即時補怪：在變身的玩家身旁環狀補 count 隻（依 weights 抽怪種），不計擊殺數、受同時在場上限保護，
+     * surge 二段變身即時補怪：在變身的玩家身旁環狀補 count 隻（依 weights 抽怪種），不計擊殺數、不受同時在場上限限制（場上已滿也照補），
      * 每位玩家各自冷卻 cooldownMs
      */
     profiles: {
