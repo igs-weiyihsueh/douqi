@@ -10,6 +10,12 @@
 - [UI系統實作細節](./systems/ui-implementation.md) - COMBO獎勵UI、角色狀態面板、頭上UI系統
 - [效能和配置管理](./systems/performance-config.md) - GameConfig架構、效能優化、建構部署
 - [bodySeparation系統](./systems/body-separation.md) - 推擠分離+真空圈系統 (真空圈4bfddb9+e732e52新增)
+- [關卡怪物系統](./systems/monster-profile.md) - MonsterProfile配置管理、動態難度、二段變身補怪
+- [智能召集系統](./systems/enemy-rally.md) - 玩家缺怪自動召集、多人公平分配、目標綁定
+- [多人攝影機系統](./systems/multi-camera.md) - 全隊中心跟隨、邊界約束、協作導向設計  
+- [清場輔助系統](./systems/offscreen-indicator.md) - 8方向箭頭指示、畫面外怪物定位
+- [除錯系統](./systems/debug-system.md) - GameDebugApi架構、24個除錯方法 (方案B B-4)
+- [性能優化系統](./systems/performance-optimization.md) - 空間格子、物件池預熱、JS優化
 
 ### 📋 [Conventions](./conventions/) - 開發規範流程
 - [H5程式碼規範](./conventions/h5-coding-standards.md) - TypeScript + Phaser開發規範
