@@ -655,9 +655,17 @@ export const GameConfig = {
 
     /** 投射兵（bomber）行為參數（蓄力後投擲炸彈到玩家落點） */
     bomber: {
-      /** 想與角色保持的距離（太近後退） */
+      /**
+       * 走位開關：true = 投擲冷卻中依距離走位（超過 throwRange 走近、小於 retreatRange 後退、其餘往 preferRange 靠），
+       * 冷卻好且距離在 retreatRange ~ throwRange 內就停下蓄力投擲；離出生點超過活動範圍時不再往遠離出生點的方向走。
+       * false = 生成後站在原地不動
+       */
+      moveEnabled: true,
+      /** 想與角色保持的距離（冷卻中往這個距離靠） */
       preferRange: 300,
-      /** 小於此距離就後退 */
+      /** 與 preferRange 的差距在此範圍內就站定（不來回抖動） */
+      preferTolerance: 40,
+      /** 小於此距離就後退（也不投擲） */
       retreatRange: 200,
       /** 進入此距離開始蓄力投擲 */
       throwRange: 480,

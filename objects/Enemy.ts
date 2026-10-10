@@ -461,7 +461,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     return this.aiState;
   }
 
-  // --- bomber：定點站立 + 蓄力投擲炸彈到玩家落點---
+  // --- bomber：走位（或定點站立）+ 停下蓄力投擲炸彈到玩家落點---
   private updateBomber(targetX: number, targetY: number, time: number): void {
     const cfg = GameConfig.enemy.bomber;
     const body = this.body as Phaser.Physics.Arcade.Body;
@@ -479,17 +479,42 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       return;
     }
 
-    // bomber 定點不動——生成後就站原地，不追不退
-    body.setVelocity(0, 0);
-
-    // 射程內且冷卻好 → 開始蓄力投擲（鎖定玩家「當下位置」當落點）
-    if (dist <= cfg.throwRange && time >= this.nextBombAt) {
+    // 射程內且冷卻好 → 停下開始蓄力投擲（鎖定玩家「當下位置」當落點）；走位時太近（retreatRange 內）先退開不投
+    const canThrow = dist <= cfg.throwRange && time >= this.nextBombAt && (!cfg.moveEnabled || dist >= cfg.retreatRange);
+    if (cfg.moveEnabled && !canThrow) this.moveBomber(targetX, targetY, dist);
+    else body.setVelocity(0, 0);
+    if (canThrow) {
       this.bombState = 'charging';
       this.bombChargeStartAt = time;
       this.bombTargetX = targetX;
       this.bombTargetY = targetY;
       this.setTint(0xd08bff);
     }
+  }
+
+  /**
+   * bomber 走位：離目標超過 throwRange 走近、小於 retreatRange 後退，其餘往 preferRange 靠（差距在 preferTolerance 內站定）；
+   * 離出生點超過 leashRadius 時，不再往遠離出生點的方向走（站著等，射程內照樣投擲）
+   *
+   * @param targetX 目標 x
+   * @param targetY 目標 y
+   * @param dist 與目標的距離
+   */
+  private moveBomber(targetX: number, targetY: number, dist: number): void {
+    const cfg = GameConfig.enemy.bomber;
+    const body = this.body as Phaser.Physics.Arcade.Body;
+    let dir = 0; // 1 = 走近、-1 = 後退、0 = 站定
+    if (dist > cfg.throwRange) dir = 1;
+    else if (dist < cfg.retreatRange) dir = -1;
+    else if (Math.abs(dist - cfg.preferRange) > cfg.preferTolerance) dir = dist > cfg.preferRange ? 1 : -1;
+    const ang = Phaser.Math.Angle.Between(this.x, this.y, targetX, targetY);
+    const vx = Math.cos(ang) * this.moveSpeed * dir;
+    const vy = Math.sin(ang) * this.moveSpeed * dir;
+    // 活動範圍：已在範圍外且這一步會離出生點更遠 → 不走
+    const ox = this.x - this.spawnX, oy = this.y - this.spawnY;
+    const outsideLeash = ox * ox + oy * oy > this.leashRadius * this.leashRadius;
+    if (dir === 0 || (outsideLeash && ox * vx + oy * vy > 0)) body.setVelocity(0, 0);
+    else body.setVelocity(vx, vy);
   }
 
   /** bomber 是否正在蓄力投擲（供 GameScene 畫落點預警） */
