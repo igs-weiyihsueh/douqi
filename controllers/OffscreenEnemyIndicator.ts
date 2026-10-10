@@ -14,12 +14,10 @@ export interface OffscreenEnemyIndicatorHost {
   isActive(): boolean;
 }
 
-/** 一個方向的指示：箭頭 + 怪物圖示的容器 */
+/** 一個方向的指示：箭頭容器 */
 interface SectorMarker {
   group: Phaser.GameObjects.Container;
   arrow: Phaser.GameObjects.Image;
-  /** 該方向最近那隻怪的圖示（放在箭頭的畫面內側） */
-  icon: Phaser.GameObjects.Image;
   /** 本幀是否有怪（沒有就隱藏） */
   used: boolean;
   /** 剛從隱藏變成顯示（第一次直接放到位，不從舊位置滑過來） */
@@ -30,7 +28,7 @@ interface SectorMarker {
  * 清場輔助：清場階段時，畫面外還活著的一般怪以畫面邊緣的箭頭指示方向。
  *
  * - 以畫面中心為原點把畫面外的怪依角度分成 sectors 個方向，每個方向一支箭頭（大小、光暈同 GO 指示），
- *   指向該方向離畫面中心最近的怪，箭頭內側放那隻怪的圖示（跟著怪的外觀，例如 F4 骷髏 / 舊美術圖）
+ *   指向該方向離畫面中心最近的怪
  * - 箭頭放在「畫面中心 → 該怪」連線與畫面內縮邊框的交點上（避開上方 HUD 與下方面板），平滑移動、閃動發光
  * - 只是畫面提示，不影響任何判定
  */
@@ -84,10 +82,6 @@ export class OffscreenEnemyIndicator {
       const ang = Math.atan2(best.enemy.y - cy, best.enemy.x - cx);
       const pos = this.edgePoint(view, ang);
       marker.arrow.setRotation(ang);
-      this.updateIcon(marker.icon, best.enemy);
-      // 怪物圖示放在箭頭的「畫面內側」，不會被推出畫面
-      const iconOffset = cfg.arrowSize + cfg.arrowGlowSpread + cfg.iconGap + cfg.iconSize / 2;
-      marker.icon.setPosition(-Math.cos(ang) * iconOffset, -Math.sin(ang) * iconOffset);
       if (marker.fresh || !marker.group.visible) {
         marker.group.setPosition(pos.x, pos.y).setVisible(true);
         marker.fresh = false;
@@ -95,18 +89,6 @@ export class OffscreenEnemyIndicator {
         marker.group.setPosition(marker.group.x + (pos.x - marker.group.x) * t, marker.group.y + (pos.y - marker.group.y) * t);
       }
     }
-  }
-
-  /**
-   * 圖示換成這隻怪目前的外觀（紋理 / 面向），等比縮放到邊長 iconSize 以內
-   *
-   * @param icon 圖示
-   * @param enemy 指向的怪
-   */
-  private updateIcon(icon: Phaser.GameObjects.Image, enemy: Enemy): void {
-    const size = GameConfig.stage.offscreenIndicator.iconSize;
-    if (icon.texture.key !== enemy.texture.key) icon.setTexture(enemy.texture.key);
-    icon.setFlipX(enemy.flipX).setScale(size / Math.max(icon.frame.width, icon.frame.height));
   }
 
   /**
@@ -139,13 +121,12 @@ export class OffscreenEnemyIndicator {
     const cfg = GameConfig.stage.offscreenIndicator;
     this.ensureArrowTexture();
     const arrow = this.scene.add.image(0, 0, ARROW_TEXTURE_KEY);
-    const icon = this.scene.add.image(0, 0, '__DEFAULT');
-    const group = this.scene.add.container(0, 0, [arrow, icon]).setDepth(cfg.depth).setVisible(false);
+    const group = this.scene.add.container(0, 0, [arrow]).setDepth(cfg.depth).setVisible(false);
     this.scene.tweens.add({
       targets: group, alpha: { from: 1, to: cfg.blinkMinAlpha },
       duration: cfg.blinkMs, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
     });
-    const marker: SectorMarker = { group, arrow, icon, used: false, fresh: true };
+    const marker: SectorMarker = { group, arrow, used: false, fresh: true };
     this.markers.push(marker);
     return marker;
   }

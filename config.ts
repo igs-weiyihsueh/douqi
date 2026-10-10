@@ -898,13 +898,12 @@ export const GameConfig = {
     },
     /**
      * 清場輔助：清場階段（本波已生滿、等清完）時，畫面外還活著的一般怪以畫面邊緣的箭頭指示方向。
-     * 依畫面中心往外分成 sectors 個方向，每個方向一支箭頭（大小、光暈同 GO 指示）指向該方向最近的怪，
-     * 箭頭內側放那隻怪的圖示（邊長 iconSize，與箭頭間隔 iconGap）。箭頭貼邊範圍與 GO 指示相同（避開上方 HUD / 下方面板）
+     * 依畫面中心往外分成 sectors 個方向，每個方向一支箭頭（大小、光暈同 GO 指示）指向該方向最近的怪。
+     * 箭頭貼邊範圍與 GO 指示相同（避開上方 HUD / 下方面板）
      */
     offscreenIndicator: {
       sectors: 8, depth: 54,
       arrowSize: 22, arrowColor: 0xff8a65, arrowGlowColor: 0xff3d3d, arrowGlowSpread: 14, arrowGlowLayers: 5, arrowGlowAlpha: 0.55,
-      iconSize: 56, iconGap: 6,
       edgeInset: 30, edgeMinY: 150, edgeBottomMargin: 180,
       /** 怪的身體超出畫面多少才算「在畫面外」（px） */
       viewMargin: 8,
