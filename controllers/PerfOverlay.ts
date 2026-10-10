@@ -28,7 +28,11 @@ export class PerfOverlay {
   /** 上一幀場景更新結束的時間（算實際幀間隔；Phaser 的 loop.delta 經過平滑與上限處理，不代表真實間隔） */
   private lastPostUpdateAt = 0;
 
-  constructor(private readonly scene: Phaser.Scene) {
+  /**
+   * @param scene 所在場景
+   * @param extraLines 額外顯示的除錯行（例如本關怪物配置）；省略則不顯示
+   */
+  constructor(private readonly scene: Phaser.Scene, private readonly extraLines?: () => string[]) {
     scene.input.keyboard?.on('keydown-F9', () => this.toggle());
     // 場景重開 / 離開時移除事件監聽與文字
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { if (this.text) this.disable(); });
@@ -92,7 +96,8 @@ export class PerfOverlay {
       `場景更新 平均 ${avgUpdate.toFixed(2)}ms / 最慢 ${maxUpdate.toFixed(2)}ms`,
       `物件 ${this.scene.children.list.length}   敵人 ${enemies}`,
       `tween ${this.scene.tweens.getTweens().length}   紋理 ${Object.keys(game.textures.list).length}`,
-      heap !== undefined ? `heap ${(heap / 1e6).toFixed(0)}MB` : 'heap -'
+      heap !== undefined ? `heap ${(heap / 1e6).toFixed(0)}MB` : 'heap -',
+      ...(this.extraLines?.() ?? [])
     ]);
   }
 }

@@ -4,6 +4,7 @@ import type { Character } from '../objects/Character';
 import type { Enemy, EnemyType } from '../objects/Enemy';
 import { isRegularEnemy } from '../systems/enemyKinds';
 import { shouldSpawnMore, updateRefillLatch, type WaveSpawnState } from '../systems/waveMath';
+import type { MonsterKind, MonsterPhase } from '../systems/stageMonsters';
 
 /** 本波擊殺進度 */
 export interface WaveKillProgress {
@@ -28,6 +29,8 @@ export interface SpawnHost {
   /** 本局存活時間（毫秒，生怪間隔隨時間縮短） */
   survivalMs(): number;
   waveProgress(): WaveKillProgress;
+  /** 目前關卡怪物配置的階段（null = 未使用關卡怪物配置，沿用全域出怪參數） */
+  monsterPhase(): MonsterPhase | null;
   /** 一般怪生成後計入本波已生成數 */
   onWaveEnemySpawned(): void;
   /** 場上同時存活上限（依存活人數縮放） */
@@ -87,7 +90,10 @@ export class SpawnController {
    */
   tick(delta: number): boolean {
     const cfg = GameConfig.spawn;
-    this.interval = Math.max(cfg.minIntervalMs, cfg.initialIntervalMs - (this.host.survivalMs() / 1000) * cfg.intervalDecayPerSec);
+    const phase = this.host.monsterPhase();
+    this.interval = phase
+      ? phase.intervalMs
+      : Math.max(cfg.minIntervalMs, cfg.initialIntervalMs - (this.host.survivalMs() / 1000) * cfg.intervalDecayPerSec);
     const maxAlive = this.host.maxAlive();
     const alive = this.countAlive();
     const pending = this.countPending();
@@ -136,7 +142,8 @@ export class SpawnController {
     this.formations++;
     const total = this.nearSpawned + this.fieldSpawned;
     const nearRatio = total > 0 ? this.nearSpawned / total : 0;
-    if (nearRatio < GameConfig.spawnAlloc.nearShare) this.spawnNearBatch(time);
+    const nearShare = this.host.monsterPhase()?.nearShare ?? GameConfig.spawnAlloc.nearShare;
+    if (nearRatio < nearShare) this.spawnNearBatch(time);
     else this.spawnFieldBatch(time);
     this.host.onFormationSpawned(time);
   }
@@ -171,7 +178,10 @@ export class SpawnController {
     const seat = seats[this.nearSeatCursor % seats.length];
     this.nearSeatCursor++;
     const focus = characters[seat];
-    const n = Phaser.Math.Between(alloc.nearPerPlayerMin, alloc.nearPerPlayerMax);
+    const phase = this.host.monsterPhase();
+    const n = phase
+      ? Phaser.Math.Between(phase.nearBatch[0], phase.nearBatch[1])
+      : Phaser.Math.Between(alloc.nearPerPlayerMin, alloc.nearPerPlayerMax);
     const start = Math.random() * Math.PI * 2;
     for (let i = 0; i < n; i++) {
       if (this.isBlocked()) return;
@@ -188,7 +198,8 @@ export class SpawnController {
     const cfg = GameConfig.formation.scatter;
     const alloc = GameConfig.spawnAlloc;
     const a = this.host.arena();
-    const count = Math.max(FIELD_BATCH_MIN, Math.round(Phaser.Math.Between(cfg.minCount, cfg.maxCount) * this.host.aliveScale()));
+    const phase = this.host.monsterPhase();
+    const count = phase ? this.profileFieldBatch(phase) : Math.max(FIELD_BATCH_MIN, Math.round(Phaser.Math.Between(cfg.minCount, cfg.maxCount) * this.host.aliveScale()));
     const { x: cx, y: cy } = this.randomFieldPoint(alloc.fieldMinDistFromPlayer);
     // 每隻的散佈位置夾在：移動區（邊距 FIELD_EDGE_MARGIN）；畫面內出生時再與畫面可出生範圍取交集
     const edge = new Phaser.Geom.Rectangle(a.left + FIELD_EDGE_MARGIN, a.top + FIELD_EDGE_MARGIN, a.width - FIELD_EDGE_MARGIN * 2, a.height - FIELD_EDGE_MARGIN * 2);
@@ -288,6 +299,8 @@ export class SpawnController {
    * restrictPool 有指定時改在其交集中抽，交集為空（例如早期近戰還沒解鎖）退回全部解鎖的種類
    */
   private pickEnemyType(restrictPool?: EnemyType[]): EnemyType {
+    const phase = this.host.monsterPhase();
+    if (phase) return this.pickByPhaseWeights(phase, restrictPool);
     const types = GameConfig.enemy.types;
     const unlock = GameConfig.enemy.unlockByWave as Record<string, number>;
     const wave = this.host.currentWave();
@@ -302,6 +315,42 @@ export class SpawnController {
     let roll = Math.random() * total;
     for (const k of pool) {
       roll -= types[k].spawnWeight;
+      if (roll <= 0) return k;
+    }
+    return pool[0];
+  }
+
+  /**
+   * 關卡怪物配置的場上組每批隻數：配置範圍內隨機，每多一位存活玩家放大 fieldBatchGrowthPerPlayer
+   *
+   * @param phase 目前階段
+   */
+  private profileFieldBatch(phase: MonsterPhase): number {
+    const alive = this.host.characters().filter((c) => c.alive).length;
+    const growth = 1 + Math.max(0, alive - 1) * GameConfig.stageMonsters.fieldBatchGrowthPerPlayer;
+    return Math.max(1, Math.round(Phaser.Math.Between(phase.fieldBatch[0], phase.fieldBatch[1]) * growth));
+  }
+
+  /**
+   * 依關卡怪物配置目前階段的比例抽怪種（不看波次解鎖）；restrictPool 有指定時只在其交集中抽
+   * （例如近身組只出近戰），交集內權重全為 0 時退回全部有權重的種類
+   *
+   * @param phase 目前階段
+   * @param restrictPool 限定的敵種
+   */
+  private pickByPhaseWeights(phase: MonsterPhase, restrictPool?: EnemyType[]): EnemyType {
+    const all = (Object.keys(phase.weights) as MonsterKind[]).filter((k) => phase.weights[k] > 0);
+    let pool = all;
+    if (restrictPool && restrictPool.length > 0) {
+      const restricted = all.filter((k) => restrictPool.includes(k));
+      if (restricted.length > 0) pool = restricted;
+    }
+    if (pool.length === 0) return 'normal';
+    let total = 0;
+    for (const k of pool) total += phase.weights[k];
+    let roll = Math.random() * total;
+    for (const k of pool) {
+      roll -= phase.weights[k];
       if (roll <= 0) return k;
     }
     return pool[0];

@@ -675,6 +675,53 @@ export const GameConfig = {
   },
 
   /**
+   * 關卡怪物配置（關卡制）：每個小關卡開始時依寶箱階級從 chests[tier].profiles 隨機抽一份配置，
+   * 出怪改依配置進行（擊殺數、同時在場上限、各階段的怪種比例與補怪節奏）。
+   * 資料格式即日後關卡編輯器編輯的內容；enabled = false 時回到舊的全域出怪參數
+   */
+  stageMonsters: {
+    enabled: true,
+    /** 每多一位存活玩家，場上組每批隻數增加的比例（近身組本來就是逐一輪派給每位玩家，不另外放大） */
+    fieldBatchGrowthPerPlayer: 0.5,
+    /** 各寶箱階級：可抽的配置（等機率）與擊殺數倍率（高階沿用同三套、提高擊殺數） */
+    chests: {
+      low: { profiles: ['swarm', 'armor', 'artillery'], quotaMult: 1 },
+      high: { profiles: ['swarm', 'armor', 'artillery'], quotaMult: 1.4 }
+    },
+    /**
+     * 配置：quota 擊殺數；maxAlive 同時在場上限（單人值，每多一人再加 perExtraPlayer）；
+     * phases 依擊殺進度分段（untilProgress 前套用）：weights 怪種比例、intervalMs 補怪間隔、
+     * nearBatch / fieldBatch 近身組 / 場上組每批隻數 [最少, 最多]、nearShare 近身組占比
+     */
+    profiles: {
+      /** 蜂群：小怪一直湧上來，快節奏割草 */
+      swarm: {
+        name: '蜂群', quota: 25, maxAlive: { solo: 22, perExtraPlayer: 18 },
+        phases: [
+          { untilProgress: 0.5, weights: { normal: 100, tank: 0, bomber: 0 }, intervalMs: 800, nearBatch: [2, 4], fieldBatch: [4, 7], nearShare: 0.6 },
+          { untilProgress: 1, weights: { normal: 90, tank: 10, bomber: 0 }, intervalMs: 700, nearBatch: [3, 5], fieldBatch: [5, 8], nearShare: 0.6 }
+        ]
+      },
+      /** 重甲：坦克當肉牆，怪少但硬，慢節奏 */
+      armor: {
+        name: '重甲', quota: 25, maxAlive: { solo: 22, perExtraPlayer: 18 },
+        phases: [
+          { untilProgress: 0.4, weights: { normal: 80, tank: 20, bomber: 0 }, intervalMs: 1600, nearBatch: [3, 5], fieldBatch: [6, 9], nearShare: 0.4 },
+          { untilProgress: 1, weights: { normal: 55, tank: 45, bomber: 0 }, intervalMs: 1500, nearBatch: [3, 5], fieldBatch: [6, 10], nearShare: 0.4 }
+        ]
+      },
+      /** 砲火：投擲怪在遠處轟炸（只出在場上組），要衝過去清 */
+      artillery: {
+        name: '砲火', quota: 25, maxAlive: { solo: 22, perExtraPlayer: 18 },
+        phases: [
+          { untilProgress: 0.3, weights: { normal: 85, tank: 0, bomber: 15 }, intervalMs: 1100, nearBatch: [2, 4], fieldBatch: [5, 8], nearShare: 0.4 },
+          { untilProgress: 1, weights: { normal: 70, tank: 5, bomber: 25 }, intervalMs: 1000, nearBatch: [2, 4], fieldBatch: [5, 9], nearShare: 0.35 }
+        ]
+      }
+    }
+  },
+
+  /**
    * 生成 / 難度曲線（持續制 B2）：
    * 不分明確波次，持續地成群丟隊形進來；只要場上未達上限就繼續補。
    * 隊形直接在競技場「內部」生成，並先播登場提示（telegraph）。

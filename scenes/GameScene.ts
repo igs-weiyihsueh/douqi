@@ -6,6 +6,7 @@ import { Item, type SkillType } from '../objects/Item';
 import { Breakable } from '../objects/Breakable';
 import { loadCharacterParams, type CharacterParams } from '../systems/characterParams';
 import { reloadHitFeel } from '../systems/hitFeelParams';
+import { largestProfileMaxAlive, phaseAt, pickMonsterProfile, profileMaxAlive, profileQuota, type MonsterProfile } from '../systems/stageMonsters';
 import { createStageQueue, nextStageNode, revealStageNode, displayKindOf, type StageNode } from '../systems/stageQueue';
 import type { TelegraphFx } from '../systems/telegraphFx';
 import { BossController, type BossHost } from '../controllers/BossController';
@@ -93,6 +94,8 @@ export class GameScene extends Phaser.Scene {
   private currentWave = 1;
   private waveQuota = 0;
   private waveKilled = 0;
+  /** 目前小關卡抽到的怪物配置（關卡制且 stageMonsters.enabled 時；否則 null = 舊的全域出怪參數） */
+  private monsterProfile: MonsterProfile | null = null;
   private waveSpawned = 0;
   private waveState: 'spawning' | 'clearing' | 'intermission' | 'boss' | 'event' = 'spawning';
   private intermissionUntil = 0;
@@ -260,7 +263,7 @@ export class GameScene extends Phaser.Scene {
       enemies: () => this.enemies,
       isActive: () => this.waveState === 'clearing' && !this.gameOver
     });
-    new PerfOverlay(this); // 除錯 F9：實機效能監控（自行註冊熱鍵與場景關閉時的清理）
+    new PerfOverlay(this, () => this.monsterProfileDebugLines()); // 除錯 F9：實機效能監控（自行註冊熱鍵與場景關閉時的清理）
     this.hiddenGate = new HiddenGateController(this);
     this.treasures = new TreasureEnemyController(this.createTreasureHost());
     this.treasureRoom = new TreasureRoomController({
@@ -577,7 +580,9 @@ export class GameScene extends Phaser.Scene {
    */
   private prewarmEnemyPool(): void {
     const cfg = GameConfig.spawn;
-    const target = Math.min(cfg.maxAlive, this.maxAliveForParty(this.characters.length) + cfg.poolPrewarmBuffer);
+    const n = this.characters.length;
+    const cap = this.levelMode && GameConfig.stageMonsters.enabled ? largestProfileMaxAlive(n) : this.maxAliveForParty(n);
+    const target = Math.min(cfg.maxAlive, cap + cfg.poolPrewarmBuffer);
     while (this.enemies.getLength() < target) {
       const e = this.enemies.create(0, 0) as Enemy;
       e.disableBody(true, true);
@@ -1057,7 +1062,13 @@ export class GameScene extends Phaser.Scene {
     }
     this.subWavesDone = 0;
     this.subWavesTarget = 1;
-    this.waveQuota = GameConfig.stage.quotaByChest[chest];
+    if (GameConfig.stageMonsters.enabled) {
+      // 依寶箱階級抽一份怪物配置：決定擊殺數、同時在場上限、各階段的怪種比例與補怪節奏
+      this.monsterProfile = pickMonsterProfile(chest);
+      this.waveQuota = profileQuota(this.monsterProfile, chest);
+    } else {
+      this.waveQuota = GameConfig.stage.quotaByChest[chest];
+    }
     this.spawner.resetFormationCount(); // 寶箱怪第 2 次隊形起才可能出現
     this.waveState = 'spawning';
     this.stageInProgress = true;
@@ -1166,6 +1177,7 @@ export class GameScene extends Phaser.Scene {
       currentWave: () => this.currentWave,
       survivalMs: () => this.survivalMs,
       waveProgress: () => ({ killed: this.waveKilled, quota: this.waveQuota }),
+      monsterPhase: () => (this.monsterProfile ? phaseAt(this.monsterProfile, this.waveQuota > 0 ? this.waveKilled / this.waveQuota : 0) : null),
       onWaveEnemySpawned: () => { this.waveSpawned++; },
       maxAlive: () => this.curMaxAlive(),
       aliveScale: () => this.curAliveScale(),
@@ -2111,7 +2123,16 @@ export class GameScene extends Phaser.Scene {
     return Phaser.Math.Clamp(cfg.base + (alive - 1) * cfg.perAlive, cfg.base, 1);
   }
 
+  /** F9 效能監控附加的除錯行：本關怪物配置名稱、目前階段、擊殺進度與同時在場上限 */
+  private monsterProfileDebugLines(): string[] {
+    const p = this.monsterProfile;
+    if (!p) return [];
+    const phase = phaseAt(p, this.waveQuota > 0 ? this.waveKilled / this.waveQuota : 0);
+    return [`關卡配置 ${p.name}（階段 ${p.phases.indexOf(phase) + 1}/${p.phases.length}）擊殺 ${this.waveKilled}/${this.waveQuota}  上限 ${this.curMaxAlive()}`];
+  }
+
   private curMaxAlive(): number {
+    if (this.monsterProfile) return profileMaxAlive(this.monsterProfile, this.aliveCount());
     return this.maxAliveForParty(this.aliveCount());
   }
 
