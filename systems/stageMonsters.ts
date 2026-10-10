@@ -14,7 +14,7 @@ export type MonsterKind = 'normal' | 'tank' | 'bomber';
 export interface MonsterPhase {
   /** 0 ~ 1，例如 0.4 = 擊殺數打到 40% 前 */
   untilProgress: number;
-  /** 怪種比例（權重） */
+  /** 怪種比例（權重）：整體出現比例（近身組抽到它不能出的怪種時改出在場上，比例不變） */
   weights: Record<MonsterKind, number>;
   /** 補怪間隔（毫秒） */
   intervalMs: number;

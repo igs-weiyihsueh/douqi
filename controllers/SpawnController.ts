@@ -195,7 +195,9 @@ export class SpawnController {
   }
 
   /**
-   * 近身組：在輪派到的存活玩家身旁 nearRingRadius 的環上生 nearPerPlayerMin ~ Max 隻（近戰為主），綁定該玩家
+   * 近身組：在輪派到的存活玩家身旁 nearRingRadius 的環上生 nearPerPlayerMin ~ Max 隻（近戰為主），綁定該玩家。
+   * 關卡怪物配置時依整體比例抽怪種，抽到近身組不能出的怪種（例如投擲怪）就改出在場上（離玩家夠遠的隨機點、就近綁定），
+   * 讓整體出現比例等於配置
    */
   private spawnNearBatch(time: number): void {
     const alloc = GameConfig.spawnAlloc;
@@ -214,8 +216,21 @@ export class SpawnController {
     for (let i = 0; i < n; i++) {
       if (this.isBlocked()) return;
       const a = start + (i / n) * Math.PI * 2;
-      this.spawnEnemyAt(focus.x + Math.cos(a) * alloc.nearRingRadius, focus.y + Math.sin(a) * alloc.nearRingRadius, time, alloc.nearTypes as EnemyType[], seat);
-      this.nearSpawned++;
+      const x = focus.x + Math.cos(a) * alloc.nearRingRadius, y = focus.y + Math.sin(a) * alloc.nearRingRadius;
+      if (!phase) {
+        this.spawnEnemyAt(x, y, time, alloc.nearTypes as EnemyType[], seat);
+        this.nearSpawned++;
+        continue;
+      }
+      const type = this.pickByWeights(phase.weights);
+      if ((alloc.nearTypes as string[]).includes(type)) {
+        this.spawnWaveEnemy(x, y, time, type, seat);
+        this.nearSpawned++;
+      } else {
+        const p = this.randomFieldPoint(alloc.fieldMinDistFromPlayer);
+        this.spawnWaveEnemy(p.x, p.y, time, type, -1);
+        this.fieldSpawned++;
+      }
     }
   }
 
@@ -291,7 +306,17 @@ export class SpawnController {
    * @param assignSeat 綁定的座位；-1 = 就近
    */
   private spawnEnemyAt(x: number, y: number, time: number, pool?: EnemyType[], assignSeat = -1): void {
-    if (this.placeEnemy(x, y, time, this.pickEnemyType(pool), assignSeat)) this.host.onWaveEnemySpawned();
+    this.spawnWaveEnemy(x, y, time, this.pickEnemyType(pool), assignSeat);
+  }
+
+  /**
+   * 生成一隻指定種類的波次怪並計入本波已生成數
+   *
+   * @param type 敵種
+   * @param assignSeat 綁定的座位；-1 = 就近
+   */
+  private spawnWaveEnemy(x: number, y: number, time: number, type: EnemyType, assignSeat: number): void {
+    if (this.placeEnemy(x, y, time, type, assignSeat)) this.host.onWaveEnemySpawned();
   }
 
   /**
