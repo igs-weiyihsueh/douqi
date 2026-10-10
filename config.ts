@@ -683,10 +683,13 @@ export const GameConfig = {
     enabled: true,
     /** 每多一位存活玩家，場上組每批隻數增加的比例（近身組本來就是逐一輪派給每位玩家，不另外放大） */
     fieldBatchGrowthPerPlayer: 0.5,
-    /** 各寶箱階級：可抽的配置（等機率）與擊殺數倍率（高階沿用同三套、提高擊殺數） */
+    /**
+     * 各寶箱階級：可抽的配置（等機率）與擊殺數倍率（高階沿用同三套、提高擊殺數）；
+     * bossIntrude 限時亂入 BOSS：小關卡開始時以 chance 機率決定，擊殺進度到 atProgress 時登場（BOSS 本身沿用 stage.bossIntrude）
+     */
     chests: {
-      low: { profiles: ['swarm', 'armor', 'artillery'], quotaMult: 1 },
-      high: { profiles: ['swarm', 'armor', 'artillery'], quotaMult: 1.4 }
+      low: { profiles: ['swarm', 'armor', 'artillery'], quotaMult: 1, bossIntrude: { chance: 0, atProgress: 0.5 } },
+      high: { profiles: ['swarm', 'armor', 'artillery'], quotaMult: 1.4, bossIntrude: { chance: 0.3, atProgress: 0.5 } }
     },
     /**
      * 配置：quota 擊殺數；maxAlive 同時在場上限（單人值，每多一人再加 perExtraPlayer）；
@@ -937,7 +940,8 @@ export const GameConfig = {
     /** 寶箱獎勵：完成小關卡直接發給每位存活玩家的彩票張數 */
     chestTickets: { low: 5, high: 30 },
     /**
-     * BOSS 限時亂入：問號揭曉為高階時以 chance 機率登場（揭曉橫幅後 entryDelayMs）；不擋通關（不計擊殺數），
+     * BOSS 限時亂入：問號揭曉為高階時以 chance 機率登場（揭曉橫幅後 entryDelayMs；啟用 stageMonsters 時改由其 chests.bossIntrude 決定）；
+     * 不擋通關（不計擊殺數），
      * durationMs 內沒打倒就淡出離場（leaveFadeMs），換區時也一併離場；
      * 每次命中有 hitTicketChance 機率掉 hitTickets 張彩票給命中的角色
      */

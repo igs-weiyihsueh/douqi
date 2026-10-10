@@ -98,6 +98,8 @@ export class GameScene extends Phaser.Scene {
   private monsterProfile: MonsterProfile | null = null;
   /** 各座位下次可觸發二段變身即時補怪的時間（每位玩家各自冷卻） */
   private surgeReadyAt: number[] = [];
+  /** 本關擊殺數到幾隻時亂入 BOSS（0 = 本關不亂入；關卡怪物配置的 chests.bossIntrude） */
+  private bossIntrudeAtKills = 0;
   private waveSpawned = 0;
   private waveState: 'spawning' | 'clearing' | 'intermission' | 'boss' | 'event' = 'spawning';
   private intermissionUntil = 0;
@@ -956,6 +958,7 @@ export class GameScene extends Phaser.Scene {
     if (this.pendingSubZoneComplete) return;
     if (this.waveState === 'intermission' || this.waveState === 'boss' || this.waveState === 'event') return;
     this.waveKilled++;
+    this.maybeBossIntrude();
     if (this.waveKilled >= this.waveQuota) {
       // 關卡制:清完一波 → 累計子區波數;達子區目標波數 → 進入選邊/出口階段(不走 BOSS/事件/無限)
       if (this.levelMode) {
@@ -1055,7 +1058,7 @@ export class GameScene extends Phaser.Scene {
     const wasMystery = node.kind === 'mystery' && !node.revealed;
     const chest = revealStageNode(node);
     if (wasMystery) this.showEventBanner(chest === 'high' ? '問號揭曉：高階寶箱！' : '問號揭曉：低階寶箱');
-    if (wasMystery && chest === 'high' && Math.random() < GameConfig.stage.bossIntrude.chance) {
+    if (!GameConfig.stageMonsters.enabled && wasMystery && chest === 'high' && Math.random() < GameConfig.stage.bossIntrude.chance) {
       // 等揭曉橫幅播完再登場，避免兩個橫幅疊在一起
       this.time.delayedCall(GameConfig.stage.bossIntrude.entryDelayMs, () => {
         if (this.gameOver || !this.stageInProgress || this.bossCtl.current) return;
@@ -1068,8 +1071,12 @@ export class GameScene extends Phaser.Scene {
       // 依寶箱階級抽一份怪物配置：決定擊殺數、同時在場上限、各階段的怪種比例與補怪節奏
       this.monsterProfile = pickMonsterProfile(chest);
       this.waveQuota = profileQuota(this.monsterProfile, chest);
+      // BOSS 亂入：開打時決定本關是否亂入，擊殺進度到 atProgress 時登場
+      const intrude = GameConfig.stageMonsters.chests[chest].bossIntrude;
+      this.bossIntrudeAtKills = Math.random() < intrude.chance ? Math.max(1, Math.round(this.waveQuota * intrude.atProgress)) : 0;
     } else {
       this.waveQuota = GameConfig.stage.quotaByChest[chest];
+      this.bossIntrudeAtKills = 0;
     }
     this.spawner.resetFormationCount(); // 寶箱怪第 2 次隊形起才可能出現
     this.waveState = 'spawning';
@@ -1214,6 +1221,13 @@ export class GameScene extends Phaser.Scene {
       emitStats: () => this.emitStats(),
       onEmpower: (c) => this.surgeOnEmpower(c)
     };
+  }
+
+  /** 擊殺數到本關的亂入門檻（且本關還沒打完）時，BOSS 限時亂入（場上已有 BOSS 則略過），每關最多一次 */
+  private maybeBossIntrude(): void {
+    if (this.bossIntrudeAtKills <= 0 || this.waveKilled < this.bossIntrudeAtKills || this.waveKilled >= this.waveQuota) return;
+    this.bossIntrudeAtKills = 0;
+    if (!this.bossCtl.current) this.bossCtl.spawn(true);
   }
 
   /**
