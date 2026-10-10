@@ -14,6 +14,7 @@
 - [智能召集系統](./systems/enemy-rally.md) - 玩家缺怪自動召集、多人公平分配、目標綁定
 - [多人攝影機系統](./systems/multi-camera.md) - 全隊中心跟隨、邊界約束、協作導向設計  
 - [清場輔助系統](./systems/offscreen-indicator.md) - 8方向箭頭指示、畫面外怪物定位
+- [仇恨機制系統](./systems/aggro-system.md) - DouPo黏著式仇恨、800px機制、主被動仇恨分類
 - [除錯系統](./systems/debug-system.md) - GameDebugApi架構、24個除錯方法 (方案B B-4)
 - [性能優化系統](./systems/performance-optimization.md) - 空間格子、物件池預熱、JS優化
 

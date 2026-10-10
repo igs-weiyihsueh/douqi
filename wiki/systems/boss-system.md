@@ -123,7 +123,39 @@ private scheduleRandomIntrusion(): void {
 - 🏃 **快速離場**: 存活30秒後自動離場
 - 💀 **屍體掉落**: 擊殺後留屍體(慢速模式)
 
-### **命中與掉票系統**
+**BOSS仇恨機制**: 初始鎖定最近玩家、800px黏著機制、不依傷害轉移，基於DouPo系統設計
+
+### **BOSS仇恨特殊規則** (詳見[仇恨機制系統](../systems/aggro-system.md))
+```typescript
+// BOSS目標選擇邏輯
+class BossTargeting {
+  /** BOSS初始鎖定最近玩家 */
+  private initializeTarget(): void {
+    const nearestSeat = this.host.nearestSeat(this.boss.x, this.boss.y);
+    this.boss.targetSeat = 0; // BOSS預設鎖定P1，或使用nearestSeat
+  }
+  
+  /** BOSS黏著機制 - 800px黏著距離 */
+  private updateTarget(): void {
+    const distance = this.getDistanceToTarget();
+    // BOSS使用相同的800px黏著機制，持續1秒後才重新選擇目標
+    if (distance > GameConfig.enemySticky.stickyBreakRadius) {
+      this.startBreakTimer();
+    }
+  }
+  
+  /** BOSS不依傷害轉移仇恨，只依距離和時間 */
+  private shouldSwitchTarget(): boolean {
+    return this.breakTimer >= GameConfig.enemySticky.stickyBreakSec * 1000;
+  }
+}
+```
+
+**仇恨機制核心**:
+- 🎯 **初始鎖定**: BOSS登場時鎖定最近玩家(通常P1)
+- 🔗 **800px黏著**: 目標超出800px持續1秒才重新綁定  
+- 📍 **不依傷害**: 仇恨轉移不看傷害，只看距離和時間
+- 🚫 **防搶奪**: 黏著機制避免「別人走一圈把BOSS吸走」
 ```typescript
 // BossController.ts - BOSS命中處理
 private onBossHit(boss: Enemy, damage: number): void {
