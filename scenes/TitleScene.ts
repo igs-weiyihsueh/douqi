@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { GameConfig } from '../config';
 import { CharacterEditorPanel } from '../objects/CharacterEditorPanel';
 import { HitFeelEditorPanel } from '../objects/HitFeelEditorPanel';
+import { BoundaryEditorPanel } from '../objects/BoundaryEditorPanel';
 
 /**
  * TitleScene：進入遊戲的第一個畫面。
@@ -19,14 +20,21 @@ export class TitleScene extends Phaser.Scene {
   private charEditor!: CharacterEditorPanel;
   /** 打擊感編輯器面板；開啟時主選單的鍵盤/按鈕操作暫停 */
   private hitFeelEditor!: HitFeelEditorPanel;
+  /** 地圖邊界編輯器面板；開啟時主選單的鍵盤/按鈕操作暫停 */
+  private boundaryEditor!: BoundaryEditorPanel;
 
   constructor() {
     super('TitleScene');
   }
 
+  /** 是否有任何編輯器面板開啟中（開啟時主選單的鍵盤 / 按鈕操作暫停） */
+  private get editorOpen(): boolean {
+    return !!(this.charEditor?.isOpen || this.hitFeelEditor?.isOpen || this.boundaryEditor?.isOpen);
+  }
+
   /** 切換選取的模式——移動黃框到該鈕。 */
   private selectMode(mode: 'fast' | 'slow'): void {
-    if (this.charEditor?.isOpen || this.hitFeelEditor?.isOpen) return; // 編輯器開啟中：方向鍵交給面板
+    if (this.editorOpen) return; // 編輯器開啟中：方向鍵交給面板
     this.selected = mode;
     if (this.highlightRect) this.highlightRect.x = this.hlPos[mode];
   }
@@ -35,6 +43,7 @@ export class TitleScene extends Phaser.Scene {
     this.started = false;
     this.charEditor = new CharacterEditorPanel(this);
     this.hitFeelEditor = new HitFeelEditorPanel(this);
+    this.boundaryEditor = new BoundaryEditorPanel(this);
     const w = GameConfig.width;
     const h = GameConfig.height;
 
@@ -241,6 +250,26 @@ export class TitleScene extends Phaser.Scene {
     hfBtn.on('pointerdown', () => this.openHitFeelEditor());
     this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.H).on('down', () => this.openHitFeelEditor());
 
+    // ── 地圖邊界編輯器：🗺 地圖邊界 (B)（打擊感按鈕上方）──
+    const bdBtnW = 200, bdBtnH = 44;
+    const bdX = w - bdBtnW / 2 - 20, bdY = h - bdBtnH / 2 - 200;
+    const bdBg = this.add
+      .rectangle(bdX, bdY, bdBtnW, bdBtnH, 0x064e3b, 0.9)
+      .setStrokeStyle(2, 0x34d399, 0.9)
+      .setDepth(5);
+    this.add
+      .text(bdX, bdY, '🗺 地圖邊界 (B)', { fontFamily: 'monospace', fontSize: '16px', color: '#d1fae5', fontStyle: 'bold' })
+      .setOrigin(0.5).setDepth(6);
+    const bdBtn = this.add.container(0, 0, [bdBg]).setSize(bdBtnW, bdBtnH).setDepth(5);
+    bdBtn.setInteractive(
+      new Phaser.Geom.Rectangle(bdX - bdBtnW / 2, bdY - bdBtnH / 2, bdBtnW, bdBtnH),
+      Phaser.Geom.Rectangle.Contains
+    );
+    bdBtn.on('pointerover', () => bdBg.setFillStyle(0x065f46, 0.95));
+    bdBtn.on('pointerout', () => bdBg.setFillStyle(0x064e3b, 0.9));
+    bdBtn.on('pointerdown', () => this.openBoundaryEditor());
+    this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.B).on('down', () => this.openBoundaryEditor());
+
     // ── 小遊戲入口：🎮 小遊戲 (G) → MinigameMenuScene（與 fast/slow 開始戰鬥並列，互不干擾）──
     const mgBtnW = 200, mgBtnH = 44;
     const mgX = mgBtnW / 2 + 20, mgY = h - mgBtnH / 2 - 20; // 左下角
@@ -262,21 +291,27 @@ export class TitleScene extends Phaser.Scene {
     this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.G).on('down', () => this.openMinigameMenu());
   }
 
-  /** 開啟角色編輯器（遊戲尚未開始時才可開） */
+  /** 開啟角色編輯器（遊戲尚未開始、沒有其他編輯器開啟時才可開） */
   private openCharacterEditor(): void {
-    if (this.started || this.hitFeelEditor?.isOpen) return;
+    if (this.started || this.editorOpen) return;
     this.charEditor.open();
   }
 
-  /** 開啟打擊感編輯器（遊戲尚未開始時才可開） */
+  /** 開啟打擊感編輯器（遊戲尚未開始、沒有其他編輯器開啟時才可開） */
   private openHitFeelEditor(): void {
-    if (this.started || this.charEditor?.isOpen) return;
+    if (this.started || this.editorOpen) return;
     this.hitFeelEditor.open();
+  }
+
+  /** 開啟地圖邊界編輯器（遊戲尚未開始、沒有其他編輯器開啟時才可開） */
+  private openBoundaryEditor(): void {
+    if (this.started || this.editorOpen) return;
+    this.boundaryEditor.open();
   }
 
   /** 進入小遊戲選單（角色編輯器開啟中不處理） */
   private openMinigameMenu(): void {
-    if (this.charEditor.isOpen || this.hitFeelEditor.isOpen) return;
+    if (this.editorOpen) return;
     this.scene.start('MinigameMenuScene');
   }
 
@@ -286,7 +321,7 @@ export class TitleScene extends Phaser.Scene {
    * 右上角關閉鈕(×) + Esc 鍵可關閉、移除 iframe、回到 TitleScene。開啟時暫停本場景(關閉時恢復)。
    */
   private openSceneEditor(): void {
-    if (this.charEditor.isOpen || this.hitFeelEditor.isOpen) return; // 編輯器開啟中不處理
+    if (this.editorOpen) return; // 編輯器開啟中不處理
     if (document.getElementById('scene-editor-overlay')) return; // 已開啟不重複
     // base: './' → 用 import.meta.env.BASE_URL 組相對路徑，dev/build 都正確
     const base = (import.meta as unknown as { env: { BASE_URL: string } }).env.BASE_URL || '/';
@@ -335,7 +370,7 @@ export class TitleScene extends Phaser.Scene {
 
   private startGame(mode: 'fast' | 'slow' = 'fast'): void {
     if (this.started) return; // 防重入（同時點擊+按鍵）
-    if (this.charEditor.isOpen || this.hitFeelEditor.isOpen) return; // 編輯器開啟中：空白鍵/點擊不開始遊戲
+    if (this.editorOpen) return; // 編輯器開啟中：空白鍵/點擊不開始遊戲
     this.started = true;
     
     this.scene.start('GameScene', { controlMode: mode });

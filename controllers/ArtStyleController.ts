@@ -22,7 +22,7 @@ export interface ArtStyleHost {
 }
 
 /** F4 場景背景圖（Scene.png）的紋理 key */
-const SCENE_BG_TEXTURE_KEY = 'scene-background';
+export const SCENE_BG_TEXTURE_KEY = 'scene-background';
 /** F2 強制重載 Scene.png 的路徑（會加 timestamp 防快取） */
 const SCENE_BG_RELOAD_URL = 'assets/Scene.png';
 /**

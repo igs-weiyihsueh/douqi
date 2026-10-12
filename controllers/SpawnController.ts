@@ -41,8 +41,6 @@ export interface SpawnHost {
   nearestSeat(x: number, y: number): number;
   /** 掛上一般敵人的攻擊回呼 */
   wireEnemyCallbacks(enemy: Enemy): void;
-  /** 每出一次隊形後（關卡制每波第一批時落下木箱） */
-  onFormationSpawned(): void;
 }
 
 /** 場上組每叢至少幾隻 */
@@ -124,15 +122,16 @@ export class SpawnController {
     this.accumulator = 0;
   }
 
-  /** 出一次隊形：依近身組占比決定近身組或場上組，之後通知場景（每波第一批時落下木箱） */
+  /** 出一次隊形：依近身組占比決定近身組或場上組（沒有人在場上時只出場上組） */
   spawnFormation(): void {
     const time = this.host.scene.time.now;
     const total = this.nearSpawned + this.fieldSpawned;
     const nearRatio = total > 0 ? this.nearSpawned / total : 0;
     const nearShare = this.host.monsterPhase()?.nearShare ?? GameConfig.spawnAlloc.nearShare;
-    if (nearRatio < nearShare) this.spawnNearBatch(time);
+    // 沒有人在場上時沒有近身組的對象，只出場上組
+    const anyAlive = this.host.characters().some((c) => c.alive);
+    if (anyAlive && nearRatio < nearShare) this.spawnNearBatch(time);
     else this.spawnFieldBatch(time);
-    this.host.onFormationSpawned();
   }
 
   /**

@@ -105,7 +105,7 @@ export class GameScene extends Phaser.Scene {
   private bossIntrudeAt = 0;
   /** 這一波的一般怪已打完、等場上的即時補怪清完才進休息（最後一波則結算關卡） */
   private pendingSurgeClear = false;
-  /** 關卡制：本波第一批怪出現時要落下木箱（開波時設定，落下後清除） */
+  /** 關卡制：這一波的木箱還沒排定落下（開波時設定，排定後清除；見 scheduleWaveCrates） */
   private crateDropPending = false;
   private waveSpawned = 0;
   private waveState: 'spawning' | 'clearing' | 'intermission' | 'boss' | 'event' = 'spawning';
@@ -716,6 +716,7 @@ export class GameScene extends Phaser.Scene {
 
     this.handleSpawning(delta);
     this.waveCountdown.update(this.levelMode && this.waveState === 'intermission' ? this.intermissionUntil - time : 0);
+    this.scheduleWaveCrates();
     if (this.waveState === 'event') this.eventCtl.update(time);
     this.bossCtl.update(time);
     this.treasureRoom.update(time);
@@ -968,7 +969,8 @@ export class GameScene extends Phaser.Scene {
   // 生成
   // ---------------------------------------------------------------------------
   private handleSpawning(delta: number): void {
-    if (this.creditCtl.enabled && this.aliveCount() === 0) return; // 沒有人在場上（都還沒投幣 / 等待續關）時不出怪
+    // 沒有人在場上（都還沒投幣 / 等待續關）時照常出怪：場上維持 1 人份的量（同時在場上限、本波怪數都以 1 人計），
+    // 只出場上組、各自巡邏，讓待機畫面有怪在活動；有人投幣進場後直接開打
     // 波次制狀態機
     const time = this.time.now;
 
@@ -1318,15 +1320,7 @@ export class GameScene extends Phaser.Scene {
       maxAlive: () => this.curMaxAlive(),
       aliveScale: () => this.curAliveScale(),
       nearestSeat: (x, y) => this.nearestSeat(x, y),
-      wireEnemyCallbacks: (e) => this.wireEnemyCallbacks(e),
-      onFormationSpawned: () => {
-        // 本波第一批怪出現後 delayAfterMonstersMs 才落下木箱；開場還沒人投幣時先出的怪不算，等有人在場上之後的那一批
-        if (!this.crateDropPending || (this.creditCtl.enabled && this.aliveCount() === 0)) return;
-        this.crateDropPending = false;
-        this.time.delayedCall(GameConfig.breakable.drop.delayAfterMonstersMs, () => {
-          if (this.canDropCrates()) this.breakableCtl.dropForWave();
-        });
-      }
+      wireEnemyCallbacks: (e) => this.wireEnemyCallbacks(e)
     };
   }
 
@@ -1401,6 +1395,19 @@ export class GameScene extends Phaser.Scene {
       if (batch.delayMs > 0) this.time.delayedCall(batch.delayMs, spawnBatch);
       else spawnBatch();
     }
+  }
+
+  /**
+   * 每幀：這一波的木箱還沒落下、這一波已經出過怪且有人在場上（沒人時先出的怪等有人投幣才算）時，
+   * delayAfterMonstersMs 後落下木箱（延遲期間這一波打完就不掉）
+   */
+  private scheduleWaveCrates(): void {
+    if (!this.crateDropPending || this.waveSpawned === 0 || !this.canDropCrates()) return;
+    if (this.creditCtl.enabled && this.aliveCount() === 0) return;
+    this.crateDropPending = false;
+    this.time.delayedCall(GameConfig.breakable.drop.delayAfterMonstersMs, () => {
+      if (this.canDropCrates()) this.breakableCtl.dropForWave();
+    });
   }
 
   /** 這一波的木箱還能不能落下：小關卡進行中、這一波還在打（生怪 / 清場），一般怪還沒打完 */
@@ -1625,7 +1632,8 @@ export class GameScene extends Phaser.Scene {
     this.artStyle.setBackgroundSuppressed(inRoom);
     if (inRoom) {
       // 寶藏密室：活動範圍縮成中央格中央的正方形、鏡頭固定，再開始倒數
-      const zone = this.slotWorld.centerZone, size = GameConfig.stage.treasureRoom.roomSize;
+      // 正方形不超過活動範圍高度（地圖邊界編輯器可能把範圍調矮）
+      const zone = this.slotWorld.centerZone, size = Math.min(GameConfig.stage.treasureRoom.roomSize, zone.height);
       this.slotWorld.enterRoomArena(new Phaser.Geom.Rectangle(zone.centerX - size / 2, zone.centerY - size / 2, size, size));
       this.waveState = 'clearing';
       this.treasureRoom.begin(this.time.now);

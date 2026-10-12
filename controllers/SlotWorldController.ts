@@ -4,6 +4,7 @@ import type { Character } from '../objects/Character';
 import type { GoIndicator } from './GoIndicator';
 import type { HiddenGateController } from './HiddenGateController';
 import { destroyZoneScenery, drawCorridorScenery, drawZoneScenery } from '../systems/zoneScenery';
+import { loadArenaParams, SLOT_HEIGHT } from '../systems/arenaParams';
 
 /** 左右方向 */
 export type Side = 'L' | 'R';
@@ -233,17 +234,20 @@ export class SlotWorldController {
     const st = GameConfig.stage;
     const gap = st.subGap;
     const slotW = st.arenaW + st.sceneMarginX * 2;
-    const slotH = st.arenaH + st.sceneMarginTop + st.sceneMarginBottom;
+    // 上下邊界可由主選單地圖邊界編輯器調整（背景格高度固定，活動範圍高度 = 格高 − 上下邊界）
+    const { marginTop, marginBottom } = loadArenaParams();
+    const slotH = SLOT_HEIGHT;
+    const arenaH = slotH - marginTop - marginBottom;
     const worldW = slotW * 3 + gap * 2;
     const slotBLeftX = 0, slotAX = slotW + gap, slotBRightX = (slotW + gap) * 2;
     this.slotBLeft = new Phaser.Geom.Rectangle(slotBLeftX, 0, slotW, slotH);
     this.slotA = new Phaser.Geom.Rectangle(slotAX, 0, slotW, slotH);
     this.slotBRight = new Phaser.Geom.Rectangle(slotBRightX, 0, slotW, slotH);
     // 移動區 = 格扣掉左右 / 上下不可踏入的遠景邊距
-    const mx = st.sceneMarginX, mt = st.sceneMarginTop;
-    this.zoneBLeft = new Phaser.Geom.Rectangle(slotBLeftX + mx, mt, st.arenaW, st.arenaH);
-    this.zoneA = new Phaser.Geom.Rectangle(slotAX + mx, mt, st.arenaW, st.arenaH);
-    this.zoneBRight = new Phaser.Geom.Rectangle(slotBRightX + mx, mt, st.arenaW, st.arenaH);
+    const mx = st.sceneMarginX, mt = marginTop;
+    this.zoneBLeft = new Phaser.Geom.Rectangle(slotBLeftX + mx, mt, st.arenaW, arenaH);
+    this.zoneA = new Phaser.Geom.Rectangle(slotAX + mx, mt, st.arenaW, arenaH);
+    this.zoneBRight = new Phaser.Geom.Rectangle(slotBRightX + mx, mt, st.arenaW, arenaH);
     this.arenaRect = this.zoneA;
     this.setPhysicsBounds(this.zoneA);
     this.scene.cameras.main.setBounds(0, 0, worldW, slotH);

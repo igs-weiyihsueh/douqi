@@ -189,11 +189,11 @@ export class UIScene extends Phaser.Scene {
     CLASSIC_OFFSET_X: 0,
     CLASSIC_OFFSET_Y: -2,
     /**
-     * F4 面板圖：相對面板圖左上角的位置（面板圖原尺寸像素）——左緣對齊彩票欄左緣（x 91），
-     * 下緣在彩票欄上緣（y 66）上方 4px；彩票欄上方是透明區，左邊的頭像在 x 98 以內，不會蓋到面板
+     * F4 面板圖：相對面板圖左上角的位置（面板圖原尺寸像素）——左緣對齊面板左緣，下緣在面板圖上緣上方 4px：
+     * 整組（膠囊、HIT、提示）都在面板圖外面，不會蓋到頭像與彩票欄；膠囊寬度小於面板間距，也不會蓋到下一位的面板
      */
-    OVERLAY_OFFSET_X: 91,
-    OVERLAY_OFFSET_Y: 62,
+    OVERLAY_OFFSET_X: 0,
+    OVERLAY_OFFSET_Y: -4,
     /** 高於 F4 面板圖（depth 1000+i） */
     DEPTH: 1010,
     /** 「獲得N票券！」文字樣式與動畫 */
