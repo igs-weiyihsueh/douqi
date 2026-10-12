@@ -14,6 +14,7 @@ import { ArtStyleController } from '../controllers/ArtStyleController';
 import { GoIndicator } from '../controllers/GoIndicator';
 import { OffscreenEnemyIndicator } from '../controllers/OffscreenEnemyIndicator';
 import { EnemyRallyController } from '../controllers/EnemyRallyController';
+import { CreditController, type CreditHost } from '../controllers/CreditController';
 import { HiddenGateController } from '../controllers/HiddenGateController';
 import { TreasureRoomController } from '../controllers/TreasureRoomController';
 import { TreasureEnemyController, type TreasureEnemyHost } from '../controllers/TreasureEnemyController';
@@ -130,6 +131,7 @@ export class GameScene extends Phaser.Scene {
   /** 清場輔助：畫面外剩餘一般怪的方向箭頭 */
   private offscreenIndicator!: OffscreenEnemyIndicator;
   private enemyRally!: EnemyRallyController;
+  private creditCtl!: CreditController;
   /** 隱藏入口（熔岩拱門），每次 create() 重建 */
   private hiddenGate!: HiddenGateController;
   /** 隱藏入口後的獎勵關（寶藏密室），每次 create() 重建 */
@@ -308,6 +310,7 @@ export class GameScene extends Phaser.Scene {
     this.targeting = new TargetingController(this.createTargetingHost());
     this.actions = new CharacterActionController(this.createActionHost());
 
+    this.creditCtl = new CreditController(this.createCreditHost());
     // 開場只有 P1 一人。BOT 由按 B 逐一加入（見 tryAddBot）。
     this.createCharacter(0, false);
 
@@ -339,6 +342,11 @@ export class GameScene extends Phaser.Scene {
     if (this.controlMode === 'slow') this.player.noHpLoss = true;
     // 階段3:slow 模式 P1 啟用【強化型態造型】(升級變身視覺;fast 不開,維持原強化視覺)。
     if (this.controlMode === 'slow') this.player.empoweredForm = true;
+
+    // C 鍵：P1 投幣（CREDIT + coinValue；未進場 / 等待續關時立刻進場）
+    this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.C).on('down', () => {
+      if (!this.gameOver) this.creditCtl.insertCoin(this.player);
+    });
 
     // B 鍵：逐一加入 BOT 夥伴（最多湊滿 characters.count）
     this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.B).on('down', () => {
@@ -562,9 +570,6 @@ export class GameScene extends Phaser.Scene {
     const c = new Character(this, x, y, index, isBot);
     // slow 模式下 BOT 也【noHpLoss 打不死】(與 P1 無差異;fast 則會死,不設)。P1 的 noHpLoss 在 create() 另設。
     if (this.controlMode === 'slow') c.noHpLoss = true;
-    
-    // 階段二測試：給角色初始Credit值
-    c.credit = isBot ? 500 + index * 100 : 1000; // P1: 1000, BOT1: 600, BOT2: 700, BOT3: 800
     this.characters.push(c);
     this.physics.add.overlap(
       c,
@@ -574,6 +579,7 @@ export class GameScene extends Phaser.Scene {
       this
     );
     // 木箱與角色的碰撞由每幀手動分離處理（systems/bodySeparation），不用 Arcade collider（高速時會慢慢穿透）。
+    this.creditCtl.setupCharacter(c); // CREDIT：玩家等投幣進場、BOT 自動投幣
     return c;
   }
 
@@ -611,6 +617,7 @@ export class GameScene extends Phaser.Scene {
     this.goIndicator.update(delta);
     this.offscreenIndicator.update(delta);
     this.enemyRally.update(time);
+    this.creditCtl.update();
 
     // COMBO 連擊計時（警告 / 中斷）
     this.comboReward.update();
@@ -721,8 +728,12 @@ export class GameScene extends Phaser.Scene {
     if (this.player.alive && this.playerAttackQueued) {
       this.playerAttackQueued = false;
       if (!this.player.isSkillLocked(time) && !this.isFrozenByTimestop(this.player)) {
-        if (this.bossCtl.isTransformed) this.bossCtl.formAttack(time); // 變身 BOSS：攻擊鍵改放 BOSS 招式
-        else this.actions.tryAct(this.player, time);
+        if (this.bossCtl.isTransformed) {
+          this.creditCtl.cancelAttackWindow(this.player); // 變身 BOSS 的攻擊不扣 CREDIT
+          this.bossCtl.formAttack(time); // 變身 BOSS：攻擊鍵改放 BOSS 招式
+        } else {
+          this.actions.tryAct(this.player, time);
+        }
       }
     }
     // BOT：AI 決策（招式演出鎖定中略過）時停期間非 owner 的 BOT 被凍→停速度、不跑 AI。
@@ -915,6 +926,7 @@ export class GameScene extends Phaser.Scene {
   // 生成
   // ---------------------------------------------------------------------------
   private handleSpawning(delta: number): void {
+    if (this.creditCtl.enabled && this.aliveCount() === 0) return; // 沒有人在場上（都還沒投幣 / 等待續關）時不出怪
     // 波次制狀態機
     const time = this.time.now;
 
@@ -1113,13 +1125,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * 發放小關卡寶箱獎勵：彩票加到該角色 Credit，並在下方面板播放彩票特效
+   * 發放小關卡寶箱獎勵：彩票加到該角色的彩票數，並在下方面板播放彩票特效
    *
    * @param c 獲得獎勵的角色
    * @param tickets 彩票張數
    */
   private grantStageReward(c: Character, tickets: number): void {
-    c.credit += tickets;
+    c.tickets += tickets;
     const uiScene = this.scene.get('UIScene') as any;
     // 彩票噴發數量隨張數變化：沿用 COMBO 報獎特效，以張數作為里程碑參數
     uiScene?.playComboRewardFx?.(c.index, tickets, tickets);
@@ -1268,6 +1280,45 @@ export class GameScene extends Phaser.Scene {
     return this.stageInProgress && !this.pendingSubZoneComplete && (this.waveState === 'spawning' || this.waveState === 'clearing');
   }
 
+  /** 建立 CreditController 需要的場景能力 */
+  private createCreditHost(): CreditHost {
+    return {
+      scene: this,
+      characters: () => this.characters,
+      prepareResume: (c) => this.prepareCreditResume(c),
+      setCharacterVisible: (c, visible) => this.setCharacterVisible(c, visible),
+      onCreditChanged: () => this.emitStats()
+    };
+  }
+
+  /**
+   * 投幣回到戰局前：顯示角色；若不在目前場地內（例如等待續關時隊友已換區），移到鏡頭畫面中央（夾在場地內）
+   *
+   * @param c 要回到戰局的角色
+   */
+  private prepareCreditResume(c: Character): void {
+    this.setCharacterVisible(c, true);
+    const a = this.arena;
+    if (Phaser.Geom.Rectangle.Contains(a, c.x, c.y)) return;
+    const view = this.cameras.main.worldView;
+    const r = GameConfig.player.radius;
+    c.setPosition(
+      Phaser.Math.Clamp(view.centerX, a.left + r, a.right - r),
+      Phaser.Math.Clamp(view.centerY, a.top + r, a.bottom - r)
+    );
+  }
+
+  /**
+   * 角色在場上是否看得見（P1 新美術皮膚與頭上覆蓋圖一併切換）
+   *
+   * @param c 角色
+   * @param visible 是否顯示
+   */
+  private setCharacterVisible(c: Character, visible: boolean): void {
+    c.setStageVisible(visible);
+    if (c === this.player) this.artStyle.setPlayerShown(visible);
+  }
+
   /**
    * 建立 BreakableController 需要的場景能力
    */
@@ -1382,6 +1433,7 @@ export class GameScene extends Phaser.Scene {
       performAttackOn: (actor, primary, time) => this.performAttackOn(actor, primary, time),
       onComboHit: (c, time) => this.comboSkills.onComboHit(c, time),
       triggerComboHit: (c) => this.comboReward.hit(c),
+      onAttackStart: (c, time) => this.creditCtl.openAttackWindow(c, time),
       pickEmpowerTarget: (c) => this.comboSkills.pickEmpowerTarget(c),
       empowerStrike: (c, x, y, time) => this.comboSkills.empowerStrike(c, x, y, time),
       flashWhite: (c) => this.fx.flashWhite(c),
@@ -1798,7 +1850,7 @@ export class GameScene extends Phaser.Scene {
 
   /** R 熱鍵——原地滿血復活 P1（無限次），恢復可操控與正常戰鬥 */
   private revivePlayer(): void {
-    if (this.gameOver) return;
+    if (this.gameOver || this.creditCtl.enabled) return; // CREDIT 制沒有陣亡，續關靠投幣
     if (this.player.alive) return;
     this.player.revive();
     // 第8項：R 復活 → P1 命中計數歸零
@@ -1889,8 +1941,8 @@ export class GameScene extends Phaser.Scene {
   /** 加權隨機挑掉落招式（T 時停權重明顯低於其他 4 種）。慢速排除補血 H(慢速無血量、H 無意義)。 */
   private pickDropSkill(): SkillType {
     const w = GameConfig.items.weights;
-    // 只慢速排除 H(補血)——慢速已拔血量；快速維持有 H。
-    const skills: SkillType[] = this.controlMode === 'slow'
+    // 沒有血量時（慢速、或啟用 CREDIT）排除 H(補血)；快速且沒有 CREDIT 時維持有 H。
+    const skills: SkillType[] = this.controlMode === 'slow' || this.creditCtl.enabled
       ? ['A', 'B', 'C', 'E', 'F', 'T']
       : ['A', 'B', 'C', 'E', 'F', 'H', 'T'];
     let total = 0;
@@ -1947,8 +1999,12 @@ export class GameScene extends Phaser.Scene {
       if (this.targeting.lockedTarget === item) this.targeting.lockedTarget = null;
       item.despawn();
       // 補血道具(H) → 只補撿到的角色，不走招式演出；其餘照觸發招式
-      if (skill === 'H') this.applyHeal(c);
-      else this.skillCtl.cast(c, skill, time);
+      if (skill === 'H') {
+        this.applyHeal(c);
+      } else {
+        this.creditCtl.openAttackWindow(c, time); // 道具招式也算一招
+        this.skillCtl.cast(c, skill, time);
+      }
     }
     this.pendingPickups.clear();
   }
@@ -2095,6 +2151,7 @@ export class GameScene extends Phaser.Scene {
     actor: Character, enemy: Enemy, damage: number, knockback: number, fromX: number, fromY: number, time: number
   ): void {
     if (enemy.dead || !enemy.active) return;
+    this.creditCtl.onEnemyHit(actor, time); // 這一招第一次命中扣 1 點 CREDIT
     if (enemy.enemyType === 'treasure') { this.treasures.hit(enemy, actor); return; }
     const dmg = Math.max(1, Math.round(damage));
     enemy.aggroActive = true;
@@ -2300,8 +2357,10 @@ export class GameScene extends Phaser.Scene {
         // 頭上UI修復：添加角色世界座標
         x: c.x,
         y: c.y,
-        // 階段二：Credit點數
+        // CREDIT（投幣點數）與彩票數
         credit: c.credit,
+        tickets: c.tickets,
+        creditState: c.creditState,
         // 階段三：COMBO獎勵系統狀態
         combo: { ...c.comboState }  // 淺拷貝避免引用問題
       })),

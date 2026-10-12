@@ -64,6 +64,8 @@ export class ArtStyleController {
   private uiOverlay: Phaser.GameObjects.Image | null = null;
   /** 一般怪是否用骷髏戰士外觀（與背景同時切換） */
   private skeletonEnemies = false;
+  /** P1 是否在場上顯示（尚未投幣進場時隱藏皮膚與頭上覆蓋圖） */
+  private playerShown = true;
 
   constructor(private readonly host: ArtStyleHost) {}
 
@@ -210,13 +212,24 @@ export class ArtStyleController {
     }
     this.active = !this.active;
     for (const bg of this.backgrounds) bg.setVisible(this.active);
-    this.skin?.setVisible(this.active);
-    this.uiOverlay?.setVisible(this.active);
+    this.skin?.setVisible(this.active && this.playerShown);
+    this.uiOverlay?.setVisible(this.active && this.playerShown);
     // P1 改顯示新美術皮膚時，隱藏舊美術的名稱標籤 / 腳下條 / 「爆」標記（原本被舊的固定深度皮膚蓋住）
     this.host.player().setLegacyUiHidden(this.active && this.skin !== null);
     // 新美術改用覆蓋圖 UI → 隱藏原 P1 頭頂 UI、啟用底部面板替換；舊美術反之
     this.callUiWhenReady('setP1HeadUIVisible', (ui) => !!ui.overheadUIs?.has(0), !this.active);
     this.callUiWhenReady('setBottomPanelOverlay', (ui) => (ui.rows?.length ?? 0) > 0, this.active);
+  }
+
+  /**
+   * P1 是否在場上顯示：新美術時一併切換皮膚與頭上覆蓋圖（尚未投幣進場時隱藏）
+   *
+   * @param shown 是否顯示
+   */
+  setPlayerShown(shown: boolean): void {
+    this.playerShown = shown;
+    this.skin?.setVisible(this.active && shown);
+    this.uiOverlay?.setVisible(this.active && shown);
   }
 
   /** 切換一般怪外觀，並套用到場上現有的一般怪（F4） */

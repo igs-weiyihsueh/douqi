@@ -58,6 +58,8 @@ export interface CharacterActionHost {
   onComboHit(c: Character, time: number): void;
   /** 普攻命中：COMBO 獎勵累積 */
   triggerComboHit(c: Character): void;
+  /** 角色出手（開始一招；CREDIT 以此計算「一招」） */
+  onAttackStart(c: Character, time: number): void;
   /** 慢速模式強化期間的唯一招式（目標中心圓形 AOE） */
   /** 慢速強化攻擊的目標（範圍圈內，優先鎖定的；沒有為 null） */
   pickEmpowerTarget(c: Character): Enemy | null;
@@ -132,6 +134,7 @@ export class CharacterActionController {
     if (c.isBursting || c.isDashing) return;
     if (c.isRooted(time)) return;
     if (time < c.nextAttackAllowedAt) return;
+    this.host.onAttackStart(c, time);
     const player = this.host.player();
     const slow = this.host.isSlowMode();
     // 慢速模式 P1 強化期間：衝向鎖定目標，撞到時以它為中心炸圓形 AOE（近身衝上去砍一圈）

@@ -35,8 +35,12 @@ interface CharStat {
   // 頭上UI：角色世界座標
   x: number;
   y: number;
-  // 階段二：Credit點數
+  /** CREDIT（投幣點數） */
   credit: number;
+  /** 彩票數（各種獎勵累計） */
+  tickets: number;
+  /** CREDIT 狀態：未進場 / 遊玩中 / 等待續關（後兩者以外的「不在場上」不是陣亡） */
+  creditState: 'absent' | 'playing' | 'waiting';
   // 階段三：COMBO獎勵系統狀態
   combo: ComboState;
 }
@@ -724,14 +728,14 @@ export class UIScene extends Phaser.Scene {
       const c = s.chars[i];
       
       if (!c.alive) {
-        // 死亡狀態：透明度0.5，灰色標籤，擊殺數帶✖
+        // 不在場上：透明度0.5，灰色標籤；陣亡時數字帶✖（尚未投幣進場 / 等待續關不算陣亡）
+        const mark = c.creditState === 'playing' ? ' ✖' : '';
         row.circle.setAlpha(0.5);
         this.setTextColor(row.labelText, '#777777').setAlpha(0.5);
         row.killIconText.setAlpha(0.5);
-        this.setTextColor(row.killText.setText(`${c.kills} ✖`), '#777777').setAlpha(0.5);
+        this.setTextColor(row.killText.setText(`${c.kills}${mark}`), '#777777').setAlpha(0.5);
         row.ticketIconText.setAlpha(0.5);
-        const tickets = Math.floor(c.kills / 2);
-        this.setTextColor(row.ticketText.setText(`${tickets} ✖`), '#777777').setAlpha(0.5);
+        this.setTextColor(row.ticketText.setText(`${c.tickets}${mark}`), '#777777').setAlpha(0.5);
         // 🎨 背景保持原色不變，用戶要求移除狀態顏色變化
         continue;
       }
@@ -742,8 +746,7 @@ export class UIScene extends Phaser.Scene {
       row.killIconText.setAlpha(1);
       this.setTextColor(row.killText.setText(`${c.kills}`), '#ffffff').setAlpha(1);
       row.ticketIconText.setAlpha(1);
-      const tickets = Math.floor(c.kills / 2);
-      this.setTextColor(row.ticketText.setText(`${tickets}`), '#ffd700').setAlpha(1); // 彩票數金色
+      this.setTextColor(row.ticketText.setText(`${c.tickets}`), '#ffd700').setAlpha(1); // 彩票數金色
       // 🎨 背景保持原色不變，用戶要求移除狀態顏色變化
     }
   };

@@ -16,8 +16,14 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
   energy = 0;
   /** 慢速變身期間 AOE 命中次數（每 combo.empower.burstEveryAoeHits 次觸發一次爆發）；每次變身開始歸零 */
   empowerAoeHits = 0;
-  /** 階段二：Credit點數 - 每個角色獨立的貨幣點數 */
+  /** CREDIT：投幣得到的遊玩點數（每招命中扣 1，見 CreditController） */
   credit = 0;
+  /** 彩票：COMBO / 寶箱 / 寶箱怪 / 亂入 BOSS 等獎勵累計 */
+  tickets = 0;
+  /** CREDIT 狀態：未進場（還沒投過幣）/ 遊玩中 / 用完等待投幣續關 */
+  creditState: 'absent' | 'playing' | 'waiting' = 'playing';
+  /** 這一招的扣點期限：出手時設定，期限內第一次命中敵人扣 1 點並清為 0 */
+  chargeWindowUntil = 0;
   /** 階段三：COMBO獎勵系統狀態 */
   comboState = {
     currentStreak: 0,
@@ -250,6 +256,16 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
+   * 角色在場上是否看得見（尚未進場時隱藏本體與標籤）
+   *
+   * @param visible 是否顯示
+   */
+  setStageVisible(visible: boolean): void {
+    this.setVisible(visible);
+    this.label.setVisible(visible && !this.legacyUiHidden);
+  }
+
+  /**
    * 切換舊美術頭上 / 腳下 UI（名稱標籤、腳下血條 / 鬥氣條、「爆」標記）的顯示：F4 新美術時隱藏、舊美術時恢復。
    * 「定身!」狀態提示不受影響
    *
@@ -476,8 +492,20 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
     }
   }
 
-  /** 角色陣亡：灰掉、停止、標籤標示 */
+  /** 角色陣亡：離場（停止、關物理、清狀態），再灰掉並在標籤標示 ✖ */
   die(): void {
+    this.leavePlay();
+    this.setTint(0x555555);
+    this.setAlpha(0.4);
+    this.label.setText(`${GameConfig.characters.labels[this.index]} ✖`);
+    this.label.setColor('#888888');
+  }
+
+  /**
+   * 離開戰局（陣亡、CREDIT 用完、尚未進場共用）：alive = false 讓操作、敵人鎖定、出怪、鏡頭都不再算他；
+   * 停止移動、關物理、清除衝刺 / 爆發 / 定身等狀態，隱藏腳下量條與標記（外觀由呼叫端決定）
+   */
+  leavePlay(): void {
     this.alive = false;
     this.isDashing = false;
     this.dashToItem = false;
@@ -494,14 +522,10 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
     this.setAngle(0);
     this.shieldAura.setVisible(false);
     this.stopMoving();
-    this.setTint(0x555555);
-    this.setAlpha(0.4);
-    this.ensureEmpowerParticles(false); // 死亡清強化造型粒子
+    this.ensureEmpowerParticles(false); // 離場清強化造型粒子
     this.empowerOrbit.setVisible(false).clear();
     (this.body as Phaser.Physics.Arcade.Body).enable = false;
-    this.label.setText(`${GameConfig.characters.labels[this.index]} ✖`);
-    this.label.setColor('#888888');
-    // 死亡隱藏腳下血鬥氣條與爆發標記
+    // 離場隱藏腳下血鬥氣條與爆發標記
     this.hpBarBg.setVisible(false);
     this.hpBar.setVisible(false);
     this.spiritBar.setVisible(false);
@@ -516,9 +540,16 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
    * 血回滿、清灰化/半透明/✖標籤、恢復物理與可操控；鬥氣歸零。
    */
   revive(): void {
-    this.alive = true;
     this.hp = GameConfig.player.maxHp;
     this.spirit = 0; // 復活鬥氣歸零（乾淨重來）
+    this.resumePlay();
+  }
+
+  /**
+   * 回到戰局（復活、投幣續關、投幣進場共用）：還原 leavePlay / die() 的狀態與外觀，恢復物理與可操控（血量、鬥氣不動）
+   */
+  resumePlay(): void {
+    this.alive = true;
     this.isDashing = false;
     this.dashToItem = false;
     this.dashEmpowerStrike = false;

@@ -16,7 +16,7 @@ interface ComboRewardFxScene {
  * 達到最高里程碑時立即發獎並歸零。
  *
  * 每幀依距上次命中的時間：超過 WARNING_START_MS 進入警告（頭上 UI 閃爍）、超過 STREAK_TIMEOUT_MS 中斷
- * （先發待發的獎勵再歸零）。獎勵的彩票加到該角色的 Credit，並在下方面板播放彩票噴發特效
+ * （先發待發的獎勵再歸零）。獎勵的彩票加到該角色的彩票數，並在下方面板播放彩票噴發特效
  */
 export class ComboRewardController {
   constructor(
@@ -79,7 +79,7 @@ export class ComboRewardController {
   }
 
   /**
-   * 發獎：彩票加到 Credit，並在下方面板播放彩票噴發（數量 / 速度隨里程碑變化）
+   * 發獎：彩票加到角色的彩票數，並在下方面板播放彩票噴發（數量 / 速度隨里程碑變化）
    *
    * @param actor 獲得獎勵的角色
    * @param tickets 彩票張數
@@ -87,7 +87,7 @@ export class ComboRewardController {
    */
   private grant(actor: Character, tickets: number, milestone: number): void {
     actor.comboState.ticketsEarned += tickets;
-    actor.credit += tickets;
+    actor.tickets += tickets;
     const ui = this.scene.scene.get('UIScene') as unknown as ComboRewardFxScene | null;
     if (ui?.playComboRewardFx) {
       ui.playComboRewardFx(actor.index, tickets, milestone);

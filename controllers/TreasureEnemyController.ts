@@ -241,7 +241,7 @@ export class TreasureEnemyController {
     this.spawnCoins(enemy.x, enemy.y, cfg.coinsPerHit, false);
     this.host.spawnDamageText(enemy.x, enemy.y - 10, hitsToKill - enemy.treasureHits);
     if (inRoom) {
-      actor.credit += room.ticketsPerHit;
+      actor.tickets += room.ticketsPerHit;
       this.popTicketText(enemy.x, enemy.y - 40, room.ticketsPerHit);
     }
     if (enemy.treasureHits >= hitsToKill) {
@@ -249,7 +249,7 @@ export class TreasureEnemyController {
       enemy.kill();
       if (inRoom) {
         this.roomTreasures.delete(enemy);
-        actor.credit += room.ticketsOnKill;
+        actor.tickets += room.ticketsOnKill;
         this.popTicketText(dx, dy - 70, room.ticketsOnKill);
       }
       if (this.treasure === enemy) { this.treasure = null; this.clearFx(); }

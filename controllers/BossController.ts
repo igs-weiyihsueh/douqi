@@ -366,7 +366,7 @@ export class BossController {
   private rollHitTicket(actor: Character, boss: Enemy): void {
     const cfg = GameConfig.stage.bossIntrude;
     if (Math.random() >= cfg.hitTicketChance) return;
-    actor.credit += cfg.hitTickets;
+    actor.tickets += cfg.hitTickets;
     const txt = this.scene.add.text(boss.x, boss.y - boss.getBodyRadius(), `+${cfg.hitTickets} 🎫`, OVERHEAD_STYLE)
       .setOrigin(0.5).setDepth(40);
     this.scene.tweens.add({ targets: txt, y: txt.y - 60, alpha: 0, duration: 800, onComplete: () => txt.destroy() });

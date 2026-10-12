@@ -180,6 +180,27 @@ export const GameConfig = {
   },
 
   /**
+   * CREDIT（投幣）：每位玩家各自計算。初始 0，按投幣鍵（P1：C）得 coinValue 點才進場；
+   * 每一招命中至少一隻敵人扣 1 點（空揮不扣、一招打中多隻也只扣 1；變身 BOSS 的攻擊不扣）。
+   * 用完時角色停在原地、無敵、怪不理他，頭上顯示 continueText，投幣後恢復。BOT 用完自動投幣。
+   * 啟用時角色沒有血量（被打不扣血、不會陣亡）；enabled = false 回到舊行為
+   */
+  credit: {
+    enabled: true,
+    /** 投一次幣得到的 CREDIT */
+    coinValue: 10,
+    /** 出手後多久內第一次命中敵人算這一招（毫秒；涵蓋衝刺、連段、爆發，一招最多扣 1 點） */
+    attackWindowMs: 1500,
+    /** 投幣恢復後的無敵時間（毫秒） */
+    resumeInvulnMs: 1000,
+    /** 頭上提示：離角色中心的高度、字級、顏色、閃動週期（毫秒） */
+    prompt: { offsetY: -150, fontSize: 30, color: '#ffe066', stroke: '#000000', strokeThickness: 6, blinkMs: 900, depth: 60 },
+    /** 提示文字：尚未進場 / CREDIT 用完 */
+    joinText: '投幣開始',
+    continueText: '投幣續關'
+  },
+
+  /**
    * 召集：玩家身邊完全沒有怪（engagedRadius 內沒有、也沒有怪正在追他或被召集去找他）持續 lonelyMs，
    * 就從 recruitRange 內挑最近的 recruitCount 隻閒置的怪去找他（原速，不加速）。只在小關卡進行中（生怪 / 清場）啟用。
    * - checkIntervalMs：評估間隔；cooldownMs：同一位玩家兩次召集的間隔
