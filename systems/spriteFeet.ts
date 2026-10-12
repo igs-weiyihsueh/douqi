@@ -11,15 +11,23 @@ interface FeetMetrics {
   bottomOffset: number;
   /** 腳部（最下方 FOOT_BAND_RATIO 高度）不透明像素的左右寬度的一半 */
   footHalfWidth: number;
-  /** 全部不透明像素的左右寬度的一半 */
-  halfWidth: number;
+  /** 全部不透明像素的外框（相對紋理中心） */
+  bounds: VisibleBounds;
+}
+
+/** 紋理可見部分（不透明像素）的外框，各邊相對紋理中心（未縮放；左、上為負值） */
+export interface VisibleBounds {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
 }
 
 /** 各紋理的腳底量測，第一次查詢時掃描後快取 */
 const metricsCache = new Map<string, FeetMetrics>();
 
 /**
- * 掃描紋理的不透明像素，量出腳底位置、腳寬與整體寬度（依紋理 key 快取；換新美術素材時自動重新量）
+ * 掃描紋理的不透明像素，量出腳底位置、腳寬與可見外框（依紋理 key 快取；換新美術素材時自動重新量）
  *
  * @param textures 紋理管理器
  * @param key 紋理 key
@@ -49,7 +57,7 @@ function feetMetrics(textures: Phaser.Textures.TextureManager, key: string): Fee
     }
   }
   const footHalfWidth = right >= left ? (right - left + 1) / 2 : 0;
-  // 整體寬度：腳部以上的列繼續擴展左右界
+  // 可見外框：腳部以上的列繼續擴展左右界
   for (let y = top; y < bandTop; y++) {
     for (let x = 0; x < w; x++) {
       if (!opaque(x, y)) continue;
@@ -60,7 +68,9 @@ function feetMetrics(textures: Phaser.Textures.TextureManager, key: string): Fee
   const metrics: FeetMetrics = {
     bottomOffset: bottom + 1 - h / 2,
     footHalfWidth,
-    halfWidth: right >= left ? (right - left + 1) / 2 : 0
+    bounds: right >= left
+      ? { left: left - w / 2, right: right + 1 - w / 2, top: top - h / 2, bottom: bottom + 1 - h / 2 }
+      : { left: 0, right: 0, top: 0, bottom: 0 }
   };
   metricsCache.set(key, metrics);
   return metrics;
@@ -115,11 +125,11 @@ export function visibleFootHalfWidth(textures: Phaser.Textures.TextureManager, k
 }
 
 /**
- * 紋理全部可見部分（不透明像素）的左右寬度的一半（未縮放）
+ * 紋理可見部分（不透明像素）的外框，各邊相對紋理中心（未縮放；原點在中心的 Sprite / Image 適用）
  *
  * @param textures 紋理管理器
  * @param key 紋理 key
  */
-export function visibleHalfWidth(textures: Phaser.Textures.TextureManager, key: string): number {
-  return feetMetrics(textures, key).halfWidth;
+export function visibleBounds(textures: Phaser.Textures.TextureManager, key: string): VisibleBounds {
+  return feetMetrics(textures, key).bounds;
 }

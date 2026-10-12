@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GameConfig } from '../config';
-import { visibleHalfWidth } from '../systems/spriteFeet';
+import { visibleBounds, type VisibleBounds } from '../systems/spriteFeet';
 
 export type BreakableKind = 'crate' | 'barrel';
 
@@ -13,12 +13,40 @@ export const CRATE_TEXTURE = 'breakable-crate';
 export const BARREL_TEXTURE = 'breakable-barrel';
 
 /**
- * 木箱的碰撞 / 命中半徑：WoodenBox 圖片可見寬度的一半乘上 crate.bodyRadiusRatio（換圖自動跟著變）
+ * 木箱的碰撞 / 命中範圍（軸對齊矩形，各邊相對物件位置）：WoodenBox 圖片的可見外框，
+ * 以外框中心依 crate.bodyScale 縮放（換圖自動跟著變）
  *
  * @param textures 紋理管理器
  */
-export function crateBodyRadius(textures: Phaser.Textures.TextureManager): number {
-  return visibleHalfWidth(textures, CRATE_TEXTURE) * GameConfig.breakable.crate.bodyRadiusRatio;
+export function crateBodyBounds(textures: Phaser.Textures.TextureManager): VisibleBounds {
+  const b = visibleBounds(textures, CRATE_TEXTURE);
+  const scale = GameConfig.breakable.crate.bodyScale;
+  const cx = (b.left + b.right) / 2, cy = (b.top + b.bottom) / 2;
+  const halfW = (b.right - b.left) / 2 * scale, halfH = (b.bottom - b.top) / 2 * scale;
+  return { left: cx - halfW, right: cx + halfW, top: cy - halfH, bottom: cy + halfH };
+}
+
+/**
+ * 點 (px, py) 到「物件位於 (x, y)、範圍 bounds」的碰撞矩形的最短距離（在矩形內為 0）
+ *
+ * @param px 點 x
+ * @param py 點 y
+ * @param x 物件位置 x
+ * @param y 物件位置 y
+ * @param bounds 碰撞範圍（各邊相對物件位置）
+ */
+export function distanceToBounds(px: number, py: number, x: number, y: number, bounds: VisibleBounds): number {
+  const dx = Math.max(x + bounds.left - px, 0, px - (x + bounds.right));
+  const dy = Math.max(y + bounds.top - py, 0, py - (y + bounds.bottom));
+  return Math.hypot(dx, dy);
+}
+
+/**
+ * 爆炸桶的碰撞 / 命中範圍：邊長 2 × barrel.radius 的正方形
+ */
+function barrelBodyBounds(): VisibleBounds {
+  const r = GameConfig.breakable.barrel.radius;
+  return { left: -r, right: r, top: -r, bottom: r };
 }
 
 /**
@@ -26,8 +54,8 @@ export function crateBodyRadius(textures: Phaser.Textures.TextureManager): numbe
  * - 只有【玩家攻擊（普攻揮擊 / 衝刺 / 招式 AOE）】能打，敵人不能破壞，靜止、不攻擊玩家。
  * - 耐久以「被命中次數」計算（不看攻擊力）：每次命中扣 1，歸零才碎；同一物件兩次命中至少相隔 hitIntervalMs
  *   （持續型招式不會每幀都算一下）。受擊時閃白並彈一下。
- * - 帶「碰撞」擋角色+怪（不可穿越）——用 GameScene 每幀【手動分離】（Arcade collider 會 creep）。衝刺穿過不擋。
- * - 命中判定 / 分離都用距離數學（不依賴 physics body），是純顯示 sprite。
+ * - 碰撞 / 命中範圍是貼合圖片可見外框的軸對齊矩形（getBody）；角色和怪碰到會推動它（systems/bodySeparation），衝刺穿過不擋。
+ * - 命中判定 / 分離都用幾何數學（不依賴 physics body），是純顯示 sprite。
  */
 export class Breakable extends Phaser.GameObjects.Sprite {
   /** 剩餘耐久（命中次數） */
@@ -39,8 +67,10 @@ export class Breakable extends Phaser.GameObjects.Sprite {
   vy = 0;
   /** 爆炸桶已打破進入 fuse 倒數(等待爆炸)——期間不再被打、地面警示圈跟隨。 */
   fusing = false;
-  /** 碰撞 / 命中半徑（生成時依種類決定） */
-  private bodyRadius: number = GameConfig.breakable.barrel.radius;
+  /** 碰撞 / 命中範圍各邊相對物件位置（生成時依種類決定） */
+  private bodyBounds: VisibleBounds = barrelBodyBounds();
+  /** getBody 回傳的矩形（重複使用，不每次配置） */
+  private readonly bodyRect = new Phaser.Geom.Rectangle();
   /** 下一次可以再被命中的場景時間（受擊間隔） */
   private hittableAt = 0;
   private flashTimer?: Phaser.Time.TimerEvent;
@@ -57,7 +87,7 @@ export class Breakable extends Phaser.GameObjects.Sprite {
     const cfg = GameConfig.breakable;
     this.kind = kind;
     this.hp = kind === 'barrel' ? cfg.barrel.hp : cfg.crate.hp;
-    this.bodyRadius = kind === 'barrel' ? cfg.barrel.radius : crateBodyRadius(this.scene.textures);
+    this.bodyBounds = kind === 'barrel' ? barrelBodyBounds() : crateBodyBounds(this.scene.textures);
     this.dead = false;
     this.fusing = false;
     this.hittableAt = 0;
@@ -88,9 +118,27 @@ export class Breakable extends Phaser.GameObjects.Sprite {
     return 'damaged';
   }
 
-  /** 半徑(命中/碰撞分離判定用) */
-  getBodyRadius(): number {
-    return this.bodyRadius;
+  /**
+   * 目前位置的碰撞 / 命中矩形（世界座標）。回傳的是共用物件，只在當下讀取，不要保存
+   */
+  getBody(): Phaser.Geom.Rectangle {
+    const b = this.bodyBounds;
+    return this.bodyRect.setTo(this.x + b.left, this.y + b.top, b.right - b.left, b.bottom - b.top);
+  }
+
+  /** 碰撞範圍各邊相對物件位置（左、上為負值） */
+  get bodyLocalBounds(): Readonly<VisibleBounds> {
+    return this.bodyBounds;
+  }
+
+  /**
+   * 點 (px, py) 到碰撞矩形的最短距離（在矩形內為 0）
+   *
+   * @param px 點 x
+   * @param py 點 y
+   */
+  distanceTo(px: number, py: number): number {
+    return distanceToBounds(px, py, this.x, this.y, this.bodyBounds);
   }
 
   despawn(): void {

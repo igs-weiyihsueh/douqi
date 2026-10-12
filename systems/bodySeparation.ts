@@ -451,18 +451,43 @@ export function pushEnemiesOutOfNpc(npc: Enemy, enemies: Phaser.Physics.Arcade.G
 // ---------------------------------------------------------------------------
 
 /**
- * 把與 (x, y)、半徑 radius 重疊的物件推出重疊，並沿推出方向加上 pushSpeed 的速度
+ * 把與圓 (x, y, radius) 重疊的物件（碰撞矩形）推出重疊，並沿推出方向加上 pushSpeed 的速度
  */
 function pushBreakablesFrom(x: number, y: number, radius: number, breakables: Phaser.GameObjects.Group, pushSpeed: number): void {
   for (const child of breakables.getChildren()) {
     const bk = child as Breakable;
     if (!bk.active || bk.dead) continue;
-    const minDist = radius + bk.getBodyRadius();
-    const { nx, ny, d } = normalBetween(x, y, bk.x, bk.y); // 推的一方 → 物件
-    if (d >= minDist) continue;
-    bk.setPosition(bk.x + nx * (minDist - d), bk.y + ny * (minDist - d));
-    bk.vx += nx * pushSpeed; bk.vy += ny * pushSpeed; // 速度累加，updateBreakableMotion 會摩擦衰減
+    const push = circlePushOutOfBox(x, y, radius, bk.getBody());
+    if (!push) continue;
+    bk.setPosition(bk.x + push.nx * push.depth, bk.y + push.ny * push.depth);
+    bk.vx += push.nx * pushSpeed; bk.vy += push.ny * pushSpeed; // 速度累加，updateBreakableMotion 會摩擦衰減
   }
+}
+
+/**
+ * 圓與矩形重疊時，矩形要往哪個方向移多少才會分開（沒重疊回傳 null）。
+ * 圓心在矩形外：沿「圓心 → 矩形上最近點」推；圓心在矩形內：往穿透最淺的一側推
+ *
+ * @param x 圓心 x
+ * @param y 圓心 y
+ * @param radius 圓半徑
+ * @param box 矩形
+ */
+function circlePushOutOfBox(x: number, y: number, radius: number, box: Phaser.Geom.Rectangle): { nx: number; ny: number; depth: number } | null {
+  const qx = Phaser.Math.Clamp(x, box.left, box.right);
+  const qy = Phaser.Math.Clamp(y, box.top, box.bottom);
+  const dx = qx - x, dy = qy - y;
+  const d = Math.hypot(dx, dy);
+  if (d >= radius) return null;
+  if (d > 0.001) return { nx: dx / d, ny: dy / d, depth: radius - d };
+  // 圓心在矩形內：四個方向各需移動的距離，取最小
+  const options = [
+    { nx: 1, ny: 0, depth: x + radius - box.left },
+    { nx: -1, ny: 0, depth: box.right - (x - radius) },
+    { nx: 0, ny: 1, depth: y + radius - box.top },
+    { nx: 0, ny: -1, depth: box.bottom - (y - radius) }
+  ];
+  return options.reduce((best, o) => (o.depth < best.depth ? o : best));
 }
 
 /**
@@ -487,7 +512,7 @@ export function pushBreakablesFromCharacter(c: Character, breakables: Phaser.Gam
 }
 
 /**
- * 每幀更新可推動物件：速度位移 + 推到牆停 + 摩擦衰減，再處理物件之間的重疊（各推一半）。
+ * 每幀更新可推動物件：速度位移 + 推到牆停 + 摩擦衰減，再處理物件之間的重疊（碰撞矩形沿重疊較淺的軸各推一半）。
  * 另外回收「已死卻沒有進入引爆流程」的物件，避免它們卡在場上打不到
  *
  * @param breakables 可打破物件池
@@ -503,19 +528,19 @@ export function updateBreakableMotion(breakables: Phaser.GameObjects.Group, aren
   const friction = Math.max(0, 1 - GameConfig.breakable.push.friction * dt);
   for (const bk of children) {
     if (!bk.active || bk.dead || (bk.vx === 0 && bk.vy === 0)) continue;
-    const r = bk.getBodyRadius();
+    const b = bk.bodyLocalBounds;
     let nx = bk.x + bk.vx * dt, ny = bk.y + bk.vy * dt;
-    if (nx < arena.left + r) { nx = arena.left + r; bk.vx = 0; }
-    else if (nx > arena.right - r) { nx = arena.right - r; bk.vx = 0; }
-    if (ny < arena.top + r) { ny = arena.top + r; bk.vy = 0; }
-    else if (ny > arena.bottom - r) { ny = arena.bottom - r; bk.vy = 0; }
+    if (nx < arena.left - b.left) { nx = arena.left - b.left; bk.vx = 0; }
+    else if (nx > arena.right - b.right) { nx = arena.right - b.right; bk.vx = 0; }
+    if (ny < arena.top - b.top) { ny = arena.top - b.top; bk.vy = 0; }
+    else if (ny > arena.bottom - b.bottom) { ny = arena.bottom - b.bottom; bk.vy = 0; }
     bk.setPosition(nx, ny);
     bk.vx *= friction; bk.vy *= friction;
     if (Math.abs(bk.vx) < 3 && Math.abs(bk.vy) < 3) { bk.vx = 0; bk.vy = 0; }
   }
   const place = (bk: Breakable, x: number, y: number): void => {
-    const r = bk.getBodyRadius();
-    bk.setPosition(Phaser.Math.Clamp(x, arena.left + r, arena.right - r), Phaser.Math.Clamp(y, arena.top + r, arena.bottom - r));
+    const b = bk.bodyLocalBounds;
+    bk.setPosition(Phaser.Math.Clamp(x, arena.left - b.left, arena.right - b.right), Phaser.Math.Clamp(y, arena.top - b.top, arena.bottom - b.bottom));
   };
   for (let i = 0; i < children.length; i++) {
     const a = children[i];
@@ -523,13 +548,20 @@ export function updateBreakableMotion(breakables: Phaser.GameObjects.Group, aren
     for (let j = i + 1; j < children.length; j++) {
       const b = children[j];
       if (!b.active || b.dead) continue;
-      const minDist = a.getBodyRadius() + b.getBodyRadius();
-      const dx = b.x - a.x, dy = b.y - a.y;
-      const d = Math.hypot(dx, dy);
-      if (d >= minDist || d <= 0.001) continue;
-      const push = (minDist - d) / 2;
-      place(a, a.x - (dx / d) * push, a.y - (dy / d) * push);
-      place(b, b.x + (dx / d) * push, b.y + (dy / d) * push);
+      // 碰撞矩形重疊：沿重疊較淺的軸各推開一半
+      const ra = a.getBody(), rb = b.getBody();
+      const overlapX = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
+      const overlapY = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
+      if (overlapX <= 0 || overlapY <= 0) continue;
+      if (overlapX < overlapY) {
+        const shift = (rb.centerX >= ra.centerX ? 1 : -1) * overlapX / 2;
+        place(a, a.x - shift, a.y);
+        place(b, b.x + shift, b.y);
+      } else {
+        const shift = (rb.centerY >= ra.centerY ? 1 : -1) * overlapY / 2;
+        place(a, a.x, a.y - shift);
+        place(b, b.x, b.y + shift);
+      }
     }
   }
 }

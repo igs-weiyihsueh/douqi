@@ -1,10 +1,11 @@
 import Phaser from 'phaser';
 import { GameConfig } from '../config';
-import { crateBodyRadius, type Breakable } from '../objects/Breakable';
+import { crateBodyBounds, distanceToBounds, type Breakable } from '../objects/Breakable';
 import type { Character } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
 import { isFixedEnemy } from '../systems/enemyKinds';
-import { pointInOrientedRect } from '../systems/geometry';
+import { orientedRectIntersectsBox, sectorIntersectsBox } from '../systems/geometry';
+import type { VisibleBounds } from '../systems/spriteFeet';
 import type { Side } from './SlotWorldController';
 
 /**
@@ -45,6 +46,15 @@ const STATIC_TRIES = 30;
 const IN_CLUSTER_GAP = 4;
 const PLAYER_GAP = 8;
 const BARREL_CRATE_GAP = 6;
+/**
+ * 兩個同樣碰撞範圍的木箱分別放在 a、b 時是否重疊（含 gap 的縫）
+ *
+ * @param bounds 木箱碰撞範圍（各邊相對物件位置）
+ */
+function cratesOverlap(ax: number, ay: number, bx: number, by: number, bounds: VisibleBounds, gap: number): boolean {
+  return Math.abs(ax - bx) < bounds.right - bounds.left + gap && Math.abs(ay - by) < bounds.bottom - bounds.top + gap;
+}
+
 /** 區域靜態布置時離 P1 的最小距離 */
 const STATIC_AVOID_PLAYER = 90;
 /** 爆炸桶警示圈：深度、閃爍週期、顏色 */
@@ -106,8 +116,7 @@ export class BreakableController {
       clusterCenters.push({ x: hx, y: hy });
       // 堆內木箱彼此間距至少一個直徑，不互疊
       const placed: Array<{ x: number; y: number }> = [];
-      const crateR = crateBodyRadius(this.scene.textures);
-      const minGap = crateR * 2 + IN_CLUSTER_GAP;
+      const crateBounds = crateBodyBounds(this.scene.textures);
       for (let n = 0; n < cfg.perCluster; n++) {
         if (pool.countActive(true) >= cfg.maxAlive) break;
         let bx = 0, by = 0, placedOk = false;
@@ -116,8 +125,8 @@ export class BreakableController {
           const rad = Math.random() * cfg.clusterSpread;
           const x = Phaser.Math.Clamp(hx + Math.cos(ang) * rad, a.left + inset, a.right - inset);
           const y = Phaser.Math.Clamp(hy + Math.sin(ang) * rad, a.top + inset, a.bottom - inset);
-          if (Phaser.Math.Distance.Between(x, y, p.x, p.y) < GameConfig.player.radius + crateR + PLAYER_GAP) continue;
-          if (placed.some((q) => Phaser.Math.Distance.Between(x, y, q.x, q.y) < minGap)) continue;
+          if (distanceToBounds(p.x, p.y, x, y, crateBounds) < GameConfig.player.radius + PLAYER_GAP) continue;
+          if (placed.some((q) => cratesOverlap(x, y, q.x, q.y, crateBounds, IN_CLUSTER_GAP))) continue;
           bx = x; by = y; placedOk = true; break;
         }
         if (!placedOk) continue;
@@ -142,8 +151,10 @@ export class BreakableController {
         for (const ch of pool.getChildren()) {
           const o = ch as Breakable;
           if (!o.active) continue;
-          const need = o.explosive ? bcfg.minBarrelSpacing : (bcfg.radius + o.getBodyRadius() + BARREL_CRATE_GAP);
-          if (Phaser.Math.Distance.Between(x, y, o.x, o.y) < need) { clash = true; break; }
+          const clashes = o.explosive
+            ? Phaser.Math.Distance.Between(x, y, o.x, o.y) < bcfg.minBarrelSpacing
+            : o.distanceTo(x, y) < bcfg.radius + BARREL_CRATE_GAP;
+          if (clashes) { clash = true; break; }
         }
         if (clash) continue;
         bx = x; by = y; ok = true; break;
@@ -157,7 +168,7 @@ export class BreakableController {
 
   /**
    * 關卡制：在目前移動區隨機靜態布置木箱與爆炸桶（不重生）；避開中心、邊緣與玩家，彼此不重疊
-   * （間距至少 minSpacingR，且不小於兩個木箱的碰撞直徑）
+   * （中心間距至少 minSpacingR，且木箱的碰撞矩形不重疊）
    *
    * @param side 物件布置的基調（右側爆炸桶上限多 barrelBiasExtra）
    */
@@ -168,7 +179,8 @@ export class BreakableController {
     const pool = this.host.group();
     const minWH = Math.min(a.width, a.height);
     const placed: Array<{ x: number; y: number }> = [];
-    const spacing = Math.max(cfg.minSpacingR * minWH, crateBodyRadius(this.scene.textures) * 2 + IN_CLUSTER_GAP);
+    const spacing = cfg.minSpacingR * minWH;
+    const crateBounds = crateBodyBounds(this.scene.textures);
     const centerAvoid = cfg.centerAvoidR * minWH;
     const pick = (): { x: number; y: number } | null => {
       for (let attempt = 0; attempt < STATIC_TRIES; attempt++) {
@@ -176,7 +188,7 @@ export class BreakableController {
         const y = a.top + Phaser.Math.FloatBetween(cfg.marginY, 1 - cfg.marginY) * a.height;
         if (Phaser.Math.Distance.Between(x, y, a.centerX, a.centerY) < centerAvoid) continue;
         if (Phaser.Math.Distance.Between(x, y, p.x, p.y) < STATIC_AVOID_PLAYER) continue;
-        if (placed.some((q) => Phaser.Math.Distance.Between(x, y, q.x, q.y) < spacing)) continue;
+        if (placed.some((q) => Phaser.Math.Distance.Between(x, y, q.x, q.y) < spacing || cratesOverlap(x, y, q.x, q.y, crateBounds, IN_CLUSTER_GAP))) continue;
         return { x, y };
       }
       return null;
@@ -210,12 +222,12 @@ export class BreakableController {
    * @param actor 施放的角色
    * @param x 圓心 x
    * @param y 圓心 y
-   * @param radius 半徑（到物件外緣）
+   * @param radius 半徑（到物件的碰撞矩形）
    * @param time 目前場景時間
    * @returns 命中的物件數
    */
   hitInCircle(actor: Character, x: number, y: number, radius: number, time: number): number {
-    return this.hitWhere(actor, (bk) => Phaser.Math.Distance.Between(x, y, bk.x, bk.y) <= radius + bk.getBodyRadius(), time);
+    return this.hitWhere(actor, (bk) => bk.distanceTo(x, y) <= radius, time);
   }
 
   /**
@@ -232,16 +244,16 @@ export class BreakableController {
    * @returns 命中的物件數
    */
   hitInRect(actor: Character, ox: number, oy: number, dir: number, back: number, length: number, width: number, time: number): number {
-    return this.hitWhere(actor, (bk) => pointInOrientedRect(bk.x, bk.y, ox, oy, dir, back, length, width), time);
+    return this.hitWhere(actor, (bk) => orientedRectIntersectsBox(ox, oy, dir, back, length, width, bk.getBody()), time);
   }
 
   /**
    * 普攻 / 衝刺打物件：範圍內每個扣 1 耐久
    *
    * @param c 攻擊的角色
-   * @param radius 範圍半徑（到物件外緣）
+   * @param radius 範圍半徑（到物件的碰撞矩形）
    * @param half 扇形半角（useArc 時用）
-   * @param useArc true = 普攻扇形（需在 aimAngle ± half 內）；false = 衝刺圓形
+   * @param useArc true = 普攻扇形（aimAngle ± half 與碰撞矩形重疊）；false = 衝刺圓形
    * @param time 目前場景時間
    * @param alreadyHit 這一招已命中過的物件（跳過；命中的會加進去）——衝刺每幀判定，一次衝刺每個物件只算一下
    * @returns 命中的物件數
@@ -249,10 +261,8 @@ export class BreakableController {
   hitInRange(c: Character, radius: number, half: number, useArc: boolean, time: number, alreadyHit?: Set<Breakable>): number {
     return this.hitWhere(c, (bk) => {
       if (alreadyHit?.has(bk)) return false;
-      if (Phaser.Math.Distance.Between(c.x, c.y, bk.x, bk.y) > radius + bk.getBodyRadius()) return false;
-      if (!useArc) return true;
-      const toBk = Phaser.Math.Angle.Between(c.x, c.y, bk.x, bk.y);
-      return Math.abs(Phaser.Math.Angle.Wrap(toBk - c.aimAngle)) <= half;
+      if (!useArc) return bk.distanceTo(c.x, c.y) <= radius;
+      return sectorIntersectsBox(c.x, c.y, radius, c.aimAngle, half, bk.getBody());
     }, time, alreadyHit);
   }
 
@@ -385,7 +395,7 @@ export class BreakableController {
       for (const child of this.host.group().getChildren()) {
         const other = child as Breakable;
         if (!other.active || other.dead || !other.explosive) continue;
-        if (Phaser.Math.Distance.Between(ex, ey, other.x, other.y) <= bcfg.explodeRadius + other.getBodyRadius()) {
+        if (other.distanceTo(ex, ey) <= bcfg.explodeRadius) {
           this.scene.time.delayedCall(CHAIN_DELAY_MS, () => {
             if (other.active && !other.dead) this.explodeBarrel(other, this.scene.time.now, depth + 1, false);
           });
