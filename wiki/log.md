@@ -1418,3 +1418,30 @@ CREDIT投幣系統現已達到完美狀態：
 **下次提醒**：功能已完成，可討論多人攝影機系統整合方案
 
 ---
+
+## 2026-10-12 — commit 08125a4 BOSS 變身機制調整
+
+**變更摘要**：亂入 BOSS 改為開打 3 秒後登場；變身 BOSS 補怪分兩批（12~14 + 第 5 秒 10~12，不乘人數）；最後一波打完時即時補怪要清完才結算關卡；關卡打完後不留 BOSS 屍體、換區時結束變身。
+
+**影響檔案（commit 08125a4，+98/-39，4 檔）**：
+- `config.ts` — `stageMonsters.bossFormSurge` 改批次結構；`chests[].bossIntrude` 由 `atProgress:0.5` → `delayMs:3000`
+- `controllers/BossController.ts` — 新增 `onStageComplete()`、`isStageActive()`（BossHost）、`onZoneLeave()` 加 `endForm()`、`spawnCorpse()` 加 `isStageActive()` 條件、`endForm()` 收回變身無敵
+- `controllers/SpawnController.ts` — `countQuotaExempt()` private → public
+- `scenes/GameScene.ts` — `bossIntrudeAtProgress → bossIntrudeAt`（場景時間）；新增 `pendingSurgeClear`、`finishStage()`、`finishStageWhenSurgeCleared()`、`maybeBossIntrude(time)` 改逐幀；`surgeOnBossForm()` 改分批；`canSurge()` 納入 intermission 與 pendingSurgeClear
+
+**四大機制對照**：
+1. **亂入時機**：`stageKillProgress() ≥ 0.5` → `time.now ≥ bossIntrudeAt`（開打 +3000ms）。逐幀 `maybeBossIntrude(time)`，波間休息/全員陣亡時延後。
+2. **兩批補怪**：單批 `[12,16]` → `batches:[{0,[12,14]},{5000,[10,12]}]`，不乘人數，批次失效保護（變身結束/關卡打完不補）。
+3. **結算條件**：達波數目標時 `countQuotaExempt()>0` → `pendingSurgeClear`，清完才 `finishStage()`；與寶箱怪 `pendingSubZoneComplete` 二段延後。
+4. **保險機制**：`onStageComplete()` 清屍體、`onZoneLeave()` `endForm()` 結束變身並收回無敵、`spawnCorpse()` 需 `isStageActive()`。
+
+**更新頁面**：
+- `systems/monster-profile.md` — 改寫二段變身/變身 BOSS 補怪/亂入時機，新增關卡結算條件節；上線記錄加 08125a4
+- `systems/boss-system.md` — 新增「變身 BOSS 生命週期保險機制」表格節；參考檔案加 08125a4
+- `systems/stage-system.md` — `onSubZoneComplete` 後新增「關卡結算延後門檻」節（`finishStage`/兩道逐幀門檻）
+
+**查重結果**：BOSS 亂入舊述分散於 monster-profile（stage 層 `bossIntrude`）與 boss-system（泛用 `scheduleRandomIntrusion` 15-25s 亂入，為不同機制，未混用）。本次只改 stage 層 `bossIntrude` 相關，泛用亂入段落未動。無新建頁面。
+
+**下次提醒**：boss-system.md 的「亂入系統機制」段落描述的是 `scheduleRandomIntrusion`（15-25 秒遞迴亂入），與 stage 層 `bossIntrude`（寶箱觸發、開打 3 秒登場）是**兩套不同亂入**——勿合併。若日後查證兩者實際關係，再決定是否交叉連結。
+
+---

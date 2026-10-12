@@ -262,6 +262,35 @@ onSubZoneComplete(): void {
 }
 ```
 
+### 關卡結算延後門檻 (08125a4)
+達子區目標波數後不再直接結算，改經 `finishStage()`（`scenes/GameScene.ts:1043-1054`），並多兩道延後門檻：
+
+```typescript
+// 達目標波數時（GameScene.ts:1016-1022）
+if (this.spawner.countQuotaExempt() > 0) {
+  // 即時補怪（二段變身 / 變身 BOSS）還在場上 → 先不結算
+  this.pendingSurgeClear = true;
+  this.waveState = 'clearing';
+} else {
+  this.finishStage();
+}
+
+// finishStage()：結算後若場上還有寶箱怪，再延後場景切換
+private finishStage(): void {
+  this.completeStage();
+  if (this.treasures.isOnField) {
+    this.pendingSubZoneComplete = true;   // 等寶箱怪死/離場
+    this.waveState = 'clearing';
+  } else {
+    this.onSubZoneComplete();
+  }
+}
+```
+
+兩道延後門檻（每幀檢查）：
+1. **`pendingSurgeClear`** → `finishStageWhenSurgeCleared()`：`countQuotaExempt()` 歸零才 `finishStage()`
+2. **`pendingSubZoneComplete`** → `finishPendingSubZoneIfTreasureGone()`：寶箱怪清掉才 `onSubZoneComplete()`
+
 ### 低階轉場：左右平移
 ```typescript
 // GameScene.ts:2330-2370 - 開放通道
