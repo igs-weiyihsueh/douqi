@@ -410,7 +410,7 @@ export const GameConfig = {
     STREAK_TIMEOUT_MAX_MS: 10000,
     STREAK_TIMEOUT_MIN_MS: 2000,
     STREAK_TIMEOUT_MIN_AT_HITS: 100,
-    /** 警告開始於中斷時間的此比例：距上次命中超過「中斷時間 × 比例」進入警告，UI 開始閃爍（10 秒時 7.5 秒起、2 秒時 1.5 秒起） */
+    /** 警告開始於中斷時間的此比例：距上次命中超過「中斷時間 × 比例」進入警告（ComboState.isWarning；目前 HIT 顯示不區分警告）（10 秒時 7.5 秒起、2 秒時 1.5 秒起） */
     WARNING_START_RATIO: 0.75,
     /**
      * 獎勵里程碑：達到這些連擊數時記下獎勵，連擊中斷時只發「最高達成階」；
@@ -419,8 +419,6 @@ export const GameConfig = {
     MILESTONES: [5, 10, 20, 50, 100] as const,
     /** 對應票券獎勵：各里程碑對應的票券數量 */
     REWARDS: [1, 3, 10, 50, 100] as const,
-    /** UI閃爍週期（毫秒）：警告狀態下的閃爍頻率 */
-    WARNING_BLINK_MS: 300,
   },
 
   /**

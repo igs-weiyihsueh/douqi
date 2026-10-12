@@ -4,6 +4,7 @@ import { GameConfig } from '../config';
 /** 下方面板圖（1P～4P.png）讀不到尺寸時的預設排版尺寸 */
 const BOTTOM_PANEL_FALLBACK_SIZE = { WIDTH: 267, HEIGHT: 119 } as const;
 import type { StageNodeKind } from '../systems/stageQueue';
+import { HitCounter } from '../objects/HitCounter';
 
 /** 卷軸 HUD 節點狀態類型 */
 type StageNodeState = 'current' | 'pending' | 'done';
@@ -168,9 +169,11 @@ export class UIScene extends Phaser.Scene {
   // 多角色底部面板替換系統
   private bottomPanelOverlays: Array<Phaser.GameObjects.Image | null> = [null, null, null, null]; // [1P, 2P, 3P, 4P]
 
-  /** 下方面板 COMBO 文字（HIT xN），每個角色一個，索引對應 rows */
-  private panelComboTexts: Phaser.GameObjects.Text[] = [];
-  /** 下方面板 COMBO 顯示設定：文字右下角對齊面板右上角（加偏移），原版色塊面板與 F4 面板圖各有一組偏移 */
+  /** 下方面板 HIT 連擊顯示（底圖 + 數字圖 + HIT 字樣），每個角色一個，索引對應 rows */
+  private panelHitCounters: HitCounter[] = [];
+  /** 下方面板「投幣加入遊戲」提示（CREDIT 未進場時取代 HIT 顯示），每個角色一個，索引對應 rows */
+  private panelJoinTexts: Phaser.GameObjects.Text[] = [];
+  /** 下方面板 COMBO 顯示設定：HIT 顯示與投幣提示的右下角對齊面板右上角（加偏移），原版色塊面板與 F4 面板圖各有一組偏移 */
   private readonly PANEL_COMBO_CONFIG = {
     FONT_SIZE: '36px',
     STROKE_WIDTH: 4,
@@ -182,11 +185,6 @@ export class UIScene extends Phaser.Scene {
     OVERLAY_OFFSET_Y: 30,
     /** 高於 F4 面板圖（depth 1000+i） */
     DEPTH: 1010,
-    /** 警告狀態橙紅交替閃爍週期 */
-    WARNING_BLINK_MS: GameConfig.comboReward.WARNING_BLINK_MS,
-    /** 報獎特效（彩票噴發/閃光/獲得文字）相對 COMBO 文字錨點（面板右上角）的偏移：往左移到文字中央附近、往上一點 */
-    REWARD_FX_OFFSET_X: -60,
-    REWARD_FX_OFFSET_Y: -20,
     /** 「獲得N票券！」文字樣式與動畫 */
     REWARD_TEXT_FONT_SIZE: '42px',
     REWARD_TEXT_STROKE_WIDTH: 4,
@@ -291,11 +289,7 @@ export class UIScene extends Phaser.Scene {
       WHITE: '#ffffff',
       BLACK: '#000000',
       TEXT_FLASH: '#ff3b30',
-      HINT_YELLOW: '#ffe23a',
-      // COMBO文字顏色
-      COMBO_TEXT_NORMAL: '#00ff00',
-      COMBO_TEXT_WARNING: '#ff6600',
-      COMBO_TEXT_CRITICAL: '#ff0000'
+      HINT_YELLOW: '#ffe23a'
     }
   } as const;
   /** 波次顯示（上方中央） */
@@ -545,7 +539,7 @@ export class UIScene extends Phaser.Scene {
     }
 
     // 下方面板 COMBO 文字（需在 rows 與 F4 面板圖建立後，才能對齊兩種面板）
-    this.createPanelComboTexts();
+    this.createPanelCombos();
 
     this.aimGraphics = this.add.graphics().setDepth(-1); // 衝刺距離指示線（腳下圓盤由 GameScene 畫）
 
@@ -1520,18 +1514,17 @@ export class UIScene extends Phaser.Scene {
   /**
    * 在下方面板播放 COMBO 報獎特效：彩票噴發 + 閃光 + 「獲得N票券！」文字
    *
-   * 位置以該角色的面板 COMBO 文字錨點（面板右上角，已隨 F4 面板模式定位）為基準
+   * 位置在該角色 HIT 顯示的底圖中心（已隨 F4 面板模式定位）
    *
-   * @param index 角色索引（對應 panelComboTexts）
+   * @param index 角色索引（對應 panelHitCounters）
    * @param tickets 獲得的票券數量
    * @param milestone 達成的里程碑（連擊數，決定彩票數量與噴發速度）
    */
   playComboRewardFx(index: number, tickets: number, milestone: number): void {
-    const anchor = this.panelComboTexts[index];
-    if (!anchor) return;
-    const cfg = this.PANEL_COMBO_CONFIG;
-    const x = anchor.x + cfg.REWARD_FX_OFFSET_X;
-    const y = anchor.y + cfg.REWARD_FX_OFFSET_Y;
+    const counter = this.panelHitCounters[index];
+    if (!counter) return;
+    const x = counter.centerX;
+    const y = counter.centerY;
 
     const config = GameConfig.ticketEffect;
     const ticketCount = Math.max(
@@ -1766,78 +1759,72 @@ export class UIScene extends Phaser.Scene {
   }
 
   /**
-   * 建立下方面板的 COMBO 文字（每個角色一個，預設隱藏），先對齊原版色塊面板；
-   * F4 切換時由 setBottomPanelOverlay → positionPanelComboTexts 重新定位
+   * 建立下方面板的 HIT 連擊顯示與投幣加入提示（每個角色各一，預設隱藏），先對齊原版色塊面板；
+   * F4 切換時由 setBottomPanelOverlay → positionPanelCombos 重新定位
    */
-  private createPanelComboTexts(): void {
+  private createPanelCombos(): void {
     const cfg = this.PANEL_COMBO_CONFIG;
-    const colors = this.OVERHEAD_UI_CONFIG.COLORS;
-    this.panelComboTexts = this.rows.map(() =>
-      this.add.text(0, 0, '', {
+    this.panelHitCounters = this.rows.map(() =>
+      new HitCounter(this).setDepth(cfg.DEPTH).setScrollFactor(0)
+    );
+    this.panelJoinTexts = this.rows.map(() =>
+      this.add.text(0, 0, GameConfig.credit.joinText, {
         fontFamily: 'monospace',
         fontSize: cfg.FONT_SIZE,
-        color: colors.COMBO_TEXT_NORMAL,
-        stroke: colors.BLACK,
+        color: GameConfig.credit.prompt.color,
+        stroke: this.OVERHEAD_UI_CONFIG.COLORS.BLACK,
         strokeThickness: cfg.STROKE_WIDTH,
         fontStyle: 'bold'
       }).setOrigin(1, 1).setDepth(cfg.DEPTH).setScrollFactor(0).setVisible(false)
     );
-    this.positionPanelComboTexts(false);
+    this.positionPanelCombos(false);
   }
 
   /**
-   * 依面板模式把 COMBO 文字移到對應面板的右上角
+   * 依面板模式把 HIT 顯示與投幣提示（右下角）移到對應面板的右上角
    *
    * @param useOverlay - true = F4 面板圖；false = 原版色塊面板（該角色沒有面板圖時也退回原版位置）
    */
-  private positionPanelComboTexts(useOverlay: boolean): void {
+  private positionPanelCombos(useOverlay: boolean): void {
     const cfg = this.PANEL_COMBO_CONFIG;
-    this.panelComboTexts.forEach((text, i) => {
+    this.rows.forEach((row, i) => {
+      let x: number;
+      let y: number;
       const overlay = this.bottomPanelOverlays[i];
       if (useOverlay && overlay) {
         // 面板圖 origin 為中心 → 右上角 = 中心 + (寬/2, -高/2)
-        text.setPosition(
-          overlay.x + overlay.displayWidth / 2 + cfg.OVERLAY_OFFSET_X,
-          overlay.y - overlay.displayHeight / 2 + cfg.OVERLAY_OFFSET_Y
-        );
+        x = overlay.x + overlay.displayWidth / 2 + cfg.OVERLAY_OFFSET_X;
+        y = overlay.y - overlay.displayHeight / 2 + cfg.OVERLAY_OFFSET_Y;
+      } else if (row.panelBg) {
+        // 原版色塊面板 origin 為左上 → 右上角 = (x + 寬, y)
+        x = row.panelBg.x + row.panelBg.width + cfg.CLASSIC_OFFSET_X;
+        y = row.panelBg.y + cfg.CLASSIC_OFFSET_Y;
+      } else {
         return;
       }
-      // 原版色塊面板 origin 為左上 → 右上角 = (x + 寬, y)
-      const panelBg = this.rows[i]?.panelBg;
-      if (panelBg) text.setPosition(panelBg.x + panelBg.width + cfg.CLASSIC_OFFSET_X, panelBg.y + cfg.CLASSIC_OFFSET_Y);
+      this.panelHitCounters[i]?.setPosition(x, y);
+      this.panelJoinTexts[i]?.setPosition(x, y);
     });
   }
 
   /**
-   * 更新下方面板的 COMBO 顯示：HIT xN；警告狀態橙紅交替閃爍；
-   * 連擊為 0、角色未加入或陣亡時隱藏。CREDIT 未進場時改在同一位置閃動顯示「投幣加入遊戲」
+   * 更新下方面板的 COMBO 顯示：HIT 連擊圖（連擊數改變時彈跳），連擊為 0、角色未加入或陣亡時隱藏；
+   * CREDIT 未進場時改在同一位置閃動顯示「投幣加入遊戲」
    *
-   * @param index 角色索引（對應 rows / panelComboTexts）
+   * @param index 角色索引（對應 rows / panelHitCounters / panelJoinTexts）
    * @param character 角色數據（未加入時為 undefined）
    */
   private updatePanelCombo(index: number, character: CharStat | undefined): void {
-    const text = this.panelComboTexts[index];
-    if (!text) return;
-    if (character?.creditState === 'absent') {
-      const credit = GameConfig.credit;
-      const blinkOn = this.time.now % credit.prompt.blinkMs < credit.prompt.blinkMs / 2;
-      this.setTextColor(text.setText(credit.joinText), credit.prompt.color).setAlpha(blinkOn ? 1 : 0.45).setVisible(true);
-      return;
+    const counter = this.panelHitCounters[index];
+    const joinText = this.panelJoinTexts[index];
+    if (!counter || !joinText) return;
+    const absent = character?.creditState === 'absent';
+    joinText.setVisible(absent);
+    if (absent) {
+      const blinkMs = GameConfig.credit.prompt.blinkMs;
+      joinText.setAlpha(this.time.now % blinkMs < blinkMs / 2 ? 1 : 0.45);
     }
-    text.setAlpha(1);
-    const combo = character?.alive ? character.combo : undefined;
-    if (!combo || combo.currentStreak === 0) {
-      text.setVisible(false);
-      return;
-    }
-    const cfg = this.PANEL_COMBO_CONFIG;
-    const colors = this.OVERHEAD_UI_CONFIG.COLORS;
-    let color: string = colors.COMBO_TEXT_NORMAL;
-    if (combo.isWarning) {
-      const blinkOn = this.time.now % cfg.WARNING_BLINK_MS < cfg.WARNING_BLINK_MS / 2;
-      color = blinkOn ? colors.COMBO_TEXT_CRITICAL : colors.COMBO_TEXT_WARNING;
-    }
-    this.setTextColor(text.setText(`HIT x${combo.currentStreak}`), color).setVisible(true);
+    counter.setCount(!absent && character?.alive ? character.combo.currentStreak : 0);
   }
 
   /**
@@ -1848,7 +1835,7 @@ export class UIScene extends Phaser.Scene {
    * @param useOverlay - true顯示所有覆蓋並隱藏原始面板，false恢復所有原始面板
    */
   setBottomPanelOverlay(useOverlay: boolean): void {
-    this.positionPanelComboTexts(useOverlay);
+    this.positionPanelCombos(useOverlay);
     const playerLabels = ['1P', '2P', '3P', '4P'];
     const count = GameConfig.characters.count;
     

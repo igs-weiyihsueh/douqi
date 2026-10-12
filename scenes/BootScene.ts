@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GameConfig } from '../config';
+import { HIT_COUNTER_TEXTURES } from '../objects/HitCounter';
 
 /**
  * BootScene：程序化產生占位像素貼圖（不依賴外部素材檔）。
@@ -105,6 +106,11 @@ export class BootScene extends Phaser.Scene {
     this.load.image('bottom-panel-2P', 'assets/2P.png');  // P2底部面板UI
     this.load.image('bottom-panel-3P', 'assets/3P.png');  // P3底部面板UI
     this.load.image('bottom-panel-4P', 'assets/4P.png');  // P4底部面板UI
+
+    // 下方面板 HIT 連擊顯示：底圖、HIT 字樣、數字 0～9
+    this.load.image(HIT_COUNTER_TEXTURES.BG, 'assets/MG_HIT_BG.png');
+    this.load.image(HIT_COUNTER_TEXTURES.LABEL, 'assets/MG_HiT.png');
+    HIT_COUNTER_TEXTURES.DIGITS.forEach((key, d) => this.load.image(key, `assets/MG_HiT_num_${d}.png`));
     
     console.log('🔍 嘗試載入路徑:', scenePaths[0]);
     console.log('🔍 嘗試載入Goku皮膚: assets/Goku_1.png');
