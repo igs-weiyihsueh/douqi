@@ -585,7 +585,7 @@ export class SlotWorldController {
       this.arenaRect = this.zoneA;
       this.setPhysicsBounds(this.zoneA);
       this.drawAreaScenes();
-      this.placeCharactersAtEntry();
+      this.placeCharactersAtEntry(this.zoneA);
       this.enableFollow(this.slotA);
       this.levelEntering = true;
       this.progressPhase = 'playing';
@@ -613,14 +613,34 @@ export class SlotWorldController {
   private resetToCenterZone(): void {
     this.arenaRect = this.zoneA;
     this.setPhysicsBounds(this.zoneA);
-    this.placeCharactersAtEntry();
+    this.placeCharactersAtEntry(this.zoneA);
     this.enableFollow(this.slotA);
   }
 
-  /** 全隊放到中央移動區下緣入口（P1 在中央、BOT 左右散開），面向場內，並清掉轉場前的移動狀態 */
-  private placeCharactersAtEntry(): void {
-    const cx = this.zoneA.centerX;
-    const entryY = this.zoneA.bottom - ENTRY_BOTTOM_OFFSET;
+  /**
+   * 寶藏密室：移動區換成 rect（中央格內較小的範圍），鏡頭停止跟隨、固定在 rect 中心（整個密室一次看完），
+   * 全隊移到 rect 下緣入口。離開時由下一次換區（resetToCenterZone 等）還原
+   *
+   * @param rect 密室的移動區
+   */
+  enterRoomArena(rect: Phaser.Geom.Rectangle): void {
+    this.arenaRect = rect;
+    this.setPhysicsBounds(rect);
+    const cam = this.scene.cameras.main;
+    cam.stopFollow();
+    cam.setBounds(this.slotA.x, this.slotA.y, this.slotA.width, this.slotA.height);
+    cam.centerOn(rect.centerX, rect.centerY);
+    this.placeCharactersAtEntry(rect);
+  }
+
+  /**
+   * 全隊放到移動區下緣入口（P1 在中央、BOT 左右散開），面向場內，並清掉轉場前的移動狀態
+   *
+   * @param zone 要放進去的移動區
+   */
+  private placeCharactersAtEntry(zone: Phaser.Geom.Rectangle): void {
+    const cx = zone.centerX;
+    const entryY = zone.bottom - ENTRY_BOTTOM_OFFSET;
     const player = this.host.player();
     for (const c of this.host.characters()) {
       if (!c.alive) continue;

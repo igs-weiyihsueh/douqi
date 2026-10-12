@@ -1064,19 +1064,28 @@ export const GameConfig = {
     },
     /**
      * 獎勵關（寶藏密室）：限時 durationMs，剩 finalCountdownSec 秒時畫面中央大倒數；倒數 HUD 在畫面上方 hudY。
-     * 場地覆蓋金色色調（tintColor / tintAlpha），散布 decorCount 組金幣堆 / 寶石 / 寶箱（距邊 decorMargin、
-     * 彼此間隔 decorSpacing、避開下緣入口半徑 entryClearRadius）。
-     * 寶箱怪：進場 firstSpawnDelayMs 後開始，每 spawnIntervalMs 從裝飾處跳出一隻（噴 spawnCoinBurst 枚金幣），
+     * 活動範圍縮成中央格中央 roomSize × roomSize 的正方形，鏡頭固定在正方形中心（整個密室一次看完）；
+     * 正方形內鋪乾淨地板（floorColor / floorAlpha），外框金邊（borderWidth + 外圍光暈 borderGlowWidth / borderGlowAlpha），
+     * 正方形外覆蓋金色色調（tintColor / tintAlpha）並在畫面內散布 decorCount 組金幣堆 / 寶石 / 寶箱 / 金條
+     * （離畫面邊 decorViewInset、離金邊 decorRoomGap、彼此間隔 decorSpacing）。
+     * 寶箱怪：進場 firstSpawnDelayMs 後開始，每 spawnIntervalMs 從外圍隨機一堆財寶跳出（噴 spawnCoinBurst 枚金幣），
+     * 沿拋物線（費時 jumpMs、拱高 jumpHeight，地上影子由小變大）跳進正方形內（離金邊 landMargin），空中不能被打，落地壓扁彈回；
      * 場上最多 maxAlive 隻；打 hitsToKill 下死，每次命中給命中者 ticketsPerHit 張彩票、擊殺再給 ticketsOnKill 張；
-     * 時間到全部離場
+     * 時間到全部跳回外圍的財寶堆（jumpOutMs）後消失
      */
     treasureRoom: {
       durationMs: 60000, finalCountdownSec: 5, hudY: 104, hudLabel: '💰 寶藏密室',
       firstSpawnDelayMs: 1500, spawnIntervalMs: 4000, maxAlive: 3, spawnCoinBurst: 16,
       hitsToKill: 10, ticketsPerHit: 1, ticketsOnKill: 30,
       enterBanner: '寶藏密室！限時 60 秒', endBanner: '時間到！',
+      roomSize: 760,
+      floorColor: 0xc8a060, floorAlpha: 0.35, floorDepth: 0.6,
+      borderColor: 0xffd700, borderWidth: 6, borderGlowWidth: 20, borderGlowAlpha: 0.25, borderDepth: 0.7,
       tintColor: 0xffc84a, tintAlpha: 0.18, tintDepth: 0.6, decorDepth: 0.8,
-      decorCount: 10, decorMargin: 80, decorSpacing: 160, entryClearRadius: 260
+      decorCount: 36, decorViewInset: 40, decorRoomGap: 50, decorSpacing: 95,
+      jumpMs: 700, jumpHeight: 180, jumpOutMs: 600, landMargin: 70,
+      shadowColor: 0x000000, shadowAlpha: 0.3, shadowWidth: 44, shadowHeight: 14, shadowStartScale: 0.4,
+      squashX: 1.2, squashY: 0.8, squashMs: 180
     },
     /**
      * 出口標記：實心發光圓（核心半徑 radius、外圍光暈 glowRadius 分 glowLayers 層，總透明度 glowAlpha），

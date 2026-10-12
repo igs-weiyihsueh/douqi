@@ -37,6 +37,9 @@ const TINT_PULSE_PERIOD = 140;
 const GLOW_PULSE_PERIOD = 220;
 /** 金色粒子環繞半徑 */
 const SPARK_ORBIT_RADIUS = 30;
+/** 獎勵關寶箱怪落地的鏡頭震動 */
+const LAND_SHAKE_MS = 90;
+const LAND_SHAKE_INTENSITY = 0.004;
 /** 打倒時的擴散圈與震動 */
 const DEATH_RING_RADIUS = 100;
 const DEATH_RING_COLOR = 0xffd700;
@@ -59,7 +62,7 @@ const COIN_DEPTH = 21;
  * 寶箱怪：
  * - 關卡中：打破木箱時依機率從木箱位置跳出（每個小關卡最多一隻，限時事件期間不出；機率與時機由 BreakableController / 場景決定），出現時顯示提示橫幅並加上金光與粒子；
  *   在場內跑點（衝到隨機點 → 停頓 → 再衝），限時沒打死就朝最近的牆跑走。換區前直接逃走、換區時清掉
- * - 獎勵關：從財寶裝飾跳出（可多隻、不限時），每次命中與打倒給命中者彩票，時間到全部跑走
+ * - 獎勵關：從密室外圍的財寶堆跳進正方形內（可多隻、不限時），每次命中與打倒給命中者彩票，時間到全部跳回財寶堆消失
  * - 命中只計次數不扣血（每下噴金幣、顯示剩餘次數），達到命中數就打倒並噴大量金幣
  */
 export class TreasureEnemyController {
@@ -183,24 +186,83 @@ export class TreasureEnemyController {
   }
 
   /**
-   * 獎勵關：從財寶裝飾位置跳出一隻寶箱怪（不限時，時間到統一離場）
+   * 獎勵關：從外圍財寶堆跳出一隻寶箱怪，沿拋物線跳進密室內的落點（空中不能被打；不限時，時間到統一離場）
    *
-   * @param x 裝飾位置 x
-   * @param y 裝飾位置 y
+   * @param fromX 財寶堆位置 x
+   * @param fromY 財寶堆位置 y
+   * @param toX 落點 x
+   * @param toY 落點 y
    */
-  spawnRoomTreasure(x: number, y: number): void {
-    const t = this.host.enemies().get(x, y) as Enemy | null;
+  spawnRoomTreasure(fromX: number, fromY: number, toX: number, toY: number): void {
+    const room = GameConfig.stage.treasureRoom;
+    const t = this.host.enemies().get(fromX, fromY) as Enemy | null;
     if (!t) return;
-    t.spawn(x, y, this.scene.time.now, 'treasure', 1);
+    t.spawn(fromX, fromY, this.scene.time.now, 'treasure', 1);
+    t.treasureMoveTX = toX;
+    t.treasureMoveTY = toY;
     this.roomTreasures.add(t);
-    this.spawnCoins(x, y, GameConfig.stage.treasureRoom.spawnCoinBurst, true);
+    this.spawnCoins(fromX, fromY, room.spawnCoinBurst, true);
+    this.jump(t, toX, toY, room.jumpMs, () => {
+      this.spawnCoins(toX, toY, room.spawnCoinBurst / 2, true);
+      this.host.shakeOnce(LAND_SHAKE_MS, LAND_SHAKE_INTENSITY);
+    });
   }
 
-  /** 獎勵關時間到：場上的寶箱怪全部跑走 */
-  dismissRoom(): void {
+  /**
+   * 獎勵關時間到：場上的寶箱怪全部跳回外圍隨機一堆財寶後消失（沒有財寶位置時改為跑走）；離場途中打到不給獎勵
+   *
+   * @param treasurePiles 外圍財寶的位置
+   */
+  dismissRoom(treasurePiles: ReadonlyArray<{ x: number; y: number }>): void {
     for (const t of this.roomTreasures) {
-      if (t.active && !t.dead && !t.treasureFleeing) this.flee(t);
+      if (!t.active || t.dead || t.treasureFleeing) continue;
+      if (treasurePiles.length === 0) { this.flee(t); continue; }
+      t.treasureFleeing = true;
+      const p = Phaser.Utils.Array.GetRandom(treasurePiles as Array<{ x: number; y: number }>);
+      this.jump(t, p.x, p.y, GameConfig.stage.treasureRoom.jumpOutMs, () => {
+        this.spawnCoins(p.x, p.y, GameConfig.stage.treasureRoom.spawnCoinBurst / 2, true);
+        this.roomTreasures.delete(t);
+        t.kill();
+      });
     }
+  }
+
+  /**
+   * 寶箱怪拋物線跳到 (toX, toY)：期間不可觸碰（Enemy.holdUntouchable），本體沿直線移動並往上拱 jumpHeight，
+   * 地上影子跟著移動、離地越高越小；落地壓扁彈回後呼叫 onLand
+   *
+   * @param t 寶箱怪
+   * @param toX 落點 x
+   * @param toY 落點 y
+   * @param ms 跳躍時間
+   * @param onLand 落地時呼叫
+   */
+  private jump(t: Enemy, toX: number, toY: number, ms: number, onLand: () => void): void {
+    const room = GameConfig.stage.treasureRoom;
+    const fromX = t.x, fromY = t.y;
+    const sx = t.scaleX, sy = t.scaleY;
+    const groundOffset = t.getBodyRadius();
+    t.holdUntouchable(this.scene.time.now + ms);
+    const shadow = this.scene.add.ellipse(fromX, fromY + groundOffset, room.shadowWidth, room.shadowHeight, room.shadowColor, room.shadowAlpha)
+      .setDepth(t.depth - 0.5);
+    this.scene.tweens.addCounter({
+      from: 0, to: 1, duration: ms,
+      onUpdate: (tween) => {
+        const k = tween.getValue() ?? 0;
+        const lift = Math.sin(Math.PI * k);
+        const gx = fromX + (toX - fromX) * k, gy = fromY + (toY - fromY) * k;
+        t.setPosition(gx, gy - lift * room.jumpHeight);
+        shadow.setPosition(gx, gy + groundOffset).setScale(1 - (1 - room.shadowStartScale) * lift);
+      },
+      onComplete: () => {
+        shadow.destroy();
+        if (!t.active || t.dead) return;
+        t.setPosition(toX, toY);
+        t.setScale(sx * room.squashX, sy * room.squashY);
+        this.scene.tweens.add({ targets: t, scaleX: sx, scaleY: sy, duration: room.squashMs, ease: 'Back.easeOut' });
+        onLand();
+      }
+    });
   }
 
   /**

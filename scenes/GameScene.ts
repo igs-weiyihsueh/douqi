@@ -290,11 +290,11 @@ export class GameScene extends Phaser.Scene {
     this.treasures = new TreasureEnemyController(this.createTreasureHost());
     this.treasureRoom = new TreasureRoomController({
       scene: this,
-      zone: () => this.slotWorld.centerZone,
+      room: () => this.arena,
       slot: () => this.slotWorld.centerSlot,
       roomTreasureCount: () => this.treasures.roomCount,
-      spawnRoomTreasure: (x, y) => this.treasures.spawnRoomTreasure(x, y),
-      dismissRoomTreasures: () => this.treasures.dismissRoom(),
+      spawnRoomTreasure: (fromX, fromY, toX, toY) => this.treasures.spawnRoomTreasure(fromX, fromY, toX, toY),
+      dismissRoomTreasures: () => this.treasures.dismissRoom(this.treasureRoom.spawnPoints),
       onFinished: () => this.onTreasureRoomFinished()
     });
 
@@ -1602,13 +1602,16 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * 進入新區域：獎勵關直接開始倒數（不生一般怪）；其餘清掉左右平移前的可破壞物件（之後隨怪從天而降）、
+   * 進入新區域：獎勵關縮成正方形密室後直接開始倒數（不生一般怪）；其餘清掉左右平移前的可破壞物件（之後隨怪從天而降）、
    * 波次計數歸零後開始佇列中的下一個小關卡
    *
    * @param to 轉場去處
    */
   private onAreaEnter(to: AreaTransition): void {
     if (to === 'treasureRoom') {
+      // 寶藏密室：活動範圍縮成中央格中央的正方形、鏡頭固定，再開始倒數
+      const zone = this.slotWorld.centerZone, size = GameConfig.stage.treasureRoom.roomSize;
+      this.slotWorld.enterRoomArena(new Phaser.Geom.Rectangle(zone.centerX - size / 2, zone.centerY - size / 2, size, size));
       this.waveState = 'clearing';
       this.treasureRoom.begin(this.time.now);
       return;
@@ -1941,8 +1944,8 @@ export class GameScene extends Phaser.Scene {
         drawEnemyChargeWarnings(this.chargeWarnGfx, enemy, time);
       }
 
-      // 邊界反彈——敵人被擊飛超出場地時 clamp 回內側並反向該軸速度
-      bounceEnemyOffBounds(enemy, this.arena);
+      // 邊界反彈——敵人被擊飛超出場地時 clamp 回內側並反向該軸速度（登場中不動、也可能在場外跳進來，不套用）
+      if (!enemy.telegraphing) bounceEnemyOffBounds(enemy, this.arena);
       // 怪推開木箱（推不動時沿邊緣繞過）、不可穿過塔 / BOSS 本體（時停中怪凍結，不套用）
       if (!this.timeStopped) {
         pushBreakablesFromEnemy(enemy, this.breakables, this.arena);

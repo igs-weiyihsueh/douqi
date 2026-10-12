@@ -693,6 +693,23 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     return this.maxHp > 0 ? Phaser.Math.Clamp(this.hp / this.maxHp, 0, 1) : 0;
   }
 
+  /**
+   * 暫時不可觸碰（寶箱怪跳躍登場 / 離場）：直到 until 都維持登場狀態（不能被打、沒有碰撞），但不閃爍、完全不透明；
+   * 時間到自動實體化（見 runPreamble）
+   *
+   * @param until 恢復可觸碰的場景時間
+   */
+  holdUntouchable(until: number): void {
+    this.telegraphTween?.remove();
+    this.telegraphTween = undefined;
+    this.setAlpha(1);
+    this.telegraphing = true;
+    this.telegraphUntil = until;
+    const body = this.body as Phaser.Physics.Arcade.Body;
+    body.setVelocity(0, 0);
+    body.enable = false;
+  }
+
   private materialize(): void {
     this.telegraphing = false;
     this.telegraphTween?.remove();
