@@ -3,26 +3,26 @@ import Phaser from 'phaser';
 /** 多投多送膠囊量條的排版與動態 */
 const COIN_BAR_CONFIG = {
   /** 膠囊：高度（兩端半圓半徑 = 高度一半）、底色、描邊 */
-  HEIGHT: 52,
+  HEIGHT: 46,
   CAPSULE_FILL: 0x1a1206,
   CAPSULE_FILL_ALPHA: 0.8,
   CAPSULE_BORDER: 0xffc107,
   CAPSULE_BORDER_WIDTH: 3,
   /** 最左側硬幣：中心離膠囊左緣的距離、半徑、顏色（外圈 / 幣面 / 內圈線 / 反光） */
-  COIN_CENTER_X: 24,
-  COIN_RADIUS: 19,
+  COIN_CENTER_X: 20,
+  COIN_RADIUS: 16,
   COIN_RIM: 0xe0a000,
   COIN_FACE: 0xffd54f,
   COIN_INNER_LINE: 0xb07800,
-  COIN_INNER_RADIUS: 13,
+  COIN_INNER_RADIUS: 11,
   COIN_SHINE: 0xfff8d0,
   /** 格子：從 CELLS_LEFT 開始排，寬 CELL_WIDTH、間隔 CELL_GAP、高 CELL_HEIGHT、圓角 CELL_RADIUS；膠囊右側留 RIGHT_PADDING */
-  CELLS_LEFT: 48,
-  CELL_WIDTH: 52,
-  CELL_GAP: 3,
-  CELL_HEIGHT: 40,
-  CELL_RADIUS: 8,
-  RIGHT_PADDING: 12,
+  CELLS_LEFT: 38,
+  CELL_WIDTH: 43,
+  CELL_GAP: 2,
+  CELL_HEIGHT: 36,
+  CELL_RADIUS: 7,
+  RIGHT_PADDING: 8,
   /** 格子底色：未亮 / 已亮 */
   CELL_FILL: 0x000000,
   CELL_FILL_ALPHA: 0.55,
@@ -32,12 +32,12 @@ const COIN_BAR_CONFIG = {
    * 有加贈的格子：劍圖示在左、「+N」在右（相對格子中心）。未亮時金色劍 + 深色外框（深色劍放大 ICON_OUTLINE_SCALE 墊在後面），
    * 亮格（金色底）時改成深色劍
    */
-  ICON_OFFSET_X: -16,
-  ICON_SCALE: 1.1,
+  ICON_OFFSET_X: -14,
+  ICON_SCALE: 1,
   ICON_OUTLINE_SCALE: 1.3,
   ICON_DARK: 0x3a2600,
-  TEXT_OFFSET_X: 8,
-  FONT_SIZE: '20px',
+  TEXT_OFFSET_X: 7,
+  FONT_SIZE: '16px',
   TEXT_COLOR: '#ffffff',
   TEXT_LIT_COLOR: '#3a2600',
   TEXT_STROKE: '#000000',

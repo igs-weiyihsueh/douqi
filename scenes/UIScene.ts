@@ -173,7 +173,7 @@ export class UIScene extends Phaser.Scene {
 
   /** 下方面板 HIT 連擊顯示（底圖 + 數字圖 + HIT 字樣），每個角色一個，索引對應 rows */
   private panelHitCounters: HitCounter[] = [];
-  /** 下方面板「投幣加入遊戲 / 投越多送越多」輪播提示（CREDIT 未進場時取代 HIT 顯示），每個角色一個，索引對應 rows */
+  /** 下方面板「投幣加入遊戲 / 投越多送越多」兩行提示（CREDIT 未進場時取代 HIT 顯示），每個角色一個，索引對應 rows */
   private panelJoinTexts: Phaser.GameObjects.Text[] = [];
   /** 下方面板多投多送膠囊量條（HIT 顯示下方），每個角色一個，索引對應 rows */
   private panelCoinBars: CoinBonusBar[] = [];
@@ -182,6 +182,8 @@ export class UIScene extends Phaser.Scene {
   /** 下方面板 COMBO 顯示設定：HIT 顯示與投幣提示的左下角錨點，原版色塊面板與 F4 面板圖各有一組位置 */
   private readonly PANEL_COMBO_CONFIG = {
     FONT_SIZE: '36px',
+    /** 未進場提示（兩行同時顯示、不閃動）的字級 */
+    JOIN_FONT_SIZE: '26px',
     STROKE_WIDTH: 4,
     /** 多投多送量條在錨點（左下角），HIT 顯示與投幣提示疊在量條上方，相隔 COIN_BAR_GAP */
     COIN_BAR_GAP: 6,
@@ -189,11 +191,12 @@ export class UIScene extends Phaser.Scene {
     CLASSIC_OFFSET_X: 0,
     CLASSIC_OFFSET_Y: -2,
     /**
-     * F4 面板圖：相對面板圖左上角的位置（面板圖原尺寸像素）——左緣對齊面板左緣，下緣在面板圖上緣上方 4px：
-     * 整組（膠囊、HIT、提示）都在面板圖外面，不會蓋到頭像與彩票欄；膠囊寬度小於面板間距，也不會蓋到下一位的面板
+     * F4 面板圖：相對面板圖左上角的位置（面板圖原尺寸像素）——左緣對齊彩票欄左緣（x 91），
+     * 下緣在彩票欄上緣（y 66）上方 4px；彩票欄上方是透明區，左邊的頭像在 x 98 以內，不會蓋到面板。
+     * 膠囊寬 314：右端在面板左緣 + 405，小於面板間距（267 + 150），不會蓋到下一位的面板
      */
-    OVERLAY_OFFSET_X: 0,
-    OVERLAY_OFFSET_Y: -4,
+    OVERLAY_OFFSET_X: 91,
+    OVERLAY_OFFSET_Y: 62,
     /** 高於 F4 面板圖（depth 1000+i） */
     DEPTH: 1010,
     /** 「獲得N票券！」文字樣式與動畫 */
@@ -1878,9 +1881,9 @@ export class UIScene extends Phaser.Scene {
         .setDepth(cfg.DEPTH).setScrollFactor(0).setVisible(false)
     );
     this.panelJoinTexts = this.rows.map(() =>
-      this.add.text(0, 0, GameConfig.credit.joinTexts[0], {
+      this.add.text(0, 0, GameConfig.credit.joinTexts.join('\n'), {
         fontFamily: 'monospace',
-        fontSize: cfg.FONT_SIZE,
+        fontSize: cfg.JOIN_FONT_SIZE,
         color: GameConfig.credit.prompt.color,
         stroke: this.OVERHEAD_UI_CONFIG.COLORS.BLACK,
         strokeThickness: cfg.STROKE_WIDTH,
@@ -1973,7 +1976,7 @@ export class UIScene extends Phaser.Scene {
   /**
    * 更新下方面板的 COMBO 顯示：HIT 連擊圖（連擊數改變時彈跳、連擊快斷時閃爍淡出），連擊為 0、角色未加入或陣亡時隱藏
    * （CREDIT 等待續關時照常顯示，連擊停在當下）；
-   * CREDIT 未進場時改在同一位置閃動、輪流顯示 joinTexts；多投多送量條在已加入的角色（showWhenAbsent 時含未進場）下方顯示
+   * CREDIT 未進場時改在同一位置靜態顯示 joinTexts（兩行同時顯示）；多投多送量條在已加入的角色（showWhenAbsent 時含未進場）下方顯示
    *
    * @param index 角色索引（對應 rows / panelHitCounters / panelJoinTexts / panelCoinBars）
    * @param character 角色數據（未加入時為 undefined）
@@ -1986,12 +1989,6 @@ export class UIScene extends Phaser.Scene {
     const credit = GameConfig.credit;
     const absent = character?.creditState === 'absent';
     joinText.setVisible(absent);
-    if (absent) {
-      const blinkMs = credit.prompt.blinkMs;
-      joinText.setAlpha(this.time.now % blinkMs < blinkMs / 2 ? 1 : 0.45);
-      const line = credit.joinTexts[Math.floor(this.time.now / credit.joinRotateMs) % credit.joinTexts.length];
-      if (joinText.text !== line) joinText.setText(line);
-    }
     bar.setVisible(credit.enabled && !!character && (!absent || credit.coinBar.showWhenAbsent));
     if (character) bar.setLit(character.coinStep);
     const shown = character?.alive || character?.creditState === 'waiting';

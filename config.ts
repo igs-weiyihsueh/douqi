@@ -218,7 +218,7 @@ export const GameConfig = {
    * 多投多送：每次投幣依序得 coinCycle 的點數（5 → 10 → 5 → 15 → 5 → 20 → 5 …，平均每幣 10），投幣續關逾時離場時才回到第一檔；
    * 每一招命中至少一隻敵人扣 1 點（空揮不扣、一招打中多隻也只扣 1；變身 BOSS 的攻擊不扣）。
    * 用完時角色停在原地、無敵、怪不理他，頭上顯示 continueText 與倒數，continueSeconds 秒內投幣恢復，逾時離場（回到未進場）。
-   * 未進場時下方面板（HIT 數的位置）輪流顯示 joinTexts。BOT 用完自動投幣。
+   * 未進場時下方面板（HIT 數的位置）以兩行靜態顯示 joinTexts。BOT 用完自動投幣。
    * 下方面板的多投多送膠囊量條（HIT 數下方）：每格是一次投幣，有加贈的格子標示加贈點數；投幣時亮一格，有加贈時再飛出一道光到角色身上
    * 啟用時角色沒有血量（被打不扣血、不會陣亡）；enabled = false 回到舊行為
    */
@@ -251,9 +251,8 @@ export const GameConfig = {
     prompt: { offsetY: -200, fontSize: 30, color: '#ffe066', stroke: '#000000', strokeThickness: 6, paddingY: 8, blinkMs: 900, depth: 60 },
     /** 投幣續關的倒數秒數（逾時角色離場，回到未進場） */
     continueSeconds: 15,
-    /** 提示文字：未進場（下方面板，每 joinRotateMs 輪換一句）/ CREDIT 用完（頭上，後面接倒數秒數） */
+    /** 提示文字：未進場（下方面板，每句一行同時顯示）/ CREDIT 用完（頭上，後面接倒數秒數） */
     joinTexts: ['投幣加入遊戲', '投越多送越多'] as ReadonlyArray<string>,
-    joinRotateMs: 3000,
     continueText: '投幣續關'
   },
 
