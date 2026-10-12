@@ -4,7 +4,7 @@ import type { Character } from '../objects/Character';
 import type { Enemy, EnemyType } from '../objects/Enemy';
 import { isRegularEnemy } from '../systems/enemyKinds';
 import { shouldSpawnMore, updateRefillLatch, type WaveSpawnState } from '../systems/waveMath';
-import type { MonsterKind, MonsterPhase, MonsterSurge } from '../systems/stageMonsters';
+import type { MonsterKind, MonsterPhase, SurgeBatch } from '../systems/stageMonsters';
 
 /** 本波擊殺進度 */
 export interface WaveKillProgress {
@@ -168,7 +168,7 @@ export class SpawnController {
   }
 
   /**
-   * 即時補怪（二段變身）：在指定玩家身旁 nearRingRadius 的環上補一批，綁定該玩家；
+   * 即時補怪（二段變身 / 變身 BOSS）：在指定玩家身旁 nearRingRadius 的環上補一批，綁定該玩家；
    * 不計本波配額（不佔生產總量、擊殺不推進進度），也不受同時在場上限限制：場上已滿也照補（可暫時超出上限），
    * 只受物件池大小（spawn.maxAlive）限制。超出期間一般補怪因場上已達上限而暫停，等清掉後才恢復
    *
@@ -176,7 +176,7 @@ export class SpawnController {
    * @param rule 補怪規則（數量、怪種比例）
    * @returns 實際補了幾隻
    */
-  spawnSurge(seat: number, rule: MonsterSurge): number {
+  spawnSurge(seat: number, rule: SurgeBatch): number {
     const focus = this.host.characters()[seat];
     if (!focus?.alive) return 0;
     const time = this.host.scene.time.now;

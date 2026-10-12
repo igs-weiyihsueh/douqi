@@ -39,6 +39,8 @@ export interface BossHost {
   shakeOnce(duration: number, intensity: number): void;
   spawnDeathBurst(x: number, y: number): void;
   showEventBanner(text: string): void;
+  /** P1 剛變身 BOSS（場景依關卡怪物配置做即時補怪） */
+  onBossForm(): void;
   emitStats(): void;
   /** 非亂入的波次 BOSS 被打倒後，由場景決定通關 / 轉場 / 過關 */
   onWaveBossDefeated(): void;
@@ -436,6 +438,7 @@ export class BossController {
     this.form = { until, normalHits: 0, img, timer };
     this.host.spawnExpandingRing(p.x, p.y, cfg.normal.radius, 0xffd700, 400);
     this.host.showEventBanner('變身 BOSS！');
+    this.host.onBossForm();
   }
 
   /**

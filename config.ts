@@ -582,7 +582,7 @@ export const GameConfig = {
       /** 一般近戰蓄力小怪 */
       normal: {
         maxHp: 90,
-        speed: 70,
+        speed: 90,
         radius: 14,
         color: 0xff5a6e,
         stroke: 0x2a0a12,
@@ -591,7 +591,7 @@ export const GameConfig = {
       /** 肉盾：高 HP、慢速、體型較大 */
       tank: {
         maxHp: 200,
-        speed: 40,
+        speed: 52,
         radius: 22,
         color: 0x8b5cf6,
         stroke: 0x1a0a2e,
@@ -600,7 +600,7 @@ export const GameConfig = {
       /** 投射兵：保持距離、瞄準玩家位置蓄力投擲炸彈（落點有預警圈），本體脆 */
       bomber: {
         maxHp: 60,
-        speed: 55,
+        speed: 72,
         radius: 15,
         color: 0xe0b0ff,
         stroke: 0x2a1a3a,
@@ -709,6 +709,8 @@ export const GameConfig = {
    */
   stageMonsters: {
     enabled: true,
+    /** 變身 BOSS 即時補怪：變身瞬間在玩家身旁環狀補 count 隻（依 weights 抽怪種），規則同二段變身補怪，但無冷卻（每打倒一隻 BOSS 才可能變身一次） */
+    bossFormSurge: { count: [12, 16], weights: { normal: 90, tank: 10, bomber: 0 } },
     /** 每多一位存活玩家，場上組每批隻數增加的比例（近身組本來就是逐一輪派給每位玩家，不另外放大） */
     fieldBatchGrowthPerPlayer: 0.5,
     /**
@@ -731,7 +733,7 @@ export const GameConfig = {
       /** 蜂群：小怪一直湧上來，快節奏割草 */
       swarm: {
         name: '蜂群', quota: 25, maxAlive: { solo: 22, perExtraPlayer: 18 },
-        surge: { count: [6, 10], weights: { normal: 90, tank: 10, bomber: 0 }, cooldownMs: 10000 },
+        surge: { count: [10, 14], weights: { normal: 90, tank: 10, bomber: 0 }, cooldownMs: 10000 },
         phases: [
           { untilProgress: 0.5, weights: { normal: 70, tank: 10, bomber: 20 }, intervalMs: 800, nearBatch: [2, 4], fieldBatch: [4, 7], nearShare: 0.6 },
           { untilProgress: 1, weights: { normal: 70, tank: 10, bomber: 20 }, intervalMs: 700, nearBatch: [3, 5], fieldBatch: [5, 8], nearShare: 0.6 }
@@ -740,7 +742,7 @@ export const GameConfig = {
       /** 重甲：坦克當肉牆，怪少但硬，慢節奏 */
       armor: {
         name: '重甲', quota: 25, maxAlive: { solo: 22, perExtraPlayer: 18 },
-        surge: { count: [6, 10], weights: { normal: 90, tank: 10, bomber: 0 }, cooldownMs: 10000 },
+        surge: { count: [10, 14], weights: { normal: 90, tank: 10, bomber: 0 }, cooldownMs: 10000 },
         phases: [
           { untilProgress: 0.4, weights: { normal: 60, tank: 30, bomber: 10 }, intervalMs: 1600, nearBatch: [3, 5], fieldBatch: [6, 9], nearShare: 0.4 },
           { untilProgress: 1, weights: { normal: 60, tank: 30, bomber: 10 }, intervalMs: 1500, nearBatch: [3, 5], fieldBatch: [6, 10], nearShare: 0.4 }
@@ -749,7 +751,7 @@ export const GameConfig = {
       /** 砲火：投擲怪在遠處轟炸（只出在場上組），要衝過去清 */
       artillery: {
         name: '砲火', quota: 25, maxAlive: { solo: 22, perExtraPlayer: 18 },
-        surge: { count: [6, 10], weights: { normal: 90, tank: 10, bomber: 0 }, cooldownMs: 10000 },
+        surge: { count: [10, 14], weights: { normal: 90, tank: 10, bomber: 0 }, cooldownMs: 10000 },
         phases: [
           { untilProgress: 0.3, weights: { normal: 60, tank: 10, bomber: 30 }, intervalMs: 1100, nearBatch: [2, 4], fieldBatch: [5, 8], nearShare: 0.4 },
           { untilProgress: 1, weights: { normal: 60, tank: 10, bomber: 30 }, intervalMs: 1000, nearBatch: [2, 4], fieldBatch: [5, 9], nearShare: 0.35 }

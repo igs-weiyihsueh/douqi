@@ -25,12 +25,16 @@ export interface MonsterPhase {
   nearShare: number;
 }
 
-/** 二段變身即時補怪：在變身的玩家身旁環狀補一批，不計擊殺數、不受同時在場上限限制 */
-export interface MonsterSurge {
+/** 即時補怪的一批：在玩家身旁環狀補 count 隻，不計擊殺數、不受同時在場上限限制 */
+export interface SurgeBatch {
   /** 每次補幾隻 [最少, 最多] */
   count: readonly [number, number];
   /** 怪種比例（權重） */
   weights: Record<MonsterKind, number>;
+}
+
+/** 二段變身即時補怪 */
+export interface MonsterSurge extends SurgeBatch {
   /** 每位玩家各自的冷卻（毫秒） */
   cooldownMs: number;
 }

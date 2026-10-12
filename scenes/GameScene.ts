@@ -1250,12 +1250,22 @@ export class GameScene extends Phaser.Scene {
    */
   private surgeOnEmpower(c: Character): void {
     const profile = this.monsterProfile;
-    if (!profile || !this.stageInProgress || this.pendingSubZoneComplete) return;
-    if (this.waveState !== 'spawning' && this.waveState !== 'clearing') return;
+    if (!profile || !this.canSurge()) return;
     const seat = this.characters.indexOf(c);
     const now = this.time.now;
     if (seat < 0 || now < (this.surgeReadyAt[seat] ?? 0)) return;
     if (this.spawner.spawnSurge(seat, profile.surge) > 0) this.surgeReadyAt[seat] = now + profile.surge.cooldownMs;
+  }
+
+  /** 變身 BOSS 即時補怪：小關卡進行中在 P1 身旁補一批 stageMonsters.bossFormSurge（不計擊殺數、無冷卻） */
+  private surgeOnBossForm(): void {
+    if (!this.monsterProfile || !this.canSurge()) return;
+    this.spawner.spawnSurge(this.characters.indexOf(this.player), GameConfig.stageMonsters.bossFormSurge);
+  }
+
+  /** 目前能否即時補怪：小關卡進行中（生怪 / 清場階段）、沒在等寶箱怪清掉 */
+  private canSurge(): boolean {
+    return this.stageInProgress && !this.pendingSubZoneComplete && (this.waveState === 'spawning' || this.waveState === 'clearing');
   }
 
   /**
@@ -1460,7 +1470,8 @@ export class GameScene extends Phaser.Scene {
       spawnDeathBurst: (x, y) => this.fx.deathBurst(x, y),
       showEventBanner: (text) => this.showEventBanner(text),
       emitStats: () => this.emitStats(),
-      onWaveBossDefeated: () => this.onWaveBossDefeated()
+      onWaveBossDefeated: () => this.onWaveBossDefeated(),
+      onBossForm: () => this.surgeOnBossForm()
     };
   }
 
