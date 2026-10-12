@@ -28,7 +28,7 @@ export function streakTimeoutMs(streak: number): number {
  * 達到最高里程碑時立即發獎並歸零。
  *
  * 每幀依距上次命中的時間：超過中斷時間 × WARNING_START_RATIO 進入警告（UI 閃爍）、超過中斷時間就中斷
- * （先發待發的獎勵再歸零）；中斷時間隨連擊數線性遞減（見 streakTimeoutMs）。獎勵的彩票加到該角色的彩票數，並在下方面板播放彩票噴發特效
+ * （先發待發的獎勵再歸零）；中斷時間隨連擊數線性遞減（見 streakTimeoutMs）。小關卡通關時立即結算（settleAll）。獎勵的彩票加到該角色的彩票數，並在下方面板播放彩票噴發特效
  */
 export class ComboRewardController {
   constructor(
@@ -59,10 +59,7 @@ export class ComboRewardController {
       const sinceLastHit = now - combo.lastKillTime;
       const timeout = streakTimeoutMs(combo.currentStreak);
       if (sinceLastHit >= timeout) {
-        if (combo.pendingRewardTickets !== undefined && combo.pendingRewardTickets > 0) {
-          this.grant(character, combo.pendingRewardTickets, combo.pendingRewardMilestone!);
-        }
-        this.reset(combo);
+        this.settle(character);
       } else {
         combo.isWarning = sinceLastHit >= timeout * cfg.WARNING_START_RATIO;
       }
@@ -107,6 +104,26 @@ export class ComboRewardController {
     } else {
       console.error('❌ UIScene.playComboRewardFx 不存在，COMBO 獎勵特效無法播放');
     }
+  }
+
+  /** 小關卡通關：所有角色的連擊立即結算（發待發獎勵再歸零），不等中斷倒數 */
+  settleAll(): void {
+    for (const character of this.characters()) {
+      if (character.comboState.currentStreak > 0) this.settle(character);
+    }
+  }
+
+  /**
+   * 結算一個角色的連擊：有待發獎勵就發，再歸零
+   *
+   * @param character 角色
+   */
+  private settle(character: Character): void {
+    const combo = character.comboState;
+    if (combo.pendingRewardTickets !== undefined && combo.pendingRewardTickets > 0) {
+      this.grant(character, combo.pendingRewardTickets, combo.pendingRewardMilestone!);
+    }
+    this.reset(combo);
   }
 
   /** 連擊歸零：清除警告與待發獎勵，下個目標回到第一個里程碑 */

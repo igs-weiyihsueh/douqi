@@ -1123,6 +1123,7 @@ export class GameScene extends Phaser.Scene {
     for (const c of this.characters) {
       if (c.alive) this.grantStageReward(c, tickets);
     }
+    this.comboReward.settleAll(); // 通關時 HIT 連擊立即結算彩票，不等中斷倒數
     this.currentStage++;
     // 佇列往前推一格，最右邊依規則生成新節點
     this.stageQueue.shift();

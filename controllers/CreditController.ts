@@ -31,7 +31,7 @@ export interface CreditHost {
  *   → 倒數內投幣回到遊玩中；逾時離場回到尚未進場
  * - 不在遊玩中的角色以 Character.leavePlay 離開戰局（alive = false）：不能操作、無敵、敵人不鎖定、不影響出怪與鏡頭
  * - 扣點：每次出手（openAttackWindow）後 attackWindowMs 內第一次命中敵人扣 1 點，一招最多扣 1 點；空揮不扣
- * - 多投多送：每次投幣依 coinCycle 循環給點（逾時離場才回到第一檔），頭上浮出獲得提示
+ * - 多投多送：每次投幣依 coinCycle 循環給點（逾時離場才回到第一檔），有額外時頭上浮出額外獲得提示
  * - BOT：加入時自動投幣，用完自動再投
  * - 免費攻擊（X 鍵切換）：開啟時攻擊不扣 CREDIT
  * - 等待中的角色頭上顯示「投幣續關」與倒數；未進場的提示在下方面板（UIScene）
@@ -92,7 +92,7 @@ export class CreditController {
   }
 
   /**
-   * 投幣：依多投多送的檔位加 CREDIT 並推進到下一檔，頭上浮出獲得提示；未進場或等待中的角色立刻回到戰局（短暫無敵）
+   * 投幣：依多投多送的檔位加 CREDIT 並推進到下一檔，有額外時頭上浮出提示；未進場或等待中的角色立刻回到戰局（短暫無敵）
    *
    * @param c 投幣的角色
    */
@@ -111,24 +111,22 @@ export class CreditController {
       c.resumePlay();
       c.invulnUntil = this.host.scene.time.now + GameConfig.credit.resumeInvulnMs;
     }
-    this.showGain(c, gain, gain - cycle[0]);
+    this.showBonus(c, gain - cycle[0]);
     this.host.onCreditChanged();
   }
 
   /**
-   * 頭上浮出投幣獲得提示（金色，往上飄並淡出）：「獲得 N 能量」，有額外時第二行「額外獲得 M 能量」
+   * 頭上浮出投幣額外獲得提示（金色，往上飄並淡出）：「額外獲得 M 能量」；第一檔沒有額外就不顯示（不告知總獲得數）
    *
    * @param c 投幣的角色
-   * @param gain 這次獲得的 CREDIT
-   * @param bonus 超過第一檔的額外點數（0 = 不顯示第二行）
+   * @param bonus 超過第一檔的額外點數
    */
-  private showGain(c: Character, gain: number, bonus: number): void {
+  private showBonus(c: Character, bonus: number): void {
+    if (bonus <= 0) return;
     const cfg = GameConfig.credit;
     const f = cfg.gainFloat;
-    const lines = [cfg.gainText.replace('{n}', String(gain))];
-    if (bonus > 0) lines.push(cfg.bonusText.replace('{n}', String(bonus)));
     const y = c.y + cfg.prompt.offsetY;
-    const text = this.host.scene.add.text(c.x, y, lines.join('\n'), {
+    const text = this.host.scene.add.text(c.x, y, cfg.bonusText.replace('{n}', String(bonus)), {
       fontSize: `${f.fontSize}px`, fontStyle: 'bold', color: f.color, stroke: f.stroke, strokeThickness: f.strokeThickness,
       align: 'center', padding: { top: f.paddingY, bottom: f.paddingY }
     }).setOrigin(0.5, 1).setDepth(f.depth);

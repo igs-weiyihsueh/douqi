@@ -191,9 +191,8 @@ export const GameConfig = {
     enabled: true,
     /** 多投多送：第 1、2、3… 次投幣分別得到的 CREDIT，循環使用（超過第一檔的部分顯示為額外獲得） */
     coinCycle: [6, 8, 10, 12, 14] as ReadonlyArray<number>,
-    /** 投幣獲得提示：從頭頂提示高度往上飄 riseY、durationMs 內淡出；第一行 gainText，有額外時第二行 bonusText（{n} 代入點數） */
+    /** 投幣額外獲得提示：只在超過第一檔時顯示 bonusText（{n} 代入額外點數，不顯示總獲得數），從頭頂提示高度往上飄 riseY、durationMs 內淡出 */
     gainFloat: { riseY: 70, durationMs: 1500, fontSize: 28, color: '#ffd700', stroke: '#000000', strokeThickness: 6, paddingY: 8, depth: 61 },
-    gainText: '獲得 {n} 能量',
     bonusText: '額外獲得 {n} 能量',
     /** 出手後多久內第一次命中敵人算這一招（毫秒；涵蓋衝刺、連段、爆發，一招最多扣 1 點） */
     attackWindowMs: 1500,
