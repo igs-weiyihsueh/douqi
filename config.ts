@@ -1072,14 +1072,14 @@ export const GameConfig = {
      * 外框金邊（borderWidth + 外圍光暈 borderGlowWidth / borderGlowAlpha），
      * 正方形外覆蓋金色色調（tintColor / tintAlpha）並在畫面內散布 decorCount 組金幣堆 / 銀幣堆 / 寶石 / 寶箱 / 金條
      * （離畫面邊 decorViewInset、離金邊 decorRoomGap、彼此間隔 decorSpacing），空隙再撒 looseCoinCount 枚散落的金銀幣。
-     * 寶箱怪：進場 firstSpawnDelayMs 後開始，每 spawnIntervalMs 從外圍隨機一堆財寶跳出（噴 spawnCoinBurst 枚金幣），
+     * 寶箱怪：進場 firstSpawnDelayMs 後開始，每 spawnIntervalMs ÷ (1 + (存活人數 − 1) × spawnSpeedupPerExtraPlayer) 從外圍隨機一堆財寶跳出（噴 spawnCoinBurst 枚金幣），
      * 沿拋物線（費時 jumpMs、拱高 jumpHeight，地上影子由小變大）跳進正方形內（離金邊 landMargin），空中不能被打，落地壓扁彈回；
      * 場上最多 maxAliveBase + (存活人數 − 1) × maxAlivePerExtraPlayer 隻；每隻存在 lifetimeMs（從跳出起算），沒打死就跳回外圍財寶堆消失；
      * 打 hitsToKill 下死，每次命中給命中者 ticketsPerHit 張彩票、擊殺再給 ticketsOnKill 張；密室時間到全部跳回外圍的財寶堆（jumpOutMs）後消失
      */
     treasureRoom: {
       durationMs: 60000, finalCountdownSec: 5, hudY: 104, hudLabel: '💰 寶藏密室',
-      firstSpawnDelayMs: 1500, spawnIntervalMs: 2000, maxAliveBase: 4, maxAlivePerExtraPlayer: 2, lifetimeMs: 12000, spawnCoinBurst: 16,
+      firstSpawnDelayMs: 1500, spawnIntervalMs: 2000, spawnSpeedupPerExtraPlayer: 0.33, maxAliveBase: 4, maxAlivePerExtraPlayer: 2, lifetimeMs: 12000, spawnCoinBurst: 16,
       hitsToKill: 10, ticketsPerHit: 1, ticketsOnKill: 30,
       enterBanner: '寶藏密室！限時 60 秒', endBanner: '時間到！',
       roomSize: 760,

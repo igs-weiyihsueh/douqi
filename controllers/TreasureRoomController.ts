@@ -140,7 +140,7 @@ export class TreasureRoomController {
   }
 
   /**
-   * 到了補怪時間且場上未滿上限（maxAliveBase + 每多一位玩家 maxAlivePerExtraPlayer）時，
+   * 到了補怪時間（間隔隨人數縮短）且場上未滿上限（maxAliveBase + 每多一位玩家 maxAlivePerExtraPlayer）時，
    * 從外圍隨機一堆財寶跳出一隻寶箱怪，落在正方形內（離金邊 landMargin）的隨機點
    *
    * @param time 目前場景時間
@@ -148,8 +148,10 @@ export class TreasureRoomController {
   private spawnTick(time: number): void {
     const cfg = GameConfig.stage.treasureRoom;
     if (time < this.nextSpawnAt || this.points.length === 0) return;
-    this.nextSpawnAt = time + cfg.spawnIntervalMs;
-    const maxAlive = cfg.maxAliveBase + Math.max(0, this.host.playerCount() - 1) * cfg.maxAlivePerExtraPlayer;
+    // 人越多跳得越快、上限越高（1 ~ 4 人：間隔 2 / 1.5 / 1.2 / 1 秒、上限 4 / 6 / 8 / 10），讓多人時真的能看到更多隻
+    const extraPlayers = Math.max(0, this.host.playerCount() - 1);
+    this.nextSpawnAt = time + cfg.spawnIntervalMs / (1 + extraPlayers * cfg.spawnSpeedupPerExtraPlayer);
+    const maxAlive = cfg.maxAliveBase + extraPlayers * cfg.maxAlivePerExtraPlayer;
     if (this.host.roomTreasureCount() >= maxAlive) return;
     const p = Phaser.Utils.Array.GetRandom(this.points);
     const room = this.host.room(), m = cfg.landMargin;
