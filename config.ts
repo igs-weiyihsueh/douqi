@@ -1159,7 +1159,24 @@ export const GameConfig = {
     /** 玩家走到箭頭/出口的觸發距離 */
     triggerDist: 46,
     /** 階段2:crossing 開放後短暫緩衝(毫秒)內不觸發邊界過場——讓玩家看引導箭頭、不貼邊秒觸發。 */
-    crossGraceMs: 700
+    crossGraceMs: 700,
+    /**
+     * 出口超時自動前進：出口開啟（左右 / 上方 / 隱藏入口，含寶藏密室結束後的出口）afterMs 後還沒有人走進去，
+     * 就自動前進（只有一個出口走那個，岔路隨機選一個）；固定倒數，玩家移動不會重新計時（場上沒有玩家時也一樣）。
+     * 剩 announceSec 秒時畫面上方（畫面高度 × yRatio）顯示 text（{n} = 剩餘秒數）
+     */
+    autoAdvance: {
+      afterMs: 20000,
+      announceSec: 5,
+      text: '{n} 秒後自動前進',
+      yRatio: 0.2,
+      fontSize: 36,
+      color: '#ffe066',
+      stroke: '#000000',
+      strokeThickness: 6,
+      paddingY: 8,
+      depth: 60
+    }
   },
 
   /**

@@ -7,6 +7,7 @@ import type { CharacterParams } from '../systems/characterParams';
 import { hitFeel } from '../systems/hitFeelParams';
 import { standCharacterOutside } from '../systems/bodySeparation';
 import { isStructureEnemy } from '../systems/enemyKinds';
+import type { EdgeMargins } from '../systems/spriteFeet';
 import type { LockTarget, TargetingController } from './TargetingController';
 
 /** 慢速模式八方向移動鍵（方向鍵 + WASD） */
@@ -35,6 +36,8 @@ export interface CharacterActionHost {
   arena(): Phaser.Geom.Rectangle;
   /** 角色可活動範圍（左右出口開放時放寬到開放側） */
   walkBounds(): Phaser.Geom.Rectangle;
+  /** 角色位置離可活動範圍各邊要留的距離（新美術皮膚依圖片大小，否則為 player.radius） */
+  edgeMargins(c: Character): EdgeMargins;
   /** 鎖定與瞄準 */
   targeting(): TargetingController;
   /** 是否為慢速模式 */
@@ -391,10 +394,10 @@ export class CharacterActionController {
    * @param toItem true = 撿道具衝刺（途中撞到敵人不停下）
    */
   private beginDash(c: Character, destX: number, destY: number, time: number, toItem: boolean): void {
-    const r = GameConfig.player.radius;
+    const m = this.host.edgeMargins(c);
     const bnd = c === this.host.player() ? this.host.walkBounds() : this.host.arena();
-    c.dashDestX = Phaser.Math.Clamp(destX, bnd.left + r, bnd.right - r);
-    c.dashDestY = Phaser.Math.Clamp(destY, bnd.top + r, bnd.bottom - r);
+    c.dashDestX = Phaser.Math.Clamp(destX, bnd.left + m.left, bnd.right - m.right);
+    c.dashDestY = Phaser.Math.Clamp(destY, bnd.top + m.top, bnd.bottom - m.bottom);
     c.isDashing = true;
     c.dashToItem = toItem;
     this.dashHitBreakables.get(c)?.clear();
@@ -515,12 +518,12 @@ export class CharacterActionController {
     (c.body as Phaser.Physics.Arcade.Body).setVelocity(paused ? 0 : c.cutInVelocityX, paused ? 0 : c.cutInVelocityY);
   }
 
-  /** 把角色夾在可活動範圍內；衝刺中撞牆被夾回就結束衝刺（避免牆邊來回震盪或卡在衝刺狀態） */
+  /** 把角色夾在可活動範圍內（離各邊留 edgeMargins）；衝刺中撞牆被夾回就結束衝刺（避免牆邊來回震盪或卡在衝刺狀態） */
   clampToArena(c: Character): void {
-    const r = GameConfig.player.radius;
+    const m = this.host.edgeMargins(c);
     const bnd = this.host.walkBounds();
-    const cx = Phaser.Math.Clamp(c.x, bnd.left + r, bnd.right - r);
-    const cy = Phaser.Math.Clamp(c.y, bnd.top + r, bnd.bottom - r);
+    const cx = Phaser.Math.Clamp(c.x, bnd.left + m.left, bnd.right - m.right);
+    const cy = Phaser.Math.Clamp(c.y, bnd.top + m.top, bnd.bottom - m.bottom);
     if (cx !== c.x || cy !== c.y) {
       c.setPosition(cx, cy);
       if (c.isDashing) this.endDashState(c);

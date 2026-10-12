@@ -1375,14 +1375,15 @@ export class UIScene extends Phaser.Scene {
    *
    * @param graphics 用於繪製的Graphics對象
    * @param isFlashing 是否為閃爍狀態（Credit耗盡時顯示紅色）
+   * @param fillOverride 有給時整把劍改用這個顏色（例如多投多送量條亮格上的深色劍）
    */
-  private drawSwordIcon(graphics: Phaser.GameObjects.Graphics, isFlashing: boolean): void {
+  private drawSwordIcon(graphics: Phaser.GameObjects.Graphics, isFlashing: boolean, fillOverride?: number): void {
     const config = this.OVERHEAD_UI_CONFIG;
     const swordConfig = config.SWORD;
     const colors = config.COLORS;
     
     // 選擇顏色：正常金色或閃爍紅色
-    const fillColor = isFlashing ? colors.FLASH_RED : colors.SWORD_FILL;
+    const fillColor = fillOverride ?? (isFlashing ? colors.FLASH_RED : colors.SWORD_FILL);
     const strokeColor = isFlashing ? colors.FLASH_RED_BORDER : colors.SWORD_BORDER;
     
     graphics.clear();
@@ -1873,7 +1874,7 @@ export class UIScene extends Phaser.Scene {
     );
     const cycle = GameConfig.credit.coinCycle;
     this.panelCoinBars = this.rows.map(() =>
-      new CoinBonusBar(this, cycle.map((gain) => gain - cycle[0]), (g) => this.drawSwordIcon(g, false))
+      new CoinBonusBar(this, cycle.map((gain) => gain - cycle[0]), (g, fill) => this.drawSwordIcon(g, false, fill))
         .setDepth(cfg.DEPTH).setScrollFactor(0).setVisible(false)
     );
     this.panelJoinTexts = this.rows.map(() =>

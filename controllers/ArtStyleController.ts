@@ -4,7 +4,7 @@ import type { Character } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
 import { createCoverImage } from '../systems/zoneScenery';
 import type { GroundFootprint } from '../systems/bodySeparation';
-import { visibleBottomOffset, visibleFootHalfWidth, warmFeetMetrics } from '../systems/spriteFeet';
+import { visibleBottomOffset, visibleBounds, visibleFootHalfWidth, warmFeetMetrics, type EdgeMargins } from '../systems/spriteFeet';
 import { OVERLAY_DEPTH_STEP } from '../systems/standingDepth';
 
 /**
@@ -171,6 +171,22 @@ export class ArtStyleController {
   characterFootOffset(c: Character): number {
     const img = this.displayImageOf(c);
     return visibleBottomOffset(this.scene.textures, img.texture.key) * img.scaleY;
+  }
+
+  /**
+   * 角色位置離可活動範圍邊緣要留的距離：P1 顯示新美術皮膚時依皮膚圖的可見範圍
+   * （左右 = 可見寬度的一半、下 = 腳底，上方維持 player.radius，頭超過上緣屬於透視），其餘角色回傳 null（用 player.radius）
+   *
+   * @param c 角色
+   */
+  edgeMargins(c: Character): EdgeMargins | null {
+    const img = this.displayImageOf(c);
+    if (img === c) return null;
+    const b = visibleBounds(this.scene.textures, img.texture.key);
+    const r = GameConfig.player.radius;
+    // 皮膚會依面向鏡像，左右取較寬的一側
+    const half = Math.max(-b.left, b.right) * Math.abs(img.scaleX);
+    return { left: Math.max(r, half), right: Math.max(r, half), top: r, bottom: Math.max(r, b.bottom * img.scaleY) };
   }
 
   /**

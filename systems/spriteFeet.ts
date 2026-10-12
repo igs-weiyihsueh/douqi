@@ -23,6 +23,14 @@ export interface VisibleBounds {
   bottom: number;
 }
 
+/** 角色位置離可活動範圍各邊至少要留的距離（皆為正值） */
+export interface EdgeMargins {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
 /** 各紋理的腳底量測，第一次查詢時掃描後快取 */
 const metricsCache = new Map<string, FeetMetrics>();
 

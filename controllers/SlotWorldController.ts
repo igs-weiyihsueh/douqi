@@ -112,6 +112,10 @@ export class SlotWorldController {
   private crossAllowed = { L: true, R: true };
   /** 出口開放的時間（之後 crossGraceMs 內不觸發，避免清完波剛好貼在邊緣就直接轉場） */
   private crossOpenAt = 0;
+  /** 出口超時自動前進的場景時間（0 = 沒有出口開啟中） */
+  private autoAdvanceAt = 0;
+  /** 自動前進倒數提示（剩 announceSec 秒內顯示） */
+  private autoAdvanceText: Phaser.GameObjects.Text | null = null;
 
   // 場景繪製物件
   private sceneLayers: Phaser.GameObjects.GameObject[] = [];
@@ -268,6 +272,7 @@ export class SlotWorldController {
       }
       return true;
     }
+    this.updateAutoAdvance(time);
     if (this.progressPhase === 'exiting') this.updateTopExit();
     if (this.progressPhase === 'playing' || this.progressPhase === 'exiting') this.updateHiddenGateEntry();
     if (this.choiceGfx || this.exitGfx) this.pulseExitMarkers(time);
@@ -321,12 +326,14 @@ export class SlotWorldController {
     if (openR) this.drawCorridorScene('R');
     if (openL) this.drawCorridorScene('L');
     this.drawCrossingMarkers();
+    this.armAutoAdvance();
   }
 
   /** 開放上方出口（玩家走到出口 → 閃黑到新區域） */
   openTopExit(): void {
     this.progressPhase = 'exiting';
     this.showTopExit();
+    this.armAutoAdvance();
   }
 
   /**
@@ -351,6 +358,59 @@ export class SlotWorldController {
     gate.open();
     const d = gate.doorway;
     if (d) this.host.goIndicator().show('U', d.x, d.y, d.radius);
+    this.armAutoAdvance();
+  }
+
+  /** 出口開啟：開始自動前進的固定倒數（同一次開啟多個出口時以第一個為準，不重新計時） */
+  private armAutoAdvance(): void {
+    if (this.autoAdvanceAt === 0) this.autoAdvanceAt = this.scene.time.now + GameConfig.stage.autoAdvance.afterMs;
+  }
+
+  /** 開始轉場（走進任一出口或自動前進）：取消倒數並收掉提示 */
+  private disarmAutoAdvance(): void {
+    this.autoAdvanceAt = 0;
+    this.autoAdvanceText?.destroy();
+    this.autoAdvanceText = null;
+  }
+
+  /**
+   * 每幀：出口開啟中剩 announceSec 秒時顯示倒數提示；時間到還沒有人走進出口就自動前進
+   * （只有一個出口走那個，岔路隨機選一個；與玩家走進出口相同的轉場）
+   *
+   * @param time 目前場景時間
+   */
+  private updateAutoAdvance(time: number): void {
+    if (this.autoAdvanceAt === 0) return;
+    const cfg = GameConfig.stage.autoAdvance;
+    const remaining = this.autoAdvanceAt - time;
+    if (remaining <= 0) {
+      this.autoAdvance();
+      return;
+    }
+    const sec = Math.ceil(remaining / 1000);
+    if (sec > cfg.announceSec) return;
+    if (!this.autoAdvanceText) {
+      // 粗體中文加描邊時字形上緣會超出量到的行高而被切掉，上下留 padding
+      this.autoAdvanceText = this.scene.add.text(GameConfig.width / 2, GameConfig.height * cfg.yRatio, '', {
+        fontFamily: 'monospace', fontSize: `${cfg.fontSize}px`, fontStyle: 'bold', color: cfg.color,
+        stroke: cfg.stroke, strokeThickness: cfg.strokeThickness, padding: { top: cfg.paddingY, bottom: cfg.paddingY }
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(cfg.depth);
+    }
+    const text = cfg.text.replace('{n}', String(sec));
+    if (this.autoAdvanceText.text !== text) this.autoAdvanceText.setText(text);
+  }
+
+  /** 自動前進：在目前開啟的出口（左右、上方、隱藏入口）中隨機選一個走進去；都沒有時取消 */
+  private autoAdvance(): void {
+    const options: Array<() => void> = [];
+    if (this.crossingOpen && this.crossPhase === 'walk') {
+      if (this.crossAllowed.L) options.push(() => this.startPanToSide('L'));
+      if (this.crossAllowed.R) options.push(() => this.startPanToSide('R'));
+    }
+    if (this.progressPhase === 'exiting' && this.exitGfx) options.push(() => this.startNextAreaTransition());
+    if (this.host.hiddenGate().isOpen) options.push(() => this.enterHiddenGate());
+    this.disarmAutoAdvance();
+    if (options.length > 0) Phaser.Utils.Array.GetRandom(options)();
   }
 
   /** 畫中央移動區左右緣開放方向的出口標記並顯示 GO（玩家走到該側邊緣觸發） */
@@ -465,6 +525,7 @@ export class SlotWorldController {
    * 平移期間凍結遊戲，平移完鏡頭範圍收成該格、全隊自動走進去
    */
   private startPanToSide(side: Side): void {
+    this.disarmAutoAdvance();
     this.crossPhase = 'panning';
     this.crossSide = side;
     this.host.resetCharacterMotion(); // 觸發時可能正在衝刺，先清掉避免與自動走位互搶
@@ -553,6 +614,7 @@ export class SlotWorldController {
 
   /** 走進隱藏入口：收掉其他出口，閃黑後在中央格展開獎勵關 */
   private enterHiddenGate(): void {
+    this.disarmAutoAdvance();
     this.host.hiddenGate().clear();
     this.progressPhase = 'transition';
     this.clearCrossingMarkers();
@@ -571,6 +633,7 @@ export class SlotWorldController {
 
   /** 閃黑到新區域（走進上方出口，或中場 BOSS 打倒後）：收掉其他出口，黑幕中三格重繪成新區域（方向限制解除），全隊從下緣自動走到定位 */
   startNextAreaTransition(): void {
+    this.disarmAutoAdvance();
     this.progressPhase = 'transition';
     this.clearCrossingMarkers();
     this.closeTopExit();

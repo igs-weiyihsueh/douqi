@@ -41,7 +41,7 @@ import {
 } from '../systems/bodySeparation';
 import { drawEnemyChargeWarnings } from '../systems/enemyWarnings';
 import { isFixedEnemy, isRegularEnemy } from '../systems/enemyKinds';
-import { visibleBottomOffset, warmFeetMetrics } from '../systems/spriteFeet';
+import { visibleBottomOffset, warmFeetMetrics, type EdgeMargins } from '../systems/spriteFeet';
 import { drawFootDisc, FOOT_DISC_DEPTH, type VacuumDisk } from '../systems/footDisc';
 import { standingDepth } from '../systems/standingDepth';
 import { facingRightFrom } from '../systems/facing';
@@ -830,6 +830,16 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
+   * 角色位置離可活動範圍 / 畫面邊緣要留的距離：P1 新美術皮膚依圖片大小，其餘為 player.radius
+   *
+   * @param c 角色
+   */
+  private edgeMarginsOf(c: Character): EdgeMargins {
+    const r = GameConfig.player.radius;
+    return this.artStyle.edgeMargins(c) ?? { left: r, right: r, top: r, bottom: r };
+  }
+
+  /**
    * 多人時把角色限制在目前鏡頭畫面內（內縮 stage.viewClampInset；已貼鏡頭邊界的那側不內縮），衝刺中被夾回就結束衝刺。
    * 單人、非關卡制、出口開放或轉場中不限制
    *
@@ -841,11 +851,11 @@ export class GameScene extends Phaser.Scene {
     const v = cam.worldView;
     const b = cam.getBounds();
     const inset = GameConfig.stage.viewClampInset;
-    const r = GameConfig.player.radius;
-    const left = v.left + (v.left > b.left + 1 ? inset : 0) + r;
-    const right = v.right - (v.right < b.right - 1 ? inset : 0) - r;
-    const top = v.top + (v.top > b.top + 1 ? inset : 0) + r;
-    const bottom = v.bottom - (v.bottom < b.bottom - 1 ? inset : 0) - r;
+    const m = this.edgeMarginsOf(c);
+    const left = v.left + (v.left > b.left + 1 ? inset : 0) + m.left;
+    const right = v.right - (v.right < b.right - 1 ? inset : 0) - m.right;
+    const top = v.top + (v.top > b.top + 1 ? inset : 0) + m.top;
+    const bottom = v.bottom - (v.bottom < b.bottom - 1 ? inset : 0) - m.bottom;
     if (left >= right || top >= bottom) return;
     const cx = Phaser.Math.Clamp(c.x, left, right);
     const cy = Phaser.Math.Clamp(c.y, top, bottom);
@@ -1550,6 +1560,7 @@ export class GameScene extends Phaser.Scene {
       player: () => this.player,
       arena: () => this.arena,
       walkBounds: () => this.slotWorld.walkBounds,
+      edgeMargins: (c) => this.edgeMarginsOf(c),
       targeting: () => this.targeting,
       isSlowMode: () => this.controlMode === 'slow',
       slowTuning: () => this.slowTuning,

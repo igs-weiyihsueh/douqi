@@ -3,36 +3,41 @@ import Phaser from 'phaser';
 /** 多投多送膠囊量條的排版與動態 */
 const COIN_BAR_CONFIG = {
   /** 膠囊：高度（兩端半圓半徑 = 高度一半）、底色、描邊 */
-  HEIGHT: 40,
+  HEIGHT: 52,
   CAPSULE_FILL: 0x1a1206,
   CAPSULE_FILL_ALPHA: 0.8,
   CAPSULE_BORDER: 0xffc107,
   CAPSULE_BORDER_WIDTH: 3,
   /** 最左側硬幣：中心離膠囊左緣的距離、半徑、顏色（外圈 / 幣面 / 內圈線 / 反光） */
-  COIN_CENTER_X: 20,
-  COIN_RADIUS: 15,
+  COIN_CENTER_X: 24,
+  COIN_RADIUS: 19,
   COIN_RIM: 0xe0a000,
   COIN_FACE: 0xffd54f,
   COIN_INNER_LINE: 0xb07800,
-  COIN_INNER_RADIUS: 10,
+  COIN_INNER_RADIUS: 13,
   COIN_SHINE: 0xfff8d0,
   /** 格子：從 CELLS_LEFT 開始排，寬 CELL_WIDTH、間隔 CELL_GAP、高 CELL_HEIGHT、圓角 CELL_RADIUS；膠囊右側留 RIGHT_PADDING */
-  CELLS_LEFT: 40,
-  CELL_WIDTH: 40,
-  CELL_GAP: 4,
-  CELL_HEIGHT: 28,
-  CELL_RADIUS: 6,
-  RIGHT_PADDING: 10,
+  CELLS_LEFT: 48,
+  CELL_WIDTH: 52,
+  CELL_GAP: 3,
+  CELL_HEIGHT: 40,
+  CELL_RADIUS: 8,
+  RIGHT_PADDING: 12,
   /** 格子底色：未亮 / 已亮 */
   CELL_FILL: 0x000000,
   CELL_FILL_ALPHA: 0.55,
   CELL_LIT_FILL: 0xffc107,
   CELL_LIT_ALPHA: 1,
-  /** 有加贈的格子：劍圖示在左、「+N」在右（相對格子中心） */
-  ICON_OFFSET_X: -11,
-  ICON_SCALE: 0.7,
-  TEXT_OFFSET_X: 7,
-  FONT_SIZE: '15px',
+  /**
+   * 有加贈的格子：劍圖示在左、「+N」在右（相對格子中心）。未亮時金色劍 + 深色外框（深色劍放大 ICON_OUTLINE_SCALE 墊在後面），
+   * 亮格（金色底）時改成深色劍
+   */
+  ICON_OFFSET_X: -16,
+  ICON_SCALE: 1.1,
+  ICON_OUTLINE_SCALE: 1.3,
+  ICON_DARK: 0x3a2600,
+  TEXT_OFFSET_X: 8,
+  FONT_SIZE: '20px',
   TEXT_COLOR: '#ffffff',
   TEXT_LIT_COLOR: '#3a2600',
   TEXT_STROKE: '#000000',
@@ -53,8 +58,10 @@ interface CoinCell {
   root: Phaser.GameObjects.Container;
   /** 格子底（圓角矩形，亮 / 暗時重畫） */
   box: Phaser.GameObjects.Graphics;
-  /** 有加贈的格子才有：劍圖示與「+N」 */
+  /** 有加贈的格子才有：未亮時的金色劍與其深色外框、亮格時的深色劍、「+N」 */
   icon?: Phaser.GameObjects.Graphics;
+  iconOutline?: Phaser.GameObjects.Graphics;
+  iconLit?: Phaser.GameObjects.Graphics;
   label?: Phaser.GameObjects.Text;
 }
 
@@ -76,9 +83,9 @@ export class CoinBonusBar extends Phaser.GameObjects.Container {
   /**
    * @param scene 場景
    * @param bonuses 每格的加贈 CREDIT（格數 = 長度；0 = 該格空白）
-   * @param drawIcon 在指定 Graphics 上畫劍圖示（以原點為中心）
+   * @param drawIcon 在指定 Graphics 上畫劍圖示（以原點為中心）；fill 有給時整把劍用這個顏色，否則用原本的金色
    */
-  constructor(scene: Phaser.Scene, bonuses: ReadonlyArray<number>, drawIcon: (g: Phaser.GameObjects.Graphics) => void) {
+  constructor(scene: Phaser.Scene, bonuses: ReadonlyArray<number>, drawIcon: (g: Phaser.GameObjects.Graphics, fill?: number) => void) {
     super(scene, 0, 0);
     const cfg = COIN_BAR_CONFIG;
     this.bonuses = bonuses;
@@ -91,13 +98,19 @@ export class CoinBonusBar extends Phaser.GameObjects.Container {
       const root = scene.add.container(cx, midY, [box]);
       const cell: CoinCell = { root, box };
       if (bonus > 0) {
-        cell.icon = scene.add.graphics({ x: cfg.ICON_OFFSET_X, y: 0 }).setScale(cfg.ICON_SCALE);
-        drawIcon(cell.icon);
+        const icon = (scale: number, fill?: number): Phaser.GameObjects.Graphics => {
+          const g = scene.add.graphics({ x: cfg.ICON_OFFSET_X, y: 0 }).setScale(scale);
+          drawIcon(g, fill);
+          return g;
+        };
+        cell.iconOutline = icon(cfg.ICON_SCALE * cfg.ICON_OUTLINE_SCALE, cfg.ICON_DARK);
+        cell.icon = icon(cfg.ICON_SCALE);
+        cell.iconLit = icon(cfg.ICON_SCALE, cfg.ICON_DARK);
         cell.label = scene.add.text(cfg.TEXT_OFFSET_X, 0, `+${bonus}`, {
           fontFamily: 'monospace', fontSize: cfg.FONT_SIZE, fontStyle: 'bold', color: cfg.TEXT_COLOR,
           stroke: cfg.TEXT_STROKE, strokeThickness: cfg.TEXT_STROKE_WIDTH
         }).setOrigin(0.5);
-        root.add([cell.icon, cell.label]);
+        root.add([cell.iconOutline, cell.icon, cell.iconLit, cell.label]);
       }
       this.add(root);
       this.cells.push(cell);
@@ -232,7 +245,9 @@ export class CoinBonusBar extends Phaser.GameObjects.Container {
         .fillStyle(lit ? cfg.CELL_LIT_FILL : cfg.CELL_FILL, lit ? cfg.CELL_LIT_ALPHA : cfg.CELL_FILL_ALPHA)
         .fillRoundedRect(-cfg.CELL_WIDTH / 2, -cfg.CELL_HEIGHT / 2, cfg.CELL_WIDTH, cfg.CELL_HEIGHT, cfg.CELL_RADIUS);
       cell.label?.setColor(lit ? cfg.TEXT_LIT_COLOR : cfg.TEXT_COLOR).setAlpha(lit ? 1 : cfg.DIM_ALPHA);
-      cell.icon?.setAlpha(lit ? 1 : cfg.DIM_ALPHA);
+      cell.icon?.setVisible(!lit).setAlpha(cfg.DIM_ALPHA);
+      cell.iconOutline?.setVisible(!lit).setAlpha(cfg.DIM_ALPHA);
+      cell.iconLit?.setVisible(lit);
     });
   }
 }
