@@ -16,6 +16,8 @@
 - [清場輔助系統](./systems/offscreen-indicator.md) - 8方向箭頭指示、畫面外怪物定位
 - [仇恨機制系統](./systems/aggro-system.md) - DouPo黏著式仇恨、800px機制、主被動仇恨分類
 - [CREDIT投幣系統](./systems/credit-system.md) - 街機風格投幣續關、攻擊扣點、多人獨立計算
+- [敵人AI系統](./systems/enemy-ai.md) - 智能行為控制、投擲怪優化、無目標巡邏機制
+- [攝影機系統](./systems/camera-system.md) - 多人智能跟隨、CREDIT狀態整合、平滑視角切換
 - [戰鬥平衡系統](./systems/combat-balance.md) - 怪物速度調整、戰鬥節奏優化、數值平衡
 - [除錯系統](./systems/debug-system.md) - GameDebugApi架構、24個除錯方法 (方案B B-4)
 - [性能優化系統](./systems/performance-optimization.md) - 空間格子、物件池預熱、JS優化
@@ -28,6 +30,7 @@
 - [技術選擇和原因](./decisions/technical-choices.md) - Phaser 3.80.1、TypeScript 5.4、Vite 5.2技術棧選擇理由
 - [CREDIT投幣系統實現](./decisions/credit-implementation.md) - 街機風格投幣續關vs傳統HP系統決策
 - [UX優化微調](./decisions/ux-optimization.md) - CREDIT提示位置+怪物速度用戶回饋優化
+- [UX回饋驅動優化](./decisions/ux-feedback.md) - 用戶試玩6項問題全面修正決策
 
 ### 🏗️ [Architecture](./architecture/) - 系統架構分析
 - [遊戲引擎架構](./architecture/game-engine.md) - Phaser 3.80.1技術棧、Scene系統、物件管理
