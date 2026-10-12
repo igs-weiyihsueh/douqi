@@ -1742,10 +1742,23 @@ export const GameConfig = {
       stroke: 0x7a1e0a,
       stripe: 0xffd400
     },
-    /** 木箱/桶【可推動】——角色/怪走路碰觸推動物件的物理參數 */
+    /**
+     * 木箱/桶【可推動】——角色/怪走路碰到物件時推動它。物件被牆或其他物件擋住推不動時，推的一方被擋下：
+     * 角色停在外緣，怪則沿物件邊緣往較近的一端滑開（繞過去，不穿模）
+     */
     push: {
-      /** 被推時每次接觸施加的速度上限(像素/秒;推著走手感、非撞飛) */
-      maxPushSpeed: 180,
+      /** 被推動的物件離手後的滑行速度（像素/秒，沿推的方向；之後依 friction 減速） */
+      characterPushSpeed: 120,
+      /** 怪推動時的滑行速度：坦克較大、小怪較小；未列出的種類用 enemyPushSpeedDefault */
+      enemyPushSpeed: { normal: 130, tank: 230, bomber: 130 } as Partial<Record<string, number>>,
+      enemyPushSpeedDefault: 130,
+      /**
+       * 角色壓進物件的距離由物件分擔的比例，其餘把角色推回——推箱時角色變慢、有沉重感
+       * （0.67 實測推箱時移動速度約為平常的 74%）；怪一律由物件全部分擔（不減速）
+       */
+      characterCrateShare: 0.67,
+      /** 怪被推不動的物件擋住時，側向滑開的距離 = 被擋下的距離 × 此倍率（約等於以原速沿邊緣滑開） */
+      enemySlideRatio: 1,
       /** 每秒速度衰減比例(摩擦阻力;越大停越快) */
       friction: 6
     }

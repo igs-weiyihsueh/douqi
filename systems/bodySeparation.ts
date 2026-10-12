@@ -450,18 +450,94 @@ export function pushEnemiesOutOfNpc(npc: Enemy, enemies: Phaser.Physics.Arcade.G
 // 可推動物件（木箱 / 桶）
 // ---------------------------------------------------------------------------
 
+/** 推動參數：滑行速度、物件分擔壓入距離的比例、被擋下時側向滑開的倍率（0 = 不滑） */
+interface PushOptions {
+  pushSpeed: number;
+  crateShare: number;
+  slideRatio: number;
+}
+
+/** 物件被擋住的判定容差（像素） */
+const CRATE_BLOCK_EPS = 0.5;
+
 /**
- * 把與圓 (x, y, radius) 重疊的物件（碰撞矩形）推出重疊，並沿推出方向加上 pushSpeed 的速度
+ * 把與圓 (x, y, radius) 重疊的物件（碰撞矩形）推出重疊：物件分擔 crateShare 的壓入距離（被牆或其他物件擋住時只移得到能移的部分），
+ * 其餘由推的一方退回；被擋下的部分依 slideRatio 讓推的一方沿物件邊緣往較近的一端滑開。物件有移動時沿推的方向給 pushSpeed 的滑行速度
+ *
+ * @returns 推的一方這一幀要移動的量
  */
-function pushBreakablesFrom(x: number, y: number, radius: number, breakables: Phaser.GameObjects.Group, pushSpeed: number): void {
+function pushBreakablesFrom(
+  x: number, y: number, radius: number,
+  breakables: Phaser.GameObjects.Group, arena: Phaser.Geom.Rectangle, opts: PushOptions
+): { dx: number; dy: number } {
+  let dx = 0, dy = 0;
   for (const child of breakables.getChildren()) {
     const bk = child as Breakable;
     if (!bk.active || bk.dead || bk.landing) continue;
-    const push = circlePushOutOfBox(x, y, radius, bk.getBody());
+    const body = bk.getBody();
+    const cx = body.centerX, cy = body.centerY;
+    const push = circlePushOutOfBox(x + dx, y + dy, radius, body);
     if (!push) continue;
-    bk.setPosition(bk.x + push.nx * push.depth, bk.y + push.ny * push.depth);
-    bk.vx += push.nx * pushSpeed; bk.vy += push.ny * pushSpeed; // 速度累加，updateBreakableMotion 會摩擦衰減
+    const want = push.depth * opts.crateShare;
+    const moved = moveCrateBlocked(bk, push.nx * want, push.ny * want, breakables, arena);
+    const movedAlong = moved.x * push.nx + moved.y * push.ny;
+    // 推的一方退回：沒被物件分擔的部分
+    const back = push.depth - movedAlong;
+    dx -= push.nx * back;
+    dy -= push.ny * back;
+    if (movedAlong > CRATE_BLOCK_EPS) {
+      // 沿推的方向的滑行速度補到 pushSpeed（不累加，推著走不會越推越快）
+      const vn = bk.vx * push.nx + bk.vy * push.ny;
+      if (vn < opts.pushSpeed) {
+        bk.vx += push.nx * (opts.pushSpeed - vn);
+        bk.vy += push.ny * (opts.pushSpeed - vn);
+      }
+    }
+    const blocked = want - movedAlong;
+    if (opts.slideRatio > 0 && blocked > CRATE_BLOCK_EPS) {
+      // 沿物件邊緣（推的方向的垂直方向）往推的一方所在的那一側滑開——離物件中心較近的一端
+      const tx = -push.ny, ty = push.nx;
+      const side = (x - cx) * tx + (y - cy) * ty >= 0 ? 1 : -1;
+      dx += tx * side * blocked * opts.slideRatio;
+      dy += ty * side * blocked * opts.slideRatio;
+    }
   }
+  return { dx, dy };
+}
+
+/**
+ * 移動物件 (dx, dy)，但不超出移動區、不推進其他物件（分 x / y 軸各自掃過，碰到就停在接觸面）
+ *
+ * @returns 實際移動的量
+ */
+function moveCrateBlocked(
+  bk: Breakable, dx: number, dy: number,
+  breakables: Phaser.GameObjects.Group, arena: Phaser.Geom.Rectangle
+): { x: number; y: number } {
+  const b = bk.getBody();
+  let left = b.left, right = b.right, top = b.top, bottom = b.bottom;
+  const others: Phaser.Geom.Rectangle[] = [];
+  for (const child of breakables.getChildren()) {
+    const o = child as Breakable;
+    if (o !== bk && o.active && !o.dead && !o.landing) others.push(o.getBody());
+  }
+  let mx = dx > 0 ? Math.min(dx, arena.right - right) : Math.max(dx, arena.left - left);
+  for (const ob of others) {
+    if (ob.bottom <= top || ob.top >= bottom) continue; // y 不重疊，x 方向碰不到
+    if (mx > 0 && ob.left >= right - CRATE_BLOCK_EPS) mx = Math.min(mx, ob.left - right);
+    if (mx < 0 && ob.right <= left + CRATE_BLOCK_EPS) mx = Math.max(mx, ob.right - left);
+  }
+  mx = dx > 0 ? Math.max(0, mx) : Math.min(0, mx);
+  left += mx; right += mx;
+  let my = dy > 0 ? Math.min(dy, arena.bottom - bottom) : Math.max(dy, arena.top - top);
+  for (const ob of others) {
+    if (ob.right <= left || ob.left >= right) continue; // x 不重疊，y 方向碰不到
+    if (my > 0 && ob.top >= bottom - CRATE_BLOCK_EPS) my = Math.min(my, ob.top - bottom);
+    if (my < 0 && ob.bottom <= top + CRATE_BLOCK_EPS) my = Math.max(my, ob.bottom - top);
+  }
+  my = dy > 0 ? Math.max(0, my) : Math.min(0, my);
+  bk.setPosition(bk.x + mx, bk.y + my);
+  return { x: mx, y: my };
 }
 
 /**
@@ -491,24 +567,43 @@ function circlePushOutOfBox(x: number, y: number, radius: number, box: Phaser.Ge
 }
 
 /**
- * 一般怪碰到木箱 / 桶時把物件推開（不擋怪、不改怪的 AI），固定目標不推
+ * 一般怪碰到木箱 / 桶時推開物件（不減速、推力依種類）；物件推不動時怪沿邊緣滑開繞過。固定目標不推
  *
  * @param e 敵人
  * @param breakables 可打破物件池
+ * @param arena 移動區
  */
-export function pushBreakablesFromEnemy(e: Enemy, breakables: Phaser.GameObjects.Group): void {
+export function pushBreakablesFromEnemy(e: Enemy, breakables: Phaser.GameObjects.Group, arena: Phaser.Geom.Rectangle): void {
   if (isFixedEnemy(e) || !e.active || e.dead) return;
-  pushBreakablesFrom(e.x, e.y, e.getBodyRadius(), breakables, Math.min(GameConfig.breakable.push.maxPushSpeed, GameConfig.slow.moveSpeed));
+  const cfg = GameConfig.breakable.push;
+  const r = e.getBodyRadius();
+  const move = pushBreakablesFrom(e.x, e.y, r, breakables, arena, {
+    pushSpeed: cfg.enemyPushSpeed[e.enemyType] ?? cfg.enemyPushSpeedDefault,
+    crateShare: 1,
+    slideRatio: cfg.enemySlideRatio
+  });
+  if (move.dx === 0 && move.dy === 0) return;
+  e.setPosition(
+    Phaser.Math.Clamp(e.x + move.dx, arena.left + r, arena.right - r),
+    Phaser.Math.Clamp(e.y + move.dy, arena.top + r, arena.bottom - r)
+  );
 }
 
 /**
- * 角色碰到木箱 / 桶時把物件推開（可以把爆炸桶推進怪群再打破）；呼叫端在衝刺中不套用（衝刺撞到直接打破）
+ * 角色碰到木箱 / 桶時推動物件，推的時候變慢（沉重感）；物件推不動時角色停在外緣。呼叫端在衝刺中不套用（衝刺穿過）
  *
  * @param c 角色
  * @param breakables 可打破物件池
+ * @param arena 移動區
  */
-export function pushBreakablesFromCharacter(c: Character, breakables: Phaser.GameObjects.Group): void {
-  pushBreakablesFrom(c.x, c.y, GameConfig.player.radius, breakables, GameConfig.breakable.push.maxPushSpeed);
+export function pushBreakablesFromCharacter(c: Character, breakables: Phaser.GameObjects.Group, arena: Phaser.Geom.Rectangle): void {
+  const cfg = GameConfig.breakable.push;
+  const move = pushBreakablesFrom(c.x, c.y, GameConfig.player.radius, breakables, arena, {
+    pushSpeed: cfg.characterPushSpeed,
+    crateShare: cfg.characterCrateShare,
+    slideRatio: 0
+  });
+  if (move.dx !== 0 || move.dy !== 0) c.setPosition(c.x + move.dx, c.y + move.dy);
 }
 
 /**

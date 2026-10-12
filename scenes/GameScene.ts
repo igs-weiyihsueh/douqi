@@ -771,8 +771,8 @@ export class GameScene extends Phaser.Scene {
       }
       // 戰鬥時角色與一般怪輕微分離（不完全重疊）；衝刺中不套用(不影響衝刺打擊貼近手感)
       if (!c.isDashing && !c.isSkillLocked(time)) pushEnemiesAwayFromCharacter(c, this.enemies, this.arena, this.controlMode === 'slow' ? this.vacuumZone(c) : null);
-      // 木箱擋角色（不可穿越）——每幀手動把重疊木箱的角色推回木箱外緣(可靠、高速不穿透)；衝刺中不套用(衝刺撞破)
-      if (!c.isDashing && !c.isSkillLocked(time)) pushBreakablesFromCharacter(c, this.breakables);
+      // 角色推木箱（推的時候變慢；推不動時停在外緣）；衝刺中不套用（衝刺穿過）
+      if (!c.isDashing && !c.isSkillLocked(time)) pushBreakablesFromCharacter(c, this.breakables, this.arena);
       // 塔/BOSS 實體碰撞:角色不可穿過塔/BOSS 本體(含衝刺中也擋,不讓穿王/塔身)
       pushCharacterOutOfStructures(c, this.enemies);
       this.actions.clampToArena(c);
@@ -1825,9 +1825,9 @@ export class GameScene extends Phaser.Scene {
 
       // 邊界反彈——敵人被擊飛超出場地時 clamp 回內側並反向該軸速度
       bounceEnemyOffBounds(enemy, this.arena);
-      // 怪推開木箱、不可穿過塔 / BOSS 本體（時停中怪凍結，不套用）
+      // 怪推開木箱（推不動時沿邊緣繞過）、不可穿過塔 / BOSS 本體（時停中怪凍結，不套用）
       if (!this.timeStopped) {
-        pushBreakablesFromEnemy(enemy, this.breakables);
+        pushBreakablesFromEnemy(enemy, this.breakables, this.arena);
         pushEnemyOutOfStructures(enemy, this.enemies);
       }
     }
