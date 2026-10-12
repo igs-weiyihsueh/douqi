@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GameConfig } from '../config';
-import type { Breakable } from '../objects/Breakable';
+import { crateBodyRadius, type Breakable } from '../objects/Breakable';
 import type { Character } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
 import { isFixedEnemy } from '../systems/enemyKinds';
@@ -30,6 +30,8 @@ export interface BreakableHost {
   /** 對角色造成傷害 */
   damageCharacterFrom(c: Character, amount: number, fromX: number, fromY: number): void;
   flashHurt(c: Character): void;
+  /** 角色的攻擊命中物件（與命中敵人一樣計算 CREDIT 扣點） */
+  onBreakableHit(actor: Character, time: number): void;
   dropItemAt(x: number, y: number, time: number): void;
   spawnExpandingRing(x: number, y: number, radius: number, color: number, ms?: number): void;
   shakeOnce(duration: number, intensity: number): void;
@@ -66,8 +68,9 @@ const BREAK_PARTICLES = 8;
 /**
  * 可破壞物件（木箱、爆炸桶）：
  * - 布置：非關卡制每波成堆散布（遠離中心、避開玩家、彼此不疊）；關卡制每進一個區域隨機靜態布置（右側基調多桶）
- * - 打破：普攻扇形 / 衝刺圓形依攻擊力扣血；招式 AOE（圓形 / 定向矩形）直接秒碎且一次最多掉 maxDropPerBreak 個道具
- * - 木箱碎裂噴粒子、機率掉道具；爆炸桶打破後先倒數（地面警示圈）再爆炸：怪受傷並被炸飛、角色受傷、連鎖引爆附近的桶
+ * - 打破：普攻扇形 / 衝刺圓形 / 招式 AOE（圓形 / 定向矩形）每次命中扣 1 耐久（Breakable.hit），歸零才碎；
+ *   一次攻擊最多掉 maxDropPerBreak 個道具；命中至少一個時通知場景計算 CREDIT（onBreakableHit），HIT 連擊由各攻擊的呼叫端計算
+ * - 木箱碎裂噴粒子、機率掉道具；爆炸桶（barrel.enabled 停用中）打破後先倒數（地面警示圈）再爆炸：怪受傷並被炸飛、角色受傷、連鎖引爆附近的桶
  * - 推動與碰撞分離在 systems/bodySeparation
  */
 export class BreakableController {
@@ -103,7 +106,8 @@ export class BreakableController {
       clusterCenters.push({ x: hx, y: hy });
       // 堆內木箱彼此間距至少一個直徑，不互疊
       const placed: Array<{ x: number; y: number }> = [];
-      const minGap = cfg.radius * 2 + IN_CLUSTER_GAP;
+      const crateR = crateBodyRadius(this.scene.textures);
+      const minGap = crateR * 2 + IN_CLUSTER_GAP;
       for (let n = 0; n < cfg.perCluster; n++) {
         if (pool.countActive(true) >= cfg.maxAlive) break;
         let bx = 0, by = 0, placedOk = false;
@@ -112,7 +116,7 @@ export class BreakableController {
           const rad = Math.random() * cfg.clusterSpread;
           const x = Phaser.Math.Clamp(hx + Math.cos(ang) * rad, a.left + inset, a.right - inset);
           const y = Phaser.Math.Clamp(hy + Math.sin(ang) * rad, a.top + inset, a.bottom - inset);
-          if (Phaser.Math.Distance.Between(x, y, p.x, p.y) < GameConfig.player.radius + cfg.radius + PLAYER_GAP) continue;
+          if (Phaser.Math.Distance.Between(x, y, p.x, p.y) < GameConfig.player.radius + crateR + PLAYER_GAP) continue;
           if (placed.some((q) => Phaser.Math.Distance.Between(x, y, q.x, q.y) < minGap)) continue;
           bx = x; by = y; placedOk = true; break;
         }
@@ -125,6 +129,7 @@ export class BreakableController {
     }
     // 少量爆炸桶：同樣遠離中心、避開玩家，且不與現有物件互疊（桶與桶之間距離更遠，避免輕易連鎖）
     const bcfg = cfg.barrel;
+    if (!bcfg.enabled) return;
     for (let n = 0; n < bcfg.perWave; n++) {
       if (pool.countActive(true) >= cfg.maxAlive) break;
       let bx = 0, by = 0, ok = false;
@@ -137,7 +142,7 @@ export class BreakableController {
         for (const ch of pool.getChildren()) {
           const o = ch as Breakable;
           if (!o.active) continue;
-          const need = o.explosive ? bcfg.minBarrelSpacing : (cfg.radius * 2 + BARREL_CRATE_GAP);
+          const need = o.explosive ? bcfg.minBarrelSpacing : (bcfg.radius + o.getBodyRadius() + BARREL_CRATE_GAP);
           if (Phaser.Math.Distance.Between(x, y, o.x, o.y) < need) { clash = true; break; }
         }
         if (clash) continue;
@@ -152,6 +157,7 @@ export class BreakableController {
 
   /**
    * 關卡制：在目前移動區隨機靜態布置木箱與爆炸桶（不重生）；避開中心、邊緣與玩家，彼此不重疊
+   * （間距至少 minSpacingR，且不小於兩個木箱的碰撞直徑）
    *
    * @param side 物件布置的基調（右側爆炸桶上限多 barrelBiasExtra）
    */
@@ -162,7 +168,7 @@ export class BreakableController {
     const pool = this.host.group();
     const minWH = Math.min(a.width, a.height);
     const placed: Array<{ x: number; y: number }> = [];
-    const spacing = cfg.minSpacingR * minWH;
+    const spacing = Math.max(cfg.minSpacingR * minWH, crateBodyRadius(this.scene.textures) * 2 + IN_CLUSTER_GAP);
     const centerAvoid = cfg.centerAvoidR * minWH;
     const pick = (): { x: number; y: number } | null => {
       for (let attempt = 0; attempt < STATIC_TRIES; attempt++) {
@@ -177,7 +183,7 @@ export class BreakableController {
     };
     const crateN = Phaser.Math.Between(cfg.crateMin, cfg.crateMax);
     const barrelMax = cfg.barrelMax + (side === 'R' ? cfg.barrelBiasExtra : 0);
-    const barrelN = Phaser.Math.Between(cfg.barrelMin, barrelMax);
+    const barrelN = GameConfig.breakable.barrel.enabled ? Phaser.Math.Between(cfg.barrelMin, barrelMax) : 0;
     const place = (count: number, kind: 'crate' | 'barrel'): void => {
       for (let i = 0; i < count; i++) {
         const pt = pick(); if (!pt) break;
@@ -199,20 +205,23 @@ export class BreakableController {
   }
 
   /**
-   * 招式 AOE（圓形）直接秒碎範圍內的物件（不管剩餘血量）；一次最多 maxDropPerBreak 個掉道具，其餘只碎不掉
+   * 招式 AOE（圓形）命中範圍內的物件，每個扣 1 耐久
    *
+   * @param actor 施放的角色
    * @param x 圓心 x
    * @param y 圓心 y
    * @param radius 半徑（到物件外緣）
    * @param time 目前場景時間
+   * @returns 命中的物件數
    */
-  breakInCircle(x: number, y: number, radius: number, time: number): void {
-    this.shatterWhere((bk) => Phaser.Math.Distance.Between(x, y, bk.x, bk.y) <= radius + bk.getBodyRadius(), time);
+  hitInCircle(actor: Character, x: number, y: number, radius: number, time: number): number {
+    return this.hitWhere(actor, (bk) => Phaser.Math.Distance.Between(x, y, bk.x, bk.y) <= radius + bk.getBodyRadius(), time);
   }
 
   /**
-   * 招式 AOE（朝 dir 的定向矩形）直接秒碎範圍內的物件，掉落上限同 breakInCircle
+   * 招式 AOE（朝 dir 的定向矩形）命中範圍內的物件，每個扣 1 耐久
    *
+   * @param actor 施放的角色
    * @param ox 矩形起點 x
    * @param oy 矩形起點 y
    * @param dir 方向（弧度）
@@ -220,47 +229,60 @@ export class BreakableController {
    * @param length 往前的長度
    * @param width 寬度
    * @param time 目前場景時間
+   * @returns 命中的物件數
    */
-  breakInRect(ox: number, oy: number, dir: number, back: number, length: number, width: number, time: number): void {
-    this.shatterWhere((bk) => pointInOrientedRect(bk.x, bk.y, ox, oy, dir, back, length, width), time);
+  hitInRect(actor: Character, ox: number, oy: number, dir: number, back: number, length: number, width: number, time: number): number {
+    return this.hitWhere(actor, (bk) => pointInOrientedRect(bk.x, bk.y, ox, oy, dir, back, length, width), time);
   }
 
   /**
-   * 普攻 / 衝刺順手打物件：範圍內依攻擊力扣血，血量歸零才打破（不鎖定、不算連段）
+   * 普攻 / 衝刺打物件：範圍內每個扣 1 耐久
    *
    * @param c 攻擊的角色
    * @param radius 範圍半徑（到物件外緣）
    * @param half 扇形半角（useArc 時用）
    * @param useArc true = 普攻扇形（需在 aimAngle ± half 內）；false = 衝刺圓形
-   * @param atk 攻擊力
    * @param time 目前場景時間
+   * @param alreadyHit 這一招已命中過的物件（跳過；命中的會加進去）——衝刺每幀判定，一次衝刺每個物件只算一下
+   * @returns 命中的物件數
    */
-  hitInRange(c: Character, radius: number, half: number, useArc: boolean, atk: number, time: number): void {
-    for (const child of this.host.group().getChildren()) {
-      const bk = child as Breakable;
-      if (!bk.active || bk.dead) continue;
-      if (Phaser.Math.Distance.Between(c.x, c.y, bk.x, bk.y) > radius + bk.getBodyRadius()) continue;
-      if (useArc) {
-        const toBk = Phaser.Math.Angle.Between(c.x, c.y, bk.x, bk.y);
-        if (Math.abs(Phaser.Math.Angle.Wrap(toBk - c.aimAngle)) > half) continue;
-      }
-      if (bk.hit(atk)) this.breakOne(bk, time);
-    }
+  hitInRange(c: Character, radius: number, half: number, useArc: boolean, time: number, alreadyHit?: Set<Breakable>): number {
+    return this.hitWhere(c, (bk) => {
+      if (alreadyHit?.has(bk)) return false;
+      if (Phaser.Math.Distance.Between(c.x, c.y, bk.x, bk.y) > radius + bk.getBodyRadius()) return false;
+      if (!useArc) return true;
+      const toBk = Phaser.Math.Angle.Between(c.x, c.y, bk.x, bk.y);
+      return Math.abs(Phaser.Math.Angle.Wrap(toBk - c.aimAngle)) <= half;
+    }, time, alreadyHit);
   }
 
-  /** 秒碎符合條件的物件（倒數中的爆炸桶跳過，它本來就會爆），掉落數有上限 */
-  private shatterWhere(inRange: (bk: Breakable) => boolean, time: number): void {
+  /**
+   * 命中符合條件的物件：各扣 1 耐久，打破的碎裂（一次最多 maxDropPerBreak 個掉道具）；命中至少一個時通知場景計算 CREDIT
+   *
+   * @param actor 攻擊的角色
+   * @param inRange 物件是否在攻擊範圍內
+   * @param time 目前場景時間
+   * @param hitSet 有給時把命中的物件加進去
+   * @returns 命中的物件數
+   */
+  private hitWhere(actor: Character, inRange: (bk: Breakable) => boolean, time: number, hitSet?: Set<Breakable>): number {
+    let hits = 0;
     let drops = 0;
     for (const child of this.host.group().getChildren()) {
       const bk = child as Breakable;
-      if (!bk.active || bk.dead) continue;
-      if (!inRange(bk)) continue;
-      if (bk.fusing) continue;
-      bk.dead = true;
-      const allowDrop = drops < GameConfig.breakable.maxDropPerBreak;
-      this.breakOne(bk, time, allowDrop);
-      if (allowDrop) drops++;
+      if (!bk.active || bk.dead || bk.fusing || !inRange(bk)) continue;
+      const result = bk.hit(time);
+      if (result === 'ignored') continue;
+      hits++;
+      hitSet?.add(bk);
+      if (result === 'broken') {
+        const allowDrop = drops < GameConfig.breakable.maxDropPerBreak;
+        this.breakOne(bk, time, allowDrop);
+        if (allowDrop) drops++;
+      }
     }
+    if (hits > 0) this.host.onBreakableHit(actor, time);
+    return hits;
   }
 
   /** 打破一個物件：爆炸桶進入倒數；木箱碎裂噴粒子、（allowDrop 時）機率掉道具並回收 */

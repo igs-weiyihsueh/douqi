@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GameConfig } from '../config';
+import type { Breakable } from '../objects/Breakable';
 import type { Character } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
 import type { CharacterParams } from '../systems/characterParams';
@@ -50,8 +51,10 @@ export interface CharacterActionHost {
   attackDamage(): number;
   /** 角色對敵人造成傷害（走場景的擊殺結算） */
   damageEnemy(actor: Character, enemy: Enemy, damage: number, knockback: number, time: number): void;
-  /** 範圍內打可破壞物件（useArc = true 時只打 aimAngle 扇形內） */
-  hitBreakablesInRange(c: Character, radius: number, half: number, useArc: boolean, damage: number, time: number): void;
+  /**
+   * 範圍內打可破壞物件（useArc = true 時只打 aimAngle 扇形內；alreadyHit 內的跳過、命中的加進去），回傳命中數
+   */
+  hitBreakablesInRange(c: Character, radius: number, half: number, useArc: boolean, time: number, alreadyHit?: Set<Breakable>): number;
   /** 衝刺撞到敵人時的攻擊（含特效與連段） */
   performAttackOn(actor: Character, primary: Enemy, time: number): void;
   /** 普攻命中：連段累積 */
@@ -77,8 +80,6 @@ const STANDOFF_MARGIN = 6;
 const DASH_ARRIVE_MIN = 12;
 /** 衝刺到點距離 = 速度 × 此秒數（約兩幀），避免高速衝刺越過終點後反向、在牆邊來回震盪 */
 const DASH_ARRIVE_LOOKAHEAD_SEC = 0.032;
-/** 衝刺撞可破壞物件的傷害（一撞即破，衝刺不卡住） */
-const DASH_BREAK_DAMAGE = 99999;
 
 /**
  * 角色行動（P1 與 BOT 共用）：
@@ -89,6 +90,9 @@ const DASH_BREAK_DAMAGE = 99999;
  * - BOT AI：選目標、沒目標朝敵群游走、依出手間隔行動
  */
 export class CharacterActionController {
+  /** 各角色這一次衝刺已撞過的可破壞物件（衝刺每幀判定，一次衝刺每個物件只算一下；開始衝刺時清空） */
+  private readonly dashHitBreakables = new Map<Character, Set<Breakable>>();
+
   constructor(private readonly host: CharacterActionHost) {}
 
   private get targeting(): TargetingController {
@@ -265,7 +269,7 @@ export class CharacterActionController {
     this.beginDash(c, target.x - Math.cos(c.aimAngle) * standoff, target.y - Math.sin(c.aimAngle) * standoff, time, false);
   }
 
-  /** 扇形劍氣：朝 aimAngle 劈出扇形，範圍內敵人受普攻傷害與擊退、順手打可破壞物件；命中至少一隻才累積連段 */
+  /** 扇形劍氣：朝 aimAngle 劈出扇形，範圍內敵人受普攻傷害與擊退、順手打可破壞物件；命中至少一隻敵人才累積連段，敵人或物件命中算一下 HIT */
   private performMeleeArc(c: Character, time: number): void {
     const cfg = GameConfig.melee;
     const emp = c.isEmpowered(time);
@@ -283,11 +287,9 @@ export class CharacterActionController {
         hitCount++;
       }
     }
-    this.host.hitBreakablesInRange(c, radius, half, true, atk, time);
-    if (hitCount > 0) {
-      this.host.onComboHit(c, time);
-      this.host.triggerComboHit(c);
-    }
+    const breakableHits = this.host.hitBreakablesInRange(c, radius, half, true, time);
+    if (hitCount > 0) this.host.onComboHit(c, time);
+    if (hitCount > 0 || breakableHits > 0) this.host.triggerComboHit(c);
     this.host.flashWhite(c);
     this.host.spawnMeleeArcEffect(c.x, c.y, c.aimAngle);
   }
@@ -363,6 +365,7 @@ export class CharacterActionController {
     c.dashDestY = Phaser.Math.Clamp(destY, bnd.top + r, bnd.bottom - r);
     c.isDashing = true;
     c.dashToItem = toItem;
+    this.dashHitBreakables.get(c)?.clear();
     c.nextAttackAllowedAt = time + this.attackCooldownMs();
     if (GameConfig.player.dashShieldInvuln) c.dashShielded = true;
     c.showDashShield(true);
@@ -381,7 +384,7 @@ export class CharacterActionController {
   }
 
   /**
-   * 每幀推進衝刺：P1 撞碎路上的可破壞物件；一般衝刺撞到敵人停下攻擊（BOSS / 塔停在外緣）；
+   * 每幀推進衝刺：P1 撞到路上的可破壞物件（每個物件一次衝刺只算一下，撞到就算一下 HIT）；一般衝刺撞到敵人停下攻擊（BOSS / 塔停在外緣）；
    * 否則朝固定終點前進（方向不隨滑鼠改變），到點停下
    *
    * @param c 角色
@@ -390,7 +393,12 @@ export class CharacterActionController {
   handleDash(c: Character, time: number): void {
     if (!c.isDashing) return;
     if (c === this.host.player()) {
-      this.host.hitBreakablesInRange(c, GameConfig.aim.dashHitRadius + GameConfig.breakable.radius, 0, false, DASH_BREAK_DAMAGE, time);
+      let hitSet = this.dashHitBreakables.get(c);
+      if (!hitSet) {
+        hitSet = new Set();
+        this.dashHitBreakables.set(c, hitSet);
+      }
+      if (this.host.hitBreakablesInRange(c, GameConfig.aim.dashHitRadius, 0, false, time, hitSet) > 0) this.host.triggerComboHit(c);
     }
     // 切入中：以減速繼續陷入敵人，時間到才停下（不再判定撞擊，避免同一次衝刺連打）
     if (c.cutInUntil > 0) {

@@ -26,10 +26,10 @@ export interface ComboSkillHost {
   damageEnemyFrom(actor: Character, enemy: Enemy, damage: number, knockback: number, fromX: number, fromY: number, time: number): void;
   /** 角色對敵人造成傷害（以角色位置為來源） */
   damageEnemy(actor: Character, enemy: Enemy, damage: number, knockback: number, time: number): void;
-  /** 招式 AOE 秒碎可破壞物件（圓形 / 定向矩形） */
-  breakInCircle(x: number, y: number, radius: number, time: number): void;
-  breakInRect(ox: number, oy: number, dir: number, back: number, length: number, width: number, time: number): void;
-  /** COMBO 連擊 +1（一招命中至少一隻算一下） */
+  /** 招式 AOE 命中可破壞物件（圓形 / 定向矩形，每個扣 1 耐久），回傳命中數 */
+  hitBreakablesInCircle(actor: Character, x: number, y: number, radius: number, time: number): number;
+  hitBreakablesInRect(actor: Character, ox: number, oy: number, dir: number, back: number, length: number, width: number, time: number): number;
+  /** COMBO 連擊 +1（一招命中至少一隻敵人或一個可破壞物件算一下） */
   comboRewardHit(c: Character): void;
   /** P1 普攻命中次數 +1（結算統計） */
   countP1AttackHit(): void;
@@ -252,8 +252,8 @@ export class ComboSkillController {
         hitAny = true;
       }
     }
+    if (this.host.hitBreakablesInCircle(c, c.x, c.y, radius, time) > 0) hitAny = true;
     if (hitAny) this.host.comboRewardHit(c);
-    this.host.breakInCircle(c.x, c.y, radius, time);
     this.host.shakeOnce(SKILL_SHAKE_MS, SKILL_SHAKE_INTENSITY);
     this.enterPerformance(c, GameConfig.performanceTime.circle, time);
   }
@@ -281,8 +281,8 @@ export class ComboSkillController {
         hitAny = true;
       }
     }
+    if (this.host.hitBreakablesInRect(c, ox, oy, dir, 0, length, width, time) > 0) hitAny = true;
     if (hitAny) this.host.comboRewardHit(c);
-    this.host.breakInRect(ox, oy, dir, 0, length, width, time);
     this.host.shakeOnce(SKILL_SHAKE_MS, SKILL_SHAKE_INTENSITY);
     this.enterPerformance(c, GameConfig.performanceTime.line, time);
   }
@@ -359,9 +359,9 @@ export class ComboSkillController {
   }
 
   /**
-   * 爆發的一段：範圍內敵人受傷、秒碎物件；命中時閃白、小震動（被打的怪各自命中凍結，不再暫停整個物理世界）
+   * 爆發的一段：範圍內敵人受傷、可破壞物件扣耐久；命中時閃白、小震動（被打的怪各自命中凍結，不再暫停整個物理世界）
    *
-   * @returns 這段是否命中至少一隻敵人
+   * @returns 這段是否命中至少一隻敵人或一個可破壞物件
    */
   private burstTick(c: Character): boolean {
     if (this.host.isGameOver() || !c.alive) return false;
@@ -377,7 +377,7 @@ export class ComboSkillController {
         hitAny = true;
       }
     }
-    this.host.breakInCircle(c.x, c.y, radius, time);
+    if (this.host.hitBreakablesInCircle(c, c.x, c.y, radius, time) > 0) hitAny = true;
     if (hitAny) {
       this.host.flashWhite(c);
       this.host.shakeOnce(BURST_TICK_SHAKE_MS, SKILL_SHAKE_INTENSITY);

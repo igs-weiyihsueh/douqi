@@ -1241,8 +1241,9 @@ export class GameScene extends Phaser.Scene {
       targeting: () => this.targeting,
       damageEnemyFrom: (actor, enemy, damage, knockback, fromX, fromY, time) => this.damageEnemyFrom(actor, enemy, damage, knockback, fromX, fromY, time),
       damageEnemy: (actor, enemy, damage, knockback, time) => this.damageEnemy(actor, enemy, damage, knockback, time),
-      breakInCircle: (x, y, radius, time) => this.breakableCtl.breakInCircle(x, y, radius, time),
-      breakInRect: (ox, oy, dir, back, length, width, time) => this.breakableCtl.breakInRect(ox, oy, dir, back, length, width, time),
+      hitBreakablesInCircle: (actor, x, y, radius, time) => this.breakableCtl.hitInCircle(actor, x, y, radius, time),
+      hitBreakablesInRect: (actor, ox, oy, dir, back, length, width, time) =>
+        this.breakableCtl.hitInRect(actor, ox, oy, dir, back, length, width, time),
       comboRewardHit: (c) => this.comboReward.hit(c),
       countP1AttackHit: () => { this.p1AttackHits++; },
       spawnExpandingRing: (x, y, radius, color, ms) => this.fx.expandingRing(x, y, radius, color, ms),
@@ -1341,6 +1342,7 @@ export class GameScene extends Phaser.Scene {
       damageEnemyFrom: (actor, enemy, damage, knockback, fromX, fromY, time) => this.damageEnemyFrom(actor, enemy, damage, knockback, fromX, fromY, time),
       damageCharacterFrom: (c, amount, fromX, fromY) => this.damageCharacterFrom(c, amount, fromX, fromY),
       flashHurt: (c) => this.fx.flashHurt(c),
+      onBreakableHit: (actor, time) => this.creditCtl.onAttackHit(actor, time), // 打到木箱與打到怪一樣扣 CREDIT
       dropItemAt: (x, y, time) => this.dropItemAt(x, y, time),
       spawnExpandingRing: (x, y, radius, color, ms) => this.fx.expandingRing(x, y, radius, color, ms),
       shakeOnce: (duration, intensity) => this.fx.shake(duration, intensity)
@@ -1436,7 +1438,7 @@ export class GameScene extends Phaser.Scene {
       isFrozenByTimestop: (c) => this.isFrozenByTimestop(c),
       attackDamage: () => this.curAttackDamage(),
       damageEnemy: (actor, enemy, damage, knockback, time) => this.damageEnemy(actor, enemy, damage, knockback, time),
-      hitBreakablesInRange: (c, radius, half, useArc, damage, time) => this.breakableCtl.hitInRange(c, radius, half, useArc, damage, time),
+      hitBreakablesInRange: (c, radius, half, useArc, time, alreadyHit) => this.breakableCtl.hitInRange(c, radius, half, useArc, time, alreadyHit),
       performAttackOn: (actor, primary, time) => this.performAttackOn(actor, primary, time),
       onComboHit: (c, time) => this.comboSkills.onComboHit(c, time),
       triggerComboHit: (c) => this.comboReward.hit(c),
@@ -2070,9 +2072,10 @@ export class GameScene extends Phaser.Scene {
       damageEnemy: (actor, enemy, damage, knockback, time) => this.damageEnemy(actor, enemy, damage, knockback, time),
       damageEnemyFrom: (actor, enemy, damage, knockback, fromX, fromY, time) =>
         this.damageEnemyFrom(actor, enemy, damage, knockback, fromX, fromY, time),
-      breakBreakablesInCircle: (x, y, radius, _damage, time) => this.breakableCtl.breakInCircle(x, y, radius, time),
-      breakBreakablesInRect: (ox, oy, dir, nearOffset, length, width, _damage, time) =>
-        this.breakableCtl.breakInRect(ox, oy, dir, nearOffset, length, width, time),
+      hitBreakablesInCircle: (actor, x, y, radius, time) => { this.breakableCtl.hitInCircle(actor, x, y, radius, time); },
+      hitBreakablesInRect: (actor, ox, oy, dir, nearOffset, length, width, time) => {
+        this.breakableCtl.hitInRect(actor, ox, oy, dir, nearOffset, length, width, time);
+      },
       spawnExpandingRing: (x, y, radius, color, ms) => this.fx.expandingRing(x, y, radius, color, ms),
       shakeOnce: (duration, intensity) => this.fx.shake(duration, intensity),
       beginTimeStop: (owner, time, durationMs) => this.beginTimeStop(owner, time, durationMs)
@@ -2157,7 +2160,7 @@ export class GameScene extends Phaser.Scene {
     actor: Character, enemy: Enemy, damage: number, knockback: number, fromX: number, fromY: number, time: number
   ): void {
     if (enemy.dead || !enemy.active) return;
-    this.creditCtl.onEnemyHit(actor, time); // 這一招第一次命中扣 1 點 CREDIT
+    this.creditCtl.onAttackHit(actor, time); // 這一招第一次命中扣 1 點 CREDIT
     if (enemy.enemyType === 'treasure') { this.treasures.hit(enemy, actor); return; }
     const dmg = Math.max(1, Math.round(damage));
     enemy.aggroActive = true;

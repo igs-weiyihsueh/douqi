@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { GameConfig } from '../config';
 import { HIT_COUNTER_TEXTURES } from '../objects/HitCounter';
+import { BARREL_TEXTURE, CRATE_TEXTURE } from '../objects/Breakable';
 
 /**
  * BootScene：程序化產生占位像素貼圖（不依賴外部素材檔）。
@@ -41,10 +42,8 @@ export class BootScene extends Phaser.Scene {
     this.makeItemTexture('item-F', ic.F);
     this.makeItemTexture('item-H', ic.H);
     this.makeItemTexture('item-T', ic.T);
-    // 可打破物件（木箱）貼圖：棕色方箱 + 十字木紋，跟圓形怪/道具方塊區分
-    this.makeBreakableTexture('breakable-jar');
-    // 爆炸桶貼圖：橘紅桶身 + 黃黑危險條紋 + 圓角，一眼跟木箱區別
-    this.makeBarrelTexture('breakable-barrel');
+    // 爆炸桶貼圖：橘紅桶身 + 黃黑危險條紋 + 圓角，一眼跟木箱區別（木箱用 WoodenBox.png，與其他美術圖一起載入）
+    this.makeBarrelTexture(BARREL_TEXTURE);
     // 小遊戲「收集競賽」4 種形狀物件貼圖（鑽石藍/星星黃/心形紅/寶石綠）
     this.makeCollectShapeTexture('collect-diamond', 0x4aa3ff, 0x0a3a6b);
     this.makeCollectShapeTexture('collect-star', 0xffd23f, 0x8a6a00);
@@ -97,6 +96,9 @@ export class BootScene extends Phaser.Scene {
     this.load.image('skeleton-warrior', 'assets/skeleton-warrior.png');
     this.load.image('enemy-skeleton-b', 'assets/Skeleton_B.png');
     this.load.image('enemy-ticket', 'assets/Ticket.png');
+
+    // 可打破物件：木箱美術圖
+    this.load.image(CRATE_TEXTURE, 'assets/WoodenBox.png');
     
     // 載入角色上方UI覆蓋：MG_1P_Player_all.png (1P玩家UI元素)
     this.load.image('character-ui-overlay', 'assets/MG_1P_Player_all.png');
@@ -299,33 +301,10 @@ export class BootScene extends Phaser.Scene {
     g.destroy();
   }
 
-  /** 可打破物件貼圖：棕色木箱(方形+木紋十字+描邊)，跟圓形怪/道具方塊明顯不同 */
-  private makeBreakableTexture(key: string): void {
-    const r = GameConfig.breakable.radius;
-    const size = r * 2 + 4;
-    const g = this.add.graphics();
-    // 外框(深棕描邊)
-    g.fillStyle(GameConfig.breakable.stroke, 1);
-    g.fillRect(0, 0, size, size);
-    // 箱身
-    g.fillStyle(GameConfig.breakable.color, 1);
-    g.fillRect(3, 3, size - 6, size - 6);
-    // 木紋十字(對角板 + 中線)
-    g.lineStyle(2, GameConfig.breakable.stroke, 0.9);
-    g.beginPath();
-    g.moveTo(3, 3); g.lineTo(size - 3, size - 3);
-    g.moveTo(size - 3, 3); g.lineTo(3, size - 3);
-    g.strokePath();
-    g.lineStyle(2, 0xffffff, 0.25);
-    g.strokeRect(4, 4, size - 8, size - 8);
-    g.generateTexture(key, size, size);
-    g.destroy();
-  }
-
   /** 爆炸桶貼圖：橘紅圓角桶身 + 黃色危險橫條紋 + 深紅描邊，一眼跟木箱(棕方箱)區別 */
   private makeBarrelTexture(key: string): void {
     const bcfg = GameConfig.breakable.barrel;
-    const r = GameConfig.breakable.radius;
+    const r = bcfg.radius;
     const size = r * 2 + 4;
     const g = this.add.graphics();
     // 描邊桶身(圓角矩形)

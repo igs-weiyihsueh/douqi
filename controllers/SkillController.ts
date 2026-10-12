@@ -20,10 +20,10 @@ export interface SkillHost {
   damageEnemy(actor: Character, enemy: Enemy, damage: number, knockback: number, time: number): void;
   /** 角色對敵人造成傷害，擊退方向以 (fromX, fromY) 為準 */
   damageEnemyFrom(actor: Character, enemy: Enemy, damage: number, knockback: number, fromX: number, fromY: number, time: number): void;
-  /** 打破圓形範圍內的可打破物件 */
-  breakBreakablesInCircle(x: number, y: number, radius: number, damage: number, time: number): void;
-  /** 打破長方形範圍內的可打破物件（參數同 pointInOrientedRect） */
-  breakBreakablesInRect(ox: number, oy: number, dir: number, nearOffset: number, length: number, width: number, damage: number, time: number): void;
+  /** 角色的招式命中圓形範圍內的可打破物件（每個扣 1 耐久） */
+  hitBreakablesInCircle(actor: Character, x: number, y: number, radius: number, time: number): void;
+  /** 角色的招式命中長方形範圍內的可打破物件（每個扣 1 耐久；參數同 pointInOrientedRect） */
+  hitBreakablesInRect(actor: Character, ox: number, oy: number, dir: number, nearOffset: number, length: number, width: number, time: number): void;
   spawnExpandingRing(x: number, y: number, radius: number, color: number, ms?: number): void;
   shakeOnce(duration: number, intensity: number): void;
   /** 開始全場時停：owner 以外的角色與所有敵人凍結 durationMs，蓄力與預警進度一併暫停 */
@@ -148,7 +148,7 @@ export class SkillController {
             this.host.damageEnemyFrom(c, enemy, cfg.damagePerHit, cfg.knockback, ox, oy, now);
           }
         }
-        this.host.breakBreakablesInCircle(ox, oy, radius, cfg.damagePerHit, now);
+        this.host.hitBreakablesInCircle(c, ox, oy, radius, now);
       }
     });
 
@@ -188,7 +188,7 @@ export class SkillController {
               this.host.damageEnemyFrom(c, enemy, cfg.damage, cfg.knockback, sx, sy, now);
             }
           }
-          this.host.breakBreakablesInCircle(sx, sy, cfg.radius, cfg.damage, now);
+          this.host.hitBreakablesInCircle(c, sx, sy, cfg.radius, now);
         });
       }
     });
@@ -257,7 +257,7 @@ export class SkillController {
               this.host.damageEnemy(c, enemy, cfg.damage, cfg.knockback, now);
             }
           }
-          this.host.breakBreakablesInCircle(c.x, c.y, cfg.hitRadius, cfg.damage, now);
+          this.host.hitBreakablesInCircle(c, c.x, c.y, cfg.hitRadius, now);
         },
         onComplete: onDone
       });
@@ -302,7 +302,7 @@ export class SkillController {
                 this.host.damageEnemy(c, enemy, cfg.damage, cfg.knockback, now);
               }
             }
-            this.host.breakBreakablesInCircle(c.x, c.y, cfg.radius, cfg.damage, now);
+            this.host.hitBreakablesInCircle(c, c.x, c.y, cfg.radius, now);
           }
         });
       }
@@ -336,7 +336,7 @@ export class SkillController {
             this.host.damageEnemyFrom(c, enemy, cfg.burstDamage, cfg.knockback, ox, oy, now);
           }
         }
-        this.host.breakBreakablesInRect(ox, oy, dir, 0, cfg.flameLength, cfg.flameWidth, cfg.burstDamage, now);
+        this.host.hitBreakablesInRect(c, ox, oy, dir, 0, cfg.flameLength, cfg.flameWidth, now);
         this.spawnBurnZone(c, ox, oy, dir);
       }
     });
@@ -425,7 +425,7 @@ export class SkillController {
             hitCount.set(enemy, (hitCount.get(enemy) ?? 0) + 1);
           }
         }
-        this.host.breakBreakablesInCircle(target.x, target.y, cfg.hitRadius, cfg.damage, this.scene.time.now);
+        this.host.hitBreakablesInCircle(c, target.x, target.y, cfg.hitRadius, this.scene.time.now);
       });
     });
 
