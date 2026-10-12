@@ -2,6 +2,37 @@
 
 ## 戰鬥核心架構
 
+### CREDIT投幣系統整合 (詳見[CREDIT系統](./credit-system.md))
+
+戰鬥系統與CREDIT投幣機制的深度整合：
+
+```typescript
+// 攻擊扣點整合
+class CombatCreditIntegration {
+  /** 角色攻擊時開始扣點窗口 */
+  onCharacterAttack(character: Character): void {
+    this.creditCtl.openAttackWindow(character, this.time.now);
+  }
+  
+  /** 攻擊命中敵人時扣CREDIT */
+  onEnemyHit(character: Character, enemy: Enemy): void {
+    this.creditCtl.onEnemyHit(character, this.time.now);
+  }
+  
+  /** 變身BOSS攻擊不扣點 */
+  onBossTransformAttack(character: Character): void {
+    this.creditCtl.cancelAttackWindow(character);
+  }
+}
+```
+
+**CREDIT戰鬥特性**：
+- 🪙 **投幣進場**: C鍵投幣(+10點)才能參與戰鬥
+- ⚔️ **攻擊扣點**: 每招命中敵人扣1點，空揮免費
+- 🛡️ **無血量**: 被攻擊不扣血，完全由CREDIT控制生死
+- ⏸️ **等待續關**: CREDIT=0時停在原地+無敵+投幣提示
+- 🤖 **BOT自動**: BOT用完自動投幣，保持遊戲連續性
+
 ### 多角色系統
 ```typescript
 // GameScene - 4角色本地協作
@@ -31,16 +62,19 @@ class Character extends Phaser.Physics.Arcade.Sprite {
   readonly index: number;           // 角色索引 (0-3)
   readonly isBot: boolean;          // AI標記
   
-  // 生命系統
-  hp: number;                       // 當前血量
+  // 生命系統  
+  hp: number;                       // 當前血量 (CREDIT模式下無效)
   alive: boolean;                   // 存活狀態
   invulnUntil: number;             // 無敵時間戳
+  noHpLoss: boolean;               // CREDIT模式:被打不扣血
   
   // 戰鬥狀態
   spirit: number;                   // 連段計數
   energy: number;                   // 能量值(v55新增)
   kills: number;                    // 擊殺數
-  credit: number;                   // 貨幣點數
+  credit: number;                   // CREDIT點數(投幣系統)
+  creditState: string;              // 投幣狀態: absent/playing/waiting
+  chargeWindowUntil: number;        // 攻擊扣點窗口結束時間
   
   // 技能系統
   skillLockUntil: number;          // 技能鎖定時間戳
