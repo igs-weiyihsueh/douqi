@@ -6,7 +6,6 @@ import type { Enemy } from '../objects/Enemy';
 import { isFixedEnemy } from '../systems/enemyKinds';
 import { orientedRectIntersectsBox, sectorIntersectsBox } from '../systems/geometry';
 import type { VisibleBounds } from '../systems/spriteFeet';
-import type { Side } from './SlotWorldController';
 
 /**
  * BreakableController 需要場景提供的能力。由 GameScene 建立並傳入；控制器不直接存取場景私有成員。
@@ -38,11 +37,10 @@ export interface BreakableHost {
   shakeOnce(duration: number, intensity: number): void;
 }
 
-/** 布置位置的嘗試次數：每波散布（堆中心 / 堆內物件）、區域靜態布置 */
+/** 非關卡制每波散布的嘗試次數（堆中心 / 堆內物件） */
 const CLUSTER_TRIES = 20;
 const IN_CLUSTER_TRIES = 16;
-const STATIC_TRIES = 30;
-/** 堆內物件彼此、物件與角色、新爆炸桶與木箱之間多留的縫 */
+/** 物件彼此（堆內、降落點）、物件與角色、新爆炸桶與木箱之間多留的縫 */
 const IN_CLUSTER_GAP = 4;
 const PLAYER_GAP = 8;
 const BARREL_CRATE_GAP = 6;
@@ -55,8 +53,6 @@ function cratesOverlap(ax: number, ay: number, bx: number, by: number, bounds: V
   return Math.abs(ax - bx) < bounds.right - bounds.left + gap && Math.abs(ay - by) < bounds.bottom - bounds.top + gap;
 }
 
-/** 區域靜態布置時離 P1 的最小距離 */
-const STATIC_AVOID_PLAYER = 90;
 /** 爆炸桶警示圈：深度、閃爍週期、顏色 */
 const FUSE_RING_DEPTH = 4;
 const FUSE_BLINK_MS = 90;
@@ -77,7 +73,7 @@ const BREAK_PARTICLES = 8;
 
 /**
  * 可破壞物件（木箱、爆炸桶）：
- * - 布置：非關卡制每波成堆散布（遠離中心、避開玩家、彼此不疊）；關卡制每進一個區域隨機靜態布置（右側基調多桶）
+ * - 布置：非關卡制每波成堆散布（遠離中心、避開玩家、彼此不疊）；關卡制隨每批怪從天而降（dropWithFormation）
  * - 打破：普攻扇形 / 衝刺圓形 / 招式 AOE（圓形 / 定向矩形）每次命中扣 1 耐久（Breakable.hit），歸零才碎；
  *   一次攻擊最多掉 maxDropPerBreak 個道具；命中至少一個時通知場景計算 CREDIT（onBreakableHit），HIT 連擊由各攻擊的呼叫端計算
  * - 木箱碎裂噴粒子、機率掉道具；爆炸桶（barrel.enabled 停用中）打破後先倒數（地面警示圈）再爆炸：怪受傷並被炸飛、角色受傷、連鎖引爆附近的桶
@@ -167,45 +163,83 @@ export class BreakableController {
   }
 
   /**
-   * 關卡制：在目前移動區隨機靜態布置木箱與爆炸桶（不重生）；避開中心、邊緣與玩家，彼此不重疊
-   * （中心間距至少 minSpacingR，且木箱的碰撞矩形不重疊）
+   * 關卡制：一批怪出生時跟著降落木箱——小關卡第一批必掉，之後 drop.chance 機率；每次 drop.count 個，
+   * 場上（含降落中）達 drop.maxAlive 就不掉，找不到合適落點的少掉
    *
-   * @param side 物件布置的基調（右側爆炸桶上限多 barrelBiasExtra）
+   * @param firstOfStage 是否為這個小關卡的第一批怪
    */
-  placeStatic(side: Side): void {
-    const cfg = GameConfig.stage.breakablesRandom;
-    const a = this.host.arena();
-    const p = this.host.player();
+  dropWithFormation(firstOfStage: boolean): void {
+    const cfg = GameConfig.breakable.drop;
+    if (!firstOfStage && Math.random() >= cfg.chance) return;
     const pool = this.host.group();
-    const minWH = Math.min(a.width, a.height);
-    const placed: Array<{ x: number; y: number }> = [];
-    const spacing = cfg.minSpacingR * minWH;
-    const crateBounds = crateBodyBounds(this.scene.textures);
-    const centerAvoid = cfg.centerAvoidR * minWH;
-    const pick = (): { x: number; y: number } | null => {
-      for (let attempt = 0; attempt < STATIC_TRIES; attempt++) {
-        const x = a.left + Phaser.Math.FloatBetween(cfg.marginX, 1 - cfg.marginX) * a.width;
-        const y = a.top + Phaser.Math.FloatBetween(cfg.marginY, 1 - cfg.marginY) * a.height;
-        if (Phaser.Math.Distance.Between(x, y, a.centerX, a.centerY) < centerAvoid) continue;
-        if (Phaser.Math.Distance.Between(x, y, p.x, p.y) < STATIC_AVOID_PLAYER) continue;
-        if (placed.some((q) => Phaser.Math.Distance.Between(x, y, q.x, q.y) < spacing || cratesOverlap(x, y, q.x, q.y, crateBounds, IN_CLUSTER_GAP))) continue;
-        return { x, y };
+    const want = Math.min(Phaser.Math.Between(cfg.count[0], cfg.count[1]), cfg.maxAlive - pool.countActive(true));
+    const bounds = crateBodyBounds(this.scene.textures);
+    for (let n = 0; n < want; n++) {
+      const pt = this.pickDropPoint(bounds);
+      if (!pt) continue;
+      const bk = pool.get(pt.x, pt.y) as Breakable | null;
+      if (!bk) break;
+      const bcfg = GameConfig.breakable.barrel;
+      bk.spawnBreakable(pt.x, pt.y, bcfg.enabled && Math.random() < bcfg.dropShare ? 'barrel' : 'crate');
+      bk.dropIn(() => this.onDropLanded(bk));
+    }
+  }
+
+  /**
+   * 找一個降落點：鏡頭畫面內（內縮 drop.viewInset）且在移動區內；木箱碰撞範圍離每位玩家至少 minDistFromPlayer、
+   * 不壓到怪、不與其他物件（含降落中）重疊。嘗試 placeTries 次都不行回傳 null
+   *
+   * @param bounds 木箱碰撞範圍（各邊相對物件位置）
+   */
+  private pickDropPoint(bounds: VisibleBounds): { x: number; y: number } | null {
+    const cfg = GameConfig.breakable.drop;
+    const a = this.host.arena();
+    // 場景剛建立、鏡頭還沒算過畫面範圍時（寬高為 0）只限在移動區內
+    const cam = this.scene.cameras.main.worldView;
+    const v = cam.width > 0 && cam.height > 0 ? cam : a;
+    const left = Math.max(a.left, v.left + cfg.viewInset) - bounds.left;
+    const right = Math.min(a.right, v.right - cfg.viewInset) - bounds.right;
+    const top = Math.max(a.top, v.top + cfg.viewInset) - bounds.top;
+    const bottom = Math.min(a.bottom, v.bottom - cfg.viewInset) - bounds.bottom;
+    if (left > right || top > bottom) return null;
+    for (let attempt = 0; attempt < cfg.placeTries; attempt++) {
+      const x = Phaser.Math.FloatBetween(left, right);
+      const y = Phaser.Math.FloatBetween(top, bottom);
+      if (this.host.characters().some((c) => c.alive && distanceToBounds(c.x, c.y, x, y, bounds) < cfg.minDistFromPlayer)) continue;
+      let blocked = false;
+      for (const child of this.host.enemies().getChildren()) {
+        const e = child as Enemy;
+        if (e.active && !e.dead && distanceToBounds(e.x, e.y, x, y, bounds) < e.getBodyRadius() + cfg.enemyGap) { blocked = true; break; }
       }
-      return null;
-    };
-    const crateN = Phaser.Math.Between(cfg.crateMin, cfg.crateMax);
-    const barrelMax = cfg.barrelMax + (side === 'R' ? cfg.barrelBiasExtra : 0);
-    const barrelN = GameConfig.breakable.barrel.enabled ? Phaser.Math.Between(cfg.barrelMin, barrelMax) : 0;
-    const place = (count: number, kind: 'crate' | 'barrel'): void => {
-      for (let i = 0; i < count; i++) {
-        const pt = pick(); if (!pt) break;
-        placed.push(pt);
-        const bk = pool.get(pt.x, pt.y) as Breakable | null;
-        if (bk) bk.spawnBreakable(pt.x, pt.y, kind);
+      if (blocked) continue;
+      for (const child of this.host.group().getChildren()) {
+        const o = child as Breakable;
+        if (o.active && cratesOverlap(x, y, o.x, o.y, bounds, IN_CLUSTER_GAP)) { blocked = true; break; }
       }
-    };
-    place(crateN, 'crate');
-    place(barrelN, 'barrel');
+      if (!blocked) return { x, y };
+    }
+    return null;
+  }
+
+  /**
+   * 木箱落地：四周噴塵土、鏡頭小震
+   *
+   * @param bk 剛落地的物件
+   */
+  private onDropLanded(bk: Breakable): void {
+    const cfg = GameConfig.breakable.drop;
+    const body = bk.getBody();
+    const x = body.centerX, y = body.bottom;
+    for (let i = 0; i < cfg.dustCount; i++) {
+      const ang = (i / cfg.dustCount) * Math.PI * 2;
+      const dist = Phaser.Math.Between(cfg.dustDistance[0], cfg.dustDistance[1]);
+      const dust = this.scene.add.circle(x, y, cfg.dustSize / 2, cfg.dustColor, 0.9).setDepth(cfg.shadowDepth + 1);
+      this.scene.tweens.add({
+        targets: dust, x: x + Math.cos(ang) * dist, y: y + Math.sin(ang) * dist * 0.4, alpha: 0, scale: 1.8,
+        duration: cfg.dustMs, ease: 'Cubic.easeOut', onComplete: () => dust.destroy()
+      });
+    }
+    this.host.shakeOnce(cfg.shakeMs, cfg.shakeIntensity);
   }
 
   /** 清掉場上所有可破壞物件（換區、轉場時） */
@@ -280,7 +314,7 @@ export class BreakableController {
     let drops = 0;
     for (const child of this.host.group().getChildren()) {
       const bk = child as Breakable;
-      if (!bk.active || bk.dead || bk.fusing || !inRange(bk)) continue;
+      if (!bk.active || bk.dead || bk.fusing || bk.landing || !inRange(bk)) continue;
       const result = bk.hit(time);
       if (result === 'ignored') continue;
       hits++;

@@ -456,7 +456,7 @@ export function pushEnemiesOutOfNpc(npc: Enemy, enemies: Phaser.Physics.Arcade.G
 function pushBreakablesFrom(x: number, y: number, radius: number, breakables: Phaser.GameObjects.Group, pushSpeed: number): void {
   for (const child of breakables.getChildren()) {
     const bk = child as Breakable;
-    if (!bk.active || bk.dead) continue;
+    if (!bk.active || bk.dead || bk.landing) continue;
     const push = circlePushOutOfBox(x, y, radius, bk.getBody());
     if (!push) continue;
     bk.setPosition(bk.x + push.nx * push.depth, bk.y + push.ny * push.depth);
@@ -527,7 +527,7 @@ export function updateBreakableMotion(breakables: Phaser.GameObjects.Group, aren
   }
   const friction = Math.max(0, 1 - GameConfig.breakable.push.friction * dt);
   for (const bk of children) {
-    if (!bk.active || bk.dead || (bk.vx === 0 && bk.vy === 0)) continue;
+    if (!bk.active || bk.dead || bk.landing || (bk.vx === 0 && bk.vy === 0)) continue;
     const b = bk.bodyLocalBounds;
     let nx = bk.x + bk.vx * dt, ny = bk.y + bk.vy * dt;
     if (nx < arena.left - b.left) { nx = arena.left - b.left; bk.vx = 0; }
@@ -544,10 +544,10 @@ export function updateBreakableMotion(breakables: Phaser.GameObjects.Group, aren
   };
   for (let i = 0; i < children.length; i++) {
     const a = children[i];
-    if (!a.active || a.dead) continue;
+    if (!a.active || a.dead || a.landing) continue;
     for (let j = i + 1; j < children.length; j++) {
       const b = children[j];
-      if (!b.active || b.dead) continue;
+      if (!b.active || b.dead || b.landing) continue;
       // 碰撞矩形重疊：沿重疊較淺的軸各推開一半
       const ra = a.getBody(), rb = b.getBody();
       const overlapX = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);

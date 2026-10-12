@@ -26,7 +26,7 @@ import { CombatFx } from '../controllers/CombatFx';
 import { HitReactionFx } from '../controllers/HitReactionFx';
 import { DashFx } from '../controllers/DashFx';
 import { EnemyAttackController, type EnemyAttackHost } from '../controllers/EnemyAttackController';
-import { SlotWorldController, type AreaTransition, type Side, type SlotWorldHost } from '../controllers/SlotWorldController';
+import { SlotWorldController, type AreaTransition, type SlotWorldHost } from '../controllers/SlotWorldController';
 import { PerfOverlay } from '../controllers/PerfOverlay';
 import { GameDebugApi, type GameDebugHost } from '../controllers/GameDebugApi';
 import { TargetingController, type TargetingHost } from '../controllers/TargetingController';
@@ -441,7 +441,6 @@ export class GameScene extends Phaser.Scene {
 
     // 關卡制:關卡 1-A 開場——靜態布置 A 物件 + A 子區隨機(純波次 或 事件),顯示關卡標題。
     if (this.levelMode) {
-      this.breakableCtl.placeStatic('L'); // 1-A 用預設一套布置
       this.startStage();
       if (GameConfig.spawn.spawnOnStart) this.spawner.spawnFormation();
     } else if (GameConfig.spawn.spawnOnStart) {
@@ -813,7 +812,8 @@ export class GameScene extends Phaser.Scene {
     for (const child of this.breakables.getChildren()) {
       const b = child as Breakable;
       if (!b.active) continue;
-      b.setDepth(standingDepth(b.y + visibleBottomOffset(this.textures, b.texture.key) * b.scaleY));
+      // 從天而降中畫在所有站立物件之上
+      b.setDepth(b.landing ? GameConfig.breakable.drop.fallDepth : standingDepth(b.y + visibleBottomOffset(this.textures, b.texture.key) * b.scaleY));
     }
   }
 
@@ -1223,7 +1223,10 @@ export class GameScene extends Phaser.Scene {
       aliveScale: () => this.curAliveScale(),
       nearestSeat: (x, y) => this.nearestSeat(x, y),
       wireEnemyCallbacks: (e) => this.wireEnemyCallbacks(e),
-      onFormationSpawned: (time) => this.treasures.trySpawn(time) // 寶箱怪擲骰（場上只會有一隻）
+      onFormationSpawned: (time) => {
+        this.treasures.trySpawn(time); // 寶箱怪擲骰（場上只會有一隻）
+        if (this.levelMode) this.breakableCtl.dropWithFormation(this.spawner.formationCount === 1); // 木箱隨怪從天而降
+      }
     };
   }
 
@@ -1466,7 +1469,7 @@ export class GameScene extends Phaser.Scene {
       resetCharacterMotion: () => this.resetCharacterMotion(),
       onAreaLeave: (to) => this.onAreaLeave(to),
       clearArea: () => { this.breakableCtl.clearAll(); this.clearAllEnemies(); },
-      onAreaEnter: (to, side) => this.onAreaEnter(to, side)
+      onAreaEnter: (to) => this.onAreaEnter(to)
     };
   }
 
@@ -1482,26 +1485,22 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * 進入新區域：獎勵關直接開始倒數（不生一般怪）；其餘重新布置可破壞物件、波次計數歸零後開始佇列中的下一個小關卡
+   * 進入新區域：獎勵關直接開始倒數（不生一般怪）；其餘清掉左右平移前的可破壞物件（之後隨怪從天而降）、
+   * 波次計數歸零後開始佇列中的下一個小關卡
    *
    * @param to 轉場去處
-   * @param side 左右平移時抵達的方向（決定物件布置的基調）
    */
-  private onAreaEnter(to: AreaTransition, side: Side): void {
+  private onAreaEnter(to: AreaTransition): void {
     if (to === 'treasureRoom') {
       this.waveState = 'clearing';
       this.treasureRoom.begin(this.time.now);
       return;
     }
-    if (to === 'side') {
-      this.breakableCtl.clearAll();
-      this.breakableCtl.placeStatic(side);
-    }
+    if (to === 'side') this.breakableCtl.clearAll();
     this.currentWave++;
     this.waveKilled = 0;
     this.waveSpawned = 0;
     this.spawner.resetTimer();
-    if (to === 'nextArea') this.breakableCtl.placeStatic('L'); // 新區域的物件布置一律用左側基調
     this.startStage();
     this.emitStats();
   }

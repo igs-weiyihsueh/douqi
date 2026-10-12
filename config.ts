@@ -1096,20 +1096,7 @@ export const GameConfig = {
     /** 玩家走到箭頭/出口的觸發距離 */
     triggerDist: 46,
     /** 階段2:crossing 開放後短暫緩衝(毫秒)內不觸發邊界過場——讓玩家看引導箭頭、不貼邊秒觸發。 */
-    crossGraceMs: 700,
-    /**
-     * 每區【隨機布置】可破壞物件:每次進子區隨機數量+位置。
-     * 保留選邊 L/R 基調:R 側多桶(barrelBias),L 側多木箱。避開中心(出入/事件目標)與邊緣。
-     */
-    breakablesRandom: {
-      crateMin: 6, crateMax: 11,     // 木箱數量範圍（每區數量明顯不同）
-      barrelMin: 1, barrelMax: 3,    // 炸彈桶數量範圍
-      barrelBiasExtra: 1,            // R 側額外桶上限(基調:某側多桶)
-      /** 隨機分布區域(相對子區比例):避開最外圈與正中心。範圍拉大→位置更分散、不顯固定。 */
-      marginX: 0.1, marginY: 0.12,   // 距邊緣內縮比例(縮小→可用範圍變大)
-      centerAvoidR: 0.14,            // 避開中心的半徑(相對 min(寬,高))
-      minSpacingR: 0.06              // 物件之間最小間距(相對 min(寬,高)),避免重疊(縮小→可放更密更多)
-    }
+    crossGraceMs: 700
   },
 
   /**
@@ -1659,6 +1646,44 @@ export const GameConfig = {
     },
     /** 同一物件兩次命中的最短間隔（毫秒）：持續型招式不會每幀算一次；小於最快的普攻間隔 */
     hitIntervalMs: 150,
+    /**
+     * 關卡制：木箱隨怪物從天而降（進區域時不再預先擺放）。每批怪出生時降落：小關卡第一批必掉，之後 chance 機率；
+     * 每次 count 個，場上（含降落中）達 maxAlive 就不掉；找不到合適落點就少掉幾個
+     */
+    drop: {
+      chance: 0.6,
+      count: [1, 3] as const,
+      maxAlive: 8,
+      /** 落點限制：在鏡頭畫面內（內縮 viewInset）；木箱碰撞範圍離每位玩家至少 minDistFromPlayer、離怪的身體至少 enemyGap；每個木箱嘗試 placeTries 次 */
+      viewInset: 80,
+      minDistFromPlayer: 150,
+      enemyGap: 12,
+      placeTries: 20,
+      /** 落下：從 fallHeight 上方加速直線落下，費時 fallMs；降落中畫在所有站立物件之上（fallDepth） */
+      fallHeight: 400,
+      fallMs: 600,
+      fallDepth: 9.95,
+      /** 落點陰影：黑色橢圓（寬、高相對木箱碰撞寬度），隨落下從 shadowStartScale 長到原大 */
+      shadowColor: 0x000000,
+      shadowAlpha: 0.35,
+      shadowWidthRatio: 0.9,
+      shadowHeightRatio: 0.28,
+      shadowStartScale: 0.3,
+      shadowDepth: 4,
+      /** 落地：壓扁（寬 squashX、高 squashY 倍）再於 squashMs 彈回 */
+      squashX: 1.15,
+      squashY: 0.82,
+      squashMs: 180,
+      /** 落地塵土：粒子數、顏色、大小、噴出距離範圍與時間 */
+      dustCount: 10,
+      dustColor: 0xd9c49a,
+      dustSize: 7,
+      dustDistance: [40, 80] as const,
+      dustMs: 380,
+      /** 落地鏡頭小震 */
+      shakeMs: 90,
+      shakeIntensity: 0.004
+    },
     /** 受擊回饋：閃白時間、彈跳放大倍率與縮回時間 */
     hitFeedback: {
       flashMs: 80,
@@ -1690,6 +1715,8 @@ export const GameConfig = {
     barrel: {
       /** 暫時停用：不生成爆炸桶（程式保留，改回 true 即恢復） */
       enabled: false,
+      /** 關卡制降落時，每個是爆炸桶的機率（enabled 時） */
+      dropShare: 0.15,
       /** 爆炸桶耐久：命中 1 次就引爆 */
       hp: 1,
       /** 體型半徑(命中/顯示/碰撞) */

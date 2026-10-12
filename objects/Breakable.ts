@@ -55,6 +55,7 @@ function barrelBodyBounds(): VisibleBounds {
  * - 耐久以「被命中次數」計算（不看攻擊力）：每次命中扣 1，歸零才碎；同一物件兩次命中至少相隔 hitIntervalMs
  *   （持續型招式不會每幀都算一下）。受擊時閃白並彈一下。
  * - 碰撞 / 命中範圍是貼合圖片可見外框的軸對齊矩形（getBody）；角色和怪碰到會推動它（systems/bodySeparation），衝刺穿過不擋。
+ * - 關卡制從天而降（dropIn）：降落中（landing）不能被打、不參與推擠，落地後才是一般物件。
  * - 命中判定 / 分離都用幾何數學（不依賴 physics body），是純顯示 sprite。
  */
 export class Breakable extends Phaser.GameObjects.Sprite {
@@ -67,6 +68,8 @@ export class Breakable extends Phaser.GameObjects.Sprite {
   vy = 0;
   /** 爆炸桶已打破進入 fuse 倒數(等待爆炸)——期間不再被打、地面警示圈跟隨。 */
   fusing = false;
+  /** 從天而降中（還沒落地）：不能被打、不參與推擠 */
+  landing = false;
   /** 碰撞 / 命中範圍各邊相對物件位置（生成時依種類決定） */
   private bodyBounds: VisibleBounds = barrelBodyBounds();
   /** getBody 回傳的矩形（重複使用，不每次配置） */
@@ -75,6 +78,8 @@ export class Breakable extends Phaser.GameObjects.Sprite {
   private hittableAt = 0;
   private flashTimer?: Phaser.Time.TimerEvent;
   private popTween?: Phaser.Tweens.Tween;
+  private dropTween?: Phaser.Tweens.Tween;
+  private dropShadow?: Phaser.GameObjects.Ellipse;
   get explosive(): boolean { return this.kind === 'barrel'; }
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
@@ -98,6 +103,40 @@ export class Breakable extends Phaser.GameObjects.Sprite {
     this.setVisible(true);
     this.setAlpha(1);
     this.resetHitFeedback();
+    this.stopDrop();
+  }
+
+  /**
+   * 從天而降：本體從目前位置上方 drop.fallHeight 加速直線落回目前位置，落點陰影隨之由小變大；
+   * 落地時壓扁彈回並呼叫 onLand（塵土、震動由呼叫端處理）。需在 spawnBreakable 之後呼叫
+   *
+   * @param onLand 落地時呼叫
+   */
+  dropIn(onLand: () => void): void {
+    const cfg = GameConfig.breakable.drop;
+    const b = this.bodyBounds;
+    const groundY = this.y;
+    const bodyW = b.right - b.left;
+    this.landing = true;
+    this.dropShadow = this.scene.add
+      .ellipse(this.x + (b.left + b.right) / 2, groundY + b.bottom, bodyW * cfg.shadowWidthRatio, bodyW * cfg.shadowHeightRatio, cfg.shadowColor, cfg.shadowAlpha)
+      .setDepth(cfg.shadowDepth)
+      .setScale(cfg.shadowStartScale);
+    this.setY(groundY - cfg.fallHeight);
+    this.dropTween = this.scene.tweens.add({
+      targets: this,
+      y: groundY,
+      duration: cfg.fallMs,
+      ease: 'Quad.easeIn',
+      onUpdate: (tween) => this.dropShadow?.setScale(cfg.shadowStartScale + (1 - cfg.shadowStartScale) * tween.progress),
+      onComplete: () => {
+        this.dropTween = undefined; // 已播完，不必再停
+        this.stopDrop();
+        this.setScale(cfg.squashX, cfg.squashY);
+        this.popTween = this.scene.tweens.add({ targets: this, scaleX: 1, scaleY: 1, duration: cfg.squashMs, ease: 'Back.easeOut' });
+        onLand();
+      }
+    });
   }
 
   /**
@@ -106,7 +145,7 @@ export class Breakable extends Phaser.GameObjects.Sprite {
    * @param time 目前場景時間
    */
   hit(time: number): BreakableHitResult {
-    if (this.dead || this.fusing || !this.active || time < this.hittableAt) return 'ignored';
+    if (this.dead || this.fusing || this.landing || !this.active || time < this.hittableAt) return 'ignored';
     const cfg = GameConfig.breakable;
     this.hittableAt = time + cfg.hitIntervalMs;
     this.hp -= 1;
@@ -143,6 +182,7 @@ export class Breakable extends Phaser.GameObjects.Sprite {
 
   despawn(): void {
     this.resetHitFeedback();
+    this.stopDrop();
     this.setAlpha(1);
     this.setActive(false);
     this.setVisible(false);
@@ -156,6 +196,15 @@ export class Breakable extends Phaser.GameObjects.Sprite {
     this.flashTimer = this.scene.time.delayedCall(fb.flashMs, () => this.clearTint());
     this.setScale(fb.popScale);
     this.popTween = this.scene.tweens.add({ targets: this, scale: 1, duration: fb.popMs, ease: 'Back.easeOut' });
+  }
+
+  /** 結束降落狀態：停掉落下動畫、移除陰影 */
+  private stopDrop(): void {
+    this.dropTween?.stop();
+    this.dropTween = undefined;
+    this.dropShadow?.destroy();
+    this.dropShadow = undefined;
+    this.landing = false;
   }
 
   /** 停掉進行中的受擊回饋，恢復原色、原尺寸 */
