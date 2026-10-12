@@ -28,8 +28,9 @@ function isEngaged(e: Enemy, characters: ReadonlyArray<Character>): boolean {
 }
 
 /**
- * 召集：玩家身邊完全沒有怪（engagedRadius 內沒有、也沒有怪正在追他或被召集去找他）持續 lonelyMs，
- * 就從 recruitRange 內挑最近的 recruitCount 隻閒置的怪去找他（原速走過去，不加速）。
+ * 召集：玩家身邊的怪（engagedRadius 內的怪，加上正在追他或被召集去找他的怪）不超過 maxEngaged 隻持續 lonelyMs，
+ * 就從 recruitRange 內挑最近的 recruitCount 隻閒置的怪去找他（符合的不足 recruitCount 隻就叫現有的；
+ * 走在鏡頭畫面外時加速 offscreenSpeedMult 倍，見 Enemy）。
  *
  * - 每 checkIntervalMs 評估一次（不是每幀）
  * - 候選：已實體化的一般怪（不含 BOSS / 寶箱怪 / 塔 / NPC）、沒在打任何玩家、不在其他玩家 excludeNearOtherPlayer 內
@@ -38,7 +39,7 @@ function isEngaged(e: Enemy, characters: ReadonlyArray<Character>): boolean {
  */
 export class EnemyRallyController {
   private nextCheckAt = 0;
-  /** 各座位開始「身邊沒怪」的時間（0 = 身邊有怪） */
+  /** 各座位開始「身邊的怪不超過 maxEngaged 隻」的時間（0 = 身邊的怪夠多） */
   private lonelySince: number[] = [];
   /** 各座位下次可召集的時間 */
   private readyAt: number[] = [];
@@ -46,7 +47,7 @@ export class EnemyRallyController {
   constructor(private readonly host: EnemyRallyHost) {}
 
   /**
-   * 每幀呼叫：到了評估時間就更新每位玩家的「身邊沒怪」計時，達標就召集
+   * 每幀呼叫：到了評估時間就更新每位玩家的「身邊怪太少」計時，達標就召集
    *
    * @param time 目前場景時間
    */
@@ -69,7 +70,7 @@ export class EnemyRallyController {
         this.lonelySince[seat] = 0;
         continue;
       }
-      if (this.countEngaged(seat, c, characters, enemies) > 0) {
+      if (this.countEngaged(seat, c, characters, enemies) > cfg.maxEngaged) {
         this.lonelySince[seat] = 0;
         continue;
       }

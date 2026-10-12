@@ -242,8 +242,9 @@ export const GameConfig = {
   },
 
   /**
-   * 召集：玩家身邊完全沒有怪（engagedRadius 內沒有、也沒有怪正在追他或被召集去找他）持續 lonelyMs，
-   * 就從 recruitRange 內挑最近的 recruitCount 隻閒置的怪去找他（原速，不加速）。只在小關卡進行中（生怪 / 清場）啟用。
+   * 召集：玩家身邊的怪（engagedRadius 內的怪，加上正在追他或被召集去找他的怪）不超過 maxEngaged 隻持續 lonelyMs，
+   * 就從 recruitRange 內挑最近的 recruitCount 隻閒置的怪去找他；走在鏡頭畫面外時移動速度 × offscreenSpeedMult，
+   * 進到畫面內恢復原速。只在小關卡進行中（生怪 / 清場）啟用。
    * - checkIntervalMs：評估間隔；cooldownMs：同一位玩家兩次召集的間隔
    * - excludeNearOtherPlayer：在其他玩家這個距離內的怪不召集（不搶別人的怪）
    * - 被召集的怪不受活動範圍限制、不換目標，走進 arriveRadius（投擲怪：投擲射程）或 maxRallyMs 到就結束，以當下位置為新的出生點
@@ -252,13 +253,15 @@ export const GameConfig = {
     enabled: true,
     checkIntervalMs: 500,
     engagedRadius: 350,
+    maxEngaged: 3,
     lonelyMs: 1500,
     recruitCount: 3,
     recruitRange: 1000,
     excludeNearOtherPlayer: 350,
     cooldownMs: 3000,
     maxRallyMs: 15000,
-    arriveRadius: 300
+    arriveRadius: 300,
+    offscreenSpeedMult: 2
   },
 
   player: {
@@ -647,7 +650,7 @@ export const GameConfig = {
       /** 一般近戰蓄力小怪 */
       normal: {
         maxHp: 90,
-        speed: 110,
+        speed: 125,
         radius: 14,
         color: 0xff5a6e,
         stroke: 0x2a0a12,
@@ -656,7 +659,7 @@ export const GameConfig = {
       /** 肉盾：高 HP、慢速、體型較大 */
       tank: {
         maxHp: 200,
-        speed: 64,
+        speed: 75,
         radius: 22,
         color: 0x8b5cf6,
         stroke: 0x1a0a2e,
@@ -665,7 +668,7 @@ export const GameConfig = {
       /** 投射兵：保持距離、瞄準玩家位置蓄力投擲炸彈（落點有預警圈），本體脆 */
       bomber: {
         maxHp: 60,
-        speed: 88,
+        speed: 100,
         radius: 15,
         color: 0xe0b0ff,
         stroke: 0x2a1a3a,
@@ -789,7 +792,28 @@ export const GameConfig = {
       ]
     },
     /** 波與波之間的休息（毫秒）：休息中不出怪、HIT 連擊倒數暫停，休息開始時落下下一波的木箱 */
-    waveBreakMs: 2000,
+    waveBreakMs: 6000,
+    /**
+     * 波間休息倒數提示：休息剩 fromSec 秒內，畫面中上方（畫面高度 × yRatio）顯示 text 與大數字倒數，
+     * 數字每跳一次從 popScale 縮回原尺寸（popMs）；出現 / 消失淡入淡出 fadeMs
+     */
+    breakCountdown: {
+      fromSec: 3,
+      text: '怪物要來了！',
+      yRatio: 0.3,
+      textFontSize: 44,
+      digitFontSize: 96,
+      digitGap: 70,
+      color: '#ffd166',
+      digitColor: '#ff6b6b',
+      stroke: '#000000',
+      strokeThickness: 8,
+      paddingY: 8,
+      depth: 60,
+      popScale: 1.6,
+      popMs: 300,
+      fadeMs: 200
+    },
     /** 每多一位存活玩家，場上組每批隻數增加的比例（近身組本來就是逐一輪派給每位玩家，不另外放大） */
     fieldBatchGrowthPerPlayer: 0.5,
     /**
@@ -802,7 +826,7 @@ export const GameConfig = {
     },
     /**
      * 配置：waves 各波擊殺數（單人的份量，逐波遞增；每波開始時乘上當下存活人數，BOT 也算；
-     * 以單人每關約消耗 150 CREDIT 設計，實測平均每隻約 2.2 CREDIT）；maxAlive 同時在場上限（單人值，每多一人再加 perExtraPlayer）；
+     * 每波約消耗 50 CREDIT、單人每關約 150 CREDIT 設計，實測平均每隻約 2.2 CREDIT）；maxAlive 同時在場上限（單人值，每多一人再加 perExtraPlayer）；
      * phases 依整關進度（已打完的波 + 本波擊殺比例）分段（untilProgress 前套用）：weights 怪種的整體出現比例（近身組只出 spawnAlloc.nearTypes，
      * 抽到其他怪種時改出在場上，整體仍等於此比例）、intervalMs 補怪間隔、
      * nearBatch / fieldBatch 近身組 / 場上組每批隻數 [最少, 最多]、nearShare 近身組占比；
@@ -812,7 +836,7 @@ export const GameConfig = {
     profiles: {
       /** 蜂群：小怪一直湧上來，快節奏割草 */
       swarm: {
-        name: '蜂群', waves: [14, 16, 18, 20], maxAlive: { solo: 22, perExtraPlayer: 18 },
+        name: '蜂群', waves: [20, 23, 26], maxAlive: { solo: 22, perExtraPlayer: 18 },
         surge: { count: [10, 14], weights: { normal: 90, tank: 10, bomber: 0 }, cooldownMs: 10000 },
         phases: [
           { untilProgress: 0.5, weights: { normal: 70, tank: 10, bomber: 20 }, intervalMs: 800, nearBatch: [2, 4], fieldBatch: [4, 7], nearShare: 0.6 },
@@ -821,7 +845,7 @@ export const GameConfig = {
       },
       /** 重甲：坦克當肉牆，怪少但硬，慢節奏 */
       armor: {
-        name: '重甲', waves: [14, 16, 18, 20], maxAlive: { solo: 22, perExtraPlayer: 18 },
+        name: '重甲', waves: [20, 23, 26], maxAlive: { solo: 22, perExtraPlayer: 18 },
         surge: { count: [10, 14], weights: { normal: 90, tank: 10, bomber: 0 }, cooldownMs: 10000 },
         phases: [
           { untilProgress: 0.4, weights: { normal: 60, tank: 30, bomber: 10 }, intervalMs: 1600, nearBatch: [3, 5], fieldBatch: [6, 9], nearShare: 0.4 },
@@ -830,7 +854,7 @@ export const GameConfig = {
       },
       /** 砲火：投擲怪在遠處轟炸（只出在場上組），要衝過去清 */
       artillery: {
-        name: '砲火', waves: [14, 16, 18, 20], maxAlive: { solo: 22, perExtraPlayer: 18 },
+        name: '砲火', waves: [20, 23, 26], maxAlive: { solo: 22, perExtraPlayer: 18 },
         surge: { count: [10, 14], weights: { normal: 90, tank: 10, bomber: 0 }, cooldownMs: 10000 },
         phases: [
           { untilProgress: 0.3, weights: { normal: 60, tank: 10, bomber: 30 }, intervalMs: 1100, nearBatch: [2, 4], fieldBatch: [5, 8], nearShare: 0.4 },

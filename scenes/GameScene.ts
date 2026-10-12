@@ -14,6 +14,7 @@ import { ArtStyleController } from '../controllers/ArtStyleController';
 import { GoIndicator } from '../controllers/GoIndicator';
 import { OffscreenEnemyIndicator } from '../controllers/OffscreenEnemyIndicator';
 import { EnemyRallyController } from '../controllers/EnemyRallyController';
+import { WaveCountdown } from '../controllers/WaveCountdown';
 import { CreditController, type CreditHost } from '../controllers/CreditController';
 import { HiddenGateController } from '../controllers/HiddenGateController';
 import { TreasureRoomController } from '../controllers/TreasureRoomController';
@@ -133,6 +134,8 @@ export class GameScene extends Phaser.Scene {
   /** 清場輔助：畫面外剩餘一般怪的方向箭頭 */
   private offscreenIndicator!: OffscreenEnemyIndicator;
   private enemyRally!: EnemyRallyController;
+  /** 波間休息倒數提示（關卡制） */
+  private waveCountdown!: WaveCountdown;
   private creditCtl!: CreditController;
   /** 隱藏入口（熔岩拱門），每次 create() 重建 */
   private hiddenGate!: HiddenGateController;
@@ -279,6 +282,7 @@ export class GameScene extends Phaser.Scene {
       isActive: () => this.levelMode && this.stageInProgress && !this.gameOver && !this.slotWorld.isBetweenAreas &&
         (this.waveState === 'spawning' || this.waveState === 'clearing')
     });
+    this.waveCountdown = new WaveCountdown(this);
     new PerfOverlay(this, () => this.monsterProfileDebugLines()); // 除錯 F9：實機效能監控（自行註冊熱鍵與場景關閉時的清理）
     this.hiddenGate = new HiddenGateController(this);
     this.treasures = new TreasureEnemyController(this.createTreasureHost());
@@ -709,6 +713,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.handleSpawning(delta);
+    this.waveCountdown.update(this.levelMode && this.waveState === 'intermission' ? this.intermissionUntil - time : 0);
     if (this.waveState === 'event') this.eventCtl.update(time);
     this.bossCtl.update(time);
     this.treasureRoom.update(time);

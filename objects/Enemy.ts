@@ -456,7 +456,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         if (inEngageRange ?? dist <= GameConfig.enemy.engageRange) {
           this.beginCharge(time);
         } else {
-          body.setVelocity(Math.cos(this.facing) * this.moveSpeed, Math.sin(this.facing) * this.moveSpeed);
+          const speed = this.chaseSpeed();
+          body.setVelocity(Math.cos(this.facing) * speed, Math.sin(this.facing) * speed);
         }
         break;
       }
@@ -490,6 +491,18 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.outOfRangeSince = 0;
     }
     this.travelAccum = 0; this.lastChaseX = this.x; this.lastChaseY = this.y;
+  }
+
+  /**
+   * 追擊移動速度：被召集且整隻在鏡頭畫面外時乘 enemyRally.offscreenSpeedMult（快點出現在畫面上），
+   * 身體碰到畫面就恢復原速（玩家看不到加速）
+   */
+  private chaseSpeed(): number {
+    if (this.rallyUntil === 0) return this.moveSpeed;
+    const view = this.scene.cameras.main.worldView;
+    const r = this.getBodyRadius();
+    const onScreen = this.x + r >= view.left && this.x - r <= view.right && this.y + r >= view.top && this.y - r <= view.bottom;
+    return onScreen ? this.moveSpeed : this.moveSpeed * GameConfig.enemyRally.offscreenSpeedMult;
   }
 
   /** 是否在召集中 */
@@ -604,7 +617,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       return;
     }
     const ang = Phaser.Math.Angle.Between(this.x, this.y, targetX, targetY);
-    body.setVelocity(Math.cos(ang) * this.moveSpeed * dir, Math.sin(ang) * this.moveSpeed * dir);
+    const speed = this.chaseSpeed();
+    body.setVelocity(Math.cos(ang) * speed * dir, Math.sin(ang) * speed * dir);
   }
 
   /** bomber 是否正在蓄力投擲（供 GameScene 畫落點預警） */
