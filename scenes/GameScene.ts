@@ -348,6 +348,12 @@ export class GameScene extends Phaser.Scene {
       if (!this.gameOver) this.creditCtl.insertCoin(this.player);
     });
 
+    // X 鍵：切換免費攻擊（攻擊不扣 CREDIT），橫幅提示目前狀態
+    this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.X).on('down', () => {
+      if (!this.creditCtl.enabled || this.gameOver) return;
+      this.showEventBanner(this.creditCtl.toggleFreePlay() ? '免費攻擊：開（攻擊不扣 CREDIT）' : '免費攻擊：關');
+    });
+
     // B 鍵：逐一加入 BOT 夥伴（最多湊滿 characters.count）
     this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.B).on('down', () => {
       this.tryAddBot();
@@ -1809,9 +1815,8 @@ export class GameScene extends Phaser.Scene {
         // 黏著目標(階段1):追【綁定目標】(生成時綁最近、黏著不亂換),事件覆寫>黏著>就近重綁。
         //   取代舊「每幀 findNearestCharacter 選最近」→ 別的角色走過去不會把已綁的怪吸走(解問題③)。
         const target: Character | { x: number; y: number } | null = this.resolveEnemyTarget(enemy, time);
-        const tx = target ? target.x : enemy.x;
-        const ty = target ? target.y : enemy.y;
-        enemy.updateAI(tx, ty, time, this.vacuumMeleeInRange(enemy, target, GameConfig.slow.vacuumEngageMargin));
+        if (target) enemy.updateAI(target.x, target.y, time, this.vacuumMeleeInRange(enemy, target, GameConfig.slow.vacuumEngageMargin));
+        else enemy.updateIdle(time); // 場上沒有玩家（例如都在等投幣）：巡邏、不攻擊
 
         drawEnemyChargeWarnings(this.chargeWarnGfx, enemy, time);
       }

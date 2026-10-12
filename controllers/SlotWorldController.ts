@@ -139,11 +139,16 @@ export class SlotWorldController {
     });
   }
 
-  /** 更新鏡頭跟隨目標點為存活角色外框中心（全員陣亡時維持原位） */
+  /**
+   * 更新鏡頭跟隨目標點為存活角色外框中心；沒有人在場上時改跟等投幣（未進場 / 等待續關）的角色，
+   * 都沒有（全員陣亡）時維持原位
+   */
   private updateFollowTarget(): void {
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    for (const c of this.host.characters()) {
-      if (!c.alive) continue;
+    const characters = this.host.characters();
+    const anyAlive = characters.some((c) => c.alive);
+    for (const c of characters) {
+      if (anyAlive ? !c.alive : c.creditState === 'playing') continue;
       minX = Math.min(minX, c.x); maxX = Math.max(maxX, c.x);
       minY = Math.min(minY, c.y); maxY = Math.max(maxY, c.y);
     }

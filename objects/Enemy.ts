@@ -305,32 +305,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
    * @param inEngageRange 近戰怪是否已到可蓄力的距離（慢速模式由場景依真空圈判斷）；省略時用與目標的距離 ≤ config.enemy.engageRange
    */
   updateAI(targetX: number, targetY: number, time: number, inEngageRange?: boolean): void {
-    if (!this.active) return;
-    // 塔/NPC：靜止物件，不跑 AI（行為由事件邏輯管）。寶箱怪：跑點 / 限時 / 計命中由寶箱怪控制器管，不跑一般 AI。
-    if (this.enemyType === 'tower' || this.enemyType === 'npc' || this.enemyType === 'treasure') {
-      if (this.enemyType !== 'treasure') (this.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
-      if (this.enemyType === 'treasure' && this.telegraphing && time >= this.telegraphUntil) this.materialize(); // 寶箱怪 telegraph 結束→實體化(可動可被打)
-      return;
-    }
-
-    if (this.telegraphing) {
-      if (time >= this.telegraphUntil) this.materialize();
-      else return;
-    }
-
-    const body = this.body as Phaser.Physics.Arcade.Body;
-    if (this.hitFreezeUntil > 0) {
-      if (time < this.hitFreezeUntil) {
-        body.setVelocity(0, 0);
-        return;
-      }
-      this.endHitFreeze(time);
-    }
-    if (time < this.knockbackUntil) {
-      body.velocity.scale(0.92);
-      return;
-    }
-
+    if (!this.runPreamble(time)) return;
     switch (this.enemyType) {
       case 'bomber':
         this.facing = Phaser.Math.Angle.Between(this.x, this.y, targetX, targetY);
@@ -344,6 +319,85 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         // normal / tank：巡邏 / 警戒追擊 + 蓄力
         this.updateMelee(targetX, targetY, time, inEngageRange);
         break;
+    }
+  }
+
+  /**
+   * 沒有目標時的 AI（場上沒有玩家，例如都在等投幣）：中斷蓄力 / 投擲蓄力與召集，在附近巡邏、不攻擊；BOSS 原地站著
+   *
+   * @param time 目前場景時間
+   */
+  updateIdle(time: number): void {
+    if (!this.runPreamble(time)) return;
+    const body = this.body as Phaser.Physics.Arcade.Body;
+    if (this.isBoss) {
+      body.setVelocity(0, 0);
+      return;
+    }
+    if (this.aiState !== 'patrol') {
+      this.cancelCharge();
+      this.aiState = 'patrol';
+      this.homeX = this.x; this.homeY = this.y; // 以當下位置為巡邏中心
+      this.nextRepathAt = 0;
+    }
+    this.interruptBomb(time);
+    this.endRally();
+    this.patrolStep(time);
+  }
+
+  /**
+   * 每幀 AI 共用的前置處理：塔 / NPC / 寶箱怪不跑一般 AI；預告結束實體化；受擊凍結、擊退中不行動
+   *
+   * @param time 目前場景時間
+   * @returns 是否繼續跑這一幀的行為 AI
+   */
+  private runPreamble(time: number): boolean {
+    if (!this.active) return false;
+    // 塔/NPC：靜止物件，不跑 AI（行為由事件邏輯管）。寶箱怪：跑點 / 限時 / 計命中由寶箱怪控制器管，不跑一般 AI。
+    if (this.enemyType === 'tower' || this.enemyType === 'npc' || this.enemyType === 'treasure') {
+      if (this.enemyType !== 'treasure') (this.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
+      if (this.enemyType === 'treasure' && this.telegraphing && time >= this.telegraphUntil) this.materialize(); // 寶箱怪 telegraph 結束→實體化(可動可被打)
+      return false;
+    }
+
+    if (this.telegraphing) {
+      if (time >= this.telegraphUntil) this.materialize();
+      else return false;
+    }
+
+    const body = this.body as Phaser.Physics.Arcade.Body;
+    if (this.hitFreezeUntil > 0) {
+      if (time < this.hitFreezeUntil) {
+        body.setVelocity(0, 0);
+        return false;
+      }
+      this.endHitFreeze(time);
+    }
+    if (time < this.knockbackUntil) {
+      body.velocity.scale(0.92);
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * 巡邏一步：在巡邏中心（home）附近小範圍慢速漫步，到點或到時間就換下一個漫步點
+   *
+   * @param time 目前場景時間
+   */
+  private patrolStep(time: number): void {
+    const cfg = GameConfig.enemy.ai;
+    const body = this.body as Phaser.Physics.Arcade.Body;
+    this.facing = Phaser.Math.Angle.Between(this.x, this.y, this.patrolTargetX, this.patrolTargetY);
+    const dToPatrol = Phaser.Math.Distance.Between(this.x, this.y, this.patrolTargetX, this.patrolTargetY);
+    if (time >= this.nextRepathAt || dToPatrol <= 8) {
+      const ang = Math.random() * Math.PI * 2;
+      const rad = Math.random() * cfg.patrolRadius;
+      this.patrolTargetX = this.homeX + Math.cos(ang) * rad;
+      this.patrolTargetY = this.homeY + Math.sin(ang) * rad;
+      this.nextRepathAt = time + Phaser.Math.Between(cfg.patrolRepathMinMs, cfg.patrolRepathMaxMs);
+    } else {
+      body.setVelocity(Math.cos(this.facing) * cfg.patrolSpeed, Math.sin(this.facing) * cfg.patrolSpeed);
     }
   }
 
@@ -364,18 +418,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
           this.travelAccum = 0; this.lastChaseX = this.x; this.lastChaseY = this.y; // leash 第二條:進 chase 重置路程
           break;
         }
-        this.facing = Phaser.Math.Angle.Between(this.x, this.y, this.patrolTargetX, this.patrolTargetY);
-        // 到點或到改點時間 → 在 home 附近選新漫步點
-        const dToPatrol = Phaser.Math.Distance.Between(this.x, this.y, this.patrolTargetX, this.patrolTargetY);
-        if (time >= this.nextRepathAt || dToPatrol <= 8) {
-          const ang = Math.random() * Math.PI * 2;
-          const rad = Math.random() * cfg.patrolRadius;
-          this.patrolTargetX = this.homeX + Math.cos(ang) * rad;
-          this.patrolTargetY = this.homeY + Math.sin(ang) * rad;
-          this.nextRepathAt = time + Phaser.Math.Between(cfg.patrolRepathMinMs, cfg.patrolRepathMaxMs);
-        } else {
-          body.setVelocity(Math.cos(this.facing) * cfg.patrolSpeed, Math.sin(this.facing) * cfg.patrolSpeed);
-        }
+        this.patrolStep(time); // 到點或到改點時間 → 在 home 附近選新漫步點
         break;
       }
       case 'chase': {
@@ -477,13 +520,18 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   private fireAttack(time: number): void {
+    this.cancelCharge();
+    this.onAttackFire?.(this);
+    this.aiState = 'cooldown';
+    this.cooldownUntil = time + GameConfig.enemy.attackCooldownMs;
+  }
+
+  /** 結束蓄力外觀（蓄力 tween、縮放、染色還原） */
+  private cancelCharge(): void {
     this.chargeTween?.remove();
     this.chargeTween = undefined;
     this.setScale(this.baseScale);
     this.clearTint();
-    this.onAttackFire?.(this);
-    this.aiState = 'cooldown';
-    this.cooldownUntil = time + GameConfig.enemy.attackCooldownMs;
   }
 
   isCharging(): boolean {
@@ -523,7 +571,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (this.rallyUntil > 0 && (time >= this.rallyUntil || dist <= cfg.throwRange)) this.endRally();
     // 射程內且冷卻好 → 停下開始蓄力投擲（鎖定玩家「當下位置」當落點）；走位時太近（retreatRange 內）先退開不投
     const canThrow = dist <= cfg.throwRange && time >= this.nextBombAt && (!cfg.moveEnabled || dist >= cfg.retreatRange);
-    if (cfg.moveEnabled && !canThrow) this.moveBomber(targetX, targetY, dist);
+    if (cfg.moveEnabled && !canThrow) this.moveBomber(targetX, targetY, dist, time);
     else body.setVelocity(0, 0);
     if (canThrow) {
       this.bombState = 'charging';
@@ -536,13 +584,14 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   /**
    * bomber 走位：離目標超過 throwRange 走近、小於 retreatRange 後退，其餘往 preferRange 靠（差距在 preferTolerance 內站定）；
-   * 離出生點超過 leashRadius 時，不再往遠離出生點的方向走（站著等，射程內照樣投擲）
+   * 目標在 chaseRadius 內時不受活動範圍限制（走到射程內）；目標更遠且已離出生點超過 leashRadius 時，回出生點附近巡邏
    *
    * @param targetX 目標 x
    * @param targetY 目標 y
    * @param dist 與目標的距離
+   * @param time 目前場景時間
    */
-  private moveBomber(targetX: number, targetY: number, dist: number): void {
+  private moveBomber(targetX: number, targetY: number, dist: number, time: number): void {
     const cfg = GameConfig.enemy.bomber;
     const body = this.body as Phaser.Physics.Arcade.Body;
     let dir = 0; // 1 = 走近、-1 = 後退、0 = 站定
@@ -552,11 +601,17 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const ang = Phaser.Math.Angle.Between(this.x, this.y, targetX, targetY);
     const vx = Math.cos(ang) * this.moveSpeed * dir;
     const vy = Math.sin(ang) * this.moveSpeed * dir;
-    // 活動範圍：已在範圍外且這一步會離出生點更遠 → 不走（召集中不受限）
+    // 活動範圍：目標在 chaseRadius 外、已在範圍外且這一步會離出生點更遠 → 回出生點附近巡邏（召集中不受限）
     const ox = this.x - this.spawnX, oy = this.y - this.spawnY;
-    const outsideLeash = this.rallyUntil === 0 && ox * ox + oy * oy > this.leashRadius * this.leashRadius;
-    if (dir === 0 || (outsideLeash && ox * vx + oy * vy > 0)) body.setVelocity(0, 0);
-    else body.setVelocity(vx, vy);
+    const outsideLeash = this.rallyUntil === 0 && dist > cfg.chaseRadius && ox * ox + oy * oy > this.leashRadius * this.leashRadius;
+    if (outsideLeash && ox * vx + oy * vy > 0) {
+      this.homeX = this.spawnX; this.homeY = this.spawnY;
+      this.patrolStep(time);
+    } else if (dir === 0) {
+      body.setVelocity(0, 0);
+    } else {
+      body.setVelocity(vx, vy);
+    }
   }
 
   /** bomber 是否正在蓄力投擲（供 GameScene 畫落點預警） */

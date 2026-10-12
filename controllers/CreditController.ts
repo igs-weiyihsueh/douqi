@@ -31,6 +31,7 @@ export interface CreditHost {
  * - 不在遊玩中的角色以 Character.leavePlay 離開戰局（alive = false）：不能操作、無敵、敵人不鎖定、不影響出怪與鏡頭
  * - 扣點：每次出手（openAttackWindow）後 attackWindowMs 內第一次命中敵人扣 1 點，一招最多扣 1 點；空揮不扣
  * - BOT：加入時自動投幣，用完自動再投
+ * - 免費攻擊（X 鍵切換）：開啟時攻擊不扣 CREDIT
  * - 未進場 / 等待中的角色頭上顯示投幣提示
  */
 export class CreditController {
@@ -38,12 +39,24 @@ export class CreditController {
   private readonly prompts = new Map<Character, Phaser.GameObjects.Text>();
   /** CREDIT 剛用完、待下一幀進入等待的角色（不在攻擊結算途中切換狀態） */
   private readonly pendingPause = new Set<Character>();
+  /** 免費攻擊：開啟時攻擊不扣 CREDIT（X 鍵切換） */
+  private freePlay = false;
 
   constructor(private readonly host: CreditHost) {
     host.scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.prompts.clear();
       this.pendingPause.clear();
     });
+  }
+
+  /**
+   * 切換免費攻擊（攻擊不扣 CREDIT）
+   *
+   * @returns 切換後是否為免費攻擊
+   */
+  toggleFreePlay(): boolean {
+    this.freePlay = !this.freePlay;
+    return this.freePlay;
   }
 
   /** 是否啟用 CREDIT 系統 */
@@ -108,13 +121,13 @@ export class CreditController {
   }
 
   /**
-   * 角色命中敵人：在這一招的扣點期限內且還沒扣過就扣 1 點；用完時 BOT 自動投幣，玩家下一幀進入等待
+   * 角色命中敵人：在這一招的扣點期限內且還沒扣過就扣 1 點（免費攻擊時不扣）；用完時 BOT 自動投幣，玩家下一幀進入等待
    *
    * @param c 攻擊的角色
    * @param time 目前場景時間
    */
   onEnemyHit(c: Character, time: number): void {
-    if (!this.enabled || c.creditState !== 'playing' || time >= c.chargeWindowUntil) return;
+    if (!this.enabled || this.freePlay || c.creditState !== 'playing' || time >= c.chargeWindowUntil) return;
     c.chargeWindowUntil = 0;
     c.credit = Math.max(0, c.credit - 1);
     if (c.credit === 0) {
@@ -162,8 +175,10 @@ export class CreditController {
   /** 建立一個頭上投幣提示文字 */
   private createPrompt(): Phaser.GameObjects.Text {
     const p = GameConfig.credit.prompt;
+    // 粗體中文加描邊時字形上緣會超出量到的行高而被切掉，上下留 padding
     return this.host.scene.add.text(0, 0, '', {
-      fontSize: `${p.fontSize}px`, fontStyle: 'bold', color: p.color, stroke: p.stroke, strokeThickness: p.strokeThickness
+      fontSize: `${p.fontSize}px`, fontStyle: 'bold', color: p.color, stroke: p.stroke, strokeThickness: p.strokeThickness,
+      padding: { top: p.paddingY, bottom: p.paddingY }
     }).setOrigin(0.5).setDepth(p.depth);
   }
 }

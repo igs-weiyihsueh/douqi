@@ -193,8 +193,8 @@ export const GameConfig = {
     attackWindowMs: 1500,
     /** 投幣恢復後的無敵時間（毫秒） */
     resumeInvulnMs: 1000,
-    /** 頭上提示：離角色中心的高度（在頭頂介面 / F4 頭上覆蓋圖上緣 −166 之上）、字級、顏色、閃動週期（毫秒） */
-    prompt: { offsetY: -200, fontSize: 30, color: '#ffe066', stroke: '#000000', strokeThickness: 6, blinkMs: 900, depth: 60 },
+    /** 頭上提示：離角色中心的高度（在頭頂介面 / F4 頭上覆蓋圖上緣 −166 之上）、字級、顏色、上下留白（避免字形上緣被切）、閃動週期（毫秒） */
+    prompt: { offsetY: -200, fontSize: 30, color: '#ffe066', stroke: '#000000', strokeThickness: 6, paddingY: 8, blinkMs: 900, depth: 60 },
     /** 提示文字：尚未進場 / CREDIT 用完 */
     joinText: '投幣開始',
     continueText: '投幣續關'
@@ -706,6 +706,8 @@ export const GameConfig = {
       preferRange: 300,
       /** 與 preferRange 的差距在此範圍內就站定（不來回抖動） */
       preferTolerance: 40,
+      /** 目標在此距離內時不受活動範圍限制、一路走到射程內（避免卡在活動範圍邊緣發呆）；更遠才回出生點附近巡邏 */
+      chaseRadius: 900,
       /** 小於此距離就後退（也不投擲） */
       retreatRange: 200,
       /** 進入此距離開始蓄力投擲 */
