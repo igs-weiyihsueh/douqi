@@ -2,63 +2,123 @@
 
 **系統概述**：街機風格的投幣續關機制，取代傳統HP系統，每位玩家獨立計算CREDIT點數，通過C鍵投幣進場和續關，實現精準的攻擊成本控制和公平的多人遊戲體驗。
 
-## 🔧 **最新系統優化** (4ea4419)
+## 🔧 **最新倒數系統** (df5cfde)
 
-### **用戶回饋修正** (2026-10-12)
-基於真實用戶試玩回饋，完成6項核心問題修正：
+### **投幣續關倒數機制** (2026-10-12)
+基於UI邏輯優化需求，實現完整的倒數續關流程：
 
-#### **1. UI顯示優化**
-```typescript
-// 投幣提示文字切割問題修復
-const textOptimization = {
-  /** 問題：粗體中文+黑邊描邊時字形上緣被切 */
-  issue: 'text_clipping',
-  
-  /** 解決：上下留8px padding避免切割 */
-  solution: 'vertical_padding_8px',
-  
-  /** 效果：「投幣開始」文字完整顯示 */
-  result: 'complete_text_display'
-};
-```
-
-#### **2. 攝影機跟隨邏輯**
+#### **1. 倒數顯示系統**
 ```typescript
 /**
- * 攝影機跟隨優化：
- * - 原問題：投幣前無目標，鏡頭停在原位
- * - 新邏輯：改跟未投幣/等待續關角色
- * - 開局效果：對準P1而不是停在原位
+ * 投幣續關倒數邏輯：
+ * - CREDIT用完進入waiting狀態：頭上顯示「投幣續關 15」
+ * - 每秒倒數：15→14→13...→1 (continueSeconds配置)
+ * - 倒數期間：按C立即恢復遊玩，重置倒數
+ * - 超時處理：倒數結束未投幣角色離場隱藏
  */
-interface CameraFollowOptimization {
-  beforeFix: 'static_position_when_no_players',
-  afterFix: 'follow_waiting_characters',
-  startupBehavior: 'focus_on_p1_immediately'
+class CountdownSystem {
+  /** 倒數截止時間記錄 */
+  private continueDeadline = new Map<Character, number>();
+  
+  /** CREDIT用完時設置倒數 */
+  onCreditEmpty(character: Character, time: number): void {
+    character.creditState = 'waiting';
+    character.leavePlay();
+    
+    // 設置15秒倒數截止時間
+    const deadline = time + GameConfig.credit.continueSeconds * 1000;
+    this.continueDeadline.set(character, deadline);
+  }
+  
+  /** 更新倒數顯示 */
+  updateCountdown(character: Character, time: number): string {
+    const deadline = this.continueDeadline.get(character);
+    if (!deadline) return '';
+    
+    const remaining = Math.max(0, Math.ceil((deadline - time) / 1000));
+    
+    if (remaining === 0) {
+      // 倒數結束：角色離場，回到未進場狀態
+      character.creditState = 'absent';
+      this.host.setCharacterVisible(character, false);
+      this.continueDeadline.delete(character);
+      return '';
+    }
+    
+    return `${GameConfig.credit.continueText} ${remaining}`;
+  }
 }
 ```
 
-#### **3. X鍵免費攻擊功能**
+#### **2. UI位置重新設計**
 ```typescript
 /**
- * 免費攻擊模式：
- * - X鍵切換開關：攻擊不扣CREDIT
- * - 橫幅提示：「免費攻擊：開/關」
- * - 測試友好：便於體驗CREDIT機制
+ * UI顯示位置優化：
+ * - 未進場狀態：下方面板HIT數位置顯示「投幣加入遊戲」
+ * - 等待續關狀態：頭上顯示「投幣續關 N」倒數
+ * - 閃動效果：未進場時下方面板閃動提示
  */
-class FreePlayMode {
-  private freePlay: boolean = false;
+interface UIPositionOptimization {
+  /** 未進場提示位置 */
+  absentPrompt: {
+    location: 'bottom_panel_hit_position',    // HIT數位置
+    text: '投幣加入遊戲',                     // credit.joinText
+    effect: 'blinking_display',              // 閃動顯示
+    visibility: 'when_creditState_absent'     // absent狀態時顯示
+  },
   
-  /** 切換免費攻擊模式 */
-  toggleFreePlay(): boolean {
-    this.freePlay = !this.freePlay;
-    return this.freePlay;
+  /** 續關倒數位置 */
+  waitingCountdown: {
+    location: 'overhead_character_position',  // 角色頭上
+    text: '投幣續關 15',                      // continueText + 剩餘秒數
+    effect: 'realtime_countdown',            // 實時倒數
+    visibility: 'when_creditState_waiting'    // waiting狀態時顯示
+  }
+}
+```
+
+#### **3. 狀態循環系統**
+```typescript
+/**
+ * 完整的CREDIT狀態循環：
+ * absent(未進場) → 投幣 → playing(遊玩) → CREDIT用完 → waiting(等待續關) 
+ *   ↑                                                                    ↓
+ *   ← ← ← ← ← 超時未投幣/離場 ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ←
+ */
+class CreditStateCycle {
+  /** 狀態轉換邏輯 */
+  transitionState(character: Character, newState: CreditState): void {
+    const oldState = character.creditState;
+    character.creditState = newState;
+    
+    switch (newState) {
+      case 'absent':
+        // 未進場：隱藏角色，下方面板顯示加入提示
+        this.host.setCharacterVisible(character, false);
+        this.clearCountdown(character);
+        break;
+        
+      case 'playing':
+        // 遊玩中：顯示角色，清除所有提示
+        this.host.setCharacterVisible(character, true);
+        this.host.prepareResume(character);
+        this.clearCountdown(character);
+        break;
+        
+      case 'waiting':
+        // 等待續關：開始倒數，頭上顯示
+        this.startCountdown(character);
+        break;
+    }
+    
+    this.host.onCreditChanged();
   }
   
-  /** 命中時根據模式決定是否扣CREDIT */
-  onEnemyHit(character: Character): void {
-    if (!this.freePlay && this.enabled) {
-      character.credit = Math.max(0, character.credit - 1);
-    }
+  /** 循環重新加入機制 */
+  handleTimeout(character: Character): void {
+    // 離場後可重新加入：waiting → absent → playing
+    this.transitionState(character, 'absent');
+    // 下方面板重新顯示「投幣加入遊戲」閃動提示
   }
 }
 ```
@@ -534,7 +594,44 @@ function validateCreditConfig(): ValidationResult {
 
 ## 🚀 **系統演進記錄**
 
-### **CREDIT系統優化記錄** (4ea4419)
+### **CREDIT系統倒數優化記錄** (df5cfde)
+```typescript
+/**
+ * commit df5cfde: 投幣續關倒數系統完整實現
+ * - 倒數機制: CREDIT用完顯示「投幣續關 15」每秒倒數
+ * - UI位置優化: 未進場改為下方面板HIT數位置顯示
+ * - 超時處理: 15秒未投幣角色離場隱藏，可重新加入
+ * - 狀態循環: absent→playing→waiting→absent完整循環
+ * - 配置驅動: continueSeconds/joinText/continueText可調
+ */
+interface CountdownSystemImplementation {
+  /** 倒數顯示 */
+  countdownDisplay: {
+    location: 'overhead_character_position',    // 頭上倒數
+    format: 'continueText + remaining_seconds', // 投幣續關 15
+    updateFrequency: '1_second_intervals',      // 每秒更新
+    timeout: 'configurable_15_seconds'          // 可配置時長
+  },
+  
+  /** UI位置重設計 */
+  uiRedesign: {
+    absentPrompt: 'bottom_panel_hit_position',  // 下方面板HIT位置
+    waitingCountdown: 'overhead_display',       // 頭上倒數顯示
+    blinkingEffect: 'absent_state_only',        // 僅未進場閃動
+    promptSeparation: 'clear_ui_hierarchy'      // 清晰UI層次
+  },
+  
+  /** 狀態循環系統 */
+  stateCycle: {
+    flow: 'absent→playing→waiting→absent',      // 完整狀態流
+    timeout: 'automatic_absent_transition',     // 自動回到未進場
+    rejoin: 'unlimited_rejoin_capability',      // 無限重新加入
+    continuity: 'seamless_game_experience'      // 無縫遊戲體驗
+  }
+}
+```
+
+### **用戶回饋修正優化** (4ea4419)  
 ```typescript
 /**
  * commit 4ea4419: 用戶回饋驅動的6項修正
@@ -545,26 +642,17 @@ function validateCreditConfig(): ValidationResult {
  * - 投擲怪改善: 900px內無活動範圍限制，發呆率降至0
  * - 代碼重構: Enemy類拆出runPreamble、patrolStep、cancelCharge
  */
-interface CreditSystemRefinement {
-  /** UI優化 */
+interface UserFeedbackOptimizations {
   uiImprovements: {
     textClipping: 'fixed_with_vertical_padding',
     cameraFollow: 'improved_startup_behavior',
     freeAttackMode: 'added_x_key_toggle'
   },
   
-  /** AI行為改善 */
   aiEnhancements: {
     noTargetBehavior: 'patrol_instead_of_self_attack', 
     bomberStuck: 'chase_radius_900px_no_limit',
     codeRefactoring: 'extracted_common_methods'
-  },
-  
-  /** 品質評估 */
-  qualityMetrics: {
-    codeQuality: '99/100',      // 銳騎評分 (100→99輕微回退)
-    userExperience: 'excellent', // 用戶體驗顯著提升
-    deploymentStatus: 'success'  // 部署成功 (Bundle: index-DlsxwFQt.js)
   }
 }
 ```
