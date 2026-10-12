@@ -41,8 +41,8 @@ export interface SpawnHost {
   nearestSeat(x: number, y: number): number;
   /** 掛上一般敵人的攻擊回呼 */
   wireEnemyCallbacks(enemy: Enemy): void;
-  /** 每出一次隊形後（寶箱怪在此擲骰） */
-  onFormationSpawned(time: number): void;
+  /** 每出一次隊形後（關卡制每波第一批時落下木箱） */
+  onFormationSpawned(): void;
 }
 
 /** 場上組每叢至少幾隻 */
@@ -72,15 +72,8 @@ export class SpawnController {
   private fieldSpawned = 0;
   /** 近身組輪派座位的游標（多人平均分配） */
   private nearSeatCursor = 0;
-  /** 已出了幾次隊形（關卡制為本關，舊波次制為本波） */
-  private formations = 0;
 
   constructor(private readonly host: SpawnHost) {}
-
-  /** 已出的隊形次數（關卡制為本關，舊波次制為本波；寶箱怪第二次隊形起才可能出現） */
-  get formationCount(): number {
-    return this.formations;
-  }
 
   /**
    * 每幀（波次生怪中）：更新補生閘門；生產總量達配額回傳 true（場景改為清場），否則到了生怪間隔且閘門開就補一次隊形
@@ -117,7 +110,7 @@ export class SpawnController {
     return false;
   }
 
-  /** 新的一波開始：閘門打開、分配計數歸零，立刻補第一批（不冷場）。隊形計數不歸零（另由 resetFormationCount 處理） */
+  /** 新的一波開始：閘門打開、分配計數歸零，立刻補第一批（不冷場） */
   startWave(): void {
     this.refilling = true;
     this.nearSpawned = 0;
@@ -131,21 +124,15 @@ export class SpawnController {
     this.accumulator = 0;
   }
 
-  /** 隊形計數歸零（關卡制每個小關卡開始時、舊波次制每波開始時） */
-  resetFormationCount(): void {
-    this.formations = 0;
-  }
-
-  /** 出一次隊形：依近身組占比決定近身組或場上組，之後讓寶箱怪擲骰 */
+  /** 出一次隊形：依近身組占比決定近身組或場上組，之後通知場景（每波第一批時落下木箱） */
   spawnFormation(): void {
     const time = this.host.scene.time.now;
-    this.formations++;
     const total = this.nearSpawned + this.fieldSpawned;
     const nearRatio = total > 0 ? this.nearSpawned / total : 0;
     const nearShare = this.host.monsterPhase()?.nearShare ?? GameConfig.spawnAlloc.nearShare;
     if (nearRatio < nearShare) this.spawnNearBatch(time);
     else this.spawnFieldBatch(time);
-    this.host.onFormationSpawned(time);
+    this.host.onFormationSpawned();
   }
 
   /**

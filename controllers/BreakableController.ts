@@ -33,6 +33,19 @@ export interface BreakableHost {
   /** 角色的攻擊命中物件（與命中敵人一樣計算 CREDIT 扣點） */
   onBreakableHit(actor: Character, time: number): void;
   dropItemAt(x: number, y: number, time: number): void;
+  /**
+   * 打破木箱爆出彩票：加到角色的彩票數並在下方面板播 HIT 報獎特效
+   *
+   * @param actor 打破木箱的角色
+   * @param tickets 彩票張數
+   */
+  grantCrateTickets(actor: Character, tickets: number): void;
+  /**
+   * 從打破的木箱位置跳出寶箱怪（小關卡最後一波打完後、這一關已出過等情況不出）
+   *
+   * @returns 是否有出現
+   */
+  spawnTreasureAt(x: number, y: number, time: number): boolean;
   spawnExpandingRing(x: number, y: number, radius: number, color: number, ms?: number): void;
   shakeOnce(duration: number, intensity: number): void;
 }
@@ -73,10 +86,10 @@ const BREAK_PARTICLES = 8;
 
 /**
  * 可破壞物件（木箱、爆炸桶）：
- * - 布置：非關卡制每波成堆散布（遠離中心、避開玩家、彼此不疊）；關卡制每波從天而降一次（dropForWave）
+ * - 布置：非關卡制每波成堆散布（遠離中心、避開玩家、彼此不疊）；關卡制每波第一批怪出現時從天而降（dropForWave）
  * - 打破：普攻扇形 / 衝刺圓形 / 招式 AOE（圓形 / 定向矩形）每次命中扣 1 耐久（Breakable.hit），歸零才碎；
  *   一次攻擊最多掉 maxDropPerBreak 個道具；命中至少一個時通知場景計算 CREDIT（onBreakableHit），HIT 連擊由各攻擊的呼叫端計算
- * - 木箱碎裂噴粒子、機率掉道具；爆炸桶（barrel.enabled 停用中）打破後先倒數（地面警示圈）再爆炸：怪受傷並被炸飛、角色受傷、連鎖引爆附近的桶
+ * - 木箱碎裂噴粒子、機率掉道具；機率爆出彩票給打破的人、機率跳出寶箱怪（crate.ticketChance / treasureChance）；爆炸桶（barrel.enabled 停用中）打破後先倒數（地面警示圈）再爆炸：怪受傷並被炸飛、角色受傷、連鎖引爆附近的桶
  * - 推動與碰撞分離在 systems/bodySeparation
  */
 export class BreakableController {
@@ -163,7 +176,7 @@ export class BreakableController {
   }
 
   /**
-   * 關卡制：每波降落一次木箱（小關卡開打時、波間休息開始時）——drop.count 個，
+   * 關卡制：每波降落一次木箱（由場景在該波第一批怪出現時呼叫）——drop.count 個，
    * 場上（含降落中）達 drop.maxAlive 就不掉，找不到合適落點的少掉
    */
   dropForWave(): void {
@@ -318,7 +331,7 @@ export class BreakableController {
       hitSet?.add(bk);
       if (result === 'broken') {
         const allowDrop = drops < GameConfig.breakable.maxDropPerBreak;
-        this.breakOne(bk, time, allowDrop);
+        this.breakOne(bk, actor, time, allowDrop);
         if (allowDrop) drops++;
       }
     }
@@ -326,13 +339,50 @@ export class BreakableController {
     return hits;
   }
 
-  /** 打破一個物件：爆炸桶進入倒數；木箱碎裂噴粒子、（allowDrop 時）機率掉道具並回收 */
-  private breakOne(bk: Breakable, time: number, allowDrop = true): void {
+  /**
+   * 打破一個物件：爆炸桶進入倒數；木箱碎裂噴粒子並回收，（allowDrop 時）機率掉道具，
+   * 另外機率跳出寶箱怪、機率爆出彩票給打破的人
+   *
+   * @param bk 打破的物件
+   * @param actor 打破它的角色
+   * @param time 目前場景時間
+   * @param allowDrop 是否可掉道具（一次攻擊最多 maxDropPerBreak 個）
+   */
+  private breakOne(bk: Breakable, actor: Character, time: number, allowDrop = true): void {
     if (bk.explosive) { this.startBarrelFuse(bk, allowDrop); return; }
+    const crate = GameConfig.breakable.crate;
+    const body = bk.getBody();
+    const cx = body.centerX, cy = body.centerY;
     const bx = bk.x, by = bk.y;
     this.spawnBreakParticles(bx, by);
     bk.despawn();
     if (allowDrop && Math.random() < GameConfig.items.dropChance) this.host.dropItemAt(bx, by, time);
+    if (Math.random() < crate.treasureChance) this.host.spawnTreasureAt(cx, cy, time);
+    if (Math.random() < crate.ticketChance) {
+      this.host.grantCrateTickets(actor, crate.tickets);
+      this.spawnTicketFx(cx, cy, crate.tickets);
+    }
+  }
+
+  /**
+   * 木箱位置的彩票提示：金光圈擴散 + 「+N 彩票」往上飄並淡出
+   *
+   * @param x 木箱中心 x
+   * @param y 木箱中心 y
+   * @param tickets 彩票張數
+   */
+  private spawnTicketFx(x: number, y: number, tickets: number): void {
+    const fx = GameConfig.breakable.crate.ticketFx;
+    this.host.spawnExpandingRing(x, y, fx.ringRadius, fx.ringColor, fx.ringMs);
+    // 粗體中文加描邊時字形上緣會超出量到的行高而被切掉，上下留 padding
+    const text = this.scene.add.text(x, y, fx.text.replace('{n}', String(tickets)), {
+      fontFamily: 'monospace', fontSize: `${fx.fontSize}px`, fontStyle: 'bold', color: fx.color,
+      stroke: fx.stroke, strokeThickness: fx.strokeThickness, padding: { top: fx.paddingY, bottom: fx.paddingY }
+    }).setOrigin(0.5, 1).setDepth(fx.depth);
+    this.scene.tweens.add({
+      targets: text, y: y - fx.riseY, alpha: 0, duration: fx.durationMs, ease: 'Cubic.easeOut',
+      onComplete: () => text.destroy()
+    });
   }
 
   /**

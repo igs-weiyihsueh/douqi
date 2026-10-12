@@ -13,14 +13,15 @@ export const CRATE_TEXTURE = 'breakable-crate';
 export const BARREL_TEXTURE = 'breakable-barrel';
 
 /**
- * 木箱的碰撞 / 命中範圍（軸對齊矩形，各邊相對物件位置）：WoodenBox 圖片的可見外框，
- * 以外框中心依 crate.bodyScale 縮放（換圖自動跟著變）
+ * 木箱的碰撞 / 命中範圍（軸對齊矩形，各邊相對物件位置）：WoodenBox 圖片的可見外框乘上顯示倍率 crate.displayScale，
+ * 再以外框中心依 crate.bodyScale 縮放（換圖自動跟著變）
  *
  * @param textures 紋理管理器
  */
 export function crateBodyBounds(textures: Phaser.Textures.TextureManager): VisibleBounds {
-  const b = visibleBounds(textures, CRATE_TEXTURE);
-  const scale = GameConfig.breakable.crate.bodyScale;
+  const raw = visibleBounds(textures, CRATE_TEXTURE);
+  const { displayScale, bodyScale: scale } = GameConfig.breakable.crate;
+  const b = { left: raw.left * displayScale, right: raw.right * displayScale, top: raw.top * displayScale, bottom: raw.bottom * displayScale };
   const cx = (b.left + b.right) / 2, cy = (b.top + b.bottom) / 2;
   const halfW = (b.right - b.left) / 2 * scale, halfH = (b.bottom - b.top) / 2 * scale;
   return { left: cx - halfW, right: cx + halfW, top: cy - halfH, bottom: cy + halfH };
@@ -54,7 +55,8 @@ function barrelBodyBounds(): VisibleBounds {
  * - 只有【玩家攻擊（普攻揮擊 / 衝刺 / 招式 AOE）】能打，敵人不能破壞，靜止、不攻擊玩家。
  * - 耐久以「被命中次數」計算（不看攻擊力）：每次命中扣 1，歸零才碎；同一物件兩次命中至少相隔 hitIntervalMs
  *   （持續型招式不會每幀都算一下）。受擊時閃白並彈一下。
- * - 碰撞 / 命中範圍是貼合圖片可見外框的軸對齊矩形（getBody）；角色和怪碰到會推動它（systems/bodySeparation），衝刺穿過不擋。
+ * - 木箱依 crate.displayScale 縮小顯示；碰撞 / 命中範圍是貼合（縮放後）圖片可見外框的軸對齊矩形（getBody）。
+ *   角色碰到會推動它（很重），怪推不動、沿邊緣繞過（systems/bodySeparation），衝刺穿過不擋。
  * - 關卡制從天而降（dropIn）：降落中（landing）不能被打、不參與推擠，落地後才是一般物件。
  * - 命中判定 / 分離都用幾何數學（不依賴 physics body），是純顯示 sprite。
  */
@@ -72,6 +74,8 @@ export class Breakable extends Phaser.GameObjects.Sprite {
   landing = false;
   /** 碰撞 / 命中範圍各邊相對物件位置（生成時依種類決定） */
   private bodyBounds: VisibleBounds = barrelBodyBounds();
+  /** 平常的顯示倍率（木箱 crate.displayScale、爆炸桶 1）；受擊彈跳、落地壓扁都乘在這上面 */
+  private baseScale = 1;
   /** getBody 回傳的矩形（重複使用，不每次配置） */
   private readonly bodyRect = new Phaser.Geom.Rectangle();
   /** 下一次可以再被命中的場景時間（受擊間隔） */
@@ -93,6 +97,7 @@ export class Breakable extends Phaser.GameObjects.Sprite {
     this.kind = kind;
     this.hp = kind === 'barrel' ? cfg.barrel.hp : cfg.crate.hp;
     this.bodyBounds = kind === 'barrel' ? barrelBodyBounds() : crateBodyBounds(this.scene.textures);
+    this.baseScale = kind === 'barrel' ? 1 : cfg.crate.displayScale;
     this.dead = false;
     this.fusing = false;
     this.hittableAt = 0;
@@ -132,8 +137,9 @@ export class Breakable extends Phaser.GameObjects.Sprite {
       onComplete: () => {
         this.dropTween = undefined; // 已播完，不必再停
         this.stopDrop();
-        this.setScale(cfg.squashX, cfg.squashY);
-        this.popTween = this.scene.tweens.add({ targets: this, scaleX: 1, scaleY: 1, duration: cfg.squashMs, ease: 'Back.easeOut' });
+        const s = this.baseScale;
+        this.setScale(cfg.squashX * s, cfg.squashY * s);
+        this.popTween = this.scene.tweens.add({ targets: this, scaleX: s, scaleY: s, duration: cfg.squashMs, ease: 'Back.easeOut' });
         onLand();
       }
     });
@@ -194,8 +200,8 @@ export class Breakable extends Phaser.GameObjects.Sprite {
     this.resetHitFeedback();
     this.setTintFill(0xffffff);
     this.flashTimer = this.scene.time.delayedCall(fb.flashMs, () => this.clearTint());
-    this.setScale(fb.popScale);
-    this.popTween = this.scene.tweens.add({ targets: this, scale: 1, duration: fb.popMs, ease: 'Back.easeOut' });
+    this.setScale(fb.popScale * this.baseScale);
+    this.popTween = this.scene.tweens.add({ targets: this, scale: this.baseScale, duration: fb.popMs, ease: 'Back.easeOut' });
   }
 
   /** 結束降落狀態：停掉落下動畫、移除陰影 */
@@ -207,13 +213,13 @@ export class Breakable extends Phaser.GameObjects.Sprite {
     this.landing = false;
   }
 
-  /** 停掉進行中的受擊回饋，恢復原色、原尺寸 */
+  /** 停掉進行中的受擊回饋，恢復原色、平常的尺寸 */
   private resetHitFeedback(): void {
     this.flashTimer?.remove();
     this.flashTimer = undefined;
     this.popTween?.stop();
     this.popTween = undefined;
     this.clearTint();
-    this.setScale(1);
+    this.setScale(this.baseScale);
   }
 }

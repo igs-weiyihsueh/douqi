@@ -450,19 +450,26 @@ export function pushEnemiesOutOfNpc(npc: Enemy, enemies: Phaser.Physics.Arcade.G
 // 可推動物件（木箱 / 桶）
 // ---------------------------------------------------------------------------
 
-/** 推動參數：滑行速度、物件分擔壓入距離的比例、被擋下時側向滑開的倍率（0 = 不滑） */
+/**
+ * 推動參數：滑行速度、物件分擔壓入距離的比例、退回的部分側向滑開的倍率（0 = 不滑）、
+ * 推的一方想走的方向（側向滑開時往這個方向那一側滑；省略或幾乎正對物件時往離物件中心較近的一端）
+ */
 interface PushOptions {
   pushSpeed: number;
   crateShare: number;
   slideRatio: number;
+  moveDirX?: number;
+  moveDirY?: number;
 }
 
 /** 物件被擋住的判定容差（像素） */
 const CRATE_BLOCK_EPS = 0.5;
+/** 想走的方向沿物件邊緣的分量至少占這個比例，才依想走的方向決定滑開的那一側（否則依位置，避免正對時左右來回） */
+const SLIDE_DIR_MIN_RATIO = 0.3;
 
 /**
  * 把與圓 (x, y, radius) 重疊的物件（碰撞矩形）推出重疊：物件分擔 crateShare 的壓入距離（被牆或其他物件擋住時只移得到能移的部分），
- * 其餘由推的一方退回；被擋下的部分依 slideRatio 讓推的一方沿物件邊緣往較近的一端滑開。物件有移動時沿推的方向給 pushSpeed 的滑行速度
+ * 其餘由推的一方退回；退回的部分依 slideRatio 讓推的一方沿物件邊緣往較近的一端滑開。物件有移動時沿推的方向給 pushSpeed 的滑行速度
  *
  * @returns 推的一方這一幀要移動的量
  */
@@ -493,11 +500,16 @@ function pushBreakablesFrom(
         bk.vy += push.ny * (opts.pushSpeed - vn);
       }
     }
-    const blocked = want - movedAlong;
+    const blocked = push.depth - movedAlong;
     if (opts.slideRatio > 0 && blocked > CRATE_BLOCK_EPS) {
-      // 沿物件邊緣（推的方向的垂直方向）往推的一方所在的那一側滑開——離物件中心較近的一端
+      // 沿物件邊緣（推的方向的垂直方向）滑開：想走的方向有明顯側向分量時往那一側（卡在角落也繞得出去）；
+      // 幾乎正對物件時往推的一方所在的那一側——離物件中心較近的一端（每幀穩定同一側，不會左右來回）
       const tx = -push.ny, ty = push.nx;
-      const side = (x - cx) * tx + (y - cy) * ty >= 0 ? 1 : -1;
+      const mx = opts.moveDirX ?? 0, my = opts.moveDirY ?? 0;
+      const along = mx * tx + my * ty;
+      const side = Math.abs(along) >= SLIDE_DIR_MIN_RATIO * Math.hypot(mx, my) && along !== 0
+        ? Math.sign(along)
+        : (x - cx) * tx + (y - cy) * ty >= 0 ? 1 : -1;
       dx += tx * side * blocked * opts.slideRatio;
       dy += ty * side * blocked * opts.slideRatio;
     }
@@ -567,7 +579,7 @@ function circlePushOutOfBox(x: number, y: number, radius: number, box: Phaser.Ge
 }
 
 /**
- * 一般怪碰到木箱 / 桶時推開物件（不減速、推力依種類）；物件推不動時怪沿邊緣滑開繞過。固定目標不推
+ * 一般怪碰到木箱 / 桶：依 enemyCrateShare 分擔推動（0 = 推不動），推不動的部分由怪退回並沿邊緣滑開繞過。固定目標不處理
  *
  * @param e 敵人
  * @param breakables 可打破物件池
@@ -578,9 +590,11 @@ export function pushBreakablesFromEnemy(e: Enemy, breakables: Phaser.GameObjects
   const cfg = GameConfig.breakable.push;
   const r = e.getBodyRadius();
   const move = pushBreakablesFrom(e.x, e.y, r, breakables, arena, {
-    pushSpeed: cfg.enemyPushSpeed[e.enemyType] ?? cfg.enemyPushSpeedDefault,
-    crateShare: 1,
-    slideRatio: cfg.enemySlideRatio
+    pushSpeed: 0, // 怪推動的物件離手不滑行
+    crateShare: cfg.enemyCrateShare,
+    slideRatio: cfg.enemySlideRatio,
+    moveDirX: e.body?.velocity.x,
+    moveDirY: e.body?.velocity.y
   });
   if (move.dx === 0 && move.dy === 0) return;
   e.setPosition(

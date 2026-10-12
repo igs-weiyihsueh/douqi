@@ -712,8 +712,6 @@ export const GameConfig = {
     },
     /** 寶箱怪行為參數 */
     treasure: {
-      /** 每次波次生怪時 roll 出現的機率(0~1)——用戶降低(0.2→0.1,太頻繁) */
-      spawnChance: 0.1,
       /** 需命中幾次才死(用戶「20下」) */
       hitsToKill: 20,
       /** 跑點:每次停頓時間(毫秒,隨機範圍)——用戶調長 3-5s 玩家更好追打 */
@@ -1683,18 +1681,42 @@ export const GameConfig = {
     crate: {
       /** 耐久：被玩家攻擊命中幾次才碎（不看攻擊力，普攻 / 衝刺 / 招式命中都算一次） */
       hp: 3,
-      /** 碰撞 / 命中範圍 = 圖片可見外框（矩形）以中心縮放此倍率；1 = 與看到的木箱外框一致 */
-      bodyScale: 1
+      /** 顯示尺寸倍率（圖片 143×130 → 約 100×91）；碰撞範圍、受擊彈跳、落地壓扁都以此為基準 */
+      displayScale: 0.7,
+      /** 碰撞 / 命中範圍 = 圖片可見外框（矩形，已乘 displayScale）以中心縮放此倍率；1 = 與看到的木箱外框一致 */
+      bodyScale: 1,
+      /**
+       * 打破木箱的獎勵：ticketChance 機率給打破的人 tickets 張彩票（下方面板播 HIT 報獎特效，木箱位置爆出金光與「+N 彩票」）；
+       * treasureChance 機率從木箱位置跳出寶箱怪（每個小關卡最多一隻，最後一波打完後不出）
+       */
+      ticketChance: 0.2,
+      tickets: 1,
+      treasureChance: 0.08,
+      /** 木箱位置的彩票提示：金光圈半徑 / 時間、文字（{n} = 張數）、上飄距離 / 時間與樣式 */
+      ticketFx: {
+        ringRadius: 70,
+        ringColor: 0xffd700,
+        ringMs: 400,
+        text: '+{n} 彩票',
+        riseY: 60,
+        durationMs: 900,
+        fontSize: 30,
+        color: '#ffd166',
+        stroke: '#000000',
+        strokeThickness: 6,
+        paddingY: 6,
+        depth: 40
+      }
     },
     /** 同一物件兩次命中的最短間隔（毫秒）：持續型招式不會每幀算一次；小於最快的普攻間隔 */
     hitIntervalMs: 150,
     /**
-     * 關卡制：木箱從天而降（進區域時不再預先擺放）。每波一次：小關卡開打時與每次波間休息開始時降落
+     * 關卡制：木箱從天而降（進區域時不再預先擺放）。每波一次：該波第一批怪出現時（開打前、波間休息都不掉）降落
      * count 個，場上（含降落中）達 maxAlive 就不掉；找不到合適落點就少掉幾個
      */
     drop: {
-      count: [1, 3] as const,
-      maxAlive: 8,
+      count: [10, 10] as const,
+      maxAlive: 30,
       /** 落點限制：在鏡頭畫面內（內縮 viewInset）；木箱碰撞範圍離每位玩家至少 minDistFromPlayer、離怪的身體至少 enemyGap；每個木箱嘗試 placeTries 次 */
       viewInset: 80,
       minDistFromPlayer: 150,
@@ -1735,8 +1757,8 @@ export const GameConfig = {
     clustersPerWave: 3,
     perCluster: 4,
     clusterSpread: 44,
-    /** 場上同時存活上限 */
-    maxAlive: 24,
+    /** 場上同時存活上限（物件池大小，需 ≥ drop.maxAlive） */
+    maxAlive: 30,
     /** 生成離牆內縮 */
     edgeInset: 60,
     /** 堆中心距場地中心的最短距離*/
@@ -1784,24 +1806,23 @@ export const GameConfig = {
       stripe: 0xffd400
     },
     /**
-     * 木箱/桶【可推動】——角色/怪走路碰到物件時推動它。物件被牆或其他物件擋住推不動時，推的一方被擋下：
+     * 木箱/桶：只有角色推得動（很重），怪推不動。物件被牆或其他物件擋住推不動時，推的一方被擋下：
      * 角色停在外緣，怪則沿物件邊緣往較近的一端滑開（繞過去，不穿模）
      */
     push: {
-      /** 被推動的物件離手後的滑行速度（像素/秒，沿推的方向；之後依 friction 減速） */
-      characterPushSpeed: 60,
-      /** 怪推動時的滑行速度：坦克較大、小怪較小；未列出的種類用 enemyPushSpeedDefault */
-      enemyPushSpeed: { normal: 130, tank: 230, bomber: 130 } as Partial<Record<string, number>>,
-      enemyPushSpeedDefault: 130,
+      /** 被角色推動的物件離手後的滑行速度（像素/秒，沿推的方向；之後依 friction 減速） */
+      characterPushSpeed: 25,
       /**
        * 角色壓進物件的距離由物件分擔的比例，其餘把角色推回——推箱時角色變慢、有沉重感
-       * （0.47 實測推箱時移動速度約為平常的 53%）；怪一律由物件全部分擔（不減速）
+       * （0.24 實測推箱時移動速度約為平常的 30%）
        */
-      characterCrateShare: 0.47,
-      /** 怪被推不動的物件擋住時，側向滑開的距離 = 被擋下的距離 × 此倍率（約等於以原速沿邊緣滑開） */
+      characterCrateShare: 0.24,
+      /** 怪壓進物件的距離由物件分擔的比例：0 = 怪推不動物件，全部由怪退回並沿邊緣滑開 */
+      enemyCrateShare: 0,
+      /** 怪被物件擋住時，側向滑開的距離 = 被擋下的距離 × 此倍率（約等於以原速沿邊緣滑開） */
       enemySlideRatio: 1,
       /** 每秒速度衰減比例(摩擦阻力;越大停越快) */
-      friction: 6
+      friction: 12
     }
   },
 

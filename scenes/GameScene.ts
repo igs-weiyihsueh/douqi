@@ -105,6 +105,8 @@ export class GameScene extends Phaser.Scene {
   private bossIntrudeAt = 0;
   /** 最後一波已打完、等場上的即時補怪清完才結算關卡 */
   private pendingSurgeClear = false;
+  /** 關卡制：本波第一批怪出現時要落下木箱（開波時設定，落下後清除） */
+  private crateDropPending = false;
   private waveSpawned = 0;
   private waveState: 'spawning' | 'clearing' | 'intermission' | 'boss' | 'event' = 'spawning';
   private intermissionUntil = 0;
@@ -994,7 +996,6 @@ export class GameScene extends Phaser.Scene {
     // 每波開始灑幾個可打破物件(清掉的下一波再補)
     this.breakableCtl.spawnForWave();
     this.treasures.resetSpawnLimit();
-    this.spawner.resetFormationCount();
     // 開波首批怪立刻湧出，不冷場（之後由補生閘門維持節奏）
     this.spawner.startWave();
     this.emitStats();
@@ -1063,9 +1064,8 @@ export class GameScene extends Phaser.Scene {
   private enterIntermission(): void {
     this.waveState = 'intermission';
     if (this.levelMode) {
-      // 關卡制波間休息：不顯示波次提示（靠下一波湧出表示），休息開始時落下下一波的木箱
+      // 關卡制波間休息：不顯示波次提示（靠倒數與下一波湧出表示）
       this.intermissionUntil = this.time.now + GameConfig.stageMonsters.waveBreakMs;
-      this.breakableCtl.dropForWave();
     } else {
       this.intermissionUntil = this.time.now + GameConfig.wave.intermissionMs;
       this.showWaveClear();
@@ -1082,6 +1082,7 @@ export class GameScene extends Phaser.Scene {
     this.waveKilled = 0;
     this.waveSpawned = 0;
     this.waveState = 'spawning';
+    this.crateDropPending = true;
     this.spawner.startWave();
     this.emitStats();
   }
@@ -1185,12 +1186,11 @@ export class GameScene extends Phaser.Scene {
       // BOSS 亂入：開打時決定本關是否亂入，開打 delayMs 後登場
       const intrude = GameConfig.stageMonsters.chests[chest].bossIntrude;
       this.bossIntrudeAt = Math.random() < intrude.chance ? this.time.now + intrude.delayMs : 0;
-      this.breakableCtl.dropForWave(); // 第一波的木箱（之後每次波間休息落下）
+      this.crateDropPending = true; // 第一波的木箱（第一批怪出現時落下）
     } else {
       this.waveQuota = GameConfig.stage.quotaByChest[chest];
       this.bossIntrudeAt = 0;
     }
-    this.spawner.resetFormationCount(); // 寶箱怪第 2 次隊形起才可能出現
     this.treasures.resetSpawnLimit();
     this.waveState = 'spawning';
     this.stageInProgress = true;
@@ -1204,7 +1204,7 @@ export class GameScene extends Phaser.Scene {
     this.lastStageChest = chest;
     const tickets = GameConfig.stage.chestTickets[chest];
     for (const c of this.characters) {
-      if (c.alive) this.grantStageReward(c, tickets);
+      if (c.alive) this.grantTickets(c, tickets);
     }
     this.comboReward.settleAll(); // 通關時 HIT 連擊立即結算彩票，不等中斷倒數
     this.bossCtl.onStageComplete(); // 關卡打完後不能再變身 BOSS
@@ -1216,12 +1216,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * 發放小關卡寶箱獎勵：彩票加到該角色的彩票數，並在下方面板播放彩票特效
+   * 發放彩票獎勵（小關卡寶箱、打破木箱）：彩票加到該角色的彩票數，並在下方面板播放彩票特效
    *
    * @param c 獲得獎勵的角色
    * @param tickets 彩票張數
    */
-  private grantStageReward(c: Character, tickets: number): void {
+  private grantTickets(c: Character, tickets: number): void {
     c.tickets += tickets;
     const uiScene = this.scene.get('UIScene') as any;
     // 彩票噴發數量隨張數變化：沿用 COMBO 報獎特效，以張數作為里程碑參數
@@ -1307,7 +1307,12 @@ export class GameScene extends Phaser.Scene {
       aliveScale: () => this.curAliveScale(),
       nearestSeat: (x, y) => this.nearestSeat(x, y),
       wireEnemyCallbacks: (e) => this.wireEnemyCallbacks(e),
-      onFormationSpawned: (time) => this.treasures.trySpawn(time) // 寶箱怪擲骰（每關最多一隻）
+      onFormationSpawned: () => {
+        // 木箱隨本波第一批怪從天而降；開場還沒人投幣時先出的怪不算，等有人在場上之後的那一批
+        if (!this.crateDropPending || (this.creditCtl.enabled && this.aliveCount() === 0)) return;
+        this.crateDropPending = false;
+        this.breakableCtl.dropForWave();
+      }
     };
   }
 
@@ -1446,6 +1451,9 @@ export class GameScene extends Phaser.Scene {
       flashHurt: (c) => this.fx.flashHurt(c),
       onBreakableHit: (actor, time) => this.creditCtl.onAttackHit(actor, time), // 打到木箱與打到怪一樣扣 CREDIT
       dropItemAt: (x, y, time) => this.dropItemAt(x, y, time),
+      grantCrateTickets: (actor, tickets) => this.grantTickets(actor, tickets),
+      // 最後一波打完（出口開放）後不出，避免寶箱怪出現時已經在離開
+      spawnTreasureAt: (x, y, time) => (!this.levelMode || (this.stageInProgress && !this.pendingSubZoneComplete)) && this.treasures.spawnAt(x, y, time),
       spawnExpandingRing: (x, y, radius, color, ms) => this.fx.expandingRing(x, y, radius, color, ms),
       shakeOnce: (duration, intensity) => this.fx.shake(duration, intensity)
     };
@@ -1459,13 +1467,8 @@ export class GameScene extends Phaser.Scene {
       scene: this,
       enemies: () => this.enemies,
       arena: () => this.arena,
-      player: () => this.player,
       isTimeStopped: () => this.timeStopped,
       isEventActive: () => this.eventCtl.kind !== null || this.waveState === 'event',
-      spawnProgress: () => ({
-        formations: this.spawner.formationCount,
-        spawnedRatio: this.levelMode ? this.stageFraction(this.waveSpawned) : this.waveSpawned / Math.max(1, this.waveQuota)
-      }),
       flashEnemy: (e) => this.fx.flashEnemy(e),
       spawnDamageText: (x, y, amount) => this.fx.damageText(x, y, amount),
       spawnExpandingRing: (x, y, radius, color, ms) => this.fx.expandingRing(x, y, radius, color, ms),

@@ -3,14 +3,6 @@ import { GameConfig } from '../config';
 import type { Character } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
 
-/** 本關（舊波次制為本波）的生怪進度：決定寶箱怪是否可能出現 */
-export interface SpawnProgress {
-  /** 已出了幾次隊形 */
-  formations: number;
-  /** 已生的怪占總量的比例（0 ~ 1） */
-  spawnedRatio: number;
-}
-
 /**
  * TreasureEnemyController 需要場景提供的能力。由 GameScene 建立並傳入；控制器不直接存取場景私有成員。
  */
@@ -21,25 +13,18 @@ export interface TreasureEnemyHost {
   enemies(): Phaser.Physics.Arcade.Group;
   /** 目前的移動區 */
   arena(): Phaser.Geom.Rectangle;
-  /** P1（寶箱怪出生點避開玩家） */
-  player(): Character;
   /** 時停中（寶箱怪也凍結） */
   isTimeStopped(): boolean;
   /** 限時事件進行中（不生寶箱怪） */
   isEventActive(): boolean;
-  spawnProgress(): SpawnProgress;
   flashEnemy(enemy: Enemy): void;
   spawnDamageText(x: number, y: number, amount: number): void;
   spawnExpandingRing(x: number, y: number, radius: number, color: number, ms?: number): void;
   shakeOnce(duration: number, intensity: number): void;
 }
 
-/** 生怪進度達總量的這個比例後才可能出現寶箱怪（避開首次生怪） */
-const SPAWN_MIN_PROGRESS = 0.35;
-/** 出生點：離移動區邊緣的距離、離 P1 的最小距離、嘗試次數 */
+/** 出生點 / 跑點目標離移動區邊緣的距離 */
 const SPAWN_EDGE_MARGIN = 20;
-const SPAWN_AVOID_PLAYER = 120;
-const SPAWN_TRIES = 20;
 /** 跑點移動：到點判定距離 */
 const MOVE_ARRIVE_PX = 16;
 /** 跑走速度倍率與淡出時間：限時到自己跑走 / 換區前立即逃走 */
@@ -72,7 +57,7 @@ const COIN_DEPTH = 21;
 
 /**
  * 寶箱怪：
- * - 關卡中：生怪時依機率出現（每個小關卡最多一隻，限時事件期間與首次生怪不出），出現時顯示提示橫幅並加上金光與粒子；
+ * - 關卡中：打破木箱時依機率從木箱位置跳出（每個小關卡最多一隻，限時事件期間不出；機率與時機由 BreakableController / 場景決定），出現時顯示提示橫幅並加上金光與粒子；
  *   在場內跑點（衝到隨機點 → 停頓 → 再衝），限時沒打死就朝最近的牆跑走。換區前直接逃走、換區時清掉
  * - 獎勵關：從財寶裝飾跳出（可多隻、不限時），每次命中與打倒給命中者彩票，時間到全部跑走
  * - 命中只計次數不扣血（每下噴金幣、顯示剩餘次數），達到命中數就打倒並噴大量金幣
@@ -116,29 +101,21 @@ export class TreasureEnemyController {
   }
 
   /**
-   * 生怪時擲骰出寶箱怪：限時事件中、這一關已出過、第一次隊形、生怪進度未達總量 35% 時都不出；
-   * 出現在場內隨機點（盡量避開 P1），顯示提示橫幅並加上金光與粒子
+   * 在指定位置（打破的木箱）跳出寶箱怪：限時事件中、這一關已出過、場上已有一隻時不出；
+   * 位置夾在移動區內，顯示提示橫幅並加上金光與粒子
    *
+   * @param px 位置 x
+   * @param py 位置 y
    * @param time 目前場景時間
+   * @returns 是否有出現
    */
-  trySpawn(time: number): void {
-    if (this.host.isEventActive()) return;
-    if (this.spawnedThisRound || this.isOnField) return;
-    const progress = this.host.spawnProgress();
-    if (progress.formations <= 1) return;
-    if (progress.spawnedRatio < SPAWN_MIN_PROGRESS) return;
-    this.treasure = null;
-    if (Math.random() >= GameConfig.enemy.treasure.spawnChance) return;
+  spawnAt(px: number, py: number, time: number): boolean {
+    if (this.host.isEventActive() || this.spawnedThisRound || this.isOnField) return false;
     const a = this.host.arena(), r = GameConfig.enemy.types.treasure.radius;
-    const p = this.host.player();
-    let x = a.centerX, y = a.centerY;
-    for (let attempt = 0; attempt < SPAWN_TRIES; attempt++) {
-      x = Phaser.Math.Between(a.left + r + SPAWN_EDGE_MARGIN, a.right - r - SPAWN_EDGE_MARGIN);
-      y = Phaser.Math.Between(a.top + r + SPAWN_EDGE_MARGIN, a.bottom - r - SPAWN_EDGE_MARGIN);
-      if (Phaser.Math.Distance.Between(x, y, p.x, p.y) > SPAWN_AVOID_PLAYER) break;
-    }
+    const x = Phaser.Math.Clamp(px, a.left + r + SPAWN_EDGE_MARGIN, a.right - r - SPAWN_EDGE_MARGIN);
+    const y = Phaser.Math.Clamp(py, a.top + r + SPAWN_EDGE_MARGIN, a.bottom - r - SPAWN_EDGE_MARGIN);
     const t = this.host.enemies().get(x, y) as Enemy | null;
-    if (!t) return;
+    if (!t) return false;
     t.spawn(x, y, time, 'treasure', 1);
     this.treasure = t;
     this.spawnedThisRound = true;
@@ -153,6 +130,7 @@ export class TreasureEnemyController {
       emitZone: { type: 'edge', source: new Phaser.Geom.Circle(0, 0, SPARK_ORBIT_RADIUS), quantity: 12 } as any
     }).setDepth((t.depth || 5) + 1);
     this.emitter.startFollow(t);
+    return true;
   }
 
   /**
