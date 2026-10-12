@@ -22,6 +22,13 @@ export interface CreditHost {
   setCharacterVisible(c: Character, visible: boolean): void;
   /** 角色 CREDIT 或狀態改變（更新 HUD） */
   onCreditChanged(): void;
+  /**
+   * 投了一次幣（播放多投多送量條亮格與光效）
+   *
+   * @param c 投幣的角色
+   * @param cycleIndex 這次投幣在 coinCycle 中的位置（0 起算）
+   */
+  onCoinInserted(c: Character, cycleIndex: number): void;
 }
 
 /**
@@ -31,7 +38,7 @@ export interface CreditHost {
  *   → 倒數內投幣回到遊玩中；逾時離場回到尚未進場
  * - 不在遊玩中的角色以 Character.leavePlay 離開戰局（alive = false）：不能操作、無敵、敵人不鎖定、不影響出怪與鏡頭
  * - 扣點：每次出手（openAttackWindow）後 attackWindowMs 內第一次命中敵人或木箱扣 1 點，一招最多扣 1 點；空揮不扣
- * - 多投多送：每次投幣依 coinCycle 循環給點（逾時離場才回到第一檔），有額外時頭上浮出額外獲得提示
+ * - 多投多送：每次投幣依 coinCycle 循環給點（逾時離場才回到第一檔），下方面板量條亮一格並飛出光效（host.onCoinInserted）
  * - BOT：加入時自動投幣，用完自動再投
  * - 免費攻擊（X 鍵切換）：開啟時攻擊不扣 CREDIT
  * - 等待中的角色頭上顯示「投幣續關」與倒數；未進場的提示在下方面板（UIScene）
@@ -92,7 +99,16 @@ export class CreditController {
   }
 
   /**
-   * 投幣：依多投多送的檔位加 CREDIT 並推進到下一檔，有額外時頭上浮出提示；未進場或等待中的角色立刻回到戰局（短暫無敵）
+   * 多投多送：角色下一次投幣在 coinCycle 中的位置（= 這一輪已投幾次）
+   *
+   * @param c 角色
+   */
+  coinCycleStep(c: Character): number {
+    return this.coinStep.get(c) ?? 0;
+  }
+
+  /**
+   * 投幣：依多投多送的檔位加 CREDIT 並推進到下一檔（通知場景播量條光效）；未進場或等待中的角色立刻回到戰局（短暫無敵）
    *
    * @param c 投幣的角色
    */
@@ -111,29 +127,8 @@ export class CreditController {
       c.resumePlay();
       c.invulnUntil = this.host.scene.time.now + GameConfig.credit.resumeInvulnMs;
     }
-    this.showBonus(c, gain - cycle[0]);
+    this.host.onCoinInserted(c, step % cycle.length);
     this.host.onCreditChanged();
-  }
-
-  /**
-   * 頭上浮出投幣額外獲得提示（金色，往上飄並淡出）：「額外獲得 M 能量」；第一檔沒有額外就不顯示（不告知總獲得數）
-   *
-   * @param c 投幣的角色
-   * @param bonus 超過第一檔的額外點數
-   */
-  private showBonus(c: Character, bonus: number): void {
-    if (bonus <= 0) return;
-    const cfg = GameConfig.credit;
-    const f = cfg.gainFloat;
-    const y = c.y + cfg.prompt.offsetY;
-    const text = this.host.scene.add.text(c.x, y, cfg.bonusText.replace('{n}', String(bonus)), {
-      fontSize: `${f.fontSize}px`, fontStyle: 'bold', color: f.color, stroke: f.stroke, strokeThickness: f.strokeThickness,
-      align: 'center', padding: { top: f.paddingY, bottom: f.paddingY }
-    }).setOrigin(0.5, 1).setDepth(f.depth);
-    this.host.scene.tweens.add({
-      targets: text, y: y - f.riseY, alpha: 0, duration: f.durationMs, ease: 'Cubic.easeOut',
-      onComplete: () => text.destroy()
-    });
   }
 
   /**

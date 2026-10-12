@@ -5,6 +5,7 @@ import { GameConfig } from '../config';
 const BOTTOM_PANEL_FALLBACK_SIZE = { WIDTH: 267, HEIGHT: 119 } as const;
 import type { StageNodeKind } from '../systems/stageQueue';
 import { HitCounter } from '../objects/HitCounter';
+import { CoinBonusBar } from '../objects/CoinBonusBar';
 
 /** 卷軸 HUD 節點狀態類型 */
 type StageNodeState = 'current' | 'pending' | 'done';
@@ -45,6 +46,8 @@ interface CharStat {
   tickets: number;
   /** CREDIT 狀態：未進場 / 遊玩中 / 等待續關（後兩者以外的「不在場上」不是陣亡） */
   creditState: 'absent' | 'playing' | 'waiting';
+  /** 多投多送：這一輪已投幾次（量條亮的格數） */
+  coinStep: number;
   // 階段三：COMBO獎勵系統狀態
   combo: ComboState;
 }
@@ -170,12 +173,18 @@ export class UIScene extends Phaser.Scene {
 
   /** 下方面板 HIT 連擊顯示（底圖 + 數字圖 + HIT 字樣），每個角色一個，索引對應 rows */
   private panelHitCounters: HitCounter[] = [];
-  /** 下方面板「投幣加入遊戲」提示（CREDIT 未進場時取代 HIT 顯示），每個角色一個，索引對應 rows */
+  /** 下方面板「投幣加入遊戲 / 投越多送越多」輪播提示（CREDIT 未進場時取代 HIT 顯示），每個角色一個，索引對應 rows */
   private panelJoinTexts: Phaser.GameObjects.Text[] = [];
+  /** 下方面板多投多送量條（HIT 顯示下方），每個角色一個，索引對應 rows */
+  private panelCoinBars: CoinBonusBar[] = [];
+  /** 最近一次 stats 的角色資料（投幣光效追蹤角色位置用） */
+  private lastChars: CharStat[] = [];
   /** 下方面板 COMBO 顯示設定：HIT 顯示與投幣提示的左下角錨點，原版色塊面板與 F4 面板圖各有一組位置 */
   private readonly PANEL_COMBO_CONFIG = {
     FONT_SIZE: '36px',
     STROKE_WIDTH: 4,
+    /** 多投多送量條在錨點（左下角），HIT 顯示與投幣提示疊在量條上方，相隔 COIN_BAR_GAP */
+    COIN_BAR_GAP: 6,
     /** 原版色塊面板：相對面板左上角的偏移（貼在面板上方） */
     CLASSIC_OFFSET_X: 0,
     CLASSIC_OFFSET_Y: -2,
@@ -608,8 +617,10 @@ export class UIScene extends Phaser.Scene {
     this.game.events.on('boss-hud', this.updateBossHud, this);
     this.game.events.on('event-hud', this.updateEventHud, this);
     this.game.events.on('items-state', this.updateItemToggleBtn, this);
+    this.game.events.on('coin-inserted', this.playCoinInserted, this);
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.game.events.off('coin-inserted', this.playCoinInserted, this);
       this.game.events.off('stats', this.updateStats, this);
       this.game.events.off('aim', this.updateAim, this);
       this.game.events.off('boss-hud', this.updateBossHud, this);
@@ -659,6 +670,7 @@ export class UIScene extends Phaser.Scene {
   };
 
   private updateStats = (s: StatsPayload): void => {
+    this.lastChars = s.chars;
     // 隱藏中的文字不更新（setText 內容改變時會重繪文字畫布，時間每幀都變）
     if (this.teamText.visible) this.teamText.setText(`團隊總擊殺 ${s.teamKills}`);
     if (this.timeText.visible) this.timeText.setText(`時間 ${(s.survivalMs / 1000).toFixed(1)}s`);
@@ -1859,8 +1871,13 @@ export class UIScene extends Phaser.Scene {
     this.panelHitCounters = this.rows.map(() =>
       new HitCounter(this).setDepth(cfg.DEPTH).setScrollFactor(0)
     );
+    const cycle = GameConfig.credit.coinCycle;
+    this.panelCoinBars = this.rows.map(() =>
+      new CoinBonusBar(this, cycle.map((gain) => gain - cycle[0]), (g) => this.drawSwordIcon(g, false))
+        .setDepth(cfg.DEPTH).setScrollFactor(0).setVisible(false)
+    );
     this.panelJoinTexts = this.rows.map(() =>
-      this.add.text(0, 0, GameConfig.credit.joinText, {
+      this.add.text(0, 0, GameConfig.credit.joinTexts[0], {
         fontFamily: 'monospace',
         fontSize: cfg.FONT_SIZE,
         color: GameConfig.credit.prompt.color,
@@ -1873,7 +1890,7 @@ export class UIScene extends Phaser.Scene {
   }
 
   /**
-   * 依面板模式把 HIT 顯示與投幣提示（左下角）移到對應面板上方（F4 面板圖時在彩票欄上方）
+   * 依面板模式把多投多送量條（左下角）移到對應面板上方（F4 面板圖時在彩票欄上方），HIT 顯示與投幣提示疊在量條上方
    *
    * @param useOverlay - true = F4 面板圖；false = 原版色塊面板（該角色沒有面板圖時也退回原版位置）
    */
@@ -1894,29 +1911,88 @@ export class UIScene extends Phaser.Scene {
       } else {
         return;
       }
-      this.panelHitCounters[i]?.setPosition(x, y);
-      this.panelJoinTexts[i]?.setPosition(x, y);
+      const bar = this.panelCoinBars[i];
+      bar?.setPosition(x, y);
+      const aboveBarY = y - (bar ? bar.barHeight + cfg.COIN_BAR_GAP : 0);
+      this.panelHitCounters[i]?.setPosition(x, aboveBarY);
+      this.panelJoinTexts[i]?.setPosition(x, aboveBarY);
+    });
+  }
+
+  /**
+   * 投幣（GameScene 的 coin-inserted 事件）：量條亮起這一格並彈跳（投滿最後一格時閃爍後清空），
+   * 從這一格飛出一道光沿弧線飛到角色頭頂（追著角色目前位置），到達時在角色身上爆一圈光
+   *
+   * @param e.index 角色索引
+   * @param e.cycleIndex 這次投幣在 coinCycle 中的位置
+   */
+  private playCoinInserted(e: { index: number; cycleIndex: number }): void {
+    const bar = this.panelCoinBars[e.index];
+    if (!bar) return;
+    bar.lightCell(e.cycleIndex);
+    if (e.cycleIndex >= bar.cellCount - 1) bar.flashAndClear(bar.popMs);
+    if (!bar.visible) return;
+    const cfg = GameConfig.credit.coinBar;
+    const start = bar.cellCenter(e.cycleIndex);
+    const target = (): { x: number; y: number } => {
+      const c = this.lastChars[e.index];
+      const gcam = (this.scene.get('GameScene') as Phaser.Scene | null)?.cameras?.main;
+      if (!c) return start;
+      return { x: c.x - (gcam?.scrollX ?? 0), y: c.y + cfg.targetOffsetY - (gcam?.scrollY ?? 0) };
+    };
+    const orb = this.add.circle(start.x, start.y, cfg.orbRadius, cfg.orbColor).setDepth(cfg.depth)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    let lastTrailAt = 0;
+    this.tweens.addCounter({
+      from: 0, to: 1, duration: cfg.flyMs, ease: 'Sine.easeIn',
+      onUpdate: (tween) => {
+        const t = tween.getValue() ?? 0;
+        const end = target();
+        // 二次貝茲曲線：控制點在起終點中間往上拱 arcHeight
+        const cx = (start.x + end.x) / 2, cy = Math.min(start.y, end.y) - cfg.arcHeight;
+        const u = 1 - t;
+        orb.setPosition(u * u * start.x + 2 * u * t * cx + t * t * end.x, u * u * start.y + 2 * u * t * cy + t * t * end.y);
+        if (this.time.now - lastTrailAt >= cfg.trailEveryMs) {
+          lastTrailAt = this.time.now;
+          const dot = this.add.circle(orb.x, orb.y, cfg.orbRadius * 0.7, cfg.orbColor, 0.8).setDepth(cfg.depth - 1)
+            .setBlendMode(Phaser.BlendModes.ADD);
+          this.tweens.add({ targets: dot, alpha: 0, scale: 0.2, duration: cfg.trailMs, onComplete: () => dot.destroy() });
+        }
+      },
+      onComplete: () => {
+        orb.destroy();
+        const end = target();
+        const ring = this.add.circle(end.x, end.y, cfg.burstRadius, cfg.orbColor, 0.5).setDepth(cfg.depth)
+          .setBlendMode(Phaser.BlendModes.ADD).setScale(0.2);
+        this.tweens.add({ targets: ring, scale: 1, alpha: 0, duration: cfg.burstMs, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
+      }
     });
   }
 
   /**
    * 更新下方面板的 COMBO 顯示：HIT 連擊圖（連擊數改變時彈跳、連擊快斷時閃爍淡出），連擊為 0、角色未加入或陣亡時隱藏
    * （CREDIT 等待續關時照常顯示，連擊停在當下）；
-   * CREDIT 未進場時改在同一位置閃動顯示「投幣加入遊戲」
+   * CREDIT 未進場時改在同一位置閃動、輪流顯示 joinTexts；多投多送量條在已加入的角色（showWhenAbsent 時含未進場）下方顯示
    *
-   * @param index 角色索引（對應 rows / panelHitCounters / panelJoinTexts）
+   * @param index 角色索引（對應 rows / panelHitCounters / panelJoinTexts / panelCoinBars）
    * @param character 角色數據（未加入時為 undefined）
    */
   private updatePanelCombo(index: number, character: CharStat | undefined): void {
     const counter = this.panelHitCounters[index];
     const joinText = this.panelJoinTexts[index];
-    if (!counter || !joinText) return;
+    const bar = this.panelCoinBars[index];
+    if (!counter || !joinText || !bar) return;
+    const credit = GameConfig.credit;
     const absent = character?.creditState === 'absent';
     joinText.setVisible(absent);
     if (absent) {
-      const blinkMs = GameConfig.credit.prompt.blinkMs;
+      const blinkMs = credit.prompt.blinkMs;
       joinText.setAlpha(this.time.now % blinkMs < blinkMs / 2 ? 1 : 0.45);
+      const line = credit.joinTexts[Math.floor(this.time.now / credit.joinRotateMs) % credit.joinTexts.length];
+      if (joinText.text !== line) joinText.setText(line);
     }
+    bar.setVisible(credit.enabled && !!character && (!absent || credit.coinBar.showWhenAbsent));
+    if (character) bar.setLit(character.coinStep);
     const shown = character?.alive || character?.creditState === 'waiting';
     const combo = shown ? character?.combo : undefined;
     counter.setCount(combo?.currentStreak ?? 0);

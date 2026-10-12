@@ -218,16 +218,31 @@ export const GameConfig = {
    * 多投多送：每次投幣依序得 coinCycle 的點數（6 → 8 → 10 → 12 → 14 → 6 …），投幣續關逾時離場時才回到第一檔；
    * 每一招命中至少一隻敵人扣 1 點（空揮不扣、一招打中多隻也只扣 1；變身 BOSS 的攻擊不扣）。
    * 用完時角色停在原地、無敵、怪不理他，頭上顯示 continueText 與倒數，continueSeconds 秒內投幣恢復，逾時離場（回到未進場）。
-   * 未進場時下方面板（HIT 數的位置）顯示 joinText。BOT 用完自動投幣。
+   * 未進場時下方面板（HIT 數的位置）輪流顯示 joinTexts。BOT 用完自動投幣。
+   * 下方面板的多投多送量條（HIT 數下方）：每格是一次投幣，標示該次贈送的額外點數，投幣時亮一格並飛出一道光到角色身上
    * 啟用時角色沒有血量（被打不扣血、不會陣亡）；enabled = false 回到舊行為
    */
   credit: {
     enabled: true,
-    /** 多投多送：第 1、2、3… 次投幣分別得到的 CREDIT，循環使用（超過第一檔的部分顯示為額外獲得） */
+    /** 多投多送：第 1、2、3… 次投幣分別得到的 CREDIT，循環使用（超過第一檔的部分是贈送，量條上標示 +0 / +2 / …） */
     coinCycle: [6, 8, 10, 12, 14] as ReadonlyArray<number>,
-    /** 投幣額外獲得提示：只在超過第一檔時顯示 bonusText（{n} 代入額外點數，不顯示總獲得數），從頭頂提示高度往上飄 riseY、durationMs 內淡出 */
-    gainFloat: { riseY: 70, durationMs: 1500, fontSize: 28, color: '#ffd700', stroke: '#000000', strokeThickness: 6, paddingY: 8, depth: 61 },
-    bonusText: '額外獲得 {n} 能量',
+    /**
+     * 多投多送量條：showWhenAbsent = 未進場的玩家也顯示（全暗）；投幣光效從亮起的那一格飛到角色頭頂（離角色中心 targetOffsetY），
+     * 費時 flyMs、弧線拱起 arcHeight，拖尾粒子每 trailEveryMs 一顆；到達時在角色身上爆一圈光（burstRadius / burstMs）
+     */
+    coinBar: {
+      showWhenAbsent: true,
+      targetOffsetY: -130,
+      flyMs: 550,
+      arcHeight: 160,
+      orbRadius: 10,
+      orbColor: 0xffe066,
+      trailEveryMs: 30,
+      trailMs: 260,
+      burstRadius: 70,
+      burstMs: 380,
+      depth: 1600
+    },
     /** 出手後多久內第一次命中敵人算這一招（毫秒；涵蓋衝刺、連段、爆發，一招最多扣 1 點） */
     attackWindowMs: 1500,
     /** 投幣恢復後的無敵時間（毫秒） */
@@ -236,8 +251,9 @@ export const GameConfig = {
     prompt: { offsetY: -200, fontSize: 30, color: '#ffe066', stroke: '#000000', strokeThickness: 6, paddingY: 8, blinkMs: 900, depth: 60 },
     /** 投幣續關的倒數秒數（逾時角色離場，回到未進場） */
     continueSeconds: 15,
-    /** 提示文字：未進場（下方面板）/ CREDIT 用完（頭上，後面接倒數秒數） */
-    joinText: '投幣加入遊戲',
+    /** 提示文字：未進場（下方面板，每 joinRotateMs 輪換一句）/ CREDIT 用完（頭上，後面接倒數秒數） */
+    joinTexts: ['投幣加入遊戲', '投越多送越多'] as ReadonlyArray<string>,
+    joinRotateMs: 3000,
     continueText: '投幣續關'
   },
 
