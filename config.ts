@@ -777,19 +777,28 @@ export const GameConfig = {
    */
   stageMonsters: {
     enabled: true,
-    /** 變身 BOSS 即時補怪：變身瞬間在玩家身旁環狀補 count 隻（依 weights 抽怪種），規則同二段變身補怪，但無冷卻（每打倒一隻 BOSS 才可能變身一次） */
-    bossFormSurge: { count: [12, 16], weights: { normal: 90, tank: 10, bomber: 0 } },
+    /**
+     * 變身 BOSS 即時補怪：變身後分批在 P1 身旁環狀補怪（依 weights 抽怪種，不乘人數），規則同二段變身補怪，但無冷卻
+     * （每打倒一隻 BOSS 才可能變身一次）；每批於變身後 delayMs 補 count 隻，變身已結束或關卡已打完的批次不補
+     */
+    bossFormSurge: {
+      weights: { normal: 90, tank: 10, bomber: 0 },
+      batches: [
+        { delayMs: 0, count: [12, 14] },
+        { delayMs: 5000, count: [10, 12] }
+      ]
+    },
     /** 波與波之間的休息（毫秒）：休息中不出怪、HIT 連擊倒數暫停，休息開始時落下下一波的木箱 */
     waveBreakMs: 2000,
     /** 每多一位存活玩家，場上組每批隻數增加的比例（近身組本來就是逐一輪派給每位玩家，不另外放大） */
     fieldBatchGrowthPerPlayer: 0.5,
     /**
      * 各寶箱階級：可抽的配置（等機率）與每波擊殺數倍率（高階沿用同三套、提高擊殺數）；
-     * bossIntrude 限時亂入 BOSS：小關卡開始時以 chance 機率決定，整關進度到 atProgress 時登場（BOSS 本身沿用 stage.bossIntrude）
+     * bossIntrude 限時亂入 BOSS：小關卡開始時以 chance 機率決定，開打 delayMs 後登場（BOSS 本身沿用 stage.bossIntrude）
      */
     chests: {
-      low: { profiles: ['swarm', 'armor', 'artillery'], quotaMult: 1, bossIntrude: { chance: 0, atProgress: 0.5 } },
-      high: { profiles: ['swarm', 'armor', 'artillery'], quotaMult: 1.4, bossIntrude: { chance: 0.3, atProgress: 0.5 } }
+      low: { profiles: ['swarm', 'armor', 'artillery'], quotaMult: 1, bossIntrude: { chance: 0, delayMs: 3000 } },
+      high: { profiles: ['swarm', 'armor', 'artillery'], quotaMult: 1.4, bossIntrude: { chance: 0.3, delayMs: 3000 } }
     },
     /**
      * 配置：waves 各波擊殺數（單人的份量，逐波遞增；每波開始時乘上當下存活人數，BOT 也算；
@@ -798,7 +807,7 @@ export const GameConfig = {
      * 抽到其他怪種時改出在場上，整體仍等於此比例）、intervalMs 補怪間隔、
      * nearBatch / fieldBatch 近身組 / 場上組每批隻數 [最少, 最多]、nearShare 近身組占比；
      * surge 二段變身即時補怪：在變身的玩家身旁環狀補 count 隻（依 weights 抽怪種），不計擊殺數、不受同時在場上限限制（場上已滿也照補），
-     * 每位玩家各自冷卻 cooldownMs
+     * 每位玩家各自冷卻 cooldownMs。最後一波打完時還在場上的即時補怪（含變身 BOSS 補怪）要清完才結算關卡
      */
     profiles: {
       /** 蜂群：小怪一直湧上來，快節奏割草 */

@@ -22,6 +22,8 @@ export interface BossHost {
   isGameOver(): boolean;
   /** 是否為慢速模式（只有慢速模式會留 BOSS 屍體、可變身） */
   isSlowMode(): boolean;
+  /** 小關卡還在進行（還會出怪）：關卡打完後打倒亂入 BOSS 不留屍體 */
+  isStageActive(): boolean;
   /** 掛上一般敵人的攻擊回呼（近戰 / 投彈） */
   wireEnemyCallbacks(enemy: Enemy): void;
   /** 登記 / 移除 / 清除場景層級的預警特效 */
@@ -184,9 +186,15 @@ export class BossController {
     if (this.intruderLeaveAt > 0) this.intruderLeaveAt += frozenMs;
   }
 
-  /** 換區時：亂入 BOSS 離場、屍體消失 */
+  /** 換區時：亂入 BOSS 離場、屍體消失，變身 BOSS 中就結束變身（不帶到下一區） */
   onZoneLeave(): void {
     this.dismissIntruder(false);
+    this.clearCorpse();
+    this.endForm();
+  }
+
+  /** 小關卡打完：BOSS 屍體消失（關卡打完後不能再變身） */
+  onStageComplete(): void {
     this.clearCorpse();
   }
 
@@ -399,13 +407,13 @@ export class BossController {
   // ---------------------------------------------------------------------------
 
   /**
-   * 留下亂入 BOSS 的屍體（只限慢速模式）：灰色 BOSS 圖 + 上方「按 Z 變成 BOSS」提示，transform.corpseMs 後消失
+   * 留下亂入 BOSS 的屍體（只限慢速模式、小關卡還在進行時）：灰色 BOSS 圖 + 上方「按 Z 變成 BOSS」提示，transform.corpseMs 後消失
    *
    * @param x 屍體位置 x
    * @param y 屍體位置 y
    */
   private spawnCorpse(x: number, y: number): void {
-    if (!this.host.isSlowMode()) return;
+    if (!this.host.isSlowMode() || !this.host.isStageActive()) return;
     this.clearCorpse();
     const cfg = GameConfig.boss.transform;
     const img = this.scene.add.image(x, y, 'enemy-boss').setTint(cfg.corpseTint).setAlpha(cfg.corpseAlpha).setDepth(5);
@@ -415,7 +423,7 @@ export class BossController {
     this.corpse = { img, hint, expireAt: this.scene.time.now + cfg.corpseMs };
   }
 
-  /** 移除 BOSS 屍體（逾時、變身或換區時） */
+  /** 移除 BOSS 屍體（逾時、變身、換區或關卡打完時） */
   private clearCorpse(): void {
     if (!this.corpse) return;
     this.scene.tweens.killTweensOf(this.corpse.hint);
@@ -466,6 +474,7 @@ export class BossController {
     form.img.destroy();
     form.timer.destroy();
     const p = this.host.player();
+    if (p.invulnUntil === form.until) p.invulnUntil = this.scene.time.now; // 提前結束（換區）時一併收回變身的無敵
     if (p.alive) p.setAlpha(1);
     this.host.spawnExpandingRing(p.x, p.y, GameConfig.boss.radius * 2, 0xffffff, 300);
   }

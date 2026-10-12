@@ -100,8 +100,10 @@ export class GameScene extends Phaser.Scene {
   private monsterProfile: MonsterProfile | null = null;
   /** 各座位下次可觸發二段變身即時補怪的時間（每位玩家各自冷卻） */
   private surgeReadyAt: number[] = [];
-  /** 整關進度到多少時亂入 BOSS（0 = 本關不亂入；關卡怪物配置的 chests.bossIntrude） */
-  private bossIntrudeAtProgress = 0;
+  /** 本關 BOSS 亂入的場景時間（0 = 本關不亂入或已亂入；關卡怪物配置的 chests.bossIntrude） */
+  private bossIntrudeAt = 0;
+  /** 最後一波已打完、等場上的即時補怪清完才結算關卡 */
+  private pendingSurgeClear = false;
   private waveSpawned = 0;
   private waveState: 'spawning' | 'clearing' | 'intermission' | 'boss' | 'event' = 'spawning';
   private intermissionUntil = 0;
@@ -490,6 +492,7 @@ export class GameScene extends Phaser.Scene {
     this.subWavesTarget = 1;
     this.pendingEventComplete = false;
     this.pendingSubZoneComplete = false; // 重開清延後切換旗標
+    this.pendingSurgeClear = false;
   }
 
   /** 本波是否為 BOSS 波 */
@@ -712,6 +715,8 @@ export class GameScene extends Phaser.Scene {
     this.updateEnemies(time);
     this.treasures.update(time); // 寶箱怪:跑點移動/金光閃爍/限時跑走
     this.treasures.updateRoom(time);
+    this.maybeBossIntrude(time);
+    this.finishStageWhenSurgeCleared(); // 延後的關卡結算：即時補怪清完才結算
     this.finishPendingSubZoneIfTreasureGone(); // 延後的場景切換:寶箱怪死/離場後才開啟
     // 守護事件——怪移動後把怪推回守護目標外圈(不疊上去);玩家仍可穿越。放 updateEnemies 之後→怪這幀先移動再被推出,渲染前已在外緣。
     const guardNpc = this.eventCtl.guardNpc;
@@ -920,6 +925,14 @@ export class GameScene extends Phaser.Scene {
     return n;
   }
 
+  /** 延後的關卡結算：最後一波打完時還在場上的即時補怪都清完 → 結算關卡。每幀在怪物更新後檢查 */
+  private finishStageWhenSurgeCleared(): void {
+    if (!this.pendingSurgeClear || this.spawner.countQuotaExempt() > 0) return;
+    this.pendingSurgeClear = false;
+    this.finishStage();
+    this.emitStats();
+  }
+
   /** 延後的場景切換：寶箱怪已打倒或離場 → 真正開啟切換。每幀在寶箱怪更新後檢查 */
   private finishPendingSubZoneIfTreasureGone(): void {
     if (!this.pendingSubZoneComplete) return;
@@ -991,24 +1004,20 @@ export class GameScene extends Phaser.Scene {
     }
     // 已在【延後場景切換(等寶箱怪清)】狀態:一般怪已清完,此時再殺到的多半是寶箱怪本身。
     //   不再走波次配額邏輯(subWavesDone 已+1);寶箱怪清空的真正切換由 finishPendingSubZoneIfTreasureGone 每幀處理。
-    if (this.pendingSubZoneComplete) return;
+    if (this.pendingSubZoneComplete || this.pendingSurgeClear) return;
     if (this.waveState === 'intermission' || this.waveState === 'boss' || this.waveState === 'event') return;
     this.waveKilled++;
-    this.maybeBossIntrude();
     if (this.waveKilled >= this.waveQuota) {
       // 關卡制:清完一波 → 累計子區波數;達子區目標波數 → 進入選邊/出口階段(不走 BOSS/事件/無限)
       if (this.levelMode) {
         this.subWavesDone++;
         if (this.subWavesDone >= this.subWavesTarget) {
-          this.completeStage();
-          // 用戶需求:最後一波打完最後一隻怪時,若場上還有【寶箱怪】→【不立刻開啟場景切換】,
-          //   延後(pendingSubZoneComplete),等寶箱怪【死掉或離場(跑走)】後才真正切換。
-          //   無寶箱怪→直接開(同現在)。
-          if (this.treasures.isOnField) {
-            this.pendingSubZoneComplete = true;
-            this.waveState = 'clearing'; // 停止生怪,等寶箱怪清了才切換
+          if (this.spawner.countQuotaExempt() > 0) {
+            // 即時補怪（二段變身 / 變身 BOSS）還在場上：先不結算，清完才結算（每幀由 finishStageWhenSurgeCleared 檢查）
+            this.pendingSurgeClear = true;
+            this.waveState = 'clearing';
           } else {
-            this.onSubZoneComplete();
+            this.finishStage();
           }
         } else {
           this.enterIntermission();
@@ -1029,6 +1038,20 @@ export class GameScene extends Phaser.Scene {
       }
     }
     this.emitStats();
+  }
+
+  /**
+   * 關卡制本關的怪都清完：結算關卡；場上還有寶箱怪時不立刻開啟場景切換（pendingSubZoneComplete），
+   * 等寶箱怪死掉或離場（跑走）後才切換，沒有就直接開
+   */
+  private finishStage(): void {
+    this.completeStage();
+    if (this.treasures.isOnField) {
+      this.pendingSubZoneComplete = true;
+      this.waveState = 'clearing'; // 停止生怪,等寶箱怪清了才切換
+    } else {
+      this.onSubZoneComplete();
+    }
   }
 
   /** 進入 intermission（過關）——供 BOSS 擊殺或作弊清場共用 */
@@ -1154,13 +1177,13 @@ export class GameScene extends Phaser.Scene {
       this.monsterProfile = pickMonsterProfile(chest);
       this.subWavesTarget = this.monsterProfile.waves.length;
       this.waveQuota = this.stageWaveQuota(0);
-      // BOSS 亂入：開打時決定本關是否亂入，整關進度到 atProgress 時登場
+      // BOSS 亂入：開打時決定本關是否亂入，開打 delayMs 後登場
       const intrude = GameConfig.stageMonsters.chests[chest].bossIntrude;
-      this.bossIntrudeAtProgress = Math.random() < intrude.chance ? intrude.atProgress : 0;
+      this.bossIntrudeAt = Math.random() < intrude.chance ? this.time.now + intrude.delayMs : 0;
       this.breakableCtl.dropForWave(); // 第一波的木箱（之後每次波間休息落下）
     } else {
       this.waveQuota = GameConfig.stage.quotaByChest[chest];
-      this.bossIntrudeAtProgress = 0;
+      this.bossIntrudeAt = 0;
     }
     this.spawner.resetFormationCount(); // 寶箱怪第 2 次隊形起才可能出現
     this.treasures.resetSpawnLimit();
@@ -1179,6 +1202,7 @@ export class GameScene extends Phaser.Scene {
       if (c.alive) this.grantStageReward(c, tickets);
     }
     this.comboReward.settleAll(); // 通關時 HIT 連擊立即結算彩票，不等中斷倒數
+    this.bossCtl.onStageComplete(); // 關卡打完後不能再變身 BOSS
     this.currentStage++;
     // 佇列往前推一格，最右邊依規則生成新節點
     this.stageQueue.shift();
@@ -1310,13 +1334,17 @@ export class GameScene extends Phaser.Scene {
     };
   }
 
-  /** 整關進度到本關的亂入門檻（且本關還沒打完）時，BOSS 限時亂入（場上已有 BOSS 則略過），每關最多一次 */
-  private maybeBossIntrude(): void {
-    if (this.bossIntrudeAtProgress <= 0) return;
-    const progress = this.stageKillProgress();
-    if (progress < this.bossIntrudeAtProgress || progress >= 1) return;
-    this.bossIntrudeAtProgress = 0;
-    if (!this.bossCtl.current) this.bossCtl.spawn(true);
+  /**
+   * 每幀：到了本關的亂入時間時 BOSS 限時亂入，每關最多一次；波間休息中或沒有人在場上時延到之後，
+   * 本關已打完或場上已有 BOSS 則取消
+   *
+   * @param time 目前場景時間
+   */
+  private maybeBossIntrude(time: number): void {
+    if (this.bossIntrudeAt <= 0 || time < this.bossIntrudeAt) return;
+    if (this.waveState === 'intermission' || (this.creditCtl.enabled && this.aliveCount() === 0)) return;
+    this.bossIntrudeAt = 0;
+    if (this.canSurge() && !this.bossCtl.current) this.bossCtl.spawn(true);
   }
 
   /**
@@ -1334,15 +1362,27 @@ export class GameScene extends Phaser.Scene {
     if (this.spawner.spawnSurge(seat, profile.surge) > 0) this.surgeReadyAt[seat] = now + profile.surge.cooldownMs;
   }
 
-  /** 變身 BOSS 即時補怪：小關卡進行中在 P1 身旁補一批 stageMonsters.bossFormSurge（不計擊殺數、無冷卻） */
+  /**
+   * 變身 BOSS 即時補怪：依 stageMonsters.bossFormSurge 分批在 P1 身旁補怪（不計擊殺數、無冷卻、不乘人數）；
+   * 輪到的批次若變身已結束或關卡已打完就不補
+   */
   private surgeOnBossForm(): void {
-    if (!this.monsterProfile || !this.canSurge()) return;
-    this.spawner.spawnSurge(this.characters.indexOf(this.player), GameConfig.stageMonsters.bossFormSurge);
+    const cfg = GameConfig.stageMonsters.bossFormSurge;
+    const seat = this.characters.indexOf(this.player);
+    for (const batch of cfg.batches) {
+      const spawnBatch = (): void => {
+        if (!this.monsterProfile || !this.canSurge() || !this.bossCtl.isTransformed) return;
+        this.spawner.spawnSurge(seat, { count: batch.count, weights: cfg.weights });
+      };
+      if (batch.delayMs > 0) this.time.delayedCall(batch.delayMs, spawnBatch);
+      else spawnBatch();
+    }
   }
 
-  /** 目前能否即時補怪：小關卡進行中（生怪 / 清場階段）、沒在等寶箱怪清掉 */
+  /** 目前能否即時補怪：小關卡進行中（生怪 / 清場 / 波間休息）、最後一波還沒打完 */
   private canSurge(): boolean {
-    return this.stageInProgress && !this.pendingSubZoneComplete && (this.waveState === 'spawning' || this.waveState === 'clearing');
+    return this.stageInProgress && !this.pendingSubZoneComplete && !this.pendingSurgeClear
+      && (this.waveState === 'spawning' || this.waveState === 'clearing' || this.waveState === 'intermission');
   }
 
   /** 建立 CreditController 需要的場景能力 */
@@ -1575,6 +1615,7 @@ export class GameScene extends Phaser.Scene {
       player: () => this.player,
       isGameOver: () => this.gameOver,
       isSlowMode: () => this.controlMode === 'slow',
+      isStageActive: () => this.canSurge(),
       wireEnemyCallbacks: (e) => this.wireEnemyCallbacks(e),
       addTelegraph: (fx) => { this.telegraphFx.push(fx); },
       removeTelegraph: (fx) => this.removeTelegraphFx(fx),

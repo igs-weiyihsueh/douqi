@@ -428,8 +428,8 @@ export class SpawnController {
     return this.countRegular(true);
   }
 
-  /** 場上（含預告中）不計配額的即時補怪數 */
-  private countQuotaExempt(): number {
+  /** 場上（含預告中）不計配額的即時補怪數（最後一波打完時要等它歸零才結算關卡） */
+  countQuotaExempt(): number {
     let n = 0;
     for (const child of this.host.enemies().getChildren()) {
       const e = child as Enemy;
