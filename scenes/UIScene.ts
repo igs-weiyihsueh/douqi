@@ -82,10 +82,9 @@ interface StatsPayload {
   currentLevel?: number;
   subWavesDone?: number;
   subWavesTarget?: number;
-  /** 小關卡卷軸 HUD：目前關卡編號、擊殺進度、本關起的寶箱階級（長度 = waveHud.visibleStages） */
+  /** 小關卡卷軸 HUD：目前關卡編號、整關擊殺進度（0 ~ 1，跨各波累計）、本關起的寶箱階級（長度 = waveHud.visibleStages） */
   stage?: number;
-  stageKilled?: number;
-  stageQuota?: number;
+  stageProgress?: number;
   stageChests?: StageNodeKind[];
   progressPhase?: string;
   crossingOpen?: boolean;
@@ -792,10 +791,9 @@ export class UIScene extends Phaser.Scene {
     }
     this.stageHudStage = stage;
     this.stageHudChests = s.stageChests!;
-    // 過場（尚未開打）時 waveKilled 可能殘留上一關的值，只有在生怪/清場階段才採計進度
-    const active = s.waveState === 'spawning' || s.waveState === 'clearing';
-    const quota = s.stageQuota ?? 0;
-    this.stageHudFillTarget = active && quota > 0 ? Phaser.Math.Clamp((s.stageKilled ?? 0) / quota, 0, 1) : 0;
+    // 過場（尚未開打）時進度可能殘留上一關的值，只有在生怪 / 清場 / 波間休息階段才採計進度
+    const active = s.waveState === 'spawning' || s.waveState === 'clearing' || s.waveState === 'intermission';
+    this.stageHudFillTarget = active ? Phaser.Math.Clamp(s.stageProgress ?? 0, 0, 1) : 0;
   }
 
   /**

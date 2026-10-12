@@ -73,7 +73,7 @@ const BREAK_PARTICLES = 8;
 
 /**
  * 可破壞物件（木箱、爆炸桶）：
- * - 布置：非關卡制每波成堆散布（遠離中心、避開玩家、彼此不疊）；關卡制隨每批怪從天而降（dropWithFormation）
+ * - 布置：非關卡制每波成堆散布（遠離中心、避開玩家、彼此不疊）；關卡制每波從天而降一次（dropForWave）
  * - 打破：普攻扇形 / 衝刺圓形 / 招式 AOE（圓形 / 定向矩形）每次命中扣 1 耐久（Breakable.hit），歸零才碎；
  *   一次攻擊最多掉 maxDropPerBreak 個道具；命中至少一個時通知場景計算 CREDIT（onBreakableHit），HIT 連擊由各攻擊的呼叫端計算
  * - 木箱碎裂噴粒子、機率掉道具；爆炸桶（barrel.enabled 停用中）打破後先倒數（地面警示圈）再爆炸：怪受傷並被炸飛、角色受傷、連鎖引爆附近的桶
@@ -163,14 +163,11 @@ export class BreakableController {
   }
 
   /**
-   * 關卡制：一批怪出生時跟著降落木箱——小關卡第一批必掉，之後 drop.chance 機率；每次 drop.count 個，
+   * 關卡制：每波降落一次木箱（小關卡開打時、波間休息開始時）——drop.count 個，
    * 場上（含降落中）達 drop.maxAlive 就不掉，找不到合適落點的少掉
-   *
-   * @param firstOfStage 是否為這個小關卡的第一批怪
    */
-  dropWithFormation(firstOfStage: boolean): void {
+  dropForWave(): void {
     const cfg = GameConfig.breakable.drop;
-    if (!firstOfStage && Math.random() >= cfg.chance) return;
     const pool = this.host.group();
     const want = Math.min(Phaser.Math.Between(cfg.count[0], cfg.count[1]), cfg.maxAlive - pool.countActive(true));
     const bounds = crateBodyBounds(this.scene.textures);

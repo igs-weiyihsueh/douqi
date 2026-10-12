@@ -72,12 +72,12 @@ export class SpawnController {
   private fieldSpawned = 0;
   /** 近身組輪派座位的游標（多人平均分配） */
   private nearSeatCursor = 0;
-  /** 本波已出了幾次隊形 */
+  /** 已出了幾次隊形（關卡制為本關，舊波次制為本波） */
   private formations = 0;
 
   constructor(private readonly host: SpawnHost) {}
 
-  /** 本波已出的隊形次數（寶箱怪第二次隊形起才可能出現） */
+  /** 已出的隊形次數（關卡制為本關，舊波次制為本波；寶箱怪第二次隊形起才可能出現） */
   get formationCount(): number {
     return this.formations;
   }
@@ -117,12 +117,11 @@ export class SpawnController {
     return false;
   }
 
-  /** 新的一波開始：閘門打開、分配與隊形計數歸零，立刻補第一批（不冷場） */
+  /** 新的一波開始：閘門打開、分配計數歸零，立刻補第一批（不冷場）。隊形計數不歸零（另由 resetFormationCount 處理） */
   startWave(): void {
     this.refilling = true;
     this.nearSpawned = 0;
     this.fieldSpawned = 0;
-    this.formations = 0;
     this.accumulator = 0;
     if (!this.isBlocked()) this.spawnFormation();
   }
@@ -132,7 +131,7 @@ export class SpawnController {
     this.accumulator = 0;
   }
 
-  /** 隊形計數歸零（新的小關卡開始時） */
+  /** 隊形計數歸零（關卡制每個小關卡開始時、舊波次制每波開始時） */
   resetFormationCount(): void {
     this.formations = 0;
   }

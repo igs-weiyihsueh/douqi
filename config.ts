@@ -771,26 +771,30 @@ export const GameConfig = {
 
   /**
    * 關卡怪物配置（關卡制）：每個小關卡開始時依寶箱階級從 chests[tier].profiles 隨機抽一份配置，
-   * 出怪改依配置進行（擊殺數、同時在場上限、各階段的怪種比例與補怪節奏）。
+   * 出怪改依配置進行（各波擊殺數、同時在場上限、各階段的怪種比例與補怪節奏）。
+   * 一關分數波：每波怪全部打完 → 休息 waveBreakMs → 下一波湧出；波內照近身組 / 場上組與補生閘門補怪。
    * 資料格式即日後關卡編輯器編輯的內容；enabled = false 時回到舊的全域出怪參數
    */
   stageMonsters: {
     enabled: true,
     /** 變身 BOSS 即時補怪：變身瞬間在玩家身旁環狀補 count 隻（依 weights 抽怪種），規則同二段變身補怪，但無冷卻（每打倒一隻 BOSS 才可能變身一次） */
     bossFormSurge: { count: [12, 16], weights: { normal: 90, tank: 10, bomber: 0 } },
+    /** 波與波之間的休息（毫秒）：休息中不出怪、HIT 連擊倒數暫停，休息開始時落下下一波的木箱 */
+    waveBreakMs: 2000,
     /** 每多一位存活玩家，場上組每批隻數增加的比例（近身組本來就是逐一輪派給每位玩家，不另外放大） */
     fieldBatchGrowthPerPlayer: 0.5,
     /**
-     * 各寶箱階級：可抽的配置（等機率）與擊殺數倍率（高階沿用同三套、提高擊殺數）；
-     * bossIntrude 限時亂入 BOSS：小關卡開始時以 chance 機率決定，擊殺進度到 atProgress 時登場（BOSS 本身沿用 stage.bossIntrude）
+     * 各寶箱階級：可抽的配置（等機率）與每波擊殺數倍率（高階沿用同三套、提高擊殺數）；
+     * bossIntrude 限時亂入 BOSS：小關卡開始時以 chance 機率決定，整關進度到 atProgress 時登場（BOSS 本身沿用 stage.bossIntrude）
      */
     chests: {
       low: { profiles: ['swarm', 'armor', 'artillery'], quotaMult: 1, bossIntrude: { chance: 0, atProgress: 0.5 } },
       high: { profiles: ['swarm', 'armor', 'artillery'], quotaMult: 1.4, bossIntrude: { chance: 0.3, atProgress: 0.5 } }
     },
     /**
-     * 配置：quota 擊殺數；maxAlive 同時在場上限（單人值，每多一人再加 perExtraPlayer）；
-     * phases 依擊殺進度分段（untilProgress 前套用）：weights 怪種的整體出現比例（近身組只出 spawnAlloc.nearTypes，
+     * 配置：waves 各波擊殺數（單人的份量，逐波遞增；每波開始時乘上當下存活人數，BOT 也算；
+     * 以單人每關約消耗 150 CREDIT 設計，實測平均每隻約 2.2 CREDIT）；maxAlive 同時在場上限（單人值，每多一人再加 perExtraPlayer）；
+     * phases 依整關進度（已打完的波 + 本波擊殺比例）分段（untilProgress 前套用）：weights 怪種的整體出現比例（近身組只出 spawnAlloc.nearTypes，
      * 抽到其他怪種時改出在場上，整體仍等於此比例）、intervalMs 補怪間隔、
      * nearBatch / fieldBatch 近身組 / 場上組每批隻數 [最少, 最多]、nearShare 近身組占比；
      * surge 二段變身即時補怪：在變身的玩家身旁環狀補 count 隻（依 weights 抽怪種），不計擊殺數、不受同時在場上限限制（場上已滿也照補），
@@ -799,7 +803,7 @@ export const GameConfig = {
     profiles: {
       /** 蜂群：小怪一直湧上來，快節奏割草 */
       swarm: {
-        name: '蜂群', quota: 25, maxAlive: { solo: 22, perExtraPlayer: 18 },
+        name: '蜂群', waves: [14, 16, 18, 20], maxAlive: { solo: 22, perExtraPlayer: 18 },
         surge: { count: [10, 14], weights: { normal: 90, tank: 10, bomber: 0 }, cooldownMs: 10000 },
         phases: [
           { untilProgress: 0.5, weights: { normal: 70, tank: 10, bomber: 20 }, intervalMs: 800, nearBatch: [2, 4], fieldBatch: [4, 7], nearShare: 0.6 },
@@ -808,7 +812,7 @@ export const GameConfig = {
       },
       /** 重甲：坦克當肉牆，怪少但硬，慢節奏 */
       armor: {
-        name: '重甲', quota: 25, maxAlive: { solo: 22, perExtraPlayer: 18 },
+        name: '重甲', waves: [14, 16, 18, 20], maxAlive: { solo: 22, perExtraPlayer: 18 },
         surge: { count: [10, 14], weights: { normal: 90, tank: 10, bomber: 0 }, cooldownMs: 10000 },
         phases: [
           { untilProgress: 0.4, weights: { normal: 60, tank: 30, bomber: 10 }, intervalMs: 1600, nearBatch: [3, 5], fieldBatch: [6, 9], nearShare: 0.4 },
@@ -817,7 +821,7 @@ export const GameConfig = {
       },
       /** 砲火：投擲怪在遠處轟炸（只出在場上組），要衝過去清 */
       artillery: {
-        name: '砲火', quota: 25, maxAlive: { solo: 22, perExtraPlayer: 18 },
+        name: '砲火', waves: [14, 16, 18, 20], maxAlive: { solo: 22, perExtraPlayer: 18 },
         surge: { count: [10, 14], weights: { normal: 90, tank: 10, bomber: 0 }, cooldownMs: 10000 },
         phases: [
           { untilProgress: 0.3, weights: { normal: 60, tank: 10, bomber: 30 }, intervalMs: 1100, nearBatch: [2, 4], fieldBatch: [5, 8], nearShare: 0.4 },
@@ -1652,11 +1656,10 @@ export const GameConfig = {
     /** 同一物件兩次命中的最短間隔（毫秒）：持續型招式不會每幀算一次；小於最快的普攻間隔 */
     hitIntervalMs: 150,
     /**
-     * 關卡制：木箱隨怪物從天而降（進區域時不再預先擺放）。每批怪出生時降落：小關卡第一批必掉，之後 chance 機率；
-     * 每次 count 個，場上（含降落中）達 maxAlive 就不掉；找不到合適落點就少掉幾個
+     * 關卡制：木箱從天而降（進區域時不再預先擺放）。每波一次：小關卡開打時與每次波間休息開始時降落
+     * count 個，場上（含降落中）達 maxAlive 就不掉；找不到合適落點就少掉幾個
      */
     drop: {
-      chance: 0.6,
       count: [1, 3] as const,
       maxAlive: 8,
       /** 落點限制：在鏡頭畫面內（內縮 viewInset）；木箱碰撞範圍離每位玩家至少 minDistFromPlayer、離怪的身體至少 enemyGap；每個木箱嘗試 placeTries 次 */

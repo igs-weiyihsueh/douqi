@@ -3,7 +3,7 @@ import type { ChestTier } from './stageQueue';
 
 /**
  * 關卡怪物配置（config.stageMonsters）的型別與查詢：
- * 小關卡開始時依寶箱階級抽一份配置，出怪依「目前擊殺進度所在的階段」決定怪種比例與補怪節奏。
+ * 小關卡開始時依寶箱階級抽一份配置，一關分數波（waves），出怪依「整關進度所在的階段」決定怪種比例與補怪節奏。
  * 資料格式即日後關卡編輯器編輯的內容
  */
 
@@ -44,8 +44,8 @@ export interface MonsterProfile {
   id: string;
   /** 顯示名稱（除錯 / 編輯器） */
   name: string;
-  /** 擊殺數（低階寶箱；高階再乘 chests.high.quotaMult） */
-  quota: number;
+  /** 各波擊殺數（單人的份量；低階寶箱，高階再乘 chests.high.quotaMult；每波開始時乘上存活人數） */
+  waves: readonly number[];
   /** 同時在場上限：單人值，每多一位存活玩家再加 perExtraPlayer */
   maxAlive: { solo: number; perExtraPlayer: number };
   phases: ReadonlyArray<MonsterPhase>;
@@ -76,20 +76,23 @@ export function pickMonsterProfile(chest: ChestTier, rand: () => number = Math.r
 }
 
 /**
- * 本關擊殺數：配置的 quota × 該寶箱階級的倍率
+ * 第 wave 波（0 起算）的擊殺數：配置的單人份量 × 寶箱階級倍率 × 存活人數（至少 1 人）
  *
  * @param profile 配置
  * @param chest 寶箱階級
+ * @param wave 第幾波（0 起算，超過最後一波時用最後一波）
+ * @param alive 波次開始時的存活人數（BOT 也算）
  */
-export function profileQuota(profile: MonsterProfile, chest: ChestTier): number {
-  return Math.round(profile.quota * GameConfig.stageMonsters.chests[chest].quotaMult);
+export function profileWaveQuota(profile: MonsterProfile, chest: ChestTier, wave: number, alive: number): number {
+  const base = profile.waves[Math.min(wave, profile.waves.length - 1)];
+  return Math.round(base * GameConfig.stageMonsters.chests[chest].quotaMult) * Math.max(1, alive);
 }
 
 /**
- * 目前擊殺進度所在的階段（超過最後一段的 untilProgress 時用最後一段）
+ * 目前整關進度所在的階段（超過最後一段的 untilProgress 時用最後一段）
  *
  * @param profile 配置
- * @param progress 擊殺進度 0 ~ 1
+ * @param progress 整關進度 0 ~ 1
  */
 export function phaseAt(profile: MonsterProfile, progress: number): MonsterPhase {
   for (const phase of profile.phases) if (progress < phase.untilProgress) return phase;

@@ -6,7 +6,7 @@ import { Item, type SkillType } from '../objects/Item';
 import { Breakable } from '../objects/Breakable';
 import { loadCharacterParams, type CharacterParams } from '../systems/characterParams';
 import { reloadHitFeel } from '../systems/hitFeelParams';
-import { largestProfileMaxAlive, phaseAt, pickMonsterProfile, profileMaxAlive, profileQuota, type MonsterProfile } from '../systems/stageMonsters';
+import { largestProfileMaxAlive, phaseAt, pickMonsterProfile, profileMaxAlive, profileWaveQuota, type MonsterProfile } from '../systems/stageMonsters';
 import { createStageQueue, nextStageNode, revealStageNode, displayKindOf, type StageNode } from '../systems/stageQueue';
 import type { TelegraphFx } from '../systems/telegraphFx';
 import { BossController, type BossHost } from '../controllers/BossController';
@@ -100,8 +100,8 @@ export class GameScene extends Phaser.Scene {
   private monsterProfile: MonsterProfile | null = null;
   /** 各座位下次可觸發二段變身即時補怪的時間（每位玩家各自冷卻） */
   private surgeReadyAt: number[] = [];
-  /** 本關擊殺數到幾隻時亂入 BOSS（0 = 本關不亂入；關卡怪物配置的 chests.bossIntrude） */
-  private bossIntrudeAtKills = 0;
+  /** 整關進度到多少時亂入 BOSS（0 = 本關不亂入；關卡怪物配置的 chests.bossIntrude） */
+  private bossIntrudeAtProgress = 0;
   private waveSpawned = 0;
   private waveState: 'spawning' | 'clearing' | 'intermission' | 'boss' | 'event' = 'spawning';
   private intermissionUntil = 0;
@@ -303,7 +303,7 @@ export class GameScene extends Phaser.Scene {
       runChildUpdate: false
     });
     this.breakableCtl = new BreakableController(this.createBreakableHost());
-    this.comboReward = new ComboRewardController(this, () => this.characters);
+    this.comboReward = new ComboRewardController(this, () => this.characters, () => this.waveState === 'intermission');
     this.comboSkills = new ComboSkillController(this.createComboSkillHost());
     this.chargeWarnGfx = this.add.graphics().setDepth(2);
     this.footDiscGfx = this.add.graphics().setDepth(FOOT_DISC_DEPTH);
@@ -937,23 +937,9 @@ export class GameScene extends Phaser.Scene {
     const time = this.time.now;
 
     if (this.waveState === 'intermission') {
-      if (time >= this.intermissionUntil) {
-        // 開始下一波
-        this.currentWave++;
-        // 事件/上一波殘留在場上的一般怪，計入這一波的目標數（不憑空消失）。
-        // 殘留 R 隻：quota = base + R、waveSpawned = R（殘留視為已生），→ 只會再補生 base 隻新怪，
-        // 總量 = R(殘留) + base(新生) = base+R，殺光殘留+新怪剛好達 quota。殘留被殺走 onWaveKill 計 waveKilled。
-        const residual = this.countResidualEnemies();
-        this.waveQuota = this.computeWaveQuota(this.currentWave) + residual;
-        this.waveKilled = 0;
-        this.waveSpawned = residual;
-        this.waveState = 'spawning';
-        // 每波開始灑幾個可打破物件(清掉的下一波再補)
-        this.breakableCtl.spawnForWave();
-        // 開波首批怪立刻湧出，不冷場（之後由補生閘門維持節奏）
-        this.spawner.startWave();
-        this.emitStats();
-      }
+      if (time < this.intermissionUntil) return;
+      if (this.levelMode) this.startNextStageWave();
+      else this.startNextWave();
       return;
     }
 
@@ -974,6 +960,26 @@ export class GameScene extends Phaser.Scene {
 
     // 生怪中：生產總量達本波配額 → 停止再生，等清完場上的怪即過關
     if (this.spawner.tick(delta)) this.waveState = 'clearing';
+  }
+
+  /** 舊波次制（非關卡制）休息結束：開下一波 */
+  private startNextWave(): void {
+    this.currentWave++;
+    // 事件/上一波殘留在場上的一般怪，計入這一波的目標數（不憑空消失）。
+    // 殘留 R 隻：quota = base + R、waveSpawned = R（殘留視為已生），→ 只會再補生 base 隻新怪，
+    // 總量 = R(殘留) + base(新生) = base+R，殺光殘留+新怪剛好達 quota。殘留被殺走 onWaveKill 計 waveKilled。
+    const residual = this.countResidualEnemies();
+    this.waveQuota = this.computeWaveQuota(this.currentWave) + residual;
+    this.waveKilled = 0;
+    this.waveSpawned = residual;
+    this.waveState = 'spawning';
+    // 每波開始灑幾個可打破物件(清掉的下一波再補)
+    this.breakableCtl.spawnForWave();
+    this.treasures.resetSpawnLimit();
+    this.spawner.resetFormationCount();
+    // 開波首批怪立刻湧出，不冷場（之後由補生閘門維持節奏）
+    this.spawner.startWave();
+    this.emitStats();
   }
 
   /** 一隻怪被清掉時呼叫——計入本波進度；達配額 → intermission 或（BOSS 波）召喚 BOSS */
@@ -1028,9 +1034,55 @@ export class GameScene extends Phaser.Scene {
   /** 進入 intermission（過關）——供 BOSS 擊殺或作弊清場共用 */
   private enterIntermission(): void {
     this.waveState = 'intermission';
-    this.intermissionUntil = this.time.now + GameConfig.wave.intermissionMs;
-    this.showWaveClear();
+    if (this.levelMode) {
+      // 關卡制波間休息：不顯示波次提示（靠下一波湧出表示），休息開始時落下下一波的木箱
+      this.intermissionUntil = this.time.now + GameConfig.stageMonsters.waveBreakMs;
+      this.breakableCtl.dropForWave();
+    } else {
+      this.intermissionUntil = this.time.now + GameConfig.wave.intermissionMs;
+      this.showWaveClear();
+    }
     this.emitStats();
+  }
+
+  /**
+   * 關卡制波間休息結束：開本關下一波，擊殺數依當下存活人數計算（上一波留下的即時補怪不計擊殺數、照常留在場上），
+   * 開波首批怪立刻湧出
+   */
+  private startNextStageWave(): void {
+    this.waveQuota = this.stageWaveQuota(this.subWavesDone);
+    this.waveKilled = 0;
+    this.waveSpawned = 0;
+    this.waveState = 'spawning';
+    this.spawner.startWave();
+    this.emitStats();
+  }
+
+  /**
+   * 關卡制第 wave 波（0 起算）的擊殺數：目前配置的單人份量 × 寶箱階級倍率 × 當下存活人數（BOT 也算）
+   *
+   * @param wave 第幾波（0 起算）
+   */
+  private stageWaveQuota(wave: number): number {
+    return profileWaveQuota(this.monsterProfile!, revealStageNode(this.stageQueue[0]), wave, this.aliveCount());
+  }
+
+  /**
+   * 關卡制整關進度（0 ~ 1）：(已打完的波數 + 本波比例) ÷ 本關波數；休息中與最後一波打完後不再計本波比例
+   *
+   * @param waveDone 本波已完成的量（擊殺數或已生數），除以本波擊殺數得本波比例
+   */
+  private stageFraction(waveDone: number): number {
+    if (this.subWavesTarget <= 0) return 0;
+    const inWave = this.subWavesDone < this.subWavesTarget && this.waveState !== 'intermission' && this.waveQuota > 0
+      ? Math.min(1, waveDone / this.waveQuota)
+      : 0;
+    return Math.min(1, (this.subWavesDone + inWave) / this.subWavesTarget);
+  }
+
+  /** 整關擊殺進度（0 ~ 1）：怪種比例階段、BOSS 亂入時機、關卡卷軸 HUD 用 */
+  private stageKillProgress(): number {
+    return this.stageFraction(this.waveKilled);
   }
 
   // ========================= 關卡系統 =========================
@@ -1098,17 +1150,20 @@ export class GameScene extends Phaser.Scene {
     this.subWavesDone = 0;
     this.subWavesTarget = 1;
     if (GameConfig.stageMonsters.enabled) {
-      // 依寶箱階級抽一份怪物配置：決定擊殺數、同時在場上限、各階段的怪種比例與補怪節奏
+      // 依寶箱階級抽一份怪物配置：決定波數與各波擊殺數、同時在場上限、各階段的怪種比例與補怪節奏
       this.monsterProfile = pickMonsterProfile(chest);
-      this.waveQuota = profileQuota(this.monsterProfile, chest);
-      // BOSS 亂入：開打時決定本關是否亂入，擊殺進度到 atProgress 時登場
+      this.subWavesTarget = this.monsterProfile.waves.length;
+      this.waveQuota = this.stageWaveQuota(0);
+      // BOSS 亂入：開打時決定本關是否亂入，整關進度到 atProgress 時登場
       const intrude = GameConfig.stageMonsters.chests[chest].bossIntrude;
-      this.bossIntrudeAtKills = Math.random() < intrude.chance ? Math.max(1, Math.round(this.waveQuota * intrude.atProgress)) : 0;
+      this.bossIntrudeAtProgress = Math.random() < intrude.chance ? intrude.atProgress : 0;
+      this.breakableCtl.dropForWave(); // 第一波的木箱（之後每次波間休息落下）
     } else {
       this.waveQuota = GameConfig.stage.quotaByChest[chest];
-      this.bossIntrudeAtKills = 0;
+      this.bossIntrudeAtProgress = 0;
     }
     this.spawner.resetFormationCount(); // 寶箱怪第 2 次隊形起才可能出現
+    this.treasures.resetSpawnLimit();
     this.waveState = 'spawning';
     this.stageInProgress = true;
   }
@@ -1217,16 +1272,13 @@ export class GameScene extends Phaser.Scene {
       currentWave: () => this.currentWave,
       survivalMs: () => this.survivalMs,
       waveProgress: () => ({ killed: this.waveKilled, quota: this.waveQuota }),
-      monsterPhase: () => (this.monsterProfile ? phaseAt(this.monsterProfile, this.waveQuota > 0 ? this.waveKilled / this.waveQuota : 0) : null),
+      monsterPhase: () => (this.monsterProfile ? phaseAt(this.monsterProfile, this.stageKillProgress()) : null),
       onWaveEnemySpawned: () => { this.waveSpawned++; },
       maxAlive: () => this.curMaxAlive(),
       aliveScale: () => this.curAliveScale(),
       nearestSeat: (x, y) => this.nearestSeat(x, y),
       wireEnemyCallbacks: (e) => this.wireEnemyCallbacks(e),
-      onFormationSpawned: (time) => {
-        this.treasures.trySpawn(time); // 寶箱怪擲骰（場上只會有一隻）
-        if (this.levelMode) this.breakableCtl.dropWithFormation(this.spawner.formationCount === 1); // 木箱隨怪從天而降
-      }
+      onFormationSpawned: (time) => this.treasures.trySpawn(time) // 寶箱怪擲骰（每關最多一隻）
     };
   }
 
@@ -1258,10 +1310,12 @@ export class GameScene extends Phaser.Scene {
     };
   }
 
-  /** 擊殺數到本關的亂入門檻（且本關還沒打完）時，BOSS 限時亂入（場上已有 BOSS 則略過），每關最多一次 */
+  /** 整關進度到本關的亂入門檻（且本關還沒打完）時，BOSS 限時亂入（場上已有 BOSS 則略過），每關最多一次 */
   private maybeBossIntrude(): void {
-    if (this.bossIntrudeAtKills <= 0 || this.waveKilled < this.bossIntrudeAtKills || this.waveKilled >= this.waveQuota) return;
-    this.bossIntrudeAtKills = 0;
+    if (this.bossIntrudeAtProgress <= 0) return;
+    const progress = this.stageKillProgress();
+    if (progress < this.bossIntrudeAtProgress || progress >= 1) return;
+    this.bossIntrudeAtProgress = 0;
     if (!this.bossCtl.current) this.bossCtl.spawn(true);
   }
 
@@ -1363,7 +1417,10 @@ export class GameScene extends Phaser.Scene {
       player: () => this.player,
       isTimeStopped: () => this.timeStopped,
       isEventActive: () => this.eventCtl.kind !== null || this.waveState === 'event',
-      waveProgress: () => ({ formations: this.spawner.formationCount, quota: this.waveQuota, spawned: this.waveSpawned }),
+      spawnProgress: () => ({
+        formations: this.spawner.formationCount,
+        spawnedRatio: this.levelMode ? this.stageFraction(this.waveSpawned) : this.waveSpawned / Math.max(1, this.waveQuota)
+      }),
       flashEnemy: (e) => this.fx.flashEnemy(e),
       spawnDamageText: (x, y, amount) => this.fx.damageText(x, y, amount),
       spawnExpandingRing: (x, y, radius, color, ms) => this.fx.expandingRing(x, y, radius, color, ms),
@@ -2250,8 +2307,9 @@ export class GameScene extends Phaser.Scene {
   private monsterProfileDebugLines(): string[] {
     const p = this.monsterProfile;
     if (!p) return [];
-    const phase = phaseAt(p, this.waveQuota > 0 ? this.waveKilled / this.waveQuota : 0);
-    return [`關卡配置 ${p.name}（階段 ${p.phases.indexOf(phase) + 1}/${p.phases.length}）擊殺 ${this.waveKilled}/${this.waveQuota}  上限 ${this.curMaxAlive()}`];
+    const phase = phaseAt(p, this.stageKillProgress());
+    const wave = Math.min(this.subWavesDone + 1, this.subWavesTarget);
+    return [`關卡配置 ${p.name}（階段 ${p.phases.indexOf(phase) + 1}/${p.phases.length}）第 ${wave}/${this.subWavesTarget} 波 擊殺 ${this.waveKilled}/${this.waveQuota}  上限 ${this.curMaxAlive()}`];
   }
 
   private curMaxAlive(): number {
@@ -2390,8 +2448,7 @@ export class GameScene extends Phaser.Scene {
       currentLevel: this.slotWorld.level,
       // 小關卡卷軸 HUD：目前關卡編號、擊殺進度、本關與後續關卡的寶箱階級
       stage: this.currentStage,
-      stageKilled: this.stageInProgress ? this.waveKilled : 0,
-      stageQuota: this.waveQuota,
+      stageProgress: this.stageInProgress ? this.stageKillProgress() : 0,
       stageChests: this.stageQueue.map(displayKindOf),
       subWavesDone: this.subWavesDone,
       subWavesTarget: this.subWavesTarget,

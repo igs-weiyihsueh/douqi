@@ -3,12 +3,12 @@ import { GameConfig } from '../config';
 import type { Character } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
 
-/** 本波生怪進度（決定寶箱怪是否可能出現） */
-export interface WaveProgress {
-  /** 本波已出了幾次隊形 */
+/** 本關（舊波次制為本波）的生怪進度：決定寶箱怪是否可能出現 */
+export interface SpawnProgress {
+  /** 已出了幾次隊形 */
   formations: number;
-  quota: number;
-  spawned: number;
+  /** 已生的怪占總量的比例（0 ~ 1） */
+  spawnedRatio: number;
 }
 
 /**
@@ -27,15 +27,15 @@ export interface TreasureEnemyHost {
   isTimeStopped(): boolean;
   /** 限時事件進行中（不生寶箱怪） */
   isEventActive(): boolean;
-  waveProgress(): WaveProgress;
+  spawnProgress(): SpawnProgress;
   flashEnemy(enemy: Enemy): void;
   spawnDamageText(x: number, y: number, amount: number): void;
   spawnExpandingRing(x: number, y: number, radius: number, color: number, ms?: number): void;
   shakeOnce(duration: number, intensity: number): void;
 }
 
-/** 波次生怪進度達配額的這個比例後才可能出現寶箱怪（避開首次生怪） */
-const SPAWN_MIN_WAVE_FRACTION = 0.35;
+/** 生怪進度達總量的這個比例後才可能出現寶箱怪（避開首次生怪） */
+const SPAWN_MIN_PROGRESS = 0.35;
 /** 出生點：離移動區邊緣的距離、離 P1 的最小距離、嘗試次數 */
 const SPAWN_EDGE_MARGIN = 20;
 const SPAWN_AVOID_PLAYER = 120;
@@ -72,7 +72,7 @@ const COIN_DEPTH = 21;
 
 /**
  * 寶箱怪：
- * - 關卡中：波次生怪時依機率出現（場上只會有一隻，限時事件期間與每波首次生怪不出），出現時顯示提示橫幅並加上金光與粒子；
+ * - 關卡中：生怪時依機率出現（每個小關卡最多一隻，限時事件期間與首次生怪不出），出現時顯示提示橫幅並加上金光與粒子；
  *   在場內跑點（衝到隨機點 → 停頓 → 再衝），限時沒打死就朝最近的牆跑走。換區前直接逃走、換區時清掉
  * - 獎勵關：從財寶裝飾跳出（可多隻、不限時），每次命中與打倒給命中者彩票，時間到全部跑走
  * - 命中只計次數不扣血（每下噴金幣、顯示剩餘次數），達到命中數就打倒並噴大量金幣
@@ -85,6 +85,8 @@ export class TreasureEnemyController {
   private banner: Phaser.GameObjects.Text | null = null;
   /** 獎勵關中的寶箱怪 */
   private readonly roomTreasures = new Set<Enemy>();
+  /** 這個小關卡（舊波次制為這一波）已經出過寶箱怪 */
+  private spawnedThisRound = false;
 
   constructor(private readonly host: TreasureEnemyHost) {}
 
@@ -108,18 +110,23 @@ export class TreasureEnemyController {
     return this.roomTreasures.size;
   }
 
+  /** 新的小關卡（舊波次制為新的一波）開始：可以再出一隻寶箱怪 */
+  resetSpawnLimit(): void {
+    this.spawnedThisRound = false;
+  }
+
   /**
-   * 波次生怪時擲骰出寶箱怪：限時事件中、場上已有一隻、本波第一次隊形、生怪進度未達配額 35% 時都不出；
+   * 生怪時擲骰出寶箱怪：限時事件中、這一關已出過、第一次隊形、生怪進度未達總量 35% 時都不出；
    * 出現在場內隨機點（盡量避開 P1），顯示提示橫幅並加上金光與粒子
    *
    * @param time 目前場景時間
    */
   trySpawn(time: number): void {
     if (this.host.isEventActive()) return;
-    if (this.isOnField) return;
-    const wave = this.host.waveProgress();
-    if (wave.formations <= 1) return;
-    if (wave.spawned < Math.max(1, wave.quota) * SPAWN_MIN_WAVE_FRACTION) return;
+    if (this.spawnedThisRound || this.isOnField) return;
+    const progress = this.host.spawnProgress();
+    if (progress.formations <= 1) return;
+    if (progress.spawnedRatio < SPAWN_MIN_PROGRESS) return;
     this.treasure = null;
     if (Math.random() >= GameConfig.enemy.treasure.spawnChance) return;
     const a = this.host.arena(), r = GameConfig.enemy.types.treasure.radius;
@@ -134,6 +141,7 @@ export class TreasureEnemyController {
     if (!t) return;
     t.spawn(x, y, time, 'treasure', 1);
     this.treasure = t;
+    this.spawnedThisRound = true;
     this.showBanner();
     this.clearFx();
     // 金光：脈動光暈（在寶箱怪之下）+ 環繞的金色粒子（在之上）
