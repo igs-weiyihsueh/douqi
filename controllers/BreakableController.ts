@@ -30,6 +30,8 @@ export interface BreakableHost {
   /** 對角色造成傷害 */
   damageCharacterFrom(c: Character, amount: number, fromX: number, fromY: number): void;
   flashHurt(c: Character): void;
+  /** 這一波的木箱還能不能落下（延遲 / 分群落下時檢查；這一波已打完時 false） */
+  canDropCrates(): boolean;
   /** 角色的攻擊命中物件（與命中敵人一樣計算 CREDIT 扣點） */
   onBreakableHit(actor: Character, time: number): void;
   dropItemAt(x: number, y: number, time: number): void;
@@ -66,6 +68,30 @@ function cratesOverlap(ax: number, ay: number, bx: number, by: number, bounds: V
   return Math.abs(ax - bx) < bounds.right - bounds.left + gap && Math.abs(ay - by) < bounds.bottom - bounds.top + gap;
 }
 
+/**
+ * 把 total 分成每份 min ~ max 的數份（隨機）；最後剩下不足 min 的併進前面的份（不超過 max 時）或從前一份借
+ *
+ * @param total 總數
+ * @param min 每份最少
+ * @param max 每份最多
+ */
+function splitIntoGroups(total: number, min: number, max: number): number[] {
+  const sizes: number[] = [];
+  let left = total;
+  while (left > 0) {
+    const n = Math.min(left, Phaser.Math.Between(min, max));
+    sizes.push(n);
+    left -= n;
+  }
+  const last = sizes.length - 1;
+  if (last > 0 && sizes[last] < min) {
+    const need = min - sizes[last];
+    if (sizes[last - 1] + sizes[last] <= max) sizes[last - 1] += sizes.pop()!;
+    else { sizes[last - 1] -= need; sizes[last] += need; }
+  }
+  return sizes;
+}
+
 /** 爆炸桶警示圈：深度、閃爍週期、顏色 */
 const FUSE_RING_DEPTH = 4;
 const FUSE_BLINK_MS = 90;
@@ -86,7 +112,7 @@ const BREAK_PARTICLES = 8;
 
 /**
  * 可破壞物件（木箱、爆炸桶）：
- * - 布置：非關卡制每波成堆散布（遠離中心、避開玩家、彼此不疊）；關卡制每波第一批怪出現時從天而降（dropForWave）
+ * - 布置：非關卡制每波成堆散布（遠離中心、避開玩家、彼此不疊）；關卡制每波第一批怪出現後一群一群從天而降（dropForWave）
  * - 打破：普攻扇形 / 衝刺圓形 / 招式 AOE（圓形 / 定向矩形）每次命中扣 1 耐久（Breakable.hit），歸零才碎；
  *   一次攻擊最多掉 maxDropPerBreak 個道具；命中至少一個時通知場景計算 CREDIT（onBreakableHit），HIT 連擊由各攻擊的呼叫端計算
  * - 木箱碎裂噴粒子、機率掉道具；機率爆出彩票給打破的人、機率跳出寶箱怪（crate.ticketChance / treasureChance）；爆炸桶（barrel.enabled 停用中）打破後先倒數（地面警示圈）再爆炸：怪受傷並被炸飛、角色受傷、連鎖引爆附近的桶
@@ -176,32 +202,83 @@ export class BreakableController {
   }
 
   /**
-   * 關卡制：每波降落一次木箱（由場景在該波第一批怪出現時呼叫）——drop.count 個，
-   * 場上（含降落中）達 drop.maxAlive 就不掉，找不到合適落點的少掉
+   * 關卡制：這一波的木箱（由場景在該波第一批怪出現 drop.delayAfterMonstersMs 後呼叫）——drop.total 個
+   * （場上含降落中最多 drop.maxAlive），分成每群 drop.groupSize 個的數群，一群一群相隔 groupIntervalMs 依序落下；
+   * 輪到的群若這一波已打完（host.canDropCrates 為 false）就不掉
    */
   dropForWave(): void {
     const cfg = GameConfig.breakable.drop;
-    const pool = this.host.group();
-    const want = Math.min(Phaser.Math.Between(cfg.count[0], cfg.count[1]), cfg.maxAlive - pool.countActive(true));
+    const total = Math.min(cfg.total, cfg.maxAlive - this.host.group().countActive(true));
+    const centers: Array<{ x: number; y: number }> = [];
+    splitIntoGroups(total, cfg.groupSize[0], cfg.groupSize[1]).forEach((size, i) => {
+      const drop = (): void => { if (this.host.canDropCrates()) this.dropGroup(size, centers); };
+      if (i === 0) drop();
+      else this.scene.time.delayedCall(i * cfg.groupIntervalMs, drop);
+    });
+  }
+
+  /**
+   * 落下一群木箱：先找群中心（離這一波其他群中心至少 groupSpacing），再把其餘木箱緊貼著已放的木箱上下左右排開
+   * （間隔 groupGap）；擠不下的少掉幾個
+   *
+   * @param size 這一群的木箱數
+   * @param centers 這一波已落下的群中心（找到的中心會加進去）
+   */
+  private dropGroup(size: number, centers: Array<{ x: number; y: number }>): void {
+    const cfg = GameConfig.breakable.drop;
     const bounds = crateBodyBounds(this.scene.textures);
-    for (let n = 0; n < want; n++) {
-      const pt = this.pickDropPoint(bounds);
-      if (!pt) continue;
-      const bk = pool.get(pt.x, pt.y) as Breakable | null;
-      if (!bk) break;
-      const bcfg = GameConfig.breakable.barrel;
-      bk.spawnBreakable(pt.x, pt.y, bcfg.enabled && Math.random() < bcfg.dropShare ? 'barrel' : 'crate');
-      bk.dropIn(() => this.onDropLanded(bk));
+    const area = this.dropArea(bounds);
+    if (!area) return;
+    let center: { x: number; y: number } | null = null;
+    for (let attempt = 0; attempt < cfg.placeTries && !center; attempt++) {
+      const x = Phaser.Math.FloatBetween(area.left, area.right);
+      const y = Phaser.Math.FloatBetween(area.top, area.bottom);
+      if (centers.some((c) => Phaser.Math.Distance.Between(x, y, c.x, c.y) < cfg.groupSpacing)) continue;
+      if (this.isDropPointFree(x, y, bounds)) center = { x, y };
+    }
+    if (!center) return;
+    centers.push(center);
+    const stepX = bounds.right - bounds.left + cfg.groupGap;
+    const stepY = bounds.bottom - bounds.top + cfg.groupGap;
+    const placed = [center];
+    this.dropCrateAt(center.x, center.y);
+    while (placed.length < size) {
+      // 候選：已放木箱的上下左右緊鄰位置，隨機挑一個可放的
+      const options: Array<{ x: number; y: number }> = [];
+      for (const q of placed) {
+        for (const [dx, dy] of [[stepX, 0], [-stepX, 0], [0, stepY], [0, -stepY]]) {
+          const x = q.x + dx, y = q.y + dy;
+          if (x < area.left || x > area.right || y < area.top || y > area.bottom) continue;
+          if (this.isDropPointFree(x, y, bounds)) options.push({ x, y });
+        }
+      }
+      if (options.length === 0) return;
+      const pick = Phaser.Utils.Array.GetRandom(options);
+      placed.push(pick);
+      if (!this.dropCrateAt(pick.x, pick.y)) return;
     }
   }
 
   /**
-   * 找一個降落點：鏡頭畫面內（內縮 drop.viewInset）且在移動區內；木箱碰撞範圍離每位玩家至少 minDistFromPlayer、
-   * 不壓到怪、不與其他物件（含降落中）重疊。嘗試 placeTries 次都不行回傳 null
+   * 在 (x, y) 落下一個物件（爆炸桶啟用時依 dropShare 機率改為桶）
+   *
+   * @returns 物件池用完時 false
+   */
+  private dropCrateAt(x: number, y: number): boolean {
+    const bk = this.host.group().get(x, y) as Breakable | null;
+    if (!bk) return false;
+    const bcfg = GameConfig.breakable.barrel;
+    bk.spawnBreakable(x, y, bcfg.enabled && Math.random() < bcfg.dropShare ? 'barrel' : 'crate');
+    bk.dropIn(() => this.onDropLanded(bk));
+    return true;
+  }
+
+  /**
+   * 落點（物件位置）的可用範圍：鏡頭畫面內（內縮 drop.viewInset）且碰撞範圍在移動區內；範圍不存在時 null
    *
    * @param bounds 木箱碰撞範圍（各邊相對物件位置）
    */
-  private pickDropPoint(bounds: VisibleBounds): { x: number; y: number } | null {
+  private dropArea(bounds: VisibleBounds): { left: number; right: number; top: number; bottom: number } | null {
     const cfg = GameConfig.breakable.drop;
     const a = this.host.arena();
     // 場景剛建立、鏡頭還沒算過畫面範圍時（寬高為 0）只限在移動區內
@@ -211,24 +288,26 @@ export class BreakableController {
     const right = Math.min(a.right, v.right - cfg.viewInset) - bounds.right;
     const top = Math.max(a.top, v.top + cfg.viewInset) - bounds.top;
     const bottom = Math.min(a.bottom, v.bottom - cfg.viewInset) - bounds.bottom;
-    if (left > right || top > bottom) return null;
-    for (let attempt = 0; attempt < cfg.placeTries; attempt++) {
-      const x = Phaser.Math.FloatBetween(left, right);
-      const y = Phaser.Math.FloatBetween(top, bottom);
-      if (this.host.characters().some((c) => c.alive && distanceToBounds(c.x, c.y, x, y, bounds) < cfg.minDistFromPlayer)) continue;
-      let blocked = false;
-      for (const child of this.host.enemies().getChildren()) {
-        const e = child as Enemy;
-        if (e.active && !e.dead && distanceToBounds(e.x, e.y, x, y, bounds) < e.getBodyRadius() + cfg.enemyGap) { blocked = true; break; }
-      }
-      if (blocked) continue;
-      for (const child of this.host.group().getChildren()) {
-        const o = child as Breakable;
-        if (o.active && cratesOverlap(x, y, o.x, o.y, bounds, IN_CLUSTER_GAP)) { blocked = true; break; }
-      }
-      if (!blocked) return { x, y };
+    return left <= right && top <= bottom ? { left, right, top, bottom } : null;
+  }
+
+  /**
+   * 木箱放在 (x, y) 是否可行：碰撞範圍離每位玩家至少 minDistFromPlayer、不壓到怪、不與其他物件（含降落中）重疊
+   *
+   * @param bounds 木箱碰撞範圍（各邊相對物件位置）
+   */
+  private isDropPointFree(x: number, y: number, bounds: VisibleBounds): boolean {
+    const cfg = GameConfig.breakable.drop;
+    if (this.host.characters().some((c) => c.alive && distanceToBounds(c.x, c.y, x, y, bounds) < cfg.minDistFromPlayer)) return false;
+    for (const child of this.host.enemies().getChildren()) {
+      const e = child as Enemy;
+      if (e.active && !e.dead && distanceToBounds(e.x, e.y, x, y, bounds) < e.getBodyRadius() + cfg.enemyGap) return false;
     }
-    return null;
+    for (const child of this.host.group().getChildren()) {
+      const o = child as Breakable;
+      if (o.active && cratesOverlap(x, y, o.x, o.groundY, bounds, cfg.groupGap)) return false;
+    }
+    return true;
   }
 
   /**

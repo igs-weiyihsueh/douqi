@@ -1711,13 +1711,20 @@ export const GameConfig = {
     /** 同一物件兩次命中的最短間隔（毫秒）：持續型招式不會每幀算一次；小於最快的普攻間隔 */
     hitIntervalMs: 150,
     /**
-     * 關卡制：木箱從天而降（進區域時不再預先擺放）。每波一次：該波第一批怪出現時（開打前、波間休息都不掉）降落
-     * count 個，場上（含降落中）達 maxAlive 就不掉；找不到合適落點就少掉幾個
+     * 關卡制：木箱從天而降（進區域時不再預先擺放）。每波一次：該波第一批怪出現後 delayAfterMonstersMs 才降落（開打前、波間休息都不掉，
+     * 延遲期間這一波已打完就不掉）。共 total 個，分成每群 groupSize 個的數群：群中心彼此相隔至少 groupSpacing，
+     * 同群木箱緊貼排列（間隔 groupGap），一群一群相隔 groupIntervalMs 依序落下。
+     * 場上（含降落中）達 maxAlive 就不掉；擠不下的少掉幾個（不疊放）
      */
     drop: {
-      count: [10, 10] as const,
+      delayAfterMonstersMs: 1500,
+      total: 10,
+      groupSize: [2, 4] as const,
+      groupSpacing: 250,
+      groupGap: 4,
+      groupIntervalMs: 300,
       maxAlive: 30,
-      /** 落點限制：在鏡頭畫面內（內縮 viewInset）；木箱碰撞範圍離每位玩家至少 minDistFromPlayer、離怪的身體至少 enemyGap；每個木箱嘗試 placeTries 次 */
+      /** 落點限制：在鏡頭畫面內（內縮 viewInset）；木箱碰撞範圍離每位玩家至少 minDistFromPlayer、離怪的身體至少 enemyGap；每群中心嘗試 placeTries 次 */
       viewInset: 80,
       minDistFromPlayer: 150,
       enemyGap: 12,

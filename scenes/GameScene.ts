@@ -1308,10 +1308,12 @@ export class GameScene extends Phaser.Scene {
       nearestSeat: (x, y) => this.nearestSeat(x, y),
       wireEnemyCallbacks: (e) => this.wireEnemyCallbacks(e),
       onFormationSpawned: () => {
-        // 木箱隨本波第一批怪從天而降；開場還沒人投幣時先出的怪不算，等有人在場上之後的那一批
+        // 本波第一批怪出現後 delayAfterMonstersMs 才落下木箱；開場還沒人投幣時先出的怪不算，等有人在場上之後的那一批
         if (!this.crateDropPending || (this.creditCtl.enabled && this.aliveCount() === 0)) return;
         this.crateDropPending = false;
-        this.breakableCtl.dropForWave();
+        this.time.delayedCall(GameConfig.breakable.drop.delayAfterMonstersMs, () => {
+          if (this.canDropCrates()) this.breakableCtl.dropForWave();
+        });
       }
     };
   }
@@ -1389,6 +1391,11 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** 這一波的木箱還能不能落下：小關卡進行中、這一波還在打（生怪 / 清場），最後一波還沒打完 */
+  private canDropCrates(): boolean {
+    return this.stageInProgress && !this.pendingSurgeClear && (this.waveState === 'spawning' || this.waveState === 'clearing');
+  }
+
   /** 目前能否即時補怪：小關卡進行中（生怪 / 清場 / 波間休息）、最後一波還沒打完 */
   private canSurge(): boolean {
     return this.stageInProgress && !this.pendingSubZoneComplete && !this.pendingSurgeClear
@@ -1449,6 +1456,7 @@ export class GameScene extends Phaser.Scene {
       damageEnemyFrom: (actor, enemy, damage, knockback, fromX, fromY, time) => this.damageEnemyFrom(actor, enemy, damage, knockback, fromX, fromY, time),
       damageCharacterFrom: (c, amount, fromX, fromY) => this.damageCharacterFrom(c, amount, fromX, fromY),
       flashHurt: (c) => this.fx.flashHurt(c),
+      canDropCrates: () => this.canDropCrates(),
       onBreakableHit: (actor, time) => this.creditCtl.onAttackHit(actor, time), // 打到木箱與打到怪一樣扣 CREDIT
       dropItemAt: (x, y, time) => this.dropItemAt(x, y, time),
       grantCrateTickets: (actor, tickets) => this.grantTickets(actor, tickets),

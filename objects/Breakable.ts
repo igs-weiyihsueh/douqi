@@ -72,6 +72,8 @@ export class Breakable extends Phaser.GameObjects.Sprite {
   fusing = false;
   /** 從天而降中（還沒落地）：不能被打、不參與推擠 */
   landing = false;
+  /** 降落的落點 y（降落中 y 還在空中） */
+  private landY = 0;
   /** 碰撞 / 命中範圍各邊相對物件位置（生成時依種類決定） */
   private bodyBounds: VisibleBounds = barrelBodyBounds();
   /** 平常的顯示倍率（木箱 crate.displayScale、爆炸桶 1）；受擊彈跳、落地壓扁都乘在這上面 */
@@ -123,6 +125,7 @@ export class Breakable extends Phaser.GameObjects.Sprite {
     const groundY = this.y;
     const bodyW = b.right - b.left;
     this.landing = true;
+    this.landY = groundY;
     this.dropShadow = this.scene.add
       .ellipse(this.x + (b.left + b.right) / 2, groundY + b.bottom, bodyW * cfg.shadowWidthRatio, bodyW * cfg.shadowHeightRatio, cfg.shadowColor, cfg.shadowAlpha)
       .setDepth(cfg.shadowDepth)
@@ -169,6 +172,11 @@ export class Breakable extends Phaser.GameObjects.Sprite {
   getBody(): Phaser.Geom.Rectangle {
     const b = this.bodyBounds;
     return this.bodyRect.setTo(this.x + b.left, this.y + b.top, b.right - b.left, b.bottom - b.top);
+  }
+
+  /** 站在地上的 y：降落中為落點，否則為目前位置（擺放新物件時判斷重疊用） */
+  get groundY(): number {
+    return this.landing ? this.landY : this.y;
   }
 
   /** 碰撞範圍各邊相對物件位置（左、上為負值） */
