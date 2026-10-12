@@ -193,8 +193,8 @@ export const GameConfig = {
     attackWindowMs: 1500,
     /** 投幣恢復後的無敵時間（毫秒） */
     resumeInvulnMs: 1000,
-    /** 頭上提示：離角色中心的高度、字級、顏色、閃動週期（毫秒） */
-    prompt: { offsetY: -150, fontSize: 30, color: '#ffe066', stroke: '#000000', strokeThickness: 6, blinkMs: 900, depth: 60 },
+    /** 頭上提示：離角色中心的高度（在頭頂介面 / F4 頭上覆蓋圖上緣 −166 之上）、字級、顏色、閃動週期（毫秒） */
+    prompt: { offsetY: -200, fontSize: 30, color: '#ffe066', stroke: '#000000', strokeThickness: 6, blinkMs: 900, depth: 60 },
     /** 提示文字：尚未進場 / CREDIT 用完 */
     joinText: '投幣開始',
     continueText: '投幣續關'
@@ -603,7 +603,7 @@ export const GameConfig = {
       /** 一般近戰蓄力小怪 */
       normal: {
         maxHp: 90,
-        speed: 90,
+        speed: 110,
         radius: 14,
         color: 0xff5a6e,
         stroke: 0x2a0a12,
@@ -612,7 +612,7 @@ export const GameConfig = {
       /** 肉盾：高 HP、慢速、體型較大 */
       tank: {
         maxHp: 200,
-        speed: 52,
+        speed: 64,
         radius: 22,
         color: 0x8b5cf6,
         stroke: 0x1a0a2e,
@@ -621,7 +621,7 @@ export const GameConfig = {
       /** 投射兵：保持距離、瞄準玩家位置蓄力投擲炸彈（落點有預警圈），本體脆 */
       bomber: {
         maxHp: 60,
-        speed: 72,
+        speed: 88,
         radius: 15,
         color: 0xe0b0ff,
         stroke: 0x2a1a3a,
