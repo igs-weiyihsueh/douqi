@@ -163,6 +163,10 @@ export class CharacterActionController {
       this.beginDash(c, target.x, target.y, time, true);
       return;
     }
+    if (targeting.isBreakable(target)) {
+      this.attackBreakable(c, target, time);
+      return;
+    }
     if (this.isImmovableLargeTarget(target as Enemy)) {
       this.standoffMeleeAttack(c, target as Enemy, time);
       return;
@@ -226,7 +230,11 @@ export class CharacterActionController {
     c.nextAttackAllowedAt = time + GameConfig.combo.empower.aoe.cooldownMs;
   }
 
-  /** 近距離：朝 aimAngle 小位移貼身（不穿過目標、夾在移動區內），扇形劍氣，進入普攻冷卻 */
+  /**
+   * 近距離：朝 aimAngle 小位移貼身（不穿過目標、夾在移動區內），扇形劍氣，進入普攻冷卻
+   *
+   * @param dist 到目標的距離（敵人 = 中心距離；木箱 = 到碰撞矩形的距離）
+   */
   private stepInAndSwing(c: Character, dist: number, time: number): void {
     const r = GameConfig.player.radius;
     const step = Math.min(GameConfig.lock.meleeStep, Math.max(0, dist - r));
@@ -237,6 +245,30 @@ export class CharacterActionController {
     );
     this.performMeleeArc(c, time);
     c.nextAttackAllowedAt = time + this.attackCooldownMs();
+  }
+
+  /**
+   * 鎖定木箱時的攻擊：面向木箱中心；離木箱碰撞矩形在 melee.range 內就小位移貼近（不進入木箱）後揮擊，
+   * 否則朝木箱外緣衝刺，終點設在外緣往內一個角色半徑——衝刺在終點前（到點判定距離）就會停，
+   * 終點設在外緣上會停得太早、碰不到木箱；停下後的些微重疊由推箱分離推開
+   *
+   * @param c 攻擊的角色
+   * @param bk 鎖定的木箱
+   * @param time 目前場景時間
+   */
+  private attackBreakable(c: Character, bk: Breakable, time: number): void {
+    const body = bk.getBody();
+    c.aimAngle = Phaser.Math.Angle.Between(c.x, c.y, body.centerX, body.centerY);
+    const edgeDist = bk.distanceTo(c.x, c.y);
+    if (edgeDist <= GameConfig.melee.range) {
+      this.stepInAndSwing(c, edgeDist, time);
+      return;
+    }
+    const nearX = Phaser.Math.Clamp(c.x, body.left, body.right);
+    const nearY = Phaser.Math.Clamp(c.y, body.top, body.bottom);
+    const ang = Phaser.Math.Angle.Between(c.x, c.y, nearX, nearY);
+    const inset = GameConfig.player.radius;
+    this.beginDash(c, nearX + Math.cos(ang) * inset, nearY + Math.sin(ang) * inset, time, false);
   }
 
   /** 不可推動的大型目標（BOSS / 塔）：攻擊時停在外緣原地揮擊，不衝進中心重疊 */

@@ -1422,7 +1422,10 @@ export const GameConfig = {
       /** 色點距框中心的半徑（畫在框外圈上方一圈） */
       dotOrbit: 30,
       /** 多個色點沿框上緣排開的間距（像素） */
-      dotSpacing: 14
+      dotSpacing: 14,
+      /** 鎖定木箱時的框：沿木箱碰撞矩形外擴 cratePadding 的四角括號（角線長 crateCornerLen），色點畫在框上緣上方 */
+      cratePadding: 6,
+      crateCornerLen: 16
     }
   },
 

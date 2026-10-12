@@ -1,11 +1,12 @@
 import Phaser from 'phaser';
 import { GameConfig } from '../config';
 import type { Character } from '../objects/Character';
+import { Breakable } from '../objects/Breakable';
 import type { Enemy } from '../objects/Enemy';
 import { Item } from '../objects/Item';
 
-/** 可鎖定的目標：敵人或道具 */
-export type LockTarget = Enemy | Item;
+/** 可鎖定的目標：敵人、道具或可破壞物件（慢速模式圈內沒有怪時才鎖） */
+export type LockTarget = Enemy | Item | Breakable;
 
 /**
  * TargetingController 需要場景提供的能力。由 GameScene 建立並傳入；控制器不直接存取場景私有成員。
@@ -17,6 +18,8 @@ export interface TargetingHost {
   enemies(): Phaser.Physics.Arcade.Group;
   /** 道具物件池 */
   items(): Phaser.Physics.Arcade.Group;
+  /** 可破壞物件池（木箱） */
+  breakables(): Phaser.GameObjects.Group;
   /** 全部角色（畫鎖定標記） */
   characters(): ReadonlyArray<Character>;
   /** P1 */
@@ -38,7 +41,8 @@ const UNDERFOOT_EXTRA = 12;
  * 鎖定與瞄準：決定 P1 每幀鎖定誰、BOT 想打誰，並畫出所有角色的鎖定標記。
  * - 快速模式（滑鼠）：autoLock = false（預設）時鎖定 = 滑鼠方向錐形內最接近方向的目標，滑鼠靜止時改鎖最近的可傷怪；
  *   autoLock = true 時為黏著式自動鎖定，滑鼠活躍且方向偏離夠多才換目標
- * - 慢速模式（鍵盤）：黏著式範圍圈鎖定，面向錐形內有目標優先，否則鎖圈內最近；主動把面向對準另一隻更準的才切換
+ * - 慢速模式（鍵盤）：黏著式範圍圈鎖定，面向錐形內有目標優先，否則鎖圈內最近；主動把面向對準另一隻更準的才切換。
+ *   圈內完全沒有怪時改鎖圈內最近的木箱，怪一進圈立刻切回怪（BOT 不鎖木箱）
  * - BOT：最近的敵人，或貪婪範圍內越稀有越想搶的道具
  */
 export class TargetingController {
@@ -79,10 +83,16 @@ export class TargetingController {
     return t instanceof Item;
   }
 
-  /** 鎖定目標目前是否有效（敵人 = 可傷、道具 = 還在場上） */
+  /** 目標是否為可破壞物件（木箱） */
+  isBreakable(t: LockTarget | null): t is Breakable {
+    return t instanceof Breakable;
+  }
+
+  /** 鎖定目標目前是否有效（敵人 = 可傷、道具 = 還在場上、木箱 = 已落地且未碎） */
   isLockValid(t: LockTarget | null): boolean {
     if (!t || !t.active) return false;
     if (this.isItem(t)) return true;
+    if (this.isBreakable(t)) return !t.dead && !t.landing;
     return (t as Enemy).isVulnerable();
   }
 
@@ -129,12 +139,19 @@ export class TargetingController {
 
   /**
    * 慢速模式：範圍圈內有敵人就一定鎖。黏著式——目前目標存活且在圈內就維持（面向轉開也不脫鎖），
-   * 只在面向錐形內有另一隻比目前目標更接近面向時才切換；沒有有效目標時先找面向錐形、再找圈內最近
+   * 只在面向錐形內有另一隻比目前目標更接近面向時才切換；沒有有效目標時先找面向錐形、再找圈內最近。
+   * 圈內沒有怪也沒有道具時鎖圈內最近的木箱；鎖著木箱時一有怪進圈就改鎖怪
    */
   private updateSlowLock(p: Character): void {
     if (!p.alive) { this.p1Target = null; return; }
     const R = this.host.slowLockRadius();
     const cur = this.p1Target;
+    if (this.isBreakable(cur)) {
+      const crateValid = this.isLockValid(cur) && cur.distanceTo(p.x, p.y) <= R;
+      const next = this.pickAimConeTarget(p, R) ?? this.pickNearestInCircle(p, R);
+      this.p1Target = next ?? (crateValid ? cur : this.pickNearestBreakable(p, R));
+      return;
+    }
     const curValid = this.isLockValid(cur) && Phaser.Math.Distance.Between(p.x, p.y, cur!.x, cur!.y) <= R;
     if (curValid) {
       const aimTarget = this.pickAimConeTarget(p, R);
@@ -147,7 +164,25 @@ export class TargetingController {
       }
       return;
     }
-    this.p1Target = this.pickAimConeTarget(p, R) ?? this.pickNearestInCircle(p, R);
+    this.p1Target = this.pickAimConeTarget(p, R) ?? this.pickNearestInCircle(p, R) ?? this.pickNearestBreakable(p, R);
+  }
+
+  /**
+   * 圈內最近的木箱（以角色到木箱碰撞矩形的距離計算；降落中、已碎的不算）；沒有則 null
+   *
+   * @param c 角色
+   * @param R 範圍圈半徑
+   */
+  private pickNearestBreakable(c: Character, R: number): Breakable | null {
+    let best: Breakable | null = null;
+    let bestDist = R;
+    for (const child of this.host.breakables().getChildren()) {
+      const bk = child as Breakable;
+      if (!this.isLockValid(bk)) continue;
+      const d = bk.distanceTo(c.x, c.y);
+      if (d <= bestDist) { bestDist = d; best = bk; }
+    }
+    return best;
   }
 
   /** 沒有有效鎖定時取得新目標：滑鼠活躍用方向選，否則選最近（皆含道具） */
@@ -344,16 +379,29 @@ export class TargetingController {
     }
     for (const [t, indices] of groups) {
       g.lineStyle(m.thickness, m.color, 0.95);
-      g.strokeCircle(t.x, t.y, m.radius);
-      const r = m.radius;
-      const s = LOCK_CORNER_LEN;
-      for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-        g.lineBetween(t.x + sx * r, t.y + sy * r, t.x + sx * (r - s), t.y + sy * r);
-        g.lineBetween(t.x + sx * r, t.y + sy * r, t.x + sx * r, t.y + sy * (r - s));
+      let dotX = t.x, dotY = t.y - m.dotOrbit;
+      if (this.isBreakable(t)) {
+        // 木箱：沿碰撞矩形外擴的四角括號，色點在框上緣上方
+        const b = t.getBody();
+        const pad = m.cratePadding, s = m.crateCornerLen;
+        const l = b.left - pad, r = b.right + pad, top = b.top - pad, bot = b.bottom + pad;
+        for (const [x, y, sx, sy] of [[l, top, 1, 1], [r, top, -1, 1], [l, bot, 1, -1], [r, bot, -1, -1]]) {
+          g.lineBetween(x, y, x + sx * s, y);
+          g.lineBetween(x, y, x, y + sy * s);
+        }
+        dotX = b.centerX;
+        dotY = top - m.dotRadius * 2;
+      } else {
+        g.strokeCircle(t.x, t.y, m.radius);
+        const r = m.radius;
+        const s = LOCK_CORNER_LEN;
+        for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+          g.lineBetween(t.x + sx * r, t.y + sy * r, t.x + sx * (r - s), t.y + sy * r);
+          g.lineBetween(t.x + sx * r, t.y + sy * r, t.x + sx * r, t.y + sy * (r - s));
+        }
       }
       const n = indices.length;
-      const startX = t.x - ((n - 1) * m.dotSpacing) / 2;
-      const dotY = t.y - m.dotOrbit;
+      const startX = dotX - ((n - 1) * m.dotSpacing) / 2;
       for (let k = 0; k < n; k++) {
         const dx = startX + k * m.dotSpacing;
         g.fillStyle(GameConfig.characters.colors[indices[k]] ?? 0xffffff, 1);

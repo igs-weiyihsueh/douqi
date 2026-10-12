@@ -1417,6 +1417,7 @@ export class GameScene extends Phaser.Scene {
       scene: this,
       enemies: () => this.enemies,
       items: () => this.items,
+      breakables: () => this.breakables,
       characters: () => this.characters,
       player: () => this.player,
       isSlowMode: () => this.controlMode === 'slow',
