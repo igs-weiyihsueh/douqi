@@ -343,7 +343,7 @@ export class GameScene extends Phaser.Scene {
     // 階段3:slow 模式 P1 啟用【強化型態造型】(升級變身視覺;fast 不開,維持原強化視覺)。
     if (this.controlMode === 'slow') this.player.empoweredForm = true;
 
-    // C 鍵：P1 投幣（CREDIT + coinValue；未進場 / 等待續關時立刻進場）
+    // C 鍵：P1 投幣（多投多送循環給 CREDIT；未進場 / 等待續關時立刻進場）
     this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.C).on('down', () => {
       if (!this.gameOver) this.creditCtl.insertCoin(this.player);
     });
@@ -351,7 +351,7 @@ export class GameScene extends Phaser.Scene {
     // X 鍵：切換免費攻擊（攻擊不扣 CREDIT），橫幅提示目前狀態
     this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.X).on('down', () => {
       if (!this.creditCtl.enabled || this.gameOver) return;
-      this.showEventBanner(this.creditCtl.toggleFreePlay() ? '免費攻擊：開（攻擊不扣 CREDIT）' : '免費攻擊：關');
+      this.showEventBanner(this.creditCtl.toggleFreePlay() ? '免費攻擊：開（攻擊不扣能量）' : '免費攻擊：關');
     });
 
     // B 鍵：逐一加入 BOT 夥伴（最多湊滿 characters.count）
