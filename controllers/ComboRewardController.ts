@@ -28,9 +28,13 @@ export function streakTimeoutMs(streak: number): number {
  * 達到最高里程碑時立即發獎並歸零。
  *
  * 每幀依距上次命中的時間：超過中斷時間 × WARNING_START_RATIO 進入警告（HIT 圖閃爍淡出）、超過中斷時間就中斷
- * （先發待發的獎勵再歸零）；中斷時間隨連擊數線性遞減（見 streakTimeoutMs）。小關卡通關時立即結算（settleAll）。獎勵的彩票加到該角色的彩票數，並在下方面板播放彩票噴發特效
+ * （先發待發的獎勵再歸零）；中斷時間隨連擊數線性遞減（見 streakTimeoutMs）。CREDIT 等待續關期間暫停倒數（連擊停在當下），
+ * 續關逾時離場時結算。小關卡通關時立即結算（settleAll）。獎勵的彩票加到該角色的彩票數，並在下方面板播放彩票噴發特效
  */
 export class ComboRewardController {
+  /** 上一次 update 的場景時間（算每幀經過時間，暫停倒數用） */
+  private lastUpdateAt?: number;
+
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly characters: () => ReadonlyArray<Character>
@@ -49,13 +53,28 @@ export class ComboRewardController {
     this.checkMilestone(actor);
   }
 
-  /** 每幀：依距上次命中的時間切換警告狀態，或中斷連擊（先發待發獎勵） */
+  /**
+   * 每幀：依距上次命中的時間切換警告狀態，或中斷連擊（先發待發獎勵）；
+   * 等待續關的角色暫停倒數，逾時離場（回到未進場）的角色結算
+   */
   update(): void {
     const now = this.scene.time.now;
+    const elapsed = now - (this.lastUpdateAt ?? now);
+    this.lastUpdateAt = now;
     const cfg = GameConfig.comboReward;
     for (const character of this.characters()) {
       const combo = character.comboState;
       if (combo.currentStreak <= 0) continue;
+      if (character.creditState === 'waiting') {
+        // 最後命中時間跟著往後推，距上次命中的時間維持不變 = 倒數暫停；暫停中不警告
+        combo.lastKillTime += elapsed;
+        combo.isWarning = false;
+        continue;
+      }
+      if (character.creditState === 'absent') {
+        this.settle(character);
+        continue;
+      }
       const sinceLastHit = now - combo.lastKillTime;
       const timeout = streakTimeoutMs(combo.currentStreak);
       if (sinceLastHit >= timeout) {

@@ -16,8 +16,10 @@ const HIT_COUNTER_CONFIG = {
   DIGIT_SPACING: -6,
   /** 數字與「HIT」字樣的間距 */
   LABEL_GAP: 4,
-  /** 「HIT」字樣下緣相對數字列中心的位置：對齊數字字形下緣（數字圖 60 高、字形下緣在 57） */
-  LABEL_BASELINE_Y: 27,
+  /** 數字圖中心相對底圖中心的垂直位置：往上移，字形（數字圖 60 高、字形在 5～57）上緣略超出底圖（51 高）上緣 */
+  DIGIT_CENTER_Y: -8,
+  /** 「HIT」字樣（18 高）下緣相對底圖中心的垂直位置：整個字樣落在底圖內、接近數字下緣 */
+  LABEL_BASELINE_Y: 16,
   /** 連擊數改變時的彈跳：數字與字樣先放大到 POP_SCALE，再於 POP_DURATION_MS 內縮回原尺寸 */
   POP_SCALE: 1.4,
   POP_DURATION_MS: 180,
@@ -29,7 +31,7 @@ const HIT_COUNTER_CONFIG = {
 /**
  * 下方面板的 HIT 連擊顯示：紅色筆刷底圖上排「數字圖 + HIT 字樣」，連擊數改變時彈跳放大。
  *
- * - 容器位置 = 底圖右下角（對齊面板的 COMBO 錨點）
+ * - 容器位置 = 底圖左下角（對齊面板的 COMBO 錨點）
  * - 數字與字樣整組置中於底圖，彈跳以底圖中心為基準縮放
  * - 連擊數為 0 時隱藏
  * - 連擊快斷警告時閃爍淡出（setWarning）
@@ -48,8 +50,8 @@ export class HitCounter extends Phaser.GameObjects.Container {
 
   constructor(scene: Phaser.Scene) {
     super(scene, 0, 0);
-    this.bg = scene.add.image(0, 0, HIT_COUNTER_TEXTURES.BG).setOrigin(1, 1);
-    this.group = scene.add.container(-this.bg.width / 2, -this.bg.height / 2);
+    this.bg = scene.add.image(0, 0, HIT_COUNTER_TEXTURES.BG).setOrigin(0, 1);
+    this.group = scene.add.container(this.bg.width / 2, -this.bg.height / 2);
     this.label = scene.add.image(0, HIT_COUNTER_CONFIG.LABEL_BASELINE_Y, HIT_COUNTER_TEXTURES.LABEL).setOrigin(0, 1);
     this.group.add(this.label);
     this.add([this.bg, this.group]);
@@ -59,7 +61,7 @@ export class HitCounter extends Phaser.GameObjects.Container {
 
   /** 底圖中心的螢幕座標（報獎特效以此為基準） */
   get centerX(): number {
-    return this.x - this.bg.width / 2;
+    return this.x + this.bg.width / 2;
   }
 
   /** 底圖中心的螢幕座標（報獎特效以此為基準） */
@@ -115,7 +117,7 @@ export class HitCounter extends Phaser.GameObjects.Container {
   private layout(text: string): void {
     const cfg = HIT_COUNTER_CONFIG;
     while (this.digits.length < text.length) {
-      const digit = this.scene.add.image(0, 0, HIT_COUNTER_TEXTURES.DIGITS[0]).setOrigin(0, 0.5);
+      const digit = this.scene.add.image(0, cfg.DIGIT_CENTER_Y, HIT_COUNTER_TEXTURES.DIGITS[0]).setOrigin(0, 0.5);
       this.digits.push(digit);
       this.group.add(digit);
     }

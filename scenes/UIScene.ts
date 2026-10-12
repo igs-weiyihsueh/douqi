@@ -173,16 +173,19 @@ export class UIScene extends Phaser.Scene {
   private panelHitCounters: HitCounter[] = [];
   /** 下方面板「投幣加入遊戲」提示（CREDIT 未進場時取代 HIT 顯示），每個角色一個，索引對應 rows */
   private panelJoinTexts: Phaser.GameObjects.Text[] = [];
-  /** 下方面板 COMBO 顯示設定：HIT 顯示與投幣提示的右下角對齊面板右上角（加偏移），原版色塊面板與 F4 面板圖各有一組偏移 */
+  /** 下方面板 COMBO 顯示設定：HIT 顯示與投幣提示的左下角錨點，原版色塊面板與 F4 面板圖各有一組位置 */
   private readonly PANEL_COMBO_CONFIG = {
     FONT_SIZE: '36px',
     STROKE_WIDTH: 4,
-    /** 原版色塊面板：相對面板右上角的偏移（貼在面板右上方） */
+    /** 原版色塊面板：相對面板左上角的偏移（貼在面板上方） */
     CLASSIC_OFFSET_X: 0,
     CLASSIC_OFFSET_Y: -2,
-    /** F4 面板圖：相對面板圖右上角的偏移（面板圖上緣有透明留白，文字落在寶箱上方） */
-    OVERLAY_OFFSET_X: -8,
-    OVERLAY_OFFSET_Y: 30,
+    /**
+     * F4 面板圖：相對面板圖左上角的位置（面板圖原尺寸像素）——左緣對齊彩票欄左緣（x 91），
+     * 下緣在彩票欄上緣（y 66）上方 4px；彩票欄上方是透明區，左邊的頭像在 x 98 以內，不會蓋到面板
+     */
+    OVERLAY_OFFSET_X: 91,
+    OVERLAY_OFFSET_Y: 62,
     /** 高於 F4 面板圖（depth 1000+i） */
     DEPTH: 1010,
     /** 「獲得N票券！」文字樣式與動畫 */
@@ -1719,7 +1722,7 @@ export class UIScene extends Phaser.Scene {
     const panelGap = Math.max(20, totalGapWidth / (count + 1)); // 最小間距20px，或自動計算
     
     const startX = (w - (count * actualPanelW + (count - 1) * panelGap)) / 2; // 居中排列
-    const rowTopY = h - 150; // 向上調整：與原始狀態列保持協調，從h-120改為h-150
+    const rowTopY = h - actualPanelH; // 面板圖下緣貼齊畫面下緣
     
     // 角色標籤和資源映射
     const playerLabels = ['1P', '2P', '3P', '4P'];
@@ -1775,13 +1778,13 @@ export class UIScene extends Phaser.Scene {
         stroke: this.OVERHEAD_UI_CONFIG.COLORS.BLACK,
         strokeThickness: cfg.STROKE_WIDTH,
         fontStyle: 'bold'
-      }).setOrigin(1, 1).setDepth(cfg.DEPTH).setScrollFactor(0).setVisible(false)
+      }).setOrigin(0, 1).setDepth(cfg.DEPTH).setScrollFactor(0).setVisible(false)
     );
     this.positionPanelCombos(false);
   }
 
   /**
-   * 依面板模式把 HIT 顯示與投幣提示（右下角）移到對應面板的右上角
+   * 依面板模式把 HIT 顯示與投幣提示（左下角）移到對應面板上方（F4 面板圖時在彩票欄上方）
    *
    * @param useOverlay - true = F4 面板圖；false = 原版色塊面板（該角色沒有面板圖時也退回原版位置）
    */
@@ -1792,12 +1795,12 @@ export class UIScene extends Phaser.Scene {
       let y: number;
       const overlay = this.bottomPanelOverlays[i];
       if (useOverlay && overlay) {
-        // 面板圖 origin 為中心 → 右上角 = 中心 + (寬/2, -高/2)
-        x = overlay.x + overlay.displayWidth / 2 + cfg.OVERLAY_OFFSET_X;
+        // 面板圖 origin 為中心 → 左上角 = 中心 - (寬/2, 高/2)
+        x = overlay.x - overlay.displayWidth / 2 + cfg.OVERLAY_OFFSET_X;
         y = overlay.y - overlay.displayHeight / 2 + cfg.OVERLAY_OFFSET_Y;
       } else if (row.panelBg) {
-        // 原版色塊面板 origin 為左上 → 右上角 = (x + 寬, y)
-        x = row.panelBg.x + row.panelBg.width + cfg.CLASSIC_OFFSET_X;
+        // 原版色塊面板 origin 為左上
+        x = row.panelBg.x + cfg.CLASSIC_OFFSET_X;
         y = row.panelBg.y + cfg.CLASSIC_OFFSET_Y;
       } else {
         return;
@@ -1808,7 +1811,8 @@ export class UIScene extends Phaser.Scene {
   }
 
   /**
-   * 更新下方面板的 COMBO 顯示：HIT 連擊圖（連擊數改變時彈跳、連擊快斷時閃爍淡出），連擊為 0、角色未加入或陣亡時隱藏；
+   * 更新下方面板的 COMBO 顯示：HIT 連擊圖（連擊數改變時彈跳、連擊快斷時閃爍淡出），連擊為 0、角色未加入或陣亡時隱藏
+   * （CREDIT 等待續關時照常顯示，連擊停在當下）；
    * CREDIT 未進場時改在同一位置閃動顯示「投幣加入遊戲」
    *
    * @param index 角色索引（對應 rows / panelHitCounters / panelJoinTexts）
@@ -1824,7 +1828,8 @@ export class UIScene extends Phaser.Scene {
       const blinkMs = GameConfig.credit.prompt.blinkMs;
       joinText.setAlpha(this.time.now % blinkMs < blinkMs / 2 ? 1 : 0.45);
     }
-    const combo = !absent && character?.alive ? character.combo : undefined;
+    const shown = character?.alive || character?.creditState === 'waiting';
+    const combo = shown ? character?.combo : undefined;
     counter.setCount(combo?.currentStreak ?? 0);
     counter.setWarning(!!combo?.isWarning);
   }
