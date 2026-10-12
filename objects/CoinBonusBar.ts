@@ -1,29 +1,43 @@
 import Phaser from 'phaser';
 
-/** 多投多送量條的排版與動態 */
+/** 多投多送膠囊量條的排版與動態 */
 const COIN_BAR_CONFIG = {
-  /** 格子尺寸與間距：5 格總寬 = 5 × 46 + 4 × 6 = 254，與 HIT 底圖同寬 */
-  CELL_WIDTH: 46,
-  CELL_HEIGHT: 36,
-  CELL_GAP: 6,
-  /** 格子底色 / 外框：未亮與已亮 */
+  /** 膠囊：高度（兩端半圓半徑 = 高度一半）、底色、描邊 */
+  HEIGHT: 40,
+  CAPSULE_FILL: 0x1a1206,
+  CAPSULE_FILL_ALPHA: 0.8,
+  CAPSULE_BORDER: 0xffc107,
+  CAPSULE_BORDER_WIDTH: 3,
+  /** 最左側硬幣：中心離膠囊左緣的距離、半徑、顏色（外圈 / 幣面 / 內圈線 / 反光） */
+  COIN_CENTER_X: 20,
+  COIN_RADIUS: 15,
+  COIN_RIM: 0xe0a000,
+  COIN_FACE: 0xffd54f,
+  COIN_INNER_LINE: 0xb07800,
+  COIN_INNER_RADIUS: 10,
+  COIN_SHINE: 0xfff8d0,
+  /** 格子：從 CELLS_LEFT 開始排，寬 CELL_WIDTH、間隔 CELL_GAP、高 CELL_HEIGHT、圓角 CELL_RADIUS；膠囊右側留 RIGHT_PADDING */
+  CELLS_LEFT: 40,
+  CELL_WIDTH: 40,
+  CELL_GAP: 4,
+  CELL_HEIGHT: 28,
+  CELL_RADIUS: 6,
+  RIGHT_PADDING: 10,
+  /** 格子底色：未亮 / 已亮 */
   CELL_FILL: 0x000000,
   CELL_FILL_ALPHA: 0.55,
   CELL_LIT_FILL: 0xffc107,
-  CELL_LIT_ALPHA: 0.95,
-  CELL_BORDER: 0x8a6d1f,
-  CELL_LIT_BORDER: 0xfff3b0,
-  CELL_BORDER_WIDTH: 2,
-  /** 格內劍圖示與數字：劍在左、數字在右（相對格子中心） */
-  ICON_OFFSET_X: -12,
-  ICON_SCALE: 0.85,
-  TEXT_OFFSET_X: 8,
-  FONT_SIZE: '18px',
+  CELL_LIT_ALPHA: 1,
+  /** 有加贈的格子：劍圖示在左、「+N」在右（相對格子中心） */
+  ICON_OFFSET_X: -11,
+  ICON_SCALE: 0.7,
+  TEXT_OFFSET_X: 7,
+  FONT_SIZE: '15px',
   TEXT_COLOR: '#ffffff',
   TEXT_LIT_COLOR: '#3a2600',
   TEXT_STROKE: '#000000',
   TEXT_STROKE_WIDTH: 3,
-  /** 未亮格整體透明度 */
+  /** 未亮格內容的透明度 */
   DIM_ALPHA: 0.6,
   /** 亮起時格子從 POP_SCALE 彈回原尺寸 */
   POP_SCALE: 1.35,
@@ -37,21 +51,23 @@ const COIN_BAR_CONFIG = {
 interface CoinCell {
   /** 格子容器（中心在格子中心，彈跳縮放這一組） */
   root: Phaser.GameObjects.Container;
-  box: Phaser.GameObjects.Rectangle;
-  icon: Phaser.GameObjects.Graphics;
-  label: Phaser.GameObjects.Text;
+  /** 格子底（圓角矩形，亮 / 暗時重畫） */
+  box: Phaser.GameObjects.Graphics;
+  /** 有加贈的格子才有：劍圖示與「+N」 */
+  icon?: Phaser.GameObjects.Graphics;
+  label?: Phaser.GameObjects.Text;
 }
 
 /**
- * 下方面板的多投多送量條：一格代表一次投幣，格內標示該次贈送的額外 CREDIT（劍圖示 + 「+N」）。
+ * 下方面板的多投多送膠囊量條：最左側一枚硬幣，後面一格代表一次投幣；有加贈的格子標示劍圖示 + 「+N」，沒有加贈的格子空白。
  *
- * - 容器位置 = 量條左下角（對齊面板的 COMBO 錨點）
+ * - 容器位置 = 膠囊左下角（對齊面板的 COMBO 錨點）
  * - setLit 直接設定亮了幾格；lightCell 亮起一格並彈跳；flashAndClear 投滿時閃爍後清空
- * - 彈跳時間 popMs 供呼叫端安排投滿閃爍的時機
- * - cellCenter 取得某格中心的螢幕座標（投幣光效的起點）
+ * - cellCenter 取得某格中心的螢幕座標（投幣光效的起點）；hasBonus 查某格有沒有加贈
  */
 export class CoinBonusBar extends Phaser.GameObjects.Container {
   private readonly cells: CoinCell[] = [];
+  private readonly bonuses: ReadonlyArray<number>;
   /** 目前亮了幾格 */
   private litCount = 0;
   /** 投滿閃爍中（閃完才清空，期間不接受 setLit） */
@@ -59,25 +75,32 @@ export class CoinBonusBar extends Phaser.GameObjects.Container {
 
   /**
    * @param scene 場景
-   * @param bonuses 每格標示的額外 CREDIT（格數 = 長度）
+   * @param bonuses 每格的加贈 CREDIT（格數 = 長度；0 = 該格空白）
    * @param drawIcon 在指定 Graphics 上畫劍圖示（以原點為中心）
    */
   constructor(scene: Phaser.Scene, bonuses: ReadonlyArray<number>, drawIcon: (g: Phaser.GameObjects.Graphics) => void) {
     super(scene, 0, 0);
     const cfg = COIN_BAR_CONFIG;
+    this.bonuses = bonuses;
+    const width = cfg.CELLS_LEFT + bonuses.length * cfg.CELL_WIDTH + (bonuses.length - 1) * cfg.CELL_GAP + cfg.RIGHT_PADDING;
+    const midY = -cfg.HEIGHT / 2;
+    this.add([this.createCapsule(width), this.createCoin(midY)]);
     bonuses.forEach((bonus, i) => {
-      const cx = i * (cfg.CELL_WIDTH + cfg.CELL_GAP) + cfg.CELL_WIDTH / 2;
-      const box = scene.add.rectangle(0, 0, cfg.CELL_WIDTH, cfg.CELL_HEIGHT, cfg.CELL_FILL, cfg.CELL_FILL_ALPHA)
-        .setStrokeStyle(cfg.CELL_BORDER_WIDTH, cfg.CELL_BORDER);
-      const icon = scene.add.graphics({ x: cfg.ICON_OFFSET_X, y: 0 }).setScale(cfg.ICON_SCALE);
-      drawIcon(icon);
-      const label = scene.add.text(cfg.TEXT_OFFSET_X, 0, `+${bonus}`, {
-        fontFamily: 'monospace', fontSize: cfg.FONT_SIZE, fontStyle: 'bold', color: cfg.TEXT_COLOR,
-        stroke: cfg.TEXT_STROKE, strokeThickness: cfg.TEXT_STROKE_WIDTH
-      }).setOrigin(0.5);
-      const root = scene.add.container(cx, -cfg.CELL_HEIGHT / 2, [box, icon, label]);
+      const cx = cfg.CELLS_LEFT + i * (cfg.CELL_WIDTH + cfg.CELL_GAP) + cfg.CELL_WIDTH / 2;
+      const box = scene.add.graphics();
+      const root = scene.add.container(cx, midY, [box]);
+      const cell: CoinCell = { root, box };
+      if (bonus > 0) {
+        cell.icon = scene.add.graphics({ x: cfg.ICON_OFFSET_X, y: 0 }).setScale(cfg.ICON_SCALE);
+        drawIcon(cell.icon);
+        cell.label = scene.add.text(cfg.TEXT_OFFSET_X, 0, `+${bonus}`, {
+          fontFamily: 'monospace', fontSize: cfg.FONT_SIZE, fontStyle: 'bold', color: cfg.TEXT_COLOR,
+          stroke: cfg.TEXT_STROKE, strokeThickness: cfg.TEXT_STROKE_WIDTH
+        }).setOrigin(0.5);
+        root.add([cell.icon, cell.label]);
+      }
       this.add(root);
-      this.cells.push({ root, box, icon, label });
+      this.cells.push(cell);
     });
     this.applyLit();
     scene.add.existing(this);
@@ -90,12 +113,21 @@ export class CoinBonusBar extends Phaser.GameObjects.Container {
 
   /** 量條高度（像素） */
   get barHeight(): number {
-    return COIN_BAR_CONFIG.CELL_HEIGHT;
+    return COIN_BAR_CONFIG.HEIGHT;
   }
 
   /** 亮格彈跳的時間（毫秒） */
   get popMs(): number {
     return COIN_BAR_CONFIG.POP_MS;
+  }
+
+  /**
+   * 第 index 格是否有加贈
+   *
+   * @param index 格子索引
+   */
+  hasBonus(index: number): boolean {
+    return (this.bonuses[index] ?? 0) > 0;
   }
 
   /**
@@ -161,15 +193,46 @@ export class CoinBonusBar extends Phaser.GameObjects.Container {
     });
   }
 
+  /**
+   * 膠囊外框：兩端半圓的長條
+   *
+   * @param width 膠囊寬度
+   */
+  private createCapsule(width: number): Phaser.GameObjects.Graphics {
+    const cfg = COIN_BAR_CONFIG;
+    const r = cfg.HEIGHT / 2;
+    return this.scene.add.graphics()
+      .fillStyle(cfg.CAPSULE_FILL, cfg.CAPSULE_FILL_ALPHA)
+      .fillRoundedRect(0, -cfg.HEIGHT, width, cfg.HEIGHT, r)
+      .lineStyle(cfg.CAPSULE_BORDER_WIDTH, cfg.CAPSULE_BORDER, 1)
+      .strokeRoundedRect(0, -cfg.HEIGHT, width, cfg.HEIGHT, r);
+  }
+
+  /**
+   * 膠囊最左側的硬幣：金色外圈 + 幣面 + 內圈線 + 左上反光
+   *
+   * @param midY 膠囊垂直中心
+   */
+  private createCoin(midY: number): Phaser.GameObjects.Graphics {
+    const cfg = COIN_BAR_CONFIG;
+    const x = cfg.COIN_CENTER_X;
+    return this.scene.add.graphics()
+      .fillStyle(cfg.COIN_RIM, 1).fillCircle(x, midY, cfg.COIN_RADIUS)
+      .fillStyle(cfg.COIN_FACE, 1).fillCircle(x, midY, cfg.COIN_RADIUS - 2)
+      .lineStyle(2, cfg.COIN_INNER_LINE, 1).strokeCircle(x, midY, cfg.COIN_INNER_RADIUS)
+      .fillStyle(cfg.COIN_SHINE, 0.8).fillEllipse(x - 5, midY - 6, 7, 4);
+  }
+
   /** 依 litCount 套用每格亮 / 暗的外觀 */
   private applyLit(): void {
     const cfg = COIN_BAR_CONFIG;
     this.cells.forEach((cell, i) => {
       const lit = i < this.litCount;
-      cell.box.setFillStyle(lit ? cfg.CELL_LIT_FILL : cfg.CELL_FILL, lit ? cfg.CELL_LIT_ALPHA : cfg.CELL_FILL_ALPHA)
-        .setStrokeStyle(cfg.CELL_BORDER_WIDTH, lit ? cfg.CELL_LIT_BORDER : cfg.CELL_BORDER);
-      cell.label.setColor(lit ? cfg.TEXT_LIT_COLOR : cfg.TEXT_COLOR);
-      cell.root.setAlpha(lit ? 1 : cfg.DIM_ALPHA);
+      cell.box.clear()
+        .fillStyle(lit ? cfg.CELL_LIT_FILL : cfg.CELL_FILL, lit ? cfg.CELL_LIT_ALPHA : cfg.CELL_FILL_ALPHA)
+        .fillRoundedRect(-cfg.CELL_WIDTH / 2, -cfg.CELL_HEIGHT / 2, cfg.CELL_WIDTH, cfg.CELL_HEIGHT, cfg.CELL_RADIUS);
+      cell.label?.setColor(lit ? cfg.TEXT_LIT_COLOR : cfg.TEXT_COLOR).setAlpha(lit ? 1 : cfg.DIM_ALPHA);
+      cell.icon?.setAlpha(lit ? 1 : cfg.DIM_ALPHA);
     });
   }
 }

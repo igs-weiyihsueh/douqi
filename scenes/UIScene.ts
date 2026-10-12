@@ -175,7 +175,7 @@ export class UIScene extends Phaser.Scene {
   private panelHitCounters: HitCounter[] = [];
   /** 下方面板「投幣加入遊戲 / 投越多送越多」輪播提示（CREDIT 未進場時取代 HIT 顯示），每個角色一個，索引對應 rows */
   private panelJoinTexts: Phaser.GameObjects.Text[] = [];
-  /** 下方面板多投多送量條（HIT 顯示下方），每個角色一個，索引對應 rows */
+  /** 下方面板多投多送膠囊量條（HIT 顯示下方），每個角色一個，索引對應 rows */
   private panelCoinBars: CoinBonusBar[] = [];
   /** 最近一次 stats 的角色資料（投幣光效追蹤角色位置用） */
   private lastChars: CharStat[] = [];
@@ -1920,8 +1920,8 @@ export class UIScene extends Phaser.Scene {
   }
 
   /**
-   * 投幣（GameScene 的 coin-inserted 事件）：量條亮起這一格並彈跳（投滿最後一格時閃爍後清空），
-   * 從這一格飛出一道光沿弧線飛到角色頭頂（追著角色目前位置），到達時在角色身上爆一圈光
+   * 投幣（GameScene 的 coin-inserted 事件）：量條亮起這一格並彈跳（投滿最後一格時閃爍後清空）；
+   * 這一格有加贈時，從這一格飛出一道光沿弧線飛到角色頭頂（追著角色目前位置），到達時在角色身上爆一圈光
    *
    * @param e.index 角色索引
    * @param e.cycleIndex 這次投幣在 coinCycle 中的位置
@@ -1931,7 +1931,7 @@ export class UIScene extends Phaser.Scene {
     if (!bar) return;
     bar.lightCell(e.cycleIndex);
     if (e.cycleIndex >= bar.cellCount - 1) bar.flashAndClear(bar.popMs);
-    if (!bar.visible) return;
+    if (!bar.visible || !bar.hasBonus(e.cycleIndex)) return;
     const cfg = GameConfig.credit.coinBar;
     const start = bar.cellCenter(e.cycleIndex);
     const target = (): { x: number; y: number } => {
