@@ -18,8 +18,8 @@ const HIT_COUNTER_CONFIG = {
   LABEL_GAP: 4,
   /** 數字圖中心相對底圖中心的垂直位置：往上移，字形（數字圖 60 高、字形在 5～57）上緣略超出底圖（51 高）上緣 */
   DIGIT_CENTER_Y: -8,
-  /** 「HIT」字樣（18 高）下緣相對底圖中心的垂直位置：整個字樣落在底圖內、接近數字下緣 */
-  LABEL_BASELINE_Y: 16,
+  /** 「HIT」字樣（18 高）下緣相對底圖中心的垂直位置：字樣上緣在 -21，貼近筆刷上緣（-23.5）但不超出 */
+  LABEL_BASELINE_Y: -3,
   /** 連擊數改變時的彈跳：數字與字樣先放大到 POP_SCALE，再於 POP_DURATION_MS 內縮回原尺寸 */
   POP_SCALE: 1.4,
   POP_DURATION_MS: 180,

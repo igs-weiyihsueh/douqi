@@ -911,14 +911,14 @@ export class UIScene extends Phaser.Scene {
     }
     // 高階寶箱：外圈金色光暈（脈動）
     if (high) {
-      g.lineStyle(cfg.nodeStrokeWidth.normal, cfg.highChestColor, (cfg.pulse.haloAlphaBase + cfg.pulse.haloAlphaAmplitude * pulse) * alpha);
+      g.lineStyle(cfg.nodeStrokeWidth.normal, cfg.highChest.haloColor, (cfg.pulse.haloAlphaBase + cfg.pulse.haloAlphaAmplitude * pulse) * alpha);
       g.strokeCircle(x, y, r + cfg.nodePadding.highHalo);
     }
     this.drawChestIcon(x, y, chest, alpha);
   }
 
   /**
-   * 畫寶箱圖示：箱體 + 箱蓋 + 鎖扣（高階較大、金色）
+   * 畫寶箱圖示：低階為樸素木箱、高階為豪華寶箱（形狀、裝飾、顏色都不同，一眼可分）
    *
    * @param x 中心 x（螢幕座標）
    * @param y 中心 y（螢幕座標）
@@ -927,20 +927,111 @@ export class UIScene extends Phaser.Scene {
    * @param scaleX 水平縮放（揭曉翻轉動畫用；1 = 原寬）
    */
   private drawChestIcon(x: number, y: number, tier: 'low' | 'high', alpha: number, scaleX = 1): void {
+    if (tier === 'high') this.drawHighChestIcon(x, y, alpha, scaleX);
+    else this.drawLowChestIcon(x, y, alpha, scaleX);
+  }
+
+  /**
+   * 低階寶箱：暗棕色平蓋木箱 + 兩條灰色直向鐵條 + 小鎖
+   *
+   * @param x 中心 x（螢幕座標）
+   * @param y 中心 y（螢幕座標）
+   * @param alpha 透明度
+   * @param scaleX 水平縮放
+   */
+  private drawLowChestIcon(x: number, y: number, alpha: number, scaleX: number): void {
     const cfg = GameConfig.waveHud;
+    const c = cfg.lowChest;
     const g = this.waveHudGfx;
-    const high = tier === 'high';
-    const size = cfg.nodeRadius * (high ? cfg.highChestScale : cfg.lowChestScale);
-    const w = size * cfg.chestRatios.aspectRatio * scaleX, h = size;
-    const bodyColor = high ? cfg.highChestColor : cfg.lowChestColor;
-    g.fillStyle(bodyColor, alpha);
-    g.fillRect(x - w / 2, y - h / 2 + h * cfg.chestRatios.bodyStart, w, h * cfg.chestRatios.bodyHeight);      // 箱體
-    g.fillStyle(this.mixColor(bodyColor, 0xffffff, cfg.chestRatios.lidBrighten), alpha);
-    g.fillRect(x - w / 2, y - h / 2, w, h * cfg.chestRatios.lidHeight);                   // 箱蓋（略亮）
-    g.lineStyle(cfg.nodeStrokeWidth.chest, cfg.chestOutlineColor, alpha);
-    g.strokeRect(x - w / 2, y - h / 2, w, h);
-    g.fillStyle(cfg.chestOutlineColor, alpha);
-    g.fillRect(x - w * cfg.chestRatios.lockOffsetX, y - h * cfg.chestRatios.lockOffsetY, w * cfg.chestRatios.lockWidth, h * cfg.chestRatios.lockHeight);      // 鎖扣
+    const h = cfg.nodeRadius * c.scale;
+    const w = h * c.aspectRatio * scaleX;
+    const left = x - w / 2, top = y - h / 2;
+    const lidH = h * c.lidHeight;
+    g.fillStyle(c.bodyColor, alpha);
+    g.fillRect(left, top + lidH, w, h - lidH);  // 箱身
+    g.fillStyle(c.lidColor, alpha);
+    g.fillRect(left, top, w, lidH);             // 平蓋
+    g.fillStyle(c.bandColor, alpha);
+    for (const side of [-1, 1]) g.fillRect(x + side * w * c.bandOffset - (w * c.bandWidth) / 2, top, w * c.bandWidth, h); // 鐵條
+    g.lineStyle(cfg.nodeStrokeWidth.chest, c.outlineColor, alpha);
+    g.strokeRect(left, top, w, h);
+    g.lineBetween(left, top + lidH, left + w, top + lidH);                  // 蓋縫
+    const lock = h * c.lockSize;
+    g.fillStyle(c.bandColor, alpha);
+    g.fillRect(x - (lock * scaleX) / 2, top + lidH - lock / 2, lock * scaleX, lock); // 鎖
+  }
+
+  /**
+   * 高階寶箱：金色圓頂蓋 + 紅色箱身 + 金色箍條 + 菱形寶石鎖，周圍星光輪流閃爍
+   *
+   * @param x 中心 x（螢幕座標）
+   * @param y 中心 y（螢幕座標）
+   * @param alpha 透明度
+   * @param scaleX 水平縮放
+   */
+  private drawHighChestIcon(x: number, y: number, alpha: number, scaleX: number): void {
+    const cfg = GameConfig.waveHud;
+    const c = cfg.highChest;
+    const g = this.waveHudGfx;
+    const h = cfg.nodeRadius * c.scale;
+    const w = h * c.aspectRatio * scaleX;
+    const left = x - w / 2, top = y - h / 2;
+    const lidH = h * c.lidHeight;
+    const round = Math.min(lidH * c.lidRound, w / 2);
+    const lidRadius = { tl: round, tr: round, bl: 0, br: 0 };
+    g.fillStyle(c.bodyColor, alpha);
+    g.fillRect(left, top + lidH, w, h - lidH);                  // 紅色箱身
+    g.fillStyle(c.lidColor, alpha);
+    g.fillRoundedRect(left, top, w, lidH, lidRadius);           // 金色圓頂蓋
+    g.fillStyle(c.lidShineColor, alpha);
+    const shine = c.lidShine;
+    const shineH = lidH * shine.height;
+    g.fillRoundedRect(left + w * shine.x, top + lidH * shine.y, w * shine.width, shineH, Math.min(shineH, w * shine.width) / 2); // 圓頂亮面
+    g.fillStyle(c.trimColor, alpha);
+    for (const side of [-1, 1]) g.fillRect(x + side * w * c.bandOffset - (w * c.bandWidth) / 2, top + lidH, w * c.bandWidth, h - lidH); // 直向金箍
+    const rimH = h * c.rimHeight;
+    g.fillRect(left, top + lidH - rimH / 2, w, rimH);          // 橫向金箍
+    g.lineStyle(cfg.nodeStrokeWidth.chest, c.outlineColor, alpha);
+    g.strokeRoundedRect(left, top, w, lidH, lidRadius);
+    g.strokeRect(left, top + lidH, w, h - lidH);
+    // 菱形寶石鎖
+    const gem = h * c.gemRadius;
+    const gy = top + lidH;
+    g.fillStyle(c.gemColor, alpha);
+    g.fillTriangle(x - gem * scaleX, gy, x, gy - gem, x + gem * scaleX, gy);
+    g.fillTriangle(x - gem * scaleX, gy, x, gy + gem, x + gem * scaleX, gy);
+    g.lineStyle(c.gemOutlineWidth, c.outlineColor, alpha);
+    g.strokeTriangle(x - gem * scaleX, gy, x, gy - gem, x + gem * scaleX, gy);
+    g.strokeTriangle(x - gem * scaleX, gy, x, gy + gem, x + gem * scaleX, gy);
+    g.fillStyle(c.gemShineColor, alpha);
+    g.fillCircle(x - gem * c.gemShineOffset * scaleX, gy - gem * c.gemShineOffset, gem * c.gemShineRadius);
+    // 星光：依序錯開相位，sin 正半週才顯示
+    const fullW = h * c.aspectRatio;
+    c.sparkles.forEach((sp, i) => {
+      const phase = (this.time.now / c.sparklePeriodMs + i / c.sparkles.length) * Math.PI * 2;
+      const twinkle = Math.sin(phase);
+      if (twinkle <= 0) return;
+      this.drawSparkle(x + sp.x * fullW * scaleX, y + sp.y * h, h * sp.size * twinkle, alpha * twinkle);
+    });
+  }
+
+  /**
+   * 高階寶箱旁的四芒星光：上下左右四個尖角
+   *
+   * @param x 中心 x
+   * @param y 中心 y
+   * @param size 尖角長度
+   * @param alpha 透明度
+   */
+  private drawSparkle(x: number, y: number, size: number, alpha: number): void {
+    const c = GameConfig.waveHud.highChest;
+    const g = this.waveHudGfx;
+    const waist = size * c.sparkleWaist;
+    g.fillStyle(c.sparkleColor, alpha);
+    g.fillTriangle(x - waist, y, x, y - size, x + waist, y);
+    g.fillTriangle(x - waist, y, x, y + size, x + waist, y);
+    g.fillTriangle(x, y - waist, x - size, y, x, y + waist);
+    g.fillTriangle(x, y - waist, x + size, y, x, y + waist);
   }
 
   /**
@@ -988,7 +1079,7 @@ export class UIScene extends Phaser.Scene {
     g.fillEllipse(x, y, r * 2 * sx, r * 2);
     this.drawChestIcon(x, y, tier, alpha, sx);
     if (tier === 'high') {
-      g.lineStyle(cfg.nodeStrokeWidth.current, cfg.highChestColor, alpha * (u - 0.5) * 2);
+      g.lineStyle(cfg.nodeStrokeWidth.current, cfg.highChest.haloColor, alpha * (u - 0.5) * 2);
       g.strokeCircle(x, y, r + cfg.nodePadding.highHalo);
     }
   }

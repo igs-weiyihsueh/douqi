@@ -57,16 +57,69 @@ export const GameConfig = {
     nodeBgColor: 0x1a1408,
     /** 進入下一關時圓點左移遞補的動畫時長(毫秒) */
     shiftMs: 450,
-    /** 低階 / 高階寶箱圖示色、外框色與尺寸（相對節點半徑） */
-    lowChestColor: 0xb07a3c,
-    highChestColor: 0xffd23f,
-    chestOutlineColor: 0x2a1a08,
-    lowChestScale: 0.7,
-    highChestScale: 0.95,
+    /**
+     * 低階寶箱圖示：樸素木箱——暗棕色、平蓋、灰色鐵條、小鎖（尺寸相對節點半徑；比例相對圖示高 h / 寬 w）
+     */
+    lowChest: {
+      scale: 0.7,
+      aspectRatio: 1.3,
+      bodyColor: 0x5c3a1e,
+      lidColor: 0x734a26,
+      bandColor: 0x7c8591,
+      outlineColor: 0x1c1107,
+      /** 平蓋高度（相對 h） */
+      lidHeight: 0.4,
+      /** 兩條直向鐵條：中心離圖示中心（相對 w）、寬度（相對 w） */
+      bandOffset: 0.3,
+      bandWidth: 0.1,
+      /** 鎖：邊長（相對 h） */
+      lockSize: 0.22
+    },
+    /**
+     * 高階寶箱圖示：豪華寶箱——金色圓頂蓋、紅色箱身、金色箍條、藍色寶石鎖，周圍閃爍星光（尺寸相對節點半徑）
+     */
+    highChest: {
+      scale: 1.05,
+      aspectRatio: 1.3,
+      lidColor: 0xffd23f,
+      /** 圓頂蓋上的橫向亮面：顏色、位置與大小（x / width 相對 w，y / height 相對蓋高） */
+      lidShineColor: 0xfff3b0,
+      lidShine: { x: 0.15, y: 0.18, width: 0.7, height: 0.22 },
+      bodyColor: 0xc8102e,
+      trimColor: 0xffb000,
+      gemColor: 0x38e1ff,
+      gemShineColor: 0xffffff,
+      outlineColor: 0x4a2a00,
+      /** 外圈光暈與揭曉光環的顏色 */
+      haloColor: 0xffd23f,
+      /** 圓頂蓋高度（相對 h），圓角 = 蓋高 × lidRound */
+      lidHeight: 0.5,
+      lidRound: 0.9,
+      /** 蓋與箱身交界的橫向金箍高度（相對 h） */
+      rimHeight: 0.12,
+      /** 兩條直向金箍：中心離圖示中心（相對 w）、寬度（相對 w） */
+      bandOffset: 0.3,
+      bandWidth: 0.1,
+      /** 菱形寶石半徑（相對 h），位於金箍中央；外框線寬；左上反光點的偏移與半徑（相對寶石半徑） */
+      gemRadius: 0.17,
+      gemOutlineWidth: 1,
+      gemShineOffset: 0.3,
+      gemShineRadius: 0.25,
+      /** 星光：各顆相對圖示中心的位置（相對 w / h）與大小（相對 h）；依序錯開相位閃爍，週期 sparklePeriodMs */
+      sparkles: [
+        { x: -0.62, y: -0.55, size: 0.22 },
+        { x: 0.66, y: -0.35, size: 0.18 },
+        { x: 0.5, y: 0.62, size: 0.14 }
+      ],
+      sparkleColor: 0xfffbe6,
+      /** 星芒腰身寬（相對尖角長度） */
+      sparkleWaist: 0.28,
+      sparklePeriodMs: 700
+    },
 
     /** 節點外框線寬度 */
     nodeStrokeWidth: {
-      /** 寶箱外框線寬 */
+      /** 寶箱圖示外框線寬 */
       chest: 2,
       /** 一般節點外框線寬 */
       normal: 3,
@@ -82,25 +135,6 @@ export const GameConfig = {
       currentPulse: 6,
       /** 高階光暈外框距離（相對於節點半徑） */
       highHalo: 10
-    },
-
-    /** 寶箱比例設定 */
-    chestRatios: {
-      /** 寶箱寬高比 */
-      aspectRatio: 1.4,
-      /** 箱體起點（相對於寶箱高度） */
-      bodyStart: 0.35,
-      /** 箱體高度（相對於寶箱高度） */
-      bodyHeight: 0.65,
-      /** 箱蓋高度（相對於寶箱高度） */
-      lidHeight: 0.4,
-      /** 箱蓋提亮混色比例 */
-      lidBrighten: 0.25,
-      /** 鎖扣尺寸（相對於寶箱寬度/高度） */
-      lockWidth: 0.16,
-      lockHeight: 0.25,
-      lockOffsetX: 0.08,
-      lockOffsetY: 0.05
     },
 
     /** 脈動效果設定 */
