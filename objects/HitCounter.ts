@@ -20,7 +20,10 @@ const HIT_COUNTER_CONFIG = {
   LABEL_BASELINE_Y: 27,
   /** 連擊數改變時的彈跳：數字與字樣先放大到 POP_SCALE，再於 POP_DURATION_MS 內縮回原尺寸 */
   POP_SCALE: 1.4,
-  POP_DURATION_MS: 180
+  POP_DURATION_MS: 180,
+  /** 連擊快斷警告：整個顯示在 1 與 WARNING_MIN_ALPHA 之間來回淡入淡出，單程 WARNING_FADE_MS */
+  WARNING_MIN_ALPHA: 0.2,
+  WARNING_FADE_MS: 220
 } as const;
 
 /**
@@ -29,6 +32,7 @@ const HIT_COUNTER_CONFIG = {
  * - 容器位置 = 底圖右下角（對齊面板的 COMBO 錨點）
  * - 數字與字樣整組置中於底圖，彈跳以底圖中心為基準縮放
  * - 連擊數為 0 時隱藏
+ * - 連擊快斷警告時閃爍淡出（setWarning）
  */
 export class HitCounter extends Phaser.GameObjects.Container {
   private readonly bg: Phaser.GameObjects.Image;
@@ -39,6 +43,8 @@ export class HitCounter extends Phaser.GameObjects.Container {
   private readonly digits: Phaser.GameObjects.Image[] = [];
   private hitCount = 0;
   private popTween?: Phaser.Tweens.Tween;
+  /** 警告閃爍的淡入淡出（警告中才有） */
+  private warningTween?: Phaser.Tweens.Tween;
 
   constructor(scene: Phaser.Scene) {
     super(scene, 0, 0);
@@ -70,9 +76,35 @@ export class HitCounter extends Phaser.GameObjects.Container {
     if (count === this.hitCount) return;
     this.hitCount = count;
     this.setVisible(count > 0);
-    if (count <= 0) return;
+    if (count <= 0) {
+      this.setWarning(false);
+      return;
+    }
     this.layout(String(count));
     this.pop();
+  }
+
+  /**
+   * 連擊快斷警告：開啟時整個顯示反覆閃爍淡出，關閉時恢復不透明
+   *
+   * @param warning 是否在警告中
+   */
+  setWarning(warning: boolean): void {
+    if (warning === !!this.warningTween) return;
+    if (!warning) {
+      this.warningTween?.stop();
+      this.warningTween = undefined;
+      this.setAlpha(1);
+      return;
+    }
+    this.warningTween = this.scene.tweens.add({
+      targets: this,
+      alpha: HIT_COUNTER_CONFIG.WARNING_MIN_ALPHA,
+      duration: HIT_COUNTER_CONFIG.WARNING_FADE_MS,
+      ease: 'Sine.easeInOut',
+      yoyo: true,
+      repeat: -1
+    });
   }
 
   /**

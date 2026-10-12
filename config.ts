@@ -410,7 +410,7 @@ export const GameConfig = {
     STREAK_TIMEOUT_MAX_MS: 10000,
     STREAK_TIMEOUT_MIN_MS: 2000,
     STREAK_TIMEOUT_MIN_AT_HITS: 100,
-    /** 警告開始於中斷時間的此比例：距上次命中超過「中斷時間 × 比例」進入警告（ComboState.isWarning；目前 HIT 顯示不區分警告）（10 秒時 7.5 秒起、2 秒時 1.5 秒起） */
+    /** 警告開始於中斷時間的此比例：距上次命中超過「中斷時間 × 比例」進入警告，下方面板 HIT 圖開始閃爍淡出（10 秒時 7.5 秒起、2 秒時 1.5 秒起） */
     WARNING_START_RATIO: 0.75,
     /**
      * 獎勵里程碑：達到這些連擊數時記下獎勵，連擊中斷時只發「最高達成階」；

@@ -1808,7 +1808,7 @@ export class UIScene extends Phaser.Scene {
   }
 
   /**
-   * 更新下方面板的 COMBO 顯示：HIT 連擊圖（連擊數改變時彈跳），連擊為 0、角色未加入或陣亡時隱藏；
+   * 更新下方面板的 COMBO 顯示：HIT 連擊圖（連擊數改變時彈跳、連擊快斷時閃爍淡出），連擊為 0、角色未加入或陣亡時隱藏；
    * CREDIT 未進場時改在同一位置閃動顯示「投幣加入遊戲」
    *
    * @param index 角色索引（對應 rows / panelHitCounters / panelJoinTexts）
@@ -1824,7 +1824,9 @@ export class UIScene extends Phaser.Scene {
       const blinkMs = GameConfig.credit.prompt.blinkMs;
       joinText.setAlpha(this.time.now % blinkMs < blinkMs / 2 ? 1 : 0.45);
     }
-    counter.setCount(!absent && character?.alive ? character.combo.currentStreak : 0);
+    const combo = !absent && character?.alive ? character.combo : undefined;
+    counter.setCount(combo?.currentStreak ?? 0);
+    counter.setWarning(!!combo?.isWarning);
   }
 
   /**
