@@ -242,13 +242,15 @@ export class GameScene extends Phaser.Scene {
         .tileSprite(arenaX, arenaY, arenaW, arenaH, 'ground')
         .setOrigin(0, 0)
         .setDepth(0);
-      const border = this.add.graphics().setDepth(1);
-      border.lineStyle(
-        GameConfig.arena.borderThickness,
-        GameConfig.arena.borderColor,
-        1
-      );
-      border.strokeRect(arenaX, arenaY, arenaW, arenaH);
+      if (GameConfig.arena.showBorder) {
+        const border = this.add.graphics().setDepth(1);
+        border.lineStyle(
+          GameConfig.arena.borderThickness,
+          GameConfig.arena.borderColor,
+          1
+        );
+        border.strokeRect(arenaX, arenaY, arenaW, arenaH);
+      }
     }
 
     // F4 新舊美術切換：需在 slot 佈局建立後，背景圖才能對齊各 slot
@@ -293,6 +295,7 @@ export class GameScene extends Phaser.Scene {
       room: () => this.arena,
       slot: () => this.slotWorld.centerSlot,
       roomTreasureCount: () => this.treasures.roomCount,
+      playerCount: () => this.aliveCount(),
       spawnRoomTreasure: (fromX, fromY, toX, toY) => this.treasures.spawnRoomTreasure(fromX, fromY, toX, toY),
       dismissRoomTreasures: () => this.treasures.dismissRoom(this.treasureRoom.spawnPoints),
       onFinished: () => this.onTreasureRoomFinished()
@@ -722,7 +725,7 @@ export class GameScene extends Phaser.Scene {
     this.treasureRoom.update(time);
     this.updateEnemies(time);
     this.treasures.update(time); // 寶箱怪:跑點移動/金光閃爍/限時跑走
-    this.treasures.updateRoom(time);
+    this.treasures.updateRoom(time, this.treasureRoom.spawnPoints);
     this.maybeBossIntrude(time);
     this.advanceWhenSurgeCleared(); // 延後的波次推進：即時補怪清完才進休息 / 結算
     this.finishPendingSubZoneIfTreasureGone(); // 延後的場景切換:寶箱怪死/離場後才開啟

@@ -173,7 +173,7 @@ export class UIScene extends Phaser.Scene {
 
   /** 下方面板 HIT 連擊顯示（底圖 + 數字圖 + HIT 字樣），每個角色一個，索引對應 rows */
   private panelHitCounters: HitCounter[] = [];
-  /** 下方面板「投幣加入遊戲 / 投越多送越多」兩行提示（CREDIT 未進場時取代 HIT 顯示），每個角色一個，索引對應 rows */
+  /** 下方面板「投幣加入遊戲 / 投越多送越多」輪播提示（CREDIT 未進場時取代 HIT 顯示），每個角色一個，索引對應 rows */
   private panelJoinTexts: Phaser.GameObjects.Text[] = [];
   /** 下方面板多投多送膠囊量條（HIT 顯示下方），每個角色一個，索引對應 rows */
   private panelCoinBars: CoinBonusBar[] = [];
@@ -182,8 +182,6 @@ export class UIScene extends Phaser.Scene {
   /** 下方面板 COMBO 顯示設定：HIT 顯示與投幣提示的左下角錨點，原版色塊面板與 F4 面板圖各有一組位置 */
   private readonly PANEL_COMBO_CONFIG = {
     FONT_SIZE: '36px',
-    /** 未進場提示（兩行同時顯示、不閃動）的字級 */
-    JOIN_FONT_SIZE: '26px',
     STROKE_WIDTH: 4,
     /** 多投多送量條在錨點（左下角），HIT 顯示與投幣提示疊在量條上方，相隔 COIN_BAR_GAP */
     COIN_BAR_GAP: 6,
@@ -1881,9 +1879,9 @@ export class UIScene extends Phaser.Scene {
         .setDepth(cfg.DEPTH).setScrollFactor(0).setVisible(false)
     );
     this.panelJoinTexts = this.rows.map(() =>
-      this.add.text(0, 0, GameConfig.credit.joinTexts.join('\n'), {
+      this.add.text(0, 0, GameConfig.credit.joinTexts[0], {
         fontFamily: 'monospace',
-        fontSize: cfg.JOIN_FONT_SIZE,
+        fontSize: cfg.FONT_SIZE,
         color: GameConfig.credit.prompt.color,
         stroke: this.OVERHEAD_UI_CONFIG.COLORS.BLACK,
         strokeThickness: cfg.STROKE_WIDTH,
@@ -1976,7 +1974,7 @@ export class UIScene extends Phaser.Scene {
   /**
    * 更新下方面板的 COMBO 顯示：HIT 連擊圖（連擊數改變時彈跳、連擊快斷時閃爍淡出），連擊為 0、角色未加入或陣亡時隱藏
    * （CREDIT 等待續關時照常顯示，連擊停在當下）；
-   * CREDIT 未進場時改在同一位置靜態顯示 joinTexts（兩行同時顯示）；多投多送量條在已加入的角色（showWhenAbsent 時含未進場）下方顯示
+   * CREDIT 未進場時改在同一位置輪流顯示 joinTexts（每 joinRotateMs 換一句，文字不閃）；多投多送量條在已加入的角色（showWhenAbsent 時含未進場）下方顯示
    *
    * @param index 角色索引（對應 rows / panelHitCounters / panelJoinTexts / panelCoinBars）
    * @param character 角色數據（未加入時為 undefined）
@@ -1989,6 +1987,11 @@ export class UIScene extends Phaser.Scene {
     const credit = GameConfig.credit;
     const absent = character?.creditState === 'absent';
     joinText.setVisible(absent);
+    if (absent) {
+      // 每 joinRotateMs 換一句（文字本身不閃）
+      const line = credit.joinTexts[Math.floor(this.time.now / credit.joinRotateMs) % credit.joinTexts.length];
+      if (joinText.text !== line) joinText.setText(line);
+    }
     bar.setVisible(credit.enabled && !!character && (!absent || credit.coinBar.showWhenAbsent));
     if (character) bar.setLit(character.coinStep);
     const shown = character?.alive || character?.creditState === 'waiting';

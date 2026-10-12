@@ -163,6 +163,8 @@ export const GameConfig = {
   arena: {
     /** 場地距畫面邊緣的內縮（像素）；場地大小 = 畫面 - 2*padding */
     padding: 72,  // 按比例調整: 48 * (1920/1280) = 72
+    /** 是否畫出活動範圍的邊界線（一般區域與走廊；寶藏密室的金邊另外畫、不受影響）；關掉時仍照常擋住不能走出去 */
+    showBorder: false,
     /** 圍欄線框粗細 */
     borderThickness: 6,
     borderColor: 0x3a4668,
@@ -218,7 +220,7 @@ export const GameConfig = {
    * 多投多送：每次投幣依序得 coinCycle 的點數（5 → 10 → 5 → 15 → 5 → 20 → 5 …，平均每幣 10），投幣續關逾時離場時才回到第一檔；
    * 每一招命中至少一隻敵人扣 1 點（空揮不扣、一招打中多隻也只扣 1；變身 BOSS 的攻擊不扣）。
    * 用完時角色停在原地、無敵、怪不理他，頭上顯示 continueText 與倒數，continueSeconds 秒內投幣恢復，逾時離場（回到未進場）。
-   * 未進場時下方面板（HIT 數的位置）以兩行靜態顯示 joinTexts。BOT 用完自動投幣。
+   * 未進場時下方面板（HIT 數的位置）每 joinRotateMs 輪流顯示一句 joinTexts。BOT 用完自動投幣。
    * 下方面板的多投多送膠囊量條（HIT 數下方）：每格是一次投幣，有加贈的格子標示加贈點數；投幣時亮一格，有加贈時再飛出一道光到角色身上
    * 啟用時角色沒有血量（被打不扣血、不會陣亡）；enabled = false 回到舊行為
    */
@@ -251,8 +253,9 @@ export const GameConfig = {
     prompt: { offsetY: -200, fontSize: 30, color: '#ffe066', stroke: '#000000', strokeThickness: 6, paddingY: 8, blinkMs: 900, depth: 60 },
     /** 投幣續關的倒數秒數（逾時角色離場，回到未進場） */
     continueSeconds: 15,
-    /** 提示文字：未進場（下方面板，每句一行同時顯示）/ CREDIT 用完（頭上，後面接倒數秒數） */
+    /** 提示文字：未進場（下方面板，每 joinRotateMs 輪流顯示一句、文字不閃）/ CREDIT 用完（頭上，後面接倒數秒數） */
     joinTexts: ['投幣加入遊戲', '投越多送越多'] as ReadonlyArray<string>,
+    joinRotateMs: 3000,
     continueText: '投幣續關'
   },
 
@@ -1071,12 +1074,12 @@ export const GameConfig = {
      * （離畫面邊 decorViewInset、離金邊 decorRoomGap、彼此間隔 decorSpacing），空隙再撒 looseCoinCount 枚散落的金銀幣。
      * 寶箱怪：進場 firstSpawnDelayMs 後開始，每 spawnIntervalMs 從外圍隨機一堆財寶跳出（噴 spawnCoinBurst 枚金幣），
      * 沿拋物線（費時 jumpMs、拱高 jumpHeight，地上影子由小變大）跳進正方形內（離金邊 landMargin），空中不能被打，落地壓扁彈回；
-     * 場上最多 maxAlive 隻；打 hitsToKill 下死，每次命中給命中者 ticketsPerHit 張彩票、擊殺再給 ticketsOnKill 張；
-     * 時間到全部跳回外圍的財寶堆（jumpOutMs）後消失
+     * 場上最多 maxAliveBase + (存活人數 − 1) × maxAlivePerExtraPlayer 隻；每隻存在 lifetimeMs（從跳出起算），沒打死就跳回外圍財寶堆消失；
+     * 打 hitsToKill 下死，每次命中給命中者 ticketsPerHit 張彩票、擊殺再給 ticketsOnKill 張；密室時間到全部跳回外圍的財寶堆（jumpOutMs）後消失
      */
     treasureRoom: {
       durationMs: 60000, finalCountdownSec: 5, hudY: 104, hudLabel: '💰 寶藏密室',
-      firstSpawnDelayMs: 1500, spawnIntervalMs: 4000, maxAlive: 3, spawnCoinBurst: 16,
+      firstSpawnDelayMs: 1500, spawnIntervalMs: 2000, maxAliveBase: 4, maxAlivePerExtraPlayer: 2, lifetimeMs: 12000, spawnCoinBurst: 16,
       hitsToKill: 10, ticketsPerHit: 1, ticketsOnKill: 30,
       enterBanner: '寶藏密室！限時 60 秒', endBanner: '時間到！',
       roomSize: 760,

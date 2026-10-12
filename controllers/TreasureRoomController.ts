@@ -12,6 +12,8 @@ export interface TreasureRoomHost {
   slot(): Phaser.Geom.Rectangle;
   /** 場上獎勵關寶箱怪的數量 */
   roomTreasureCount(): number;
+  /** 目前在場上（遊玩中）的玩家人數（BOT 也算） */
+  playerCount(): number;
   /** 在財寶堆 (fromX, fromY) 生成一隻獎勵關寶箱怪，跳進密室內的 (toX, toY) */
   spawnRoomTreasure(fromX: number, fromY: number, toX: number, toY: number): void;
   /** 讓場上的獎勵關寶箱怪全部離場（跳回外圍的財寶堆） */
@@ -41,7 +43,7 @@ const UI_DEPTH = 60;
 
 /**
  * 隱藏入口後的獎勵關（寶藏密室）：正方形移動區內是乾淨地板、外框金邊，外圍覆蓋金色色調並散布金銀財寶，限時 durationMs 倒數；
- * 期間每 spawnIntervalMs 從外圍隨機一堆財寶跳出一隻寶箱怪，跳進正方形內（場上最多 maxAlive 隻）。
+ * 期間每 spawnIntervalMs 從外圍隨機一堆財寶跳出一隻寶箱怪，跳進正方形內（場上上限隨人數增加，每隻限時，見 config.stage.treasureRoom）。
  * 剩 finalCountdownSec 秒時畫面中央依序顯示大倒數數字；時間到寶箱怪全部離場，通知場景開出口。
  */
 export class TreasureRoomController {
@@ -138,7 +140,8 @@ export class TreasureRoomController {
   }
 
   /**
-   * 到了補怪時間且場上未滿 maxAlive 隻，就從外圍隨機一堆財寶跳出一隻寶箱怪，落在正方形內（離金邊 landMargin）的隨機點
+   * 到了補怪時間且場上未滿上限（maxAliveBase + 每多一位玩家 maxAlivePerExtraPlayer）時，
+   * 從外圍隨機一堆財寶跳出一隻寶箱怪，落在正方形內（離金邊 landMargin）的隨機點
    *
    * @param time 目前場景時間
    */
@@ -146,7 +149,8 @@ export class TreasureRoomController {
     const cfg = GameConfig.stage.treasureRoom;
     if (time < this.nextSpawnAt || this.points.length === 0) return;
     this.nextSpawnAt = time + cfg.spawnIntervalMs;
-    if (this.host.roomTreasureCount() >= cfg.maxAlive) return;
+    const maxAlive = cfg.maxAliveBase + Math.max(0, this.host.playerCount() - 1) * cfg.maxAlivePerExtraPlayer;
+    if (this.host.roomTreasureCount() >= maxAlive) return;
     const p = Phaser.Utils.Array.GetRandom(this.points);
     const room = this.host.room(), m = cfg.landMargin;
     this.host.spawnRoomTreasure(p.x, p.y, Phaser.Math.Between(room.left + m, room.right - m), Phaser.Math.Between(room.top + m, room.bottom - m));

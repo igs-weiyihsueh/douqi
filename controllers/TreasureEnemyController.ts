@@ -159,27 +159,33 @@ export class TreasureEnemyController {
   }
 
   /**
-   * 每幀（獎勵關的寶箱怪）：閃爍與跑點移動（不限時）；時停中凍結
+   * 每幀（獎勵關的寶箱怪）：閃爍與跑點移動；跳出後超過 lifetimeMs 還沒打死就跳回外圍財寶堆消失；時停中凍結
    *
    * @param time 目前場景時間
+   * @param treasurePiles 外圍財寶的位置（限時到時跳回去的目的地）
    */
-  updateRoom(time: number): void {
+  updateRoom(time: number, treasurePiles: ReadonlyArray<{ x: number; y: number }>): void {
+    const lifetimeMs = GameConfig.stage.treasureRoom.lifetimeMs;
     for (const t of this.roomTreasures) {
       if (!t.active || t.dead) { this.roomTreasures.delete(t); continue; }
       if (this.host.isTimeStopped()) { (t.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0); continue; }
+      if (!t.treasureFleeing && time - t.treasureSpawnAt >= lifetimeMs) {
+        this.leaveRoom(t, treasurePiles);
+        continue;
+      }
       this.applyGoldTint(t, time);
       this.stepMovement(t, time, null);
     }
   }
 
   /**
-   * 時停結束：關卡中寶箱怪的出生時間與停頓結束時間順延凍結時間（限時與跑點節奏不流失）
+   * 時停結束：關卡中與獎勵關寶箱怪的出生時間與停頓結束時間順延凍結時間（限時與跑點節奏不流失）
    *
    * @param frozenMs 凍結時長
    */
   onTimeStopEnd(frozenMs: number): void {
-    const t = this.treasure;
-    if (t && t.active) {
+    for (const t of [this.treasure, ...this.roomTreasures]) {
+      if (!t || !t.active) continue;
       t.treasureSpawnAt += frozenMs;
       if (t.treasurePauseUntil > 0) t.treasurePauseUntil += frozenMs;
     }
@@ -215,16 +221,25 @@ export class TreasureEnemyController {
    */
   dismissRoom(treasurePiles: ReadonlyArray<{ x: number; y: number }>): void {
     for (const t of this.roomTreasures) {
-      if (!t.active || t.dead || t.treasureFleeing) continue;
-      if (treasurePiles.length === 0) { this.flee(t); continue; }
-      t.treasureFleeing = true;
-      const p = Phaser.Utils.Array.GetRandom(treasurePiles as Array<{ x: number; y: number }>);
-      this.jump(t, p.x, p.y, GameConfig.stage.treasureRoom.jumpOutMs, () => {
-        this.spawnCoins(p.x, p.y, GameConfig.stage.treasureRoom.spawnCoinBurst / 2, true);
-        this.roomTreasures.delete(t);
-        t.kill();
-      });
+      if (t.active && !t.dead && !t.treasureFleeing) this.leaveRoom(t, treasurePiles);
     }
+  }
+
+  /**
+   * 獎勵關寶箱怪離場：跳回外圍隨機一堆財寶後消失（沒有財寶位置時改為跑走）；離場途中打到不給獎勵
+   *
+   * @param t 寶箱怪
+   * @param treasurePiles 外圍財寶的位置
+   */
+  private leaveRoom(t: Enemy, treasurePiles: ReadonlyArray<{ x: number; y: number }>): void {
+    if (treasurePiles.length === 0) { this.flee(t); return; }
+    t.treasureFleeing = true;
+    const p = Phaser.Utils.Array.GetRandom(treasurePiles as Array<{ x: number; y: number }>);
+    this.jump(t, p.x, p.y, GameConfig.stage.treasureRoom.jumpOutMs, () => {
+      this.spawnCoins(p.x, p.y, GameConfig.stage.treasureRoom.spawnCoinBurst / 2, true);
+      this.roomTreasures.delete(t);
+      t.kill();
+    });
   }
 
   /**

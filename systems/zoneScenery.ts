@@ -77,11 +77,13 @@ export function drawZoneScenery(
   // 4) 移動區地面：一次性產生靜態底圖
   objects.push(scene.add.image(zone.x, zone.y, makeGroundTexture(scene, zone, level, variant, lv)).setOrigin(0, 0).setDepth(DEPTH.ground));
 
-  // 5) 圍欄：標出可走範圍
-  const border = scene.add.graphics().setDepth(DEPTH.border);
-  border.lineStyle(GameConfig.arena.borderThickness, GameConfig.arena.borderColor, 1);
-  border.strokeRect(zone.x, zone.y, zone.width, zone.height);
-  objects.push(border);
+  // 5) 圍欄：標出可走範圍（arena.showBorder 關閉時不畫）
+  if (GameConfig.arena.showBorder) {
+    const border = scene.add.graphics().setDepth(DEPTH.border);
+    border.lineStyle(GameConfig.arena.borderThickness, GameConfig.arena.borderColor, 1);
+    border.strokeRect(zone.x, zone.y, zone.width, zone.height);
+    objects.push(border);
+  }
 
   // 6) 餘燼粒子
   const embers = createEmbers(scene, slot, level, variant, lv);
@@ -126,8 +128,10 @@ export function drawCorridorScenery(
   g.fillRect(x0, slot.y, w, slot.height);
   g.fillStyle(lv.groundBase, 1);
   g.fillRect(x0, zone.top, w, zone.height);
-  g.lineStyle(3, lv.groundDark, 0.8);
-  g.strokeRect(x0, zone.top, w, zone.height);
+  if (GameConfig.arena.showBorder) {
+    g.lineStyle(3, lv.groundDark, 0.8);
+    g.strokeRect(x0, zone.top, w, zone.height);
+  }
   return g;
 }
 
