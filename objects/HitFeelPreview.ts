@@ -6,7 +6,7 @@ import { HitSparks, hitPoseAt } from '../controllers/HitReactionFx';
 import { dashStretchMult, impactSquashAt } from '../controllers/DashFx';
 import { hitFeel } from '../systems/hitFeelParams';
 
-/** 示範用的敵人圖（F4 一般兵骷髏；原圖面向左，正好面向左邊衝來的角色） */
+/** 示範用的敵人圖（F4 一般兵骷髏；原圖面向右） */
 const ENEMY_TEXTURE = 'enemy-skeleton-b';
 
 /** 預覽版面（相對預覽區中心，px） */
@@ -79,7 +79,7 @@ export class HitFeelPreview {
     this.ground = scene.add.rectangle(x, y + LAYOUT.GROUND_Y, LAYOUT.GROUND_HALF_WIDTH * 2, 2, LAYOUT.GROUND_COLOR, LAYOUT.GROUND_ALPHA);
     // 原點在腳底：壓扁時腳不離地
     this.attacker = scene.add.image(0, 0, SKIN_TEXTURE).setOrigin(0.5, 1).setScale(LAYOUT.ATTACKER_SCALE).setFlipX(true); // 原圖面左 → 翻成面右
-    this.enemy = scene.add.image(0, 0, ENEMY_TEXTURE).setOrigin(0.5, 1).setScale(LAYOUT.ENEMY_SCALE);
+    this.enemy = scene.add.image(0, 0, ENEMY_TEXTURE).setOrigin(0.5, 1).setScale(LAYOUT.ENEMY_SCALE).setFlipX(true); // 原圖面右 → 翻成面左
     container.add([this.ground, this.attacker, this.enemy]);
     this.sparks = new HitSparks(scene, depth + 2);
     this.fx = new CombatFx(scene);

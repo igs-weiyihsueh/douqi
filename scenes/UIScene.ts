@@ -1,5 +1,8 @@
 import Phaser from 'phaser';
 import { GameConfig } from '../config';
+
+/** 下方面板圖（1P～4P.png）讀不到尺寸時的預設排版尺寸 */
+const BOTTOM_PANEL_FALLBACK_SIZE = { WIDTH: 267, HEIGHT: 119 } as const;
 import type { StageNodeKind } from '../systems/stageQueue';
 
 /** 卷軸 HUD 節點狀態類型 */
@@ -1710,10 +1713,11 @@ export class UIScene extends Phaser.Scene {
     const w = GameConfig.width;
     const h = GameConfig.height;
     
-    // 🎯 計算所有角色面板的位置參數（基於實際圖片尺寸）
+    // 🎯 計算所有角色面板的位置參數（基於實際圖片尺寸：讀 1P 面板圖，載入失敗時用預設尺寸）
     const count = GameConfig.characters.count;
-    const actualPanelW = 324; // 實際面板圖片寬度
-    const actualPanelH = 166; // 實際面板圖片高度
+    const sizeFrame = this.textures.exists('bottom-panel-1P') ? this.textures.getFrame('bottom-panel-1P') : null;
+    const actualPanelW = sizeFrame?.width ?? BOTTOM_PANEL_FALLBACK_SIZE.WIDTH;
+    const actualPanelH = sizeFrame?.height ?? BOTTOM_PANEL_FALLBACK_SIZE.HEIGHT;
     
     // 計算適當的間距，讓4個面板平均分佈在螢幕寬度上
     const availableWidth = w - 100; // 留出左右邊距各50px
@@ -1742,17 +1746,12 @@ export class UIScene extends Phaser.Scene {
           const playerCenterX = playerPanelX + actualPanelW / 2; // 面板中心X座標
           const playerCenterY = playerPanelY + actualPanelH / 2; // 面板中心Y座標
           
-          // 🎨 使用實際圖片尺寸
-          const displayW = actualPanelW;
-          const displayH = actualPanelH;
-          
-          // 創建角色底部面板覆蓋，精確對準該角色的原始面板位置
+          // 創建角色底部面板覆蓋，精確對準該角色的原始面板位置；以圖片原尺寸顯示（不縮放）
           this.bottomPanelOverlays[i] = this.add.image(playerCenterX, playerCenterY, resourceKey)
             .setOrigin(0.5, 0.5)
             .setDepth(1000 + i)  // 每個角色不同深度避免衝突
             .setVisible(false)
-            .setScrollFactor(0)  // 固定位置，不隨相機移動
-            .setDisplaySize(displayW, displayH);  // 🎨 保持原始尺寸比例
+            .setScrollFactor(0);  // 固定位置，不隨相機移動
           
         } else {
           console.error(`❌ [多角色底部面板] ${playerLabel}紋理載入失敗或損壞`);

@@ -38,8 +38,8 @@ const SKIN_EMPOWERED_TEXTURE = 'character-goku-skin-2';
 const ENEMY_SKELETON_B_TEXTURE = 'enemy-skeleton-b';
 const ENEMY_SKELETON_WARRIOR_TEXTURE = 'skeleton-warrior';
 const ENEMY_TICKET_TEXTURE = 'enemy-ticket';
-/** 原圖面向左的紋理（悟空皮膚、一般兵骷髏）；其餘紋理視為面向右。另一側由 flipX 鏡像，不另存鏡像圖 */
-const TEXTURES_FACING_LEFT: ReadonlySet<string> = new Set([SKIN_TEXTURE, SKIN_EMPOWERED_TEXTURE, ENEMY_SKELETON_B_TEXTURE]);
+/** 原圖面向左的紋理（悟空皮膚）；其餘紋理（含三張怪物圖）視為面向右。另一側由 flipX 鏡像，不另存鏡像圖 */
+const TEXTURES_FACING_LEFT: ReadonlySet<string> = new Set([SKIN_TEXTURE, SKIN_EMPOWERED_TEXTURE]);
 /** P1 頭上覆蓋圖（1P 與積分），與頭上 UI 系統使用相同的垂直偏移 */
 const UI_OVERLAY_TEXTURE = 'character-ui-overlay';
 const UI_OVERLAY_OFFSET_Y = -130;
