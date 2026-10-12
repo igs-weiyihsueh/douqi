@@ -566,7 +566,7 @@ export class BossController {
       onDone();
       if (this.host.isGameOver() || !boss.active) return;
       this.host.spawnExpandingRing(ox, oy, s.radius, TELEGRAPH_RED, 300);
-      this.host.shakeOnce(120, 0.008);
+      if (GameConfig.juice.enemyAttackShake) this.host.shakeOnce(120, 0.008);
       this.releaseDamage(c => Phaser.Math.Distance.Between(c.x, c.y, ox, oy) <= s.radius, s.damage);
     });
   }
@@ -602,7 +602,7 @@ export class BossController {
       g.fillStyle(TELEGRAPH_RED, TELEGRAPH_FILL_ALPHA); g.fillPoints(strip(t), true);
     }, () => {
       if (this.host.isGameOver() || !boss.active) { onDone(); return; }
-      this.host.shakeOnce(120, 0.008);
+      if (GameConfig.juice.enemyAttackShake) this.host.shakeOnce(120, 0.008);
       const hitR = halfW + GameConfig.player.radius;
       this.releaseDamage(c => distanceToSegment(c.x, c.y, ox, oy, ex, ey) <= hitR, s.damage);
       boss.startBossDash(ang, len / (s.dashMs / 1000), s.dashMs, this.scene.time.now);
@@ -638,7 +638,7 @@ export class BossController {
       onDone();
       if (this.host.isGameOver() || !boss.active) return;
       this.host.spawnExpandingRing(ox, oy, s.range, TELEGRAPH_ORANGE, 260);
-      this.host.shakeOnce(120, 0.008);
+      if (GameConfig.juice.enemyAttackShake) this.host.shakeOnce(120, 0.008);
       this.releaseDamage(inArc, s.damage);
     });
   }

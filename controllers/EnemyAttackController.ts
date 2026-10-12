@@ -97,7 +97,7 @@ export class EnemyAttackController {
         const npc = this.host.hittableGuardNpc();
         if (npc && Phaser.Math.Distance.Between(npc.x, npc.y, tx, ty) <= cfg.bombRadius) this.hitGuardNpcOnce(enemy, now);
         this.host.fx().expandingRing(tx, ty, cfg.bombRadius, BOMB_RING_COLOR, BOMB_RING_MS);
-        this.host.fx().shake(BOMB_SHAKE_MS, BOMB_SHAKE_INTENSITY);
+        if (GameConfig.juice.enemyAttackShake) this.host.fx().shake(BOMB_SHAKE_MS, BOMB_SHAKE_INTENSITY);
       }
     });
   };

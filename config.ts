@@ -742,7 +742,7 @@ export const GameConfig = {
     bomber: {
       /**
        * 走位開關：true = 投擲冷卻中依距離走位（超過 throwRange 走近、小於 retreatRange 後退、其餘往 preferRange 靠），
-       * 冷卻好且距離在 retreatRange ~ throwRange 內就停下蓄力投擲；離出生點超過活動範圍時不再往遠離出生點的方向走。
+       * 冷卻好且距離在 retreatRange ~ throwRange 內就停下蓄力投擲；目標在 chaseRadius 外時在出生點附近巡邏。
        * false = 生成後站在原地不動
        */
       moveEnabled: true,
@@ -750,7 +750,7 @@ export const GameConfig = {
       preferRange: 300,
       /** 與 preferRange 的差距在此範圍內就站定（不來回抖動） */
       preferTolerance: 40,
-      /** 目標在此距離內時不受活動範圍限制、一路走到射程內（避免卡在活動範圍邊緣發呆）；更遠才回出生點附近巡邏 */
+      /** 目標在此距離內才走向目標（不受活動範圍限制，一路走到射程內）；更遠時在出生點附近巡邏、不靠近 */
       chaseRadius: 900,
       /** 小於此距離就後退（也不投擲） */
       retreatRange: 200,
@@ -1527,6 +1527,8 @@ export const GameConfig = {
   },
 
   juice: {
+    /** 敵人攻擊落地（投擲怪炸彈、BOSS 招式、塔的扇形砲）是否震動畫面；關閉 = 只有玩家自己的招式、BOSS 登場 / 擊倒等演出才震 */
+    enemyAttackShake: false,
     /** 爆發螢幕震動 */
     burstShakeDuration: 300,
     burstShakeIntensity: 0.009,
@@ -1748,15 +1750,15 @@ export const GameConfig = {
      */
     push: {
       /** 被推動的物件離手後的滑行速度（像素/秒，沿推的方向；之後依 friction 減速） */
-      characterPushSpeed: 120,
+      characterPushSpeed: 60,
       /** 怪推動時的滑行速度：坦克較大、小怪較小；未列出的種類用 enemyPushSpeedDefault */
       enemyPushSpeed: { normal: 130, tank: 230, bomber: 130 } as Partial<Record<string, number>>,
       enemyPushSpeedDefault: 130,
       /**
        * 角色壓進物件的距離由物件分擔的比例，其餘把角色推回——推箱時角色變慢、有沉重感
-       * （0.67 實測推箱時移動速度約為平常的 74%）；怪一律由物件全部分擔（不減速）
+       * （0.47 實測推箱時移動速度約為平常的 53%）；怪一律由物件全部分擔（不減速）
        */
-      characterCrateShare: 0.67,
+      characterCrateShare: 0.47,
       /** 怪被推不動的物件擋住時，側向滑開的距離 = 被擋下的距離 × 此倍率（約等於以原速沿邊緣滑開） */
       enemySlideRatio: 1,
       /** 每秒速度衰減比例(摩擦阻力;越大停越快) */

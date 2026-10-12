@@ -698,7 +698,7 @@ export class EventController {
         blast.fillStyle(TOWER_BLAST_COLOR, 0.5);
         blast.beginPath(); blast.moveTo(ox, oy); blast.arc(ox, oy, radius, a0, a1, false); blast.closePath(); blast.fillPath();
         this.scene.tweens.add({ targets: blast, alpha: 0, duration: TOWER_BLAST_FADE_MS, onComplete: () => blast.destroy() });
-        this.host.shakeOnce(90, 0.006);
+        if (GameConfig.juice.enemyAttackShake) this.host.shakeOnce(90, 0.006);
         for (const c of this.host.characters()) {
           if (!c.alive) continue;
           const rx = c.x - ox, ry = c.y - oy;

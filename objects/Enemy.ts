@@ -579,7 +579,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   /**
    * bomber 走位：離目標超過 throwRange 走近、小於 retreatRange 後退，其餘往 preferRange 靠（差距在 preferTolerance 內站定）；
-   * 目標在 chaseRadius 內時不受活動範圍限制（走到射程內）；目標更遠且已離出生點超過 leashRadius 時，回出生點附近巡邏
+   * 目標在 chaseRadius 內才走向目標（不受活動範圍限制，走到射程內）；更遠時在出生點附近巡邏、不靠近
+   * （若改成「走到活動範圍邊緣再折返」，會在邊緣每幀來回切換而抖動）。召集中一律走向目標
    *
    * @param targetX 目標 x
    * @param targetY 目標 y
@@ -593,20 +594,17 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (dist > cfg.throwRange) dir = 1;
     else if (dist < cfg.retreatRange) dir = -1;
     else if (Math.abs(dist - cfg.preferRange) > cfg.preferTolerance) dir = dist > cfg.preferRange ? 1 : -1;
-    const ang = Phaser.Math.Angle.Between(this.x, this.y, targetX, targetY);
-    const vx = Math.cos(ang) * this.moveSpeed * dir;
-    const vy = Math.sin(ang) * this.moveSpeed * dir;
-    // 活動範圍：目標在 chaseRadius 外、已在範圍外且這一步會離出生點更遠 → 回出生點附近巡邏（召集中不受限）
-    const ox = this.x - this.spawnX, oy = this.y - this.spawnY;
-    const outsideLeash = this.rallyUntil === 0 && dist > cfg.chaseRadius && ox * ox + oy * oy > this.leashRadius * this.leashRadius;
-    if (outsideLeash && ox * vx + oy * vy > 0) {
+    if (this.rallyUntil === 0 && dist > cfg.chaseRadius) {
       this.homeX = this.spawnX; this.homeY = this.spawnY;
       this.patrolStep(time);
-    } else if (dir === 0) {
-      body.setVelocity(0, 0);
-    } else {
-      body.setVelocity(vx, vy);
+      return;
     }
+    if (dir === 0) {
+      body.setVelocity(0, 0);
+      return;
+    }
+    const ang = Phaser.Math.Angle.Between(this.x, this.y, targetX, targetY);
+    body.setVelocity(Math.cos(ang) * this.moveSpeed * dir, Math.sin(ang) * this.moveSpeed * dir);
   }
 
   /** bomber 是否正在蓄力投擲（供 GameScene 畫落點預警） */
