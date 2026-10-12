@@ -399,10 +399,15 @@ export const GameConfig = {
    * - 警告機制：倒數期間視覺提醒
    */
   comboReward: {
-    /** 連擊超時重置時間（毫秒）：2秒內無命中將重置連擊數 */
-    STREAK_TIMEOUT_MS: 2000,
-    /** 警告開始時間（毫秒）：1.5秒後進入警告狀態，UI開始閃爍 */
-    WARNING_START_MS: 1500,
+    /**
+     * 連擊中斷時間（毫秒）：多久沒命中就中斷，依目前連擊數線性遞減——
+     * 1 HIT 時 STREAK_TIMEOUT_MAX_MS（新手好維持），每多一 HIT 減一點，到 STREAK_TIMEOUT_MIN_AT_HITS 時降到 STREAK_TIMEOUT_MIN_MS（高連擊要打得快）
+     */
+    STREAK_TIMEOUT_MAX_MS: 10000,
+    STREAK_TIMEOUT_MIN_MS: 2000,
+    STREAK_TIMEOUT_MIN_AT_HITS: 100,
+    /** 警告開始於中斷時間的此比例：距上次命中超過「中斷時間 × 比例」進入警告，UI 開始閃爍（10 秒時 7.5 秒起、2 秒時 1.5 秒起） */
+    WARNING_START_RATIO: 0.75,
     /**
      * 獎勵里程碑：達到這些連擊數時記下獎勵，連擊中斷時只發「最高達成階」；
      * 最後一階為上限：達成時立即發獎並歸零重新累積

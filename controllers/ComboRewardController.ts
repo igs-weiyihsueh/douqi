@@ -1,4 +1,4 @@
-import type Phaser from 'phaser';
+import Phaser from 'phaser';
 import { GameConfig } from '../config';
 import type { Character } from '../objects/Character';
 
@@ -11,12 +11,24 @@ interface ComboRewardFxScene {
 }
 
 /**
+ * 連擊中斷時間：1 HIT 時 STREAK_TIMEOUT_MAX_MS，線性遞減到 STREAK_TIMEOUT_MIN_AT_HITS 時的 STREAK_TIMEOUT_MIN_MS（之後維持）
+ *
+ * @param streak 目前連擊數
+ * @returns 多久沒命中就中斷（毫秒）
+ */
+export function streakTimeoutMs(streak: number): number {
+  const cfg = GameConfig.comboReward;
+  const t = Phaser.Math.Clamp((streak - 1) / (cfg.STREAK_TIMEOUT_MIN_AT_HITS - 1), 0, 1);
+  return cfg.STREAK_TIMEOUT_MAX_MS + (cfg.STREAK_TIMEOUT_MIN_MS - cfg.STREAK_TIMEOUT_MAX_MS) * t;
+}
+
+/**
  * COMBO 連擊獎勵：每次出手命中至少一隻敵人連擊 +1（普攻、衝刺、連段技、變身 AOE 各算一下，爆發整招算一下；
  * 打中幾隻都只算一下，擊殺不另外加），連擊達到里程碑時記下待發獎勵，中斷時才發；
  * 達到最高里程碑時立即發獎並歸零。
  *
- * 每幀依距上次命中的時間：超過 WARNING_START_MS 進入警告（頭上 UI 閃爍）、超過 STREAK_TIMEOUT_MS 中斷
- * （先發待發的獎勵再歸零）。獎勵的彩票加到該角色的彩票數，並在下方面板播放彩票噴發特效
+ * 每幀依距上次命中的時間：超過中斷時間 × WARNING_START_RATIO 進入警告（UI 閃爍）、超過中斷時間就中斷
+ * （先發待發的獎勵再歸零）；中斷時間隨連擊數線性遞減（見 streakTimeoutMs）。獎勵的彩票加到該角色的彩票數，並在下方面板播放彩票噴發特效
  */
 export class ComboRewardController {
   constructor(
@@ -45,13 +57,14 @@ export class ComboRewardController {
       const combo = character.comboState;
       if (combo.currentStreak <= 0) continue;
       const sinceLastHit = now - combo.lastKillTime;
-      if (sinceLastHit >= cfg.STREAK_TIMEOUT_MS) {
+      const timeout = streakTimeoutMs(combo.currentStreak);
+      if (sinceLastHit >= timeout) {
         if (combo.pendingRewardTickets !== undefined && combo.pendingRewardTickets > 0) {
           this.grant(character, combo.pendingRewardTickets, combo.pendingRewardMilestone!);
         }
         this.reset(combo);
       } else {
-        combo.isWarning = sinceLastHit >= cfg.WARNING_START_MS;
+        combo.isWarning = sinceLastHit >= timeout * cfg.WARNING_START_RATIO;
       }
     }
   }
