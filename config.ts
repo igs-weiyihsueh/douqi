@@ -182,7 +182,8 @@ export const GameConfig = {
   /**
    * CREDIT（投幣）：每位玩家各自計算。初始 0，按投幣鍵（P1：C）得 coinValue 點才進場；
    * 每一招命中至少一隻敵人扣 1 點（空揮不扣、一招打中多隻也只扣 1；變身 BOSS 的攻擊不扣）。
-   * 用完時角色停在原地、無敵、怪不理他，頭上顯示 continueText，投幣後恢復。BOT 用完自動投幣。
+   * 用完時角色停在原地、無敵、怪不理他，頭上顯示 continueText 與倒數，continueSeconds 秒內投幣恢復，逾時離場（回到未進場）。
+   * 未進場時下方面板（HIT 數的位置）顯示 joinText。BOT 用完自動投幣。
    * 啟用時角色沒有血量（被打不扣血、不會陣亡）；enabled = false 回到舊行為
    */
   credit: {
@@ -195,8 +196,10 @@ export const GameConfig = {
     resumeInvulnMs: 1000,
     /** 頭上提示：離角色中心的高度（在頭頂介面 / F4 頭上覆蓋圖上緣 −166 之上）、字級、顏色、上下留白（避免字形上緣被切）、閃動週期（毫秒） */
     prompt: { offsetY: -200, fontSize: 30, color: '#ffe066', stroke: '#000000', strokeThickness: 6, paddingY: 8, blinkMs: 900, depth: 60 },
-    /** 提示文字：尚未進場 / CREDIT 用完 */
-    joinText: '投幣開始',
+    /** 投幣續關的倒數秒數（逾時角色離場，回到未進場） */
+    continueSeconds: 15,
+    /** 提示文字：未進場（下方面板）/ CREDIT 用完（頭上，後面接倒數秒數） */
+    joinText: '投幣加入遊戲',
     continueText: '投幣續關'
   },
 

@@ -1811,7 +1811,7 @@ export class UIScene extends Phaser.Scene {
 
   /**
    * 更新下方面板的 COMBO 顯示：HIT xN；警告狀態橙紅交替閃爍；
-   * 連擊為 0、角色未加入或陣亡時隱藏
+   * 連擊為 0、角色未加入或陣亡時隱藏。CREDIT 未進場時改在同一位置閃動顯示「投幣加入遊戲」
    *
    * @param index 角色索引（對應 rows / panelComboTexts）
    * @param character 角色數據（未加入時為 undefined）
@@ -1819,6 +1819,13 @@ export class UIScene extends Phaser.Scene {
   private updatePanelCombo(index: number, character: CharStat | undefined): void {
     const text = this.panelComboTexts[index];
     if (!text) return;
+    if (character?.creditState === 'absent') {
+      const credit = GameConfig.credit;
+      const blinkOn = this.time.now % credit.prompt.blinkMs < credit.prompt.blinkMs / 2;
+      this.setTextColor(text.setText(credit.joinText), credit.prompt.color).setAlpha(blinkOn ? 1 : 0.45).setVisible(true);
+      return;
+    }
+    text.setAlpha(1);
     const combo = character?.alive ? character.combo : undefined;
     if (!combo || combo.currentStreak === 0) {
       text.setVisible(false);
