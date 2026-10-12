@@ -13,7 +13,7 @@ import { OVERLAY_DEPTH_STEP } from '../systems/standingDepth';
 export interface ArtStyleHost {
   /** 擁有者場景 */
   readonly scene: Phaser.Scene;
-  /** 敵人物件池（切換一般怪外觀用） */
+  /** 敵人物件池（切換怪物外觀用） */
   enemies(): Phaser.Physics.Arcade.Group;
   /** P1（皮膚與頭上覆蓋圖跟隨的對象） */
   player(): Character;
@@ -34,23 +34,32 @@ const UI_OVERLAY_DEPTH = 20;
 /** P1 皮膚紋理：一般 / 強化 */
 export const SKIN_TEXTURE = 'character-goku-skin';
 const SKIN_EMPOWERED_TEXTURE = 'character-goku-skin-2';
-/** 原圖面向左的紋理（悟空皮膚）；其餘紋理視為面向右 */
-const TEXTURES_FACING_LEFT: ReadonlySet<string> = new Set([SKIN_TEXTURE, SKIN_EMPOWERED_TEXTURE]);
+/** 新美術怪物紋理：一般兵骷髏 / 肉怪骷髏戰士 / 遠程票券幽靈 */
+const ENEMY_SKELETON_B_TEXTURE = 'enemy-skeleton-b';
+const ENEMY_SKELETON_WARRIOR_TEXTURE = 'skeleton-warrior';
+const ENEMY_TICKET_TEXTURE = 'enemy-ticket';
+/** 原圖面向左的紋理（悟空皮膚、一般兵骷髏）；其餘紋理視為面向右。另一側由 flipX 鏡像，不另存鏡像圖 */
+const TEXTURES_FACING_LEFT: ReadonlySet<string> = new Set([SKIN_TEXTURE, SKIN_EMPOWERED_TEXTURE, ENEMY_SKELETON_B_TEXTURE]);
 /** P1 頭上覆蓋圖（1P 與積分），與頭上 UI 系統使用相同的垂直偏移 */
 const UI_OVERLAY_TEXTURE = 'character-ui-overlay';
 const UI_OVERLAY_OFFSET_Y = -130;
-/** 一般怪的兩種外觀：新美術骷髏戰士 / 舊版紅色圓形 */
-const NORMAL_ENEMY_LOOK = {
-  skeleton: { texture: 'skeleton-warrior', scale: 1.0 },
-  classic: { texture: 'enemy-normal', scale: 1.0 }
+/** 一般怪種的兩種外觀：新美術圖（F4）/ 舊版程式繪製圓形 */
+const ENEMY_LOOKS = {
+  normal: { art: { texture: ENEMY_SKELETON_B_TEXTURE, scale: 1.0 }, classic: { texture: 'enemy-normal', scale: 1.0 } },
+  tank: { art: { texture: ENEMY_SKELETON_WARRIOR_TEXTURE, scale: 1.0 }, classic: { texture: 'enemy-tank', scale: 1.0 } },
+  bomber: { art: { texture: ENEMY_TICKET_TEXTURE, scale: 1.0 }, classic: { texture: 'enemy-bomber', scale: 1.0 } }
 } as const;
+/** 有新美術外觀的怪種 */
+type LookEnemyType = keyof typeof ENEMY_LOOKS;
+/** 新美術怪物紋理（有地面佔位橢圓、開局先量腳底） */
+const ENEMY_ART_TEXTURES: ReadonlySet<string> = new Set(Object.values(ENEMY_LOOKS).map((l) => l.art.texture));
 /** 等待 UIScene 元件建立的重試次數與間隔 */
 const UI_RETRY_MAX = 5;
 const UI_RETRY_MS = 100;
 
 /**
  * F4 新舊美術切換：
- * - 新美術：顯示 Scene.png 背景、P1 皮膚與頭上覆蓋圖、一般怪改骷髏戰士，並隱藏原 P1 頭頂 UI、改用 1P.png 底部面板
+ * - 新美術：顯示 Scene.png 背景、P1 皮膚與頭上覆蓋圖、怪物改用美術圖（一般兵骷髏 / 肉怪骷髏戰士 / 遠程票券幽靈），並隱藏原 P1 頭頂 UI、改用 1P.png 底部面板
  * - 舊美術：還原程式繪製場景與原 UI
  *
  * 熱鍵：F4 = 全部切換、F6 = 只切背景、F2 = 強制重載 Scene.png
@@ -62,8 +71,8 @@ export class ArtStyleController {
   private active = false;
   private skin: Phaser.GameObjects.Image | null = null;
   private uiOverlay: Phaser.GameObjects.Image | null = null;
-  /** 一般怪是否用骷髏戰士外觀（與背景同時切換） */
-  private skeletonEnemies = false;
+  /** 一般怪種是否用新美術外觀（與背景同時切換） */
+  private artEnemies = false;
   /** P1 是否在場上顯示（尚未投幣進場時隱藏皮膚與頭上覆蓋圖） */
   private playerShown = true;
 
@@ -90,7 +99,7 @@ export class ArtStyleController {
     const p = this.host.player();
     const textures = this.scene.textures;
     // 新美術圖的腳底 / 腳寬開局就先量好，F4 切換與二段變身時不必當場量
-    warmFeetMetrics(textures, [SKIN_TEXTURE, SKIN_EMPOWERED_TEXTURE, NORMAL_ENEMY_LOOK.skeleton.texture]);
+    warmFeetMetrics(textures, [SKIN_TEXTURE, SKIN_EMPOWERED_TEXTURE, ...ENEMY_ART_TEXTURES]);
     if (textures.exists(SKIN_TEXTURE)) {
       this.skin = this.scene.add.image(p.x, p.y, SKIN_TEXTURE).setDepth(p.depth + OVERLAY_DEPTH_STEP).setVisible(false);
     } else {
@@ -179,7 +188,7 @@ export class ArtStyleController {
    */
   enemyFootprint(e: Enemy): GroundFootprint | null {
     const key = e.texture.key;
-    if (!this.skeletonEnemies || key !== NORMAL_ENEMY_LOOK.skeleton.texture) return null;
+    if (!this.artEnemies || !ENEMY_ART_TEXTURES.has(key)) return null;
     const rx = visibleFootHalfWidth(this.scene.textures, key) * e.scaleX;
     return {
       footY: visibleBottomOffset(this.scene.textures, key) * e.scaleY,
@@ -188,9 +197,16 @@ export class ArtStyleController {
     };
   }
 
-  /** 一般怪生成時應使用的外觀（Enemy.spawn 透過 GameScene 查詢） */
-  normalEnemyLook(): { texture: string; scale: number } {
-    return this.skeletonEnemies ? NORMAL_ENEMY_LOOK.skeleton : NORMAL_ENEMY_LOOK.classic;
+  /**
+   * 怪生成時應使用的外觀（Enemy.spawn 透過 GameScene 查詢）：一般兵 / 肉怪 / 遠程怪依 F4 用新美術圖或舊版圓形；
+   * 其他怪種（BOSS、塔等）回傳 null，沿用 enemy-{type}
+   *
+   * @param type 怪種
+   */
+  enemyLook(type: string): { texture: string; scale: number } | null {
+    const looks = ENEMY_LOOKS[type as LookEnemyType];
+    if (!looks) return null;
+    return this.artEnemies ? looks.art : looks.classic;
   }
 
   /** 依目前顯示狀態建立背景圖；紋理不存在時不建立 */
@@ -232,13 +248,13 @@ export class ArtStyleController {
     this.uiOverlay?.setVisible(this.active && shown);
   }
 
-  /** 切換一般怪外觀，並套用到場上現有的一般怪（F4） */
+  /** 切換怪物外觀（新美術圖 / 舊版圓形），並套用到場上現有的一般兵、肉怪、遠程怪（F4） */
   private toggleEnemyLook(): void {
-    this.skeletonEnemies = !this.skeletonEnemies;
-    const look = this.normalEnemyLook();
+    this.artEnemies = !this.artEnemies;
     for (const child of this.host.enemies().getChildren()) {
       const e = child as Enemy;
-      if (e.enemyType === 'normal') e.setLook(look.texture, look.scale);
+      const look = this.enemyLook(e.enemyType);
+      if (look) e.setLook(look.texture, look.scale);
     }
   }
 

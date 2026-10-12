@@ -92,8 +92,10 @@ export class BootScene extends Phaser.Scene {
     // 載入二段變身皮膚：Goku_2.png (金色光環版本)
     this.load.image('character-goku-skin-2', 'assets/Goku_2.png');
     
-    // 載入骷髏戰士圖片（普通怪替換）
+    // 載入怪物美術圖（F4 新美術）：骷髏戰士 = 肉怪、Skeleton_B = 一般兵、Ticket = 遠程怪
     this.load.image('skeleton-warrior', 'assets/skeleton-warrior.png');
+    this.load.image('enemy-skeleton-b', 'assets/Skeleton_B.png');
+    this.load.image('enemy-ticket', 'assets/Ticket.png');
     
     // 載入角色上方UI覆蓋：MG_1P_Player_all.png (1P玩家UI元素)
     this.load.image('character-ui-overlay', 'assets/MG_1P_Player_all.png');

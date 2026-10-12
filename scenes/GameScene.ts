@@ -2410,8 +2410,12 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  /** 一般怪生成時應使用的外觀（Enemy.spawn 查詢；隨 F4 切換） */
-  public getNormalEnemyTextureConfig(): { texture: string; scale: number } {
-    return this.artStyle.normalEnemyLook();
+  /**
+   * 怪生成時應使用的外觀（Enemy.spawn 查詢；隨 F4 切換）；沒有新美術外觀的怪種回傳 null
+   *
+   * @param type 怪種
+   */
+  public getEnemyLook(type: string): { texture: string; scale: number } | null {
+    return this.artStyle.enemyLook(type);
   }
 }
