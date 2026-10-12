@@ -32,6 +32,10 @@ const BIG_COUNT_STYLE: Phaser.Types.GameObjects.Text.TextStyle = {
 interface CoinColors { dark: number; face: number; shine: number }
 const COIN_GOLD: CoinColors = { dark: 0xb8860b, face: 0xffd23f, shine: 0xfff4b0 };
 const COIN_SILVER: CoinColors = { dark: 0x8a8f99, face: 0xdfe4ec, shine: 0xffffff };
+/** 散落的單枚錢幣：尺寸與金幣占比（其餘為銀幣） */
+const LOOSE_COIN_W = 14;
+const LOOSE_COIN_H = 7;
+const LOOSE_GOLD_SHARE = 0.65;
 /** 畫面固定 UI 的深度 */
 const UI_DEPTH = 60;
 
@@ -175,13 +179,15 @@ export class TreasureRoomController {
   }
 
   /**
-   * 寶藏密室布置：正方形內鋪乾淨地板、外框金邊（含外圍光暈）；正方形外（整格扣掉正方形）覆蓋金色色調，
-   * 並在畫面內、金邊外隨機散布金幣堆 / 銀幣堆 / 寶石 / 寶箱 / 金條（彼此間隔 decorSpacing）
+   * 寶藏密室布置：整格深色底；正方形內鋪暖石地板與淡石板格線、外框金邊（含外圍光暈）；正方形外（整格扣掉正方形）覆蓋金色色調，
+   * 並在畫面內、金邊外隨機散布金幣堆 / 銀幣堆 / 寶石 / 寶箱 / 金條（彼此間隔 decorSpacing），空隙撒上散落的金銀幣
    */
   private drawDecor(): void {
     const cfg = GameConfig.stage.treasureRoom;
     const slot = this.host.slot(), room = this.host.room();
     const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => { this.decor.push(o); return o; };
+    // 深色底（原本的場景已由場景隱藏）
+    add(this.scene.add.rectangle(slot.x, slot.y, slot.width, slot.height, cfg.backdropColor).setOrigin(0, 0).setDepth(cfg.backdropDepth));
     // 正方形外的金色色調：上、下、左、右四塊
     for (const [x, y, w, h] of [
       [slot.left, slot.top, slot.width, room.top - slot.top],
@@ -191,7 +197,10 @@ export class TreasureRoomController {
     ]) {
       add(this.scene.add.rectangle(x, y, w, h, cfg.tintColor, cfg.tintAlpha).setOrigin(0, 0).setDepth(cfg.tintDepth));
     }
-    add(this.scene.add.rectangle(room.x, room.y, room.width, room.height, cfg.floorColor, cfg.floorAlpha).setOrigin(0, 0).setDepth(cfg.floorDepth));
+    add(this.scene.add.rectangle(room.x, room.y, room.width, room.height, cfg.floorColor).setOrigin(0, 0).setDepth(cfg.floorDepth));
+    const tiles = add(this.scene.add.graphics().setDepth(cfg.floorDepth)).lineStyle(cfg.floorLineWidth, cfg.floorLineColor, cfg.floorLineAlpha);
+    for (let x = room.left + cfg.floorTileSize; x < room.right; x += cfg.floorTileSize) tiles.lineBetween(x, room.top, x, room.bottom);
+    for (let y = room.top + cfg.floorTileSize; y < room.bottom; y += cfg.floorTileSize) tiles.lineBetween(room.left, y, room.right, y);
     add(this.scene.add.graphics().setDepth(cfg.borderDepth))
       .lineStyle(cfg.borderGlowWidth, cfg.borderColor, cfg.borderGlowAlpha).strokeRectShape(room)
       .lineStyle(cfg.borderWidth, cfg.borderColor, 1).strokeRectShape(room);
@@ -215,6 +224,17 @@ export class TreasureRoomController {
       if (this.points.some((p) => Phaser.Math.Distance.Between(x, y, p.x, p.y) < cfg.decorSpacing)) continue;
       this.points.push({ x, y });
       drawers[i % drawers.length](x, y);
+      i++;
+    }
+    // 散落的金銀幣：撒在財寶堆之間的空隙（畫在財寶下層）
+    const loose = add(this.scene.add.graphics().setDepth(cfg.decorDepth - 0.05));
+    for (let i = 0, tries = 0; i < cfg.looseCoinCount && tries < cfg.looseCoinCount * 10; tries++) {
+      const x = Phaser.Math.Between(view.left, view.right);
+      const y = Phaser.Math.Between(view.top, view.bottom);
+      if (keepOut.contains(x, y)) continue;
+      const c = Math.random() < LOOSE_GOLD_SHARE ? COIN_GOLD : COIN_SILVER;
+      loose.fillStyle(c.dark, 1).fillEllipse(x, y + 2, LOOSE_COIN_W, LOOSE_COIN_H);
+      loose.fillStyle(c.face, 1).fillEllipse(x, y, LOOSE_COIN_W, LOOSE_COIN_H);
       i++;
     }
   }

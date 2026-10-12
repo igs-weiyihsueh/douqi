@@ -69,6 +69,8 @@ export class ArtStyleController {
   private backgrounds: Phaser.GameObjects.Image[] = [];
   /** 目前是否為新美術 */
   private active = false;
+  /** 場景背景暫時隱藏中（寶藏密室）：新美術開著也不顯示背景圖 */
+  private backgroundSuppressed = false;
   private skin: Phaser.GameObjects.Image | null = null;
   private uiOverlay: Phaser.GameObjects.Image | null = null;
   /** 一般怪種是否用新美術外觀（與背景同時切換） */
@@ -216,7 +218,7 @@ export class ArtStyleController {
       return;
     }
     this.backgrounds = this.host.backgroundRects()
-      .map((rect) => createCoverImage(this.scene, SCENE_BG_TEXTURE_KEY, rect, SCENE_BG_DEPTH, this.active));
+      .map((rect) => createCoverImage(this.scene, SCENE_BG_TEXTURE_KEY, rect, SCENE_BG_DEPTH, this.active && !this.backgroundSuppressed));
   }
 
   /** 切換新舊背景與 P1 覆蓋 UI（F4 / F6） */
@@ -227,7 +229,7 @@ export class ArtStyleController {
       return;
     }
     this.active = !this.active;
-    for (const bg of this.backgrounds) bg.setVisible(this.active);
+    this.applyBackgroundVisibility();
     this.skin?.setVisible(this.active && this.playerShown);
     this.uiOverlay?.setVisible(this.active && this.playerShown);
     // P1 改顯示新美術皮膚時，隱藏舊美術的名稱標籤 / 腳下條 / 「爆」標記（原本被舊的固定深度皮膚蓋住）
@@ -235,6 +237,21 @@ export class ArtStyleController {
     // 新美術改用覆蓋圖 UI → 隱藏原 P1 頭頂 UI、啟用底部面板替換；舊美術反之
     this.callUiWhenReady('setP1HeadUIVisible', (ui) => !!ui.overheadUIs?.has(0), !this.active);
     this.callUiWhenReady('setBottomPanelOverlay', (ui) => (ui.rows?.length ?? 0) > 0, this.active);
+  }
+
+  /**
+   * 暫時隱藏 / 恢復場景背景圖（寶藏密室時隱藏；新舊美術的切換狀態不受影響）
+   *
+   * @param suppressed true = 隱藏
+   */
+  setBackgroundSuppressed(suppressed: boolean): void {
+    this.backgroundSuppressed = suppressed;
+    this.applyBackgroundVisibility();
+  }
+
+  /** 背景圖只在新美術開啟、且沒有被暫時隱藏時顯示 */
+  private applyBackgroundVisibility(): void {
+    for (const bg of this.backgrounds) bg.setVisible(this.active && !this.backgroundSuppressed);
   }
 
   /**

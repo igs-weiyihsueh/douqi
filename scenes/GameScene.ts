@@ -1602,13 +1602,17 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * 進入新區域：獎勵關縮成正方形密室後直接開始倒數（不生一般怪）；其餘清掉左右平移前的可破壞物件（之後隨怪從天而降）、
+   * 進入新區域：獎勵關隱藏原本的場景、縮成正方形密室後直接開始倒數（不生一般怪）；離開密室時恢復場景；其餘清掉左右平移前的可破壞物件（之後隨怪從天而降）、
    * 波次計數歸零後開始佇列中的下一個小關卡
    *
    * @param to 轉場去處
    */
   private onAreaEnter(to: AreaTransition): void {
-    if (to === 'treasureRoom') {
+    // 進出寶藏密室都在閃黑中：密室隱藏原本的場景（含主遊戲邊界線）與美術背景圖，其他區域恢復
+    const inRoom = to === 'treasureRoom';
+    this.slotWorld.setCenterSceneryVisible(!inRoom);
+    this.artStyle.setBackgroundSuppressed(inRoom);
+    if (inRoom) {
       // 寶藏密室：活動範圍縮成中央格中央的正方形、鏡頭固定，再開始倒數
       const zone = this.slotWorld.centerZone, size = GameConfig.stage.treasureRoom.roomSize;
       this.slotWorld.enterRoomArena(new Phaser.Geom.Rectangle(zone.centerX - size / 2, zone.centerY - size / 2, size, size));

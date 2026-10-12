@@ -745,6 +745,15 @@ export class SlotWorldController {
     this.drawZoneScene(this.slotBRight, this.zoneBRight, this.currentLevel, side);
   }
 
+  /**
+   * 顯示 / 隱藏中央格的場景繪製物件（天空、遠景、地面、邊界線等；寶藏密室時隱藏）
+   *
+   * @param visible 是否顯示
+   */
+  setCenterSceneryVisible(visible: boolean): void {
+    for (const o of this.slotLayers.get(this.slotA) ?? []) (o as unknown as Phaser.GameObjects.Components.Visible).setVisible(visible);
+  }
+
   /** 清掉所有場景繪製物件與走廊 */
   private clearSceneLayers(): void {
     destroyZoneScenery(this.scene, this.sceneLayers);
