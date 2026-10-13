@@ -204,6 +204,10 @@ export class CharacterActionController {
       this.beginDash(c, target.x, target.y, time, true); // 碰到由 overlap 拾取
       return;
     }
+    if (targeting.isBreakable(target)) {
+      this.attackBreakable(c, target, time);
+      return;
+    }
     const dist = Phaser.Math.Distance.Between(c.x, c.y, target.x, target.y);
     if (this.isImmovableLargeTarget(target as Enemy)) {
       this.standoffMeleeAttack(c, target as Enemy, time);

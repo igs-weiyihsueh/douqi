@@ -140,7 +140,8 @@ export class TargetingController {
   /**
    * 慢速模式：範圍圈內有敵人就一定鎖。黏著式——目前目標存活且在圈內就維持（面向轉開也不脫鎖），
    * 只在面向錐形內有另一隻比目前目標更接近面向時才切換；沒有有效目標時先找面向錐形、再找圈內最近。
-   * 圈內沒有怪也沒有道具時鎖圈內最近的木箱；鎖著木箱時一有怪進圈就改鎖怪
+   * 面向錐形內的木箱與怪一起比角度（面向木箱就鎖木箱）；圈內沒有怪也沒有道具時鎖圈內最近的木箱；
+   * 鎖著木箱時，面向錐形內沒有更接近面向的目標就繼續打木箱，錐形內什麼都沒有且圈內有怪才改鎖怪
    */
   private updateSlowLock(p: Character): void {
     if (!p.alive) { this.p1Target = null; return; }
@@ -230,8 +231,9 @@ export class TargetingController {
   }
 
   /**
-   * c.aimAngle 方向錐形（±aimConeDeg、searchR 內）中最接近方向的候選（敵人、道具）；錐形外不鎖（才能朝空地走位）。
-   * 道具的角度差打折，略優先於敵人。方向來源一律是 c.aimAngle（快速 = 滑鼠、慢速 = 鍵盤面向）
+   * c.aimAngle 方向錐形（±aimConeDeg、searchR 內）中最接近方向的候選（敵人、道具、木箱）；錐形外不鎖（才能朝空地走位）。
+   * 道具的角度差打折，略優先於敵人；木箱與敵人同等比角度（面向木箱就能鎖到，距離以角色到木箱碰撞矩形計算）。
+   * 方向來源一律是 c.aimAngle（快速 = 滑鼠、慢速 = 鍵盤面向）
    *
    * @param c 瞄準的角色
    * @param searchR 搜尋半徑（快速模式預設 lock.searchRadius；慢速傳範圍圈半徑）
@@ -263,6 +265,14 @@ export class TargetingController {
       if (diff > cone) continue; // 實際角度差仍須在錐形內
       const score = diff * itemMult;
       if (score < bestScore) { bestScore = score; best = item; }
+    }
+    for (const child of this.host.breakables().getChildren()) {
+      const bk = child as Breakable;
+      if (!this.isLockValid(bk)) continue;
+      if (Phaser.Math.Distance.Between(c.x, c.y, bk.x, bk.y) <= underfootR || bk.distanceTo(c.x, c.y) > searchR) continue;
+      const diff = Math.abs(Phaser.Math.Angle.Wrap(Phaser.Math.Angle.Between(c.x, c.y, bk.x, bk.y) - c.aimAngle));
+      if (diff > cone) continue;
+      if (diff < bestScore) { bestScore = diff; best = bk; }
     }
     return best;
   }
