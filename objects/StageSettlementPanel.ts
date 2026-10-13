@@ -33,13 +33,10 @@ const PANEL_CONFIG = {
   STAT_YS: [-85, -15, 55],
   SCORE_Y: 135,
   RANK_Y: 220,
-  /** 戰績列名稱（與 SettlementColumn.values / points 同順序） */
+  /** 戰績列名稱（與 SettlementColumn.values 同順序） */
   STAT_LABELS: ['擊敗敵人', '最高連擊', '破壞物件'],
   /** 數值出現時從 VALUE_POP_SCALE 彈回 */
   VALUE_POP_SCALE: 1.5,
-  /** 計分演出：「+N」從該列數值往下飛進分數（飛行占這一步時長的 POINTS_FLY_RATIO），分數同時加上去 */
-  POINTS_STYLE: { fontFamily: 'monospace', fontSize: '30px', fontStyle: 'bold', color: '#ffd54f', stroke: '#000000', strokeThickness: 5 },
-  POINTS_FLY_RATIO: 0.6,
   /** P 位名牌（底色用該 P 位顏色） */
   HEADER_WIDTH: 120,
   HEADER_HEIGHT: 50,
@@ -71,8 +68,6 @@ export interface SettlementColumn {
   state: 'playing' | 'waiting' | 'empty';
   /** 三項戰績：擊敗敵人、最高連擊、破壞物件（與 STAT_LABELS 同順序） */
   values: ReadonlyArray<number>;
-  /** 三項戰績各自換算的分數（同順序；合計 = score） */
-  points: ReadonlyArray<number>;
   score: number;
   /** 名次（1 起算；只有 playing 有意義） */
   rank: number;
@@ -84,14 +79,12 @@ interface ColumnTexts {
   values: Phaser.GameObjects.Text[];
   score: Phaser.GameObjects.Text;
   rank: Phaser.GameObjects.Text;
-  /** 計分演出目前已加到的分數 */
-  scoreShown: number;
 }
 
 /**
  * 關卡結算面板（畫面固定）：左側項目名稱，右邊 4 欄 P 位，各列擊敗敵人 / 最高連擊 / 破壞物件 / 分數與名次。
  *
- * - open → revealStat（三項戰績由上而下逐列跳出）→ addPoints（逐列把換算分數飛進分數並加上去）
+ * - open → revealStat（三項戰績由上而下逐列彈出最終數字）→ countScore（分數從 0 跳到總分）
  *   → revealRanks（名次彈出、第 1 名欄位亮框）→ close
  * - 沒在玩的 P 位整欄淡化，只顯示「等待投幣」或「未加入」
  */
@@ -137,52 +130,29 @@ export class StageSettlementPanel extends Phaser.GameObjects.Container {
   }
 
   /**
-   * 揭曉第 row 列戰績：各欄數值出現並彈跳，從 0 跳到實際值
+   * 揭曉第 row 列戰績：各欄直接顯示最終數字並彈跳（數字不跑動）
    *
    * @param row 戰績列索引（STAT_LABELS 順序）
    * @param ms 時長
    */
   revealStat(row: number, ms: number): void {
     const cfg = PANEL_CONFIG;
-    this.texts.forEach((texts) => {
-      const text = texts?.values[row];
+    this.columns.forEach((col, i) => {
+      const text = this.texts[i]?.values[row];
       if (!text) return;
-      text.setVisible(true).setScale(cfg.VALUE_POP_SCALE);
+      text.setText(`${col.values[row]}`).setVisible(true).setScale(cfg.VALUE_POP_SCALE);
       this.scene.tweens.add({ targets: text, scale: 1, duration: ms, ease: 'Back.easeOut' });
-    });
-    this.countUp(ms, (t) => {
-      this.columns.forEach((col, i) => this.texts[i]?.values[row].setText(`${Math.round(col.values[row] * t)}`));
     });
   }
 
   /**
-   * 計分第 row 列：各欄「+N」從該列數值飛進分數，分數從目前值加到加上這一列後的值（0 分的列不飛）
+   * 分數從 0 跳到總分
    *
-   * @param row 戰績列索引（STAT_LABELS 順序）
    * @param ms 時長
    */
-  addPoints(row: number, ms: number): void {
-    const cfg = PANEL_CONFIG;
-    const from: number[] = [];
-    this.columns.forEach((col, i) => {
-      const texts = this.texts[i];
-      if (!texts) return;
-      from[i] = texts.scoreShown;
-      texts.scoreShown += col.points[row];
-      if (col.points[row] <= 0) return;
-      const source = texts.values[row];
-      const fly = this.scene.add.text(source.x, source.y, `+${col.points[row]}`, cfg.POINTS_STYLE).setOrigin(0.5);
-      this.add(fly);
-      this.scene.tweens.add({
-        targets: fly, y: cfg.SCORE_Y, alpha: { from: 1, to: 0.2 }, duration: ms * cfg.POINTS_FLY_RATIO, ease: 'Quad.easeIn',
-        onComplete: () => fly.destroy()
-      });
-    });
+  countScore(ms: number): void {
     this.countUp(ms, (t) => {
-      this.columns.forEach((col, i) => {
-        const texts = this.texts[i];
-        if (texts) texts.score.setText(`${Math.round(from[i] + col.points[row] * t)}`);
-      });
+      this.columns.forEach((col, i) => this.texts[i]?.score.setText(`${Math.round(col.score * t)}`));
     });
   }
 
@@ -246,8 +216,7 @@ export class StageSettlementPanel extends Phaser.GameObjects.Container {
     const texts: ColumnTexts = {
       values: cfg.STAT_YS.map((y) => scene.add.text(x, y, '0', cfg.VALUE_STYLE).setOrigin(0.5).setVisible(false)),
       score: scene.add.text(x, cfg.SCORE_Y, '0', cfg.SCORE_STYLE).setOrigin(0.5),
-      rank: scene.add.text(x, cfg.RANK_Y, `第 ${col.rank} 名`, { ...cfg.RANK_STYLE, color: rankColor }).setOrigin(0.5).setVisible(false),
-      scoreShown: 0
+      rank: scene.add.text(x, cfg.RANK_Y, `第 ${col.rank} 名`, { ...cfg.RANK_STYLE, color: rankColor }).setOrigin(0.5).setVisible(false)
     };
     this.add([...texts.values, texts.score, texts.rank]);
     return texts;

@@ -85,23 +85,14 @@ export class StageSettlementController {
   }
 
   /**
-   * 三項戰績（擊敗敵人、最高連擊、破壞物件）各自換算的分數：數量 × perKill / perMaxCombo / perBreak
-   *
-   * @param c 角色
-   */
-  static statPoints(c: Character): number[] {
-    const w = GameConfig.stageSettlement.score;
-    const s = c.stageStats;
-    return [s.kills * w.perKill, s.maxCombo * w.perMaxCombo, s.breaks * w.perBreak].map((v) => Math.round(v));
-  }
-
-  /**
-   * 分數 = 三項戰績換算分數的合計
+   * 分數 = 擊敗 × perKill + 最高連擊 × perMaxCombo + 破壞 × perBreak
    *
    * @param c 角色
    */
   static scoreOf(c: Character): number {
-    return StageSettlementController.statPoints(c).reduce((sum, v) => sum + v, 0);
+    const w = GameConfig.stageSettlement.score;
+    const s = c.stageStats;
+    return Math.round(s.kills * w.perKill + s.maxCombo * w.perMaxCombo + s.breaks * w.perBreak);
   }
 
   /**
@@ -126,11 +117,11 @@ export class StageSettlementController {
       this.host.scene.time.delayedCall(at, fn);
     };
     panel.open(t.panelInMs);
-    // 三項戰績由上而下逐列揭曉，再逐列把換算分數飛進分數，最後彈出名次
+    // 三項戰績由上而下逐列彈出，分數從 0 跳到總分，最後彈出名次
     const rows = [0, 1, 2];
     rows.forEach((row) => schedule(row === 0 ? t.panelInMs : t.statRowMs, () => panel.revealStat(row, t.statRowMs)));
-    rows.forEach((row) => schedule(row === 0 ? t.statRowMs : t.scoreStepMs, () => panel.addPoints(row, t.scoreStepMs)));
-    schedule(t.scoreStepMs, () => panel.revealRanks(t.rankPopMs));
+    schedule(t.statRowMs, () => panel.countScore(t.scoreCountMs));
+    schedule(t.scoreCountMs, () => panel.revealRanks(t.rankPopMs));
     schedule(t.rankPopMs + t.holdMs, () => panel.close(t.panelOutMs));
     let chest: ChestFx | null = null;
     schedule(t.panelOutMs, () => { chest = this.dropChest(tier, t.chestDropMs); });
@@ -161,17 +152,14 @@ export class StageSettlementController {
     for (let i = 0; i < GameConfig.characters.count; i++) {
       const c = characters[i];
       const entry = entries.find((e) => e.c === c);
-      const base = { label: `${i + 1}P`, color: colors[i % colors.length], values: [0, 0, 0], points: [0, 0, 0], score: 0, rank: 0 };
+      const base = { label: `${i + 1}P`, color: colors[i % colors.length], values: [0, 0, 0], score: 0, rank: 0 };
       if (!c || !entry) {
         columns.push({ ...base, state: c ? 'waiting' : 'empty' });
         continue;
       }
       const rank = 1 + entries.filter((e) => e.score > entry.score).length;
       const stats = c.stageStats;
-      columns.push({
-        ...base, state: 'playing', values: [stats.kills, stats.maxCombo, stats.breaks],
-        points: StageSettlementController.statPoints(c), score: entry.score, rank
-      });
+      columns.push({ ...base, state: 'playing', values: [stats.kills, stats.maxCombo, stats.breaks], score: entry.score, rank });
     }
     return columns;
   }
