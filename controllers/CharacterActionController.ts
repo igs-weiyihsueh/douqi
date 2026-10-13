@@ -95,6 +95,8 @@ const DASH_ARRIVE_LOOKAHEAD_SEC = 0.032;
 export class CharacterActionController {
   /** 各角色這一次衝刺已撞過的可破壞物件（衝刺每幀判定，一次衝刺每個物件只算一下；開始衝刺時清空） */
   private readonly dashHitBreakables = new Map<Character, Set<Breakable>>();
+  /** 二段強化衝刺衝向的木箱（衝到木箱外緣時以木箱為中心炸強化 AOE；結束衝刺時清除） */
+  private readonly empowerCrateTargets = new Map<Character, Breakable>();
 
   constructor(private readonly host: CharacterActionHost) {}
 
@@ -218,13 +220,18 @@ export class CharacterActionController {
   }
 
   /**
-   * 慢速強化攻擊：範圍圈內有敵人就朝它衝刺，沒有就朝面向衝出（揮空）；衝刺途中撞到敵人時炸圓形 AOE
-   * （見 handleDash）。冷卻用強化 AOE 的 cooldownMs
+   * 慢速強化攻擊：鎖著木箱時改打木箱（empoweredCrateAttack）；否則範圍圈內有敵人就朝它衝刺，沒有就朝面向衝出（揮空）；
+   * 衝刺途中撞到敵人時炸圓形 AOE（見 handleDash）。冷卻用強化 AOE 的 cooldownMs
    *
    * @param c 施放的角色（慢速模式 P1）
    * @param time 目前場景時間
    */
   private empoweredDash(c: Character, time: number): void {
+    const locked = this.targeting.lockedTarget;
+    if (this.targeting.isBreakable(locked) && this.targeting.isLockValid(locked)) {
+      this.empoweredCrateAttack(c, locked, time);
+      return;
+    }
     const target = this.host.pickEmpowerTarget(c);
     if (target) {
       c.aimAngle = Phaser.Math.Angle.Between(c.x, c.y, target.x, target.y);
@@ -235,6 +242,43 @@ export class CharacterActionController {
     if (!c.isDashing) return; // 面向牆壁衝不出去時，startDirectionDash 已改為原地揮擊
     c.dashEmpowerStrike = true;
     c.nextAttackAllowedAt = time + GameConfig.combo.empower.aoe.cooldownMs;
+  }
+
+  /**
+   * 二段強化鎖著木箱：在攻擊距離內直接以木箱為中心炸強化 AOE，否則衝向木箱外緣、到點才炸（AOE 也打範圍內的木箱與怪）
+   *
+   * @param c 出手的角色
+   * @param bk 鎖定的木箱
+   * @param time 目前場景時間
+   */
+  private empoweredCrateAttack(c: Character, bk: Breakable, time: number): void {
+    const body = bk.getBody();
+    c.aimAngle = Phaser.Math.Angle.Between(c.x, c.y, body.centerX, body.centerY);
+    if (bk.distanceTo(c.x, c.y) <= GameConfig.melee.range) {
+      this.host.empowerStrike(c, body.centerX, body.centerY, time);
+    } else {
+      const dest = this.crateDashPoint(c, bk);
+      this.beginDash(c, dest.x, dest.y, time, false);
+      c.dashEmpowerStrike = true;
+      this.empowerCrateTargets.set(c, bk);
+    }
+    c.nextAttackAllowedAt = time + GameConfig.combo.empower.aoe.cooldownMs;
+  }
+
+  /**
+   * 衝向木箱的終點：木箱碰撞矩形上離角色最近的點，再往內一個角色半徑——衝刺在終點前（到點判定距離）就會停，
+   * 終點設在外緣上會停得太早、碰不到木箱；停下後的些微重疊由推箱分離推開
+   *
+   * @param c 衝刺的角色
+   * @param bk 目標木箱
+   */
+  private crateDashPoint(c: Character, bk: Breakable): { x: number; y: number } {
+    const body = bk.getBody();
+    const nearX = Phaser.Math.Clamp(c.x, body.left, body.right);
+    const nearY = Phaser.Math.Clamp(c.y, body.top, body.bottom);
+    const ang = Phaser.Math.Angle.Between(c.x, c.y, nearX, nearY);
+    const inset = GameConfig.player.radius;
+    return { x: nearX + Math.cos(ang) * inset, y: nearY + Math.sin(ang) * inset };
   }
 
   /**
@@ -256,8 +300,7 @@ export class CharacterActionController {
 
   /**
    * 鎖定木箱時的攻擊：面向木箱中心；離木箱碰撞矩形在 melee.range 內就小位移貼近（不進入木箱）後揮擊，
-   * 否則朝木箱外緣衝刺，終點設在外緣往內一個角色半徑——衝刺在終點前（到點判定距離）就會停，
-   * 終點設在外緣上會停得太早、碰不到木箱；停下後的些微重疊由推箱分離推開
+   * 否則朝木箱外緣衝刺（終點見 crateDashPoint）
    *
    * @param c 攻擊的角色
    * @param bk 鎖定的木箱
@@ -271,11 +314,8 @@ export class CharacterActionController {
       this.stepInAndSwing(c, edgeDist, time);
       return;
     }
-    const nearX = Phaser.Math.Clamp(c.x, body.left, body.right);
-    const nearY = Phaser.Math.Clamp(c.y, body.top, body.bottom);
-    const ang = Phaser.Math.Angle.Between(c.x, c.y, nearX, nearY);
-    const inset = GameConfig.player.radius;
-    this.beginDash(c, nearX + Math.cos(ang) * inset, nearY + Math.sin(ang) * inset, time, false);
+    const dest = this.crateDashPoint(c, bk);
+    this.beginDash(c, dest.x, dest.y, time, false);
   }
 
   /** 不可推動的大型目標（BOSS / 塔）：攻擊時停在外緣原地揮擊，不衝進中心重疊 */
@@ -412,6 +452,7 @@ export class CharacterActionController {
 
   /** 結束衝刺：關閉衝刺狀態、停下、收回護盾與視覺 */
   endDashState(c: Character): void {
+    this.empowerCrateTargets.delete(c);
     c.isDashing = false;
     c.dashToItem = false;
     c.dashEmpowerStrike = false;
@@ -473,18 +514,28 @@ export class CharacterActionController {
     const dx = c.dashDestX - c.x;
     const dy = c.dashDestY - c.y;
     const dist = Math.hypot(dx, dy);
-    if (dist <= DASH_ARRIVE_MIN) {
-      c.stopMoving();
-      this.endDashState(c);
+    if (dist <= Math.max(DASH_ARRIVE_MIN, dashSpeed * DASH_ARRIVE_LOOKAHEAD_SEC)) {
+      this.arriveDash(c, time);
       return;
     }
     const dashAngle = Math.atan2(dy, dx);
-    if (dist <= Math.max(DASH_ARRIVE_MIN, dashSpeed * DASH_ARRIVE_LOOKAHEAD_SEC)) {
-      c.stopMoving();
-      this.endDashState(c);
-      return;
-    }
     (c.body as Phaser.Physics.Arcade.Body).setVelocity(Math.cos(dashAngle) * dashSpeed, Math.sin(dashAngle) * dashSpeed);
+  }
+
+  /**
+   * 衝刺到點：停下並結束衝刺；二段強化衝向木箱的到點時以木箱為中心炸強化 AOE（木箱途中已碎就不炸）
+   *
+   * @param c 衝刺中的角色
+   * @param time 目前場景時間
+   */
+  private arriveDash(c: Character, time: number): void {
+    const crate = this.empowerCrateTargets.get(c);
+    c.stopMoving();
+    if (crate && this.targeting.isLockValid(crate)) {
+      const body = crate.getBody();
+      this.host.empowerStrike(c, body.centerX, body.centerY, time);
+    }
+    this.endDashState(c);
   }
 
   /** 目前衝刺速度：慢速模式讀即時調參，強化中加乘 */

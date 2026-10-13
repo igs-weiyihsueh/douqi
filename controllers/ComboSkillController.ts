@@ -223,6 +223,7 @@ export class ComboSkillController {
         hitAny = true;
       }
     }
+    if (this.host.hitBreakablesInCircle(c, tx, ty, radius, time) > 0) hitAny = true; // 範圍內的木箱各算一下
     if (hitAny) {
       this.host.comboRewardHit(c);
       this.registerEmpowerAoeHit(c, time);
