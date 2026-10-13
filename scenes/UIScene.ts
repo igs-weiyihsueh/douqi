@@ -199,6 +199,9 @@ export class UIScene extends Phaser.Scene {
      */
     OVERLAY_OFFSET_X: 91,
     OVERLAY_OFFSET_Y: 62,
+    /** F4 面板圖彩票欄的中心（相對面板圖左上角，面板圖原尺寸像素；關卡結算的彩票飛到這裡） */
+    OVERLAY_TICKET_FIELD_X: 165,
+    OVERLAY_TICKET_FIELD_Y: 88,
     /** 高於 F4 面板圖（depth 1000+i） */
     DEPTH: 1010,
     /** 「獲得N票券！」文字樣式與動畫 */
@@ -1634,14 +1637,22 @@ export class UIScene extends Phaser.Scene {
   }
 
   /**
-   * 角色在下方面板的領獎位置（HIT 顯示底圖中心，同 playComboRewardFx 的特效位置）
+   * 角色下方面板彩票欄的中心：F4 面板圖顯示中用面板圖上的彩票欄，否則用原版色塊面板的彩票數小框
    *
-   * @param index 角色索引（對應 panelHitCounters）
+   * @param index 角色索引（對應 rows）
    * @returns 畫面座標；該角色沒有面板時為 null
    */
-  panelRewardAnchor(index: number): { x: number; y: number } | null {
-    const counter = this.panelHitCounters[index];
-    return counter ? { x: counter.centerX, y: counter.centerY } : null;
+  panelTicketAnchor(index: number): { x: number; y: number } | null {
+    const cfg = this.PANEL_COMBO_CONFIG;
+    const overlay = this.bottomPanelOverlays[index];
+    if (overlay?.visible) {
+      return {
+        x: overlay.x - overlay.displayWidth / 2 + cfg.OVERLAY_TICKET_FIELD_X * overlay.scaleX,
+        y: overlay.y - overlay.displayHeight / 2 + cfg.OVERLAY_TICKET_FIELD_Y * overlay.scaleY
+      };
+    }
+    const box = this.rows[index]?.ticketBox;
+    return box ? { x: box.x + box.width / 2, y: box.y + box.height / 2 } : null;
   }
 
   /**

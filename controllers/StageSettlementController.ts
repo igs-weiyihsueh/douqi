@@ -12,7 +12,7 @@ export interface StageSettlementHost {
   characters(): ReadonlyArray<Character>;
   /** 彩票飛行圖示所在的場景（疊在下方面板之上的 UI 場景，畫面座標與本場景一致） */
   ticketLayer(): Phaser.Scene;
-  /** 角色對應下方面板的領獎位置（畫面座標；彩票飛去的終點） */
+  /** 角色下方面板彩票欄的位置（畫面座標；彩票飛去的終點） */
   panelAnchorOf(c: Character): { x: number; y: number };
   /** 依分數分配寶箱獎池（PayoutController.payStageChest），回傳各角色張數 */
   payStageChest(entries: ReadonlyArray<{ c: Character; score: number }>, tier: 'low' | 'high'): number[];
@@ -73,7 +73,7 @@ interface ChestFx {
  *
  * 1. 結算面板：4 個 P 位這一關的擊敗 / 傷害 / 破壞、分數與名次（StageSettlementPanel）
  * 2. 面板收起 → 寶箱從畫面上方降下 → 打開，參與玩家這一階寶箱 buffer 合成的獎池依分數比例分配
- * 3. 彩票從寶箱飛到各 P 位的下方面板 → 通知場景結束（開出口、恢復操作）
+ * 3. 彩票從寶箱飛到各 P 位下方面板的彩票欄 → 通知場景結束（開出口、恢復操作）
  *
  * 參與者 = 開始結算時還在場上的角色；沒有人時直接結束。播放期間場景凍結角色（isActive）
  */
@@ -205,7 +205,7 @@ export class StageSettlementController {
   }
 
   /**
-   * 彩票圖示從寶箱飛到角色的下方面板，最後一張到達時通知場景；0 張時不飛
+   * 彩票圖示從寶箱飛到角色下方面板的彩票欄，最後一張到達時通知場景；0 張時不飛
    *
    * @param c 領獎的角色
    * @param tickets 張數

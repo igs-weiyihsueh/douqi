@@ -223,7 +223,7 @@ export class GameScene extends Phaser.Scene {
       scene: this,
       characters: () => this.characters,
       ticketLayer: () => this.scene.get('UIScene'),
-      panelAnchorOf: (c) => (this.scene.get('UIScene') as UIScene).panelRewardAnchor(c.index)
+      panelAnchorOf: (c) => (this.scene.get('UIScene') as UIScene).panelTicketAnchor(c.index)
         ?? { x: c.x - this.cameras.main.scrollX, y: c.y - this.cameras.main.scrollY },
       payStageChest: (entries, tier) => this.payout.payStageChest(entries, tier),
       onTicketsArrived: (c, tickets) => this.showTicketReward(c, tickets),

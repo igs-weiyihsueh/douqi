@@ -298,7 +298,7 @@ export const GameConfig = {
   /**
    * 關卡結算：一般清敵關打完，等寶箱怪、亂入 BOSS、變身 BOSS 都結束後播放（密室不結算），播完才開出口。
    * 結算面板列出 4 個 P 位這一關的擊敗敵人 / 最高連擊 / 破壞物件與分數、名次 → 面板收起 → 寶箱降下打開，
-   * 把參與玩家這一階寶箱 buffer 合成的獎池依分數比例分給各玩家（見 PayoutController.payStageChest），彩票飛到各 P 位的下方面板。
+   * 把參與玩家這一階寶箱 buffer 合成的獎池依分數比例分給各玩家（見 PayoutController.payStageChest），彩票飛到各 P 位下方面板的彩票欄。
    * 播放期間角色不能行動。
    * - score：分數 = 擊敗 × perKill + 最高連擊 × perMaxCombo + 破壞 × perBreak
    * - timing：各段時長（毫秒），依序播放，合計約 9 秒（規格 10 秒內）
