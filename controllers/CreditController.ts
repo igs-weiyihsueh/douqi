@@ -23,6 +23,13 @@ export interface CreditHost {
   /** 角色 CREDIT 或狀態改變（更新 HUD） */
   onCreditChanged(): void;
   /**
+   * 頭上投幣提示的下緣位置（世界座標）：頭頂 UI 基準（角色畫面上看到的圖像頂端再往上 headUi.gap），
+   * 等待續關時仍顯示的頭上覆蓋圖要讓開
+   *
+   * @param c 角色
+   */
+  promptAnchorY(c: Character): number;
+  /**
    * 投了一次幣（播放多投多送量條亮格與光效）
    *
    * @param c 投幣的角色
@@ -212,7 +219,7 @@ export class CreditController {
       }
       const text = `${cfg.continueText} ${Math.max(0, Math.ceil((deadline - now) / 1000))}`;
       if (prompt.text !== text) prompt.setText(text);
-      prompt.setPosition(c.x, c.y + cfg.prompt.offsetY).setVisible(true).setAlpha(blinkOn ? 1 : 0.45);
+      prompt.setPosition(c.x, this.host.promptAnchorY(c)).setVisible(true).setAlpha(blinkOn ? 1 : 0.45);
     }
   }
 
@@ -223,6 +230,6 @@ export class CreditController {
     return this.host.scene.add.text(0, 0, '', {
       fontSize: `${p.fontSize}px`, fontStyle: 'bold', color: p.color, stroke: p.stroke, strokeThickness: p.strokeThickness,
       padding: { top: p.paddingY, bottom: p.paddingY }
-    }).setOrigin(0.5).setDepth(p.depth);
+    }).setOrigin(0.5, 1).setDepth(p.depth);
   }
 }

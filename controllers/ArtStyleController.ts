@@ -40,9 +40,8 @@ const ENEMY_SKELETON_WARRIOR_TEXTURE = 'skeleton-warrior';
 const ENEMY_TICKET_TEXTURE = 'enemy-ticket';
 /** 原圖面向左的紋理（悟空皮膚）；其餘紋理（含三張怪物圖）視為面向右。另一側由 flipX 鏡像，不另存鏡像圖 */
 const TEXTURES_FACING_LEFT: ReadonlySet<string> = new Set([SKIN_TEXTURE, SKIN_EMPOWERED_TEXTURE]);
-/** P1 頭上覆蓋圖（1P 與積分），與頭上 UI 系統使用相同的垂直偏移 */
+/** P1 頭上覆蓋圖（1P 與積分），與頭上 UI 系統使用相同的位置基準（headAnchorY） */
 const UI_OVERLAY_TEXTURE = 'character-ui-overlay';
-const UI_OVERLAY_OFFSET_Y = -130;
 /** 一般怪種的兩種外觀：新美術圖（F4）/ 舊版程式繪製圓形 */
 const ENEMY_LOOKS = {
   normal: { art: { texture: ENEMY_SKELETON_B_TEXTURE, scale: 1.0 }, classic: { texture: 'enemy-normal', scale: 1.0 } },
@@ -109,7 +108,7 @@ export class ArtStyleController {
     }
     if (!textures.exists(SKIN_EMPOWERED_TEXTURE)) console.warn(`⚠️ 強化皮膚資源不存在：${SKIN_EMPOWERED_TEXTURE}`);
     if (textures.exists(UI_OVERLAY_TEXTURE)) {
-      this.uiOverlay = this.scene.add.image(p.x, p.y + UI_OVERLAY_OFFSET_Y, UI_OVERLAY_TEXTURE).setDepth(UI_OVERLAY_DEPTH).setVisible(false);
+      this.uiOverlay = this.scene.add.image(p.x, p.y, UI_OVERLAY_TEXTURE).setOrigin(0.5, 1).setDepth(UI_OVERLAY_DEPTH).setVisible(false);
     } else {
       console.warn(`⚠️ 角色 UI 覆蓋資源不存在：${UI_OVERLAY_TEXTURE}`);
     }
@@ -128,7 +127,7 @@ export class ArtStyleController {
       const target = p.isEmpowered(time) ? SKIN_EMPOWERED_TEXTURE : SKIN_TEXTURE;
       if (this.skin.texture.key !== target && this.scene.textures.exists(target)) this.skin.setTexture(target);
     }
-    this.uiOverlay?.setPosition(p.x, p.y + UI_OVERLAY_OFFSET_Y);
+    this.uiOverlay?.setPosition(p.x, this.headAnchorY(p, time));
   }
 
   /**
@@ -171,6 +170,29 @@ export class ArtStyleController {
   characterFootOffset(c: Character): number {
     const img = this.displayImageOf(c);
     return visibleBottomOffset(this.scene.textures, img.texture.key) * img.scaleY;
+  }
+
+  /**
+   * 頭頂 UI 的下緣位置（世界座標）：角色畫面上看到的圖像可見部分的最上緣，再往上 headUi.gap（強化中用二段的間距）。
+   * P1 新美術時依目前顯示的皮膚（一段 / 二段圖高度不同），其餘角色依本體圖
+   *
+   * @param c 角色
+   * @param time 目前場景時間（判斷是否強化中）
+   */
+  headAnchorY(c: Character, time: number): number {
+    const img = this.displayImageOf(c);
+    const top = visibleBounds(this.scene.textures, img.texture.key).top * img.scaleY;
+    const gap = GameConfig.headUi.gap[c.isEmpowered(time) ? 'empowered' : 'normal'];
+    return c.y + top - gap;
+  }
+
+  /**
+   * 角色頭上覆蓋圖目前佔用的高度（P1 新美術覆蓋圖顯示中才有，其餘為 0）：頭上提示疊在它上方用
+   *
+   * @param c 角色
+   */
+  headOverlayHeight(c: Character): number {
+    return c === this.host.player() && this.uiOverlay?.visible ? this.uiOverlay.displayHeight : 0;
   }
 
   /**

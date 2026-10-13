@@ -1133,7 +1133,7 @@ export class GameScene extends Phaser.Scene {
 
   // ========================= 關卡系統 =========================
 
-  /** 區域的小關卡打完：依下一關開出口（問號 → 隨機雙出口；低階寶箱 → 左右出口；高階寶箱 → 上方出口） */
+  /** 區域的小關卡打完：依下一關開出口（問號 → 隨機雙出口；低階寶箱 → 單側左右出口；高階寶箱 → 上方出口） */
   private onSubZoneComplete(): void {
     // 清掉場上殘餘一般怪(進入選邊/出口階段,場地清乾淨)——保留還在場的寶箱怪(同場地,玩家可繼續打/它自己跑走)
     this.clearAllEnemies(true);
@@ -1144,7 +1144,7 @@ export class GameScene extends Phaser.Scene {
       this.treasures.fleeNow();
       this.slotWorld.openMysteryExits();
     } else if (this.lastStageChest === 'low') {
-      // 低階寶箱：開放左右邊界（受 dirLock 限制），玩家走到邊界 → 鏡頭平移進相鄰區域
+      // 低階寶箱：只開一側邊界（dirLock，尚未鎖定時為 defaultCrossSide；不給選邊），玩家走到邊界 → 鏡頭平移進相鄰區域
       // ③ 進 crossing 過場那刻:場上寶箱怪【直接逃走】(不留到過場/不跟到 B)。
       this.treasures.fleeNow();
       this.slotWorld.openCrossing();
@@ -1432,6 +1432,7 @@ export class GameScene extends Phaser.Scene {
       prepareResume: (c) => this.prepareCreditResume(c),
       setCharacterVisible: (c, visible) => this.setCharacterVisible(c, visible),
       onCreditChanged: () => this.emitStats(),
+      promptAnchorY: (c) => this.artStyle.headAnchorY(c, this.time.now) - this.artStyle.headOverlayHeight(c),
       onCoinInserted: (c, cycleIndex) => this.game.events.emit('coin-inserted', { index: c.index, cycleIndex })
     };
   }
@@ -2513,6 +2514,7 @@ export class GameScene extends Phaser.Scene {
         // 頭上UI修復：添加角色世界座標
         x: c.x,
         y: c.y,
+        headY: this.artStyle.headAnchorY(c, this.time.now),
         // CREDIT（投幣點數）與彩票數
         credit: c.credit,
         tickets: c.tickets,

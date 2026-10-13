@@ -16,6 +16,12 @@ export const GameConfig = {
   /** 畫面最上方置中的 JP 橫幅（MG_JP123.png 靜態圖，原尺寸 1324×116）：上緣 y、縮放、深度（固定螢幕，不隨鏡頭捲動） */
   jackpotBanner: { enabled: true, y: 8, scale: 1, depth: 24 },
 
+  /**
+   * 頭頂 UI（P1 頭上覆蓋圖、其餘角色的頭頂編號牌 / CREDIT / 能量條、投幣續關提示）的位置：
+   * 以角色畫面上看到的圖像（P1 新美術為一段 / 二段皮膚）可見部分的最上緣為基準，UI 下緣離頭頂 gap 像素；一段 / 二段分開設定
+   */
+  headUi: { gap: { normal: 10, empowered: 10 } },
+
   /** 波次進度 HUD(關卡制:節點序列 ●─●─◆);只純波次顯示,事件/BOSS 隱藏 */
   waveHud: {
     enabled: true,
@@ -252,8 +258,8 @@ export const GameConfig = {
     attackWindowMs: 1500,
     /** 投幣恢復後的無敵時間（毫秒） */
     resumeInvulnMs: 1000,
-    /** 頭上提示：離角色中心的高度（在頭頂介面 / F4 頭上覆蓋圖上緣 −166 之上）、字級、顏色、上下留白（避免字形上緣被切）、閃動週期（毫秒） */
-    prompt: { offsetY: -200, fontSize: 30, color: '#ffe066', stroke: '#000000', strokeThickness: 6, paddingY: 8, blinkMs: 900, depth: 60 },
+    /** 頭上提示（位置見 headUi：下緣在頭頂基準，P1 頭上覆蓋圖顯示中時疊在覆蓋圖上方）：字級、顏色、上下留白（避免字形上緣被切）、閃動週期（毫秒） */
+    prompt: { fontSize: 30, color: '#ffe066', stroke: '#000000', strokeThickness: 6, paddingY: 8, blinkMs: 900, depth: 60 },
     /** 投幣續關的倒數秒數（逾時角色離場，回到未進場） */
     continueSeconds: 15,
     /** 提示文字：未進場（下方面板，每 joinRotateMs 輪流顯示一句、文字不閃）/ CREDIT 用完（頭上，後面接倒數秒數） */
@@ -1100,8 +1106,13 @@ export const GameConfig = {
      * 在場地邊緣往內 arrowInset 處（左右出口在左右緣中段、上方出口在上緣中央），走到這裡觸發轉場；開放期間呼吸閃爍
      */
     exitOrb: { radius: 26, color: 0x7affc0, coreColor: 0xeafff5, glowRadius: 34, glowLayers: 6, glowAlpha: 0.6 },
-    /** 問號關前的出口組合（隨機挑一組；L 左、R 右、U 上方）；含回頭方向（與 dirLock 相反）的組合會被排除 */
-    mysteryExitCombos: [['L', 'R'], ['L', 'U'], ['R', 'U']] as ReadonlyArray<ReadonlyArray<'L' | 'R' | 'U'>>,
+    /**
+     * 問號關前的出口組合（隨機挑一組；L 左、R 右、U 上方）；含回頭方向（與 dirLock 相反）的組合會被排除。
+     * 只有問號關前才有分歧，且一定含上方出口（不出現單純的左 + 右）
+     */
+    mysteryExitCombos: [['L', 'U'], ['R', 'U']] as ReadonlyArray<ReadonlyArray<'L' | 'R' | 'U'>>,
+    /** 低階寶箱的左右平移只開一側：已鎖定方向開該側，尚未鎖定（剛進新區域）時開這一側 */
+    defaultCrossSide: 'R' as 'L' | 'R',
     /** 寶箱獎勵：完成小關卡直接發給每位存活玩家的彩票張數 */
     chestTickets: { low: 5, high: 30 },
     /**

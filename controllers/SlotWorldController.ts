@@ -308,12 +308,13 @@ export class SlotWorldController {
   /**
    * 開放左右出口：物理範圍與鏡頭範圍放寬到中央格 + 開放側、開放側畫走廊、出口標記與 GO；只開一側時直接鎖定該側
    *
-   * @param allowed 開放的方向；省略時依 dirLock（走過一側後只開同側）
+   * @param allowed 開放的方向；省略時只開一側：dirLock（走過一側後只開同側），尚未鎖定時為 stage.defaultCrossSide
    */
   openCrossing(allowed?: { L: boolean; R: boolean }): void {
     this.crossingOpen = true;
     this.crossPhase = 'walk';
-    this.crossAllowed = allowed ?? { L: this.dirLock !== 'R', R: this.dirLock !== 'L' };
+    const side = this.dirLock ?? GameConfig.stage.defaultCrossSide;
+    this.crossAllowed = allowed ?? { L: side === 'L', R: side === 'R' };
     const openL = this.crossAllowed.L;
     const openR = this.crossAllowed.R;
     this.crossSide = openL && openR ? null : openL ? 'L' : 'R';
@@ -341,7 +342,7 @@ export class SlotWorldController {
   }
 
   /**
-   * 問號關前的雙出口：從 左+右 / 左+上 / 右+上 中挑一組，排除回頭方向（dirLock = 'L' 時不出現右，反之亦然）。
+   * 問號關前的雙出口：從 stage.mysteryExitCombos（左+上 / 右+上）中挑一組，排除回頭方向（dirLock = 'L' 時不出現右，反之亦然）。
    * 左右照常平移；上方閃黑（這一區有隱藏入口時依機率改開拱門取代上方出口）
    */
   openMysteryExits(): void {

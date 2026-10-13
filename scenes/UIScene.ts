@@ -42,6 +42,8 @@ interface CharStat {
   // 頭上UI：角色世界座標
   x: number;
   y: number;
+  /** 頭頂 UI 下緣的世界 Y（角色畫面上看到的圖像頂端再往上 headUi.gap） */
+  headY: number;
   /** CREDIT（投幣點數） */
   credit: number;
   /** 彩票數（各種獎勵累計） */
@@ -1606,9 +1608,14 @@ export class UIScene extends Phaser.Scene {
       return;
     }
     
-    // 用戶要求調整：頭頂UI偏移值從-150調整為-130
+    // 容器下緣（有能量條時為能量條下緣，否則為 CREDIT 底框下緣）對齊頭頂基準 headY
+    const config = this.OVERHEAD_UI_CONFIG;
+    const energyShown = ((container as any).energyUI as EnergyUIElements).bg.visible;
+    const bottom = energyShown
+      ? config.CREDIT.Y + config.ENERGY.Y_OFFSET + config.ENERGY.HEIGHT / 2
+      : config.CREDIT.Y + config.CREDIT.BG_HEIGHT / 2;
     const worldX = character.x;
-    const worldY = character.y - 130; // 調整：從-150改為-130，向下移動20px
+    const worldY = character.headY - bottom;
     
     // 座標系統轉換：世界座標 → 螢幕座標
     // UIScene使用固定相機，需要減去GameScene相機的捲動偏移
