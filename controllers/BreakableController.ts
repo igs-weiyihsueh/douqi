@@ -428,6 +428,7 @@ export class BreakableController {
    * @param allowDrop 是否可掉道具（一次攻擊最多 maxDropPerBreak 個）
    */
   private breakOne(bk: Breakable, actor: Character, time: number, allowDrop = true): void {
+    actor.stageStats.breaks++;
     if (bk.explosive) { this.startBarrelFuse(bk, allowDrop); return; }
     const crate = GameConfig.breakable.crate;
     const body = bk.getBody();

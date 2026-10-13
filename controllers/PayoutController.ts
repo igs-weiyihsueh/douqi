@@ -124,14 +124,45 @@ export class PayoutController {
   }
 
   /**
-   * 通關寶箱：把該 P 位對應階級 buffer 的整數部分全部發出
+   * 關卡結算寶箱：把參與玩家這一階寶箱 buffer 合成一個獎池，整數部分依分數比例分給各玩家（最大餘數法，總張數不變），
+   * 零頭依各自存入的比例退回各 P 位 buffer。全隊分數都是 0 時改依存入比例分。
    *
-   * @param c 領獎的角色
+   * @param entries 參與結算的角色與分數
    * @param tier 寶箱階級
-   * @returns 發出的張數
+   * @returns 各角色發出的張數（與 entries 同順序）
    */
-  payChest(c: Character, tier: 'low' | 'high'): number {
-    return this.takeSeat(c, tier === 'high' ? 'highChest' : 'lowChest', 1);
+  payStageChest(entries: ReadonlyArray<{ c: Character; score: number }>, tier: 'low' | 'high'): number[] {
+    const prize: SeatPrize = tier === 'high' ? 'highChest' : 'lowChest';
+    const deposits = entries.map((e) => this.seatOf(e.c)[prize]);
+    const pool = deposits.reduce((sum, v) => sum + v, 0);
+    const total = Math.floor(pool);
+    const scores = entries.map((e) => Math.max(0, e.score));
+    const weights = scores.some((s) => s > 0) ? scores : deposits;
+    const amounts = PayoutController.splitByWeight(total, weights);
+    const leftover = pool - total;
+    entries.forEach((e, i) => { this.seatOf(e.c)[prize] = pool > 0 ? (leftover * deposits[i]) / pool : 0; });
+    return entries.map((e, i) => (amounts[i] > 0 ? this.pay(e.c, amounts[i]) : 0));
+  }
+
+  /**
+   * 把 total 張依權重分成整數（最大餘數法：先發各自的整數部分，剩下的依小數部分大到小各補 1 張），合計剛好 total
+   *
+   * @param total 要分的總張數
+   * @param weights 各份的權重（合計 0 時全部 0 張）
+   */
+  private static splitByWeight(total: number, weights: ReadonlyArray<number>): number[] {
+    const weightSum = weights.reduce((sum, w) => sum + w, 0);
+    if (weightSum <= 0 || total <= 0) return weights.map(() => 0);
+    const exact = weights.map((w) => (total * w) / weightSum);
+    const amounts = exact.map((v) => Math.floor(v));
+    let rest = total - amounts.reduce((sum, v) => sum + v, 0);
+    const byFraction = exact.map((_, i) => i).sort((a, b) => (exact[b] - amounts[b]) - (exact[a] - amounts[a]));
+    for (const i of byFraction) {
+      if (rest <= 0) break;
+      amounts[i]++;
+      rest--;
+    }
+    return amounts;
   }
 
   /**

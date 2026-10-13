@@ -30,6 +30,7 @@ import { EnemyAttackController, type EnemyAttackHost } from '../controllers/Enem
 import { SlotWorldController, type AreaTransition, type SlotWorldHost } from '../controllers/SlotWorldController';
 import { PerfOverlay } from '../controllers/PerfOverlay';
 import { PayoutController } from '../controllers/PayoutController';
+import { StageSettlementController } from '../controllers/StageSettlementController';
 import { PayoutDebugPanel } from '../controllers/PayoutDebugPanel';
 import { GameDebugApi, type GameDebugHost } from '../controllers/GameDebugApi';
 import { TargetingController, type TargetingHost } from '../controllers/TargetingController';
@@ -133,8 +134,11 @@ export class GameScene extends Phaser.Scene {
   private subWavesTarget = 0;              // 當前子區目標波數
   /** 事件結束時場上還有殘留怪→留給玩家打完才收尾;此旗標 true=等殘留清完再 onSubZoneComplete。 */
   private pendingEventComplete = false;
-  /** 最後一波打完最後一隻怪時場上還有寶箱怪→延後開啟場景切換,等寶箱怪死/離場才 onSubZoneComplete。 */
-  private pendingSubZoneComplete = false;
+  /** 本關的怪已清完、等待關卡結算：場上寶箱怪 / 亂入 BOSS / 變身 BOSS 都結束才開始結算，結算播完才 onSubZoneComplete */
+  private pendingSettlement = false;
+  /** 等待結算的那一關的編號（completeStage 時記下，關卡編號隨即 +1） */
+  private settlementStage = 0;
+  private settlement!: StageSettlementController;
   /** 出口開啟時畫面邊緣的 GO 指示，每次 create() 重建 */
   private goIndicator!: GoIndicator;
   /** 清場輔助：畫面外剩餘一般怪的方向箭頭 */
@@ -216,6 +220,17 @@ export class GameScene extends Phaser.Scene {
     this.resetState();
     this.fx = new CombatFx(this);
     this.payout = new PayoutController();
+    this.settlement = new StageSettlementController({
+      scene: this,
+      characters: () => this.characters,
+      screenPosOf: (c) => ({ x: c.x - this.cameras.main.scrollX, y: c.y - this.cameras.main.scrollY }),
+      payStageChest: (entries, tier) => this.payout.payStageChest(entries, tier),
+      onTicketsArrived: (c, tickets) => {
+        this.fx.ticketText(c.x, c.y, tickets);
+        this.showTicketReward(c, tickets);
+      },
+      onFinished: () => this.onSubZoneComplete()
+    });
     new PayoutDebugPanel(this, this.payout, () => this.characters); // 除錯：回饋帳本面板（自行註冊熱鍵與場景關閉時的清理）
     this.hitFx = new HitReactionFx(this);
     // 衝刺殘影、拉長與撞擊壓扁（純視覺；自行掛在場景事件上，場景關閉時解除）
@@ -508,7 +523,7 @@ export class GameScene extends Phaser.Scene {
     this.subWavesDone = 0;
     this.subWavesTarget = 1;
     this.pendingEventComplete = false;
-    this.pendingSubZoneComplete = false; // 重開清延後切換旗標
+    this.pendingSettlement = false; // 重開清等待結算旗標
     this.pendingSurgeClear = false;
   }
 
@@ -674,6 +689,16 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
+    // 關卡結算演出期間凍結：角色不能行動（BOT 不跑 AI），只重繪角色標記
+    if (this.settlement.isActive) {
+      this.cancelPlayerActions();
+      for (const c of this.characters) if (c.alive) (c.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
+      this.targeting.drawMarkers();
+      this.syncStandingVisuals();
+      this.emitAim();
+      return;
+    }
+
     // 時間暫停到期 → 解除
     if (this.timeStopped && time >= this.timeStopUntil) {
       this.timeStopped = false;
@@ -737,7 +762,7 @@ export class GameScene extends Phaser.Scene {
     this.treasures.updateRoom(time, this.treasureRoom.spawnPoints);
     this.maybeBossIntrude(time);
     this.advanceWhenSurgeCleared(); // 延後的波次推進：即時補怪清完才進休息 / 結算
-    this.finishPendingSubZoneIfTreasureGone(); // 延後的場景切換:寶箱怪死/離場後才開啟
+    this.startSettlementWhenClear(); // 等待結算：寶箱怪 / 亂入 BOSS / 變身 BOSS 都結束後才開始
     // 守護事件——怪移動後把怪推回守護目標外圈(不疊上去);玩家仍可穿越。放 updateEnemies 之後→怪這幀先移動再被推出,渲染前已在外緣。
     const guardNpc = this.eventCtl.guardNpc;
     if (this.waveState === 'event' && this.eventCtl.kind === 'guard' && guardNpc) pushEnemiesOutOfNpc(guardNpc, this.enemies, this.arena);
@@ -969,12 +994,12 @@ export class GameScene extends Phaser.Scene {
     else this.enterIntermission();
   }
 
-  /** 延後的場景切換：寶箱怪已打倒或離場 → 真正開啟切換。每幀在寶箱怪更新後檢查 */
-  private finishPendingSubZoneIfTreasureGone(): void {
-    if (!this.pendingSubZoneComplete) return;
-    if (this.treasures.isOnField) return; // 寶箱怪還在→等它死/跑走
-    this.pendingSubZoneComplete = false;
-    this.onSubZoneComplete(); // 寶箱怪清了→真正進選邊/轉場
+  /** 等待結算：場上寶箱怪、亂入 BOSS、變身 BOSS 都結束 → 開始關卡結算（播完由 onFinished 開出口）。每幀在寶箱怪更新後檢查 */
+  private startSettlementWhenClear(): void {
+    if (!this.pendingSettlement) return;
+    if (this.treasures.isOnField || this.bossCtl.current || this.bossCtl.isTransformed) return;
+    this.pendingSettlement = false;
+    this.settlement.start(this.settlementStage, this.lastStageChest);
   }
 
   // ---------------------------------------------------------------------------
@@ -1038,9 +1063,9 @@ export class GameScene extends Phaser.Scene {
       this.finishPendingEventIfCleared();
       return;
     }
-    // 已在【延後場景切換(等寶箱怪清)】狀態:一般怪已清完,此時再殺到的多半是寶箱怪本身。
-    //   不再走波次配額邏輯(subWavesDone 已+1);寶箱怪清空的真正切換由 finishPendingSubZoneIfTreasureGone 每幀處理。
-    if (this.pendingSubZoneComplete || this.pendingSurgeClear) return;
+    // 已在【等待結算】狀態:一般怪已清完,此時再殺到的多半是寶箱怪本身。
+    //   不再走波次配額邏輯(subWavesDone 已+1);開始結算由 startSettlementWhenClear 每幀處理。
+    if (this.pendingSettlement || this.pendingSurgeClear) return;
     if (this.waveState === 'intermission' || this.waveState === 'boss' || this.waveState === 'event') return;
     this.waveKilled++;
     if (this.waveKilled >= this.waveQuota) {
@@ -1073,17 +1098,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * 關卡制本關的怪都清完：結算關卡；場上還有寶箱怪時不立刻開啟場景切換（pendingSubZoneComplete），
-   * 等寶箱怪死掉或離場（跑走）後才切換，沒有就直接開
+   * 關卡制本關的怪都清完：關卡完成並進入等待結算（pendingSettlement）；場上寶箱怪 / 亂入 BOSS / 變身 BOSS 都結束才播結算，
+   * 結算播完才開出口（都沒有時下一幀就開始結算）
    */
   private finishStage(): void {
     this.completeStage();
-    if (this.treasures.isOnField) {
-      this.pendingSubZoneComplete = true;
-      this.waveState = 'clearing'; // 停止生怪,等寶箱怪清了才切換
-    } else {
-      this.onSubZoneComplete();
-    }
+    this.pendingSettlement = true;
+    this.waveState = 'clearing'; // 停止生怪
   }
 
   /** 進入 intermission（過關）——供 BOSS 擊殺或作弊清場共用 */
@@ -1202,6 +1223,7 @@ export class GameScene extends Phaser.Scene {
         this.bossCtl.spawn(true);
       });
     }
+    for (const c of this.characters) c.stageStats = { kills: 0, damage: 0, breaks: 0 }; // 關卡結算的戰績從這一關開打算起
     this.subWavesDone = 0;
     this.subWavesTarget = 1;
     if (GameConfig.stageMonsters.enabled) {
@@ -1223,14 +1245,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * 小關卡完成：每位存活玩家領取自己對應寶箱階級 buffer 的彩票（面板播報獎特效），關卡編號 +1（卷軸 HUD 隨之遞補）
+   * 小關卡完成：記下寶箱階級與關卡編號給之後的關卡結算（寶箱彩票在結算時依分數分配），關卡編號 +1（卷軸 HUD 隨之遞補）
    */
   private completeStage(): void {
-    const chest = revealStageNode(this.stageQueue[0]);
-    this.lastStageChest = chest;
-    for (const c of this.characters) {
-      if (c.alive) this.showTicketReward(c, this.payout.payChest(c, chest));
-    }
+    this.lastStageChest = revealStageNode(this.stageQueue[0]);
+    this.settlementStage = this.currentStage;
     this.comboReward.settleAll(); // 通關時 HIT 連擊立即結算彩票，不等中斷倒數
     this.bossCtl.onStageComplete(); // 關卡打完後不能再變身 BOSS
     this.currentStage++;
@@ -1430,7 +1449,7 @@ export class GameScene extends Phaser.Scene {
 
   /** 目前能否即時補怪：小關卡進行中（生怪 / 清場 / 波間休息），且不在等即時補怪清完 */
   private canSurge(): boolean {
-    return this.stageInProgress && !this.pendingSubZoneComplete && !this.pendingSurgeClear
+    return this.stageInProgress && !this.pendingSettlement && !this.pendingSurgeClear
       && (this.waveState === 'spawning' || this.waveState === 'clearing' || this.waveState === 'intermission');
   }
 
@@ -1499,7 +1518,7 @@ export class GameScene extends Phaser.Scene {
       dropItemAt: (x, y, time) => this.dropItemAt(x, y, time),
       grantCrateTickets: (actor) => this.showTicketReward(actor, this.payout.payCrate(actor)),
       // 最後一波打完（出口開放）後不出，避免寶箱怪出現時已經在離開
-      spawnTreasureAt: (x, y, time) => (!this.levelMode || (this.stageInProgress && !this.pendingSubZoneComplete)) && this.treasures.spawnAt(x, y, time),
+      spawnTreasureAt: (x, y, time) => (!this.levelMode || (this.stageInProgress && !this.pendingSettlement)) && this.treasures.spawnAt(x, y, time),
       spawnExpandingRing: (x, y, radius, color, ms) => this.fx.expandingRing(x, y, radius, color, ms),
       shakeOnce: (duration, intensity) => this.fx.shake(duration, intensity)
     };
@@ -1684,7 +1703,7 @@ export class GameScene extends Phaser.Scene {
       player: () => this.player,
       isGameOver: () => this.gameOver,
       isSlowMode: () => this.controlMode === 'slow',
-      isStageActive: () => this.stageInProgress && !this.pendingSubZoneComplete,
+      isStageActive: () => this.stageInProgress && !this.pendingSettlement,
       wireEnemyCallbacks: (e) => this.wireEnemyCallbacks(e),
       addTelegraph: (fx) => { this.telegraphFx.push(fx); },
       removeTelegraph: (fx) => this.removeTelegraphFx(fx),
@@ -2334,6 +2353,7 @@ export class GameScene extends Phaser.Scene {
     const dmg = Math.max(1, Math.round(damage));
     enemy.aggroActive = true;
     const dead = enemy.takeDamage(dmg);
+    actor.stageStats.damage += dmg;
     if (enemy.isBoss) {
       this.bossCtl.onBossHit(actor, enemy, dmg, time);
       if (this.controlMode === 'slow' && !enemy.dead) {
@@ -2354,6 +2374,7 @@ export class GameScene extends Phaser.Scene {
     enemy.kill();
     if (wasBoss) {
       actor.kills++;
+      actor.stageStats.kills++;
       this.popTickets(dx, dy, this.payout.payBossKill(actor)); // 亂入 BOSS 的打倒獎（波次 BOSS 沒有預算，不給）
       this.bossCtl.onBossKilled(dx, dy); // 大爆炸 + 掉落（波次 BOSS 再回呼 onWaveBossDefeated）
     } else if (etype === 'tower') {
@@ -2361,6 +2382,7 @@ export class GameScene extends Phaser.Scene {
       this.eventCtl.onTowerDestroyed(); // 取消塔蓄力中的扇形預警，事件成功
     } else if (etype !== 'npc') {
       actor.kills++;
+      actor.stageStats.kills++;
       if (countsTowardQuota) this.onWaveKill(); // 即時補怪不推進關卡進度
       this.fx.deathBurst(dx, dy);
       if (actor === this.player && this.bossCtl.isTransformed) this.popTickets(dx, dy, this.payout.payBossFormKill(actor)); // 變身 BOSS 期間打怪給票

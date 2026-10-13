@@ -296,6 +296,30 @@ export const GameConfig = {
   },
 
   /**
+   * 關卡結算：一般清敵關打完，等寶箱怪、亂入 BOSS、變身 BOSS 都結束後播放（密室不結算），播完才開出口。
+   * 結算面板列出 4 個 P 位這一關的擊敗 / 傷害 / 破壞與分數、名次 → 面板收起 → 寶箱降下打開，
+   * 把參與玩家這一階寶箱 buffer 合成的獎池依分數比例分給各玩家（見 PayoutController.payStageChest）。播放期間角色不能行動。
+   * - score：分數 = 擊敗 × perKill + 傷害 × perDamage + 破壞 × perBreak
+   * - timing：各段時長（毫秒），依序播放，合計約 9 秒（規格 10 秒內）
+   */
+  stageSettlement: {
+    score: { perKill: 100, perDamage: 1, perBreak: 50 },
+    timing: {
+      panelInMs: 300,
+      statsCountMs: 2400,
+      scoreCountMs: 1000,
+      rankPopMs: 400,
+      holdMs: 1500,
+      panelOutMs: 300,
+      chestDropMs: 700,
+      chestOpenDelayMs: 300,
+      chestOpenMs: 300,
+      ticketFlyMs: 900,
+      endHoldMs: 900
+    }
+  },
+
+  /**
    * 召集：玩家身邊的怪（engagedRadius 內的怪，加上正在追他或被召集去找他的怪）不超過 maxEngaged 隻持續 lonelyMs，
    * 就從 recruitRange 內挑最近的 recruitCount 隻閒置的怪去找他；走在鏡頭畫面外時移動速度 × offscreenSpeedMult，
    * 進到畫面內恢復原速。只在小關卡進行中（生怪 / 清場）啟用。
