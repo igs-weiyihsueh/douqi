@@ -13,12 +13,15 @@ export const GameConfig = {
     perfOverlay: { x: 12, y: 12, fontSize: '16px', depth: 200, refreshMs: 250, sampleFrames: 120 }
   },
 
+  /** 畫面最上方置中的 JP 橫幅（MG_JP123.png 靜態圖，原尺寸 1324×116）：上緣 y、縮放、深度（固定螢幕，不隨鏡頭捲動） */
+  jackpotBanner: { enabled: true, y: 8, scale: 1, depth: 24 },
+
   /** 波次進度 HUD(關卡制:節點序列 ●─●─◆);只純波次顯示,事件/BOSS 隱藏 */
   waveHud: {
     enabled: true,
-    /** 節點序列置中的畫面座標(setScrollFactor0 固定);上方 */
+    /** 節點序列置中的畫面座標(setScrollFactor0 固定);上方，位於 JP 橫幅（jackpotBanner）下方 */
     x: 960,  // 調整為1920/2 = 960 (置中)
-    y: 45,   // 調整為適合1080高度的位置
+    y: 160,
     /** 節點半徑 */
     nodeRadius: 22,
     /** 節點間距(圓心到圓心) */
@@ -1280,8 +1283,8 @@ export const GameConfig = {
       normal: { radius: 220, damage: 60 },
       fan: { range: 380, arcDeg: 90, damage: 150 }
     },
-    /** BOSS 提示（取代血條）：畫面上方中央的大字；亂入 BOSS 顯示離場倒數，剩 urgentSec 秒內改色並脈動 */
-    hud: { y: 104, fontSize: '40px', color: '#ffd166', urgentColor: '#ff4d6d', urgentSec: 10, pulseScale: 1.15, pulseMs: 250 }
+    /** BOSS 提示（取代血條）：畫面上方中央的大字（JP 橫幅與關卡進度下方）；亂入 BOSS 顯示離場倒數，剩 urgentSec 秒內改色並脈動 */
+    hud: { y: 220, fontSize: '40px', color: '#ffd166', urgentColor: '#ff4d6d', urgentSec: 10, pulseScale: 1.15, pulseMs: 250 }
   },
 
   /** 三種事件（塔/守護/佔領）：非 BOSS 的事件波觸發，完成給獎勵 */

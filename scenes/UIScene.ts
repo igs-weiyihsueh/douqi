@@ -3,6 +3,8 @@ import { GameConfig } from '../config';
 
 /** 下方面板圖（1P～4P.png）讀不到尺寸時的預設排版尺寸 */
 const BOTTOM_PANEL_FALLBACK_SIZE = { WIDTH: 267, HEIGHT: 119 } as const;
+/** 畫面最上方 JP 橫幅的貼圖鍵（BootScene 載入 MG_JP123.png） */
+export const JACKPOT_BANNER_TEXTURE = 'jackpot-banner';
 import type { StageNodeKind } from '../systems/stageQueue';
 import { HitCounter } from '../objects/HitCounter';
 import { CoinBonusBar } from '../objects/CoinBonusBar';
@@ -358,6 +360,13 @@ export class UIScene extends Phaser.Scene {
       })
       .setOrigin(0.5, 0)
       .setVisible(false);
+
+    // JP 橫幅：畫面最上方置中的靜態圖（關卡進度在它下方）
+    const banner = GameConfig.jackpotBanner;
+    if (banner.enabled && this.textures.exists(JACKPOT_BANNER_TEXTURE)) {
+      this.add.image(GameConfig.width / 2, banner.y, JACKPOT_BANNER_TEXTURE)
+        .setOrigin(0.5, 0).setScale(banner.scale).setScrollFactor(0).setDepth(banner.depth);
+    }
 
     // 小關卡卷軸 HUD（4 圓點 + 量條）：固定螢幕、每幀依 stats 重繪，預設隱藏
     this.waveHudGfx = this.add.graphics()

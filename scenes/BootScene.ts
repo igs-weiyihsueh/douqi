@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { GameConfig } from '../config';
 import { HIT_COUNTER_TEXTURES } from '../objects/HitCounter';
 import { BARREL_TEXTURE, CRATE_TEXTURE } from '../objects/Breakable';
+import { JACKPOT_BANNER_TEXTURE } from './UIScene';
 
 /**
  * BootScene：程序化產生占位像素貼圖（不依賴外部素材檔）。
@@ -113,6 +114,9 @@ export class BootScene extends Phaser.Scene {
     this.load.image(HIT_COUNTER_TEXTURES.BG, 'assets/MG_HIT_BG.png');
     this.load.image(HIT_COUNTER_TEXTURES.LABEL, 'assets/MG_HiT.png');
     HIT_COUNTER_TEXTURES.DIGITS.forEach((key, d) => this.load.image(key, `assets/MG_HiT_num_${d}.png`));
+
+    // 畫面最上方的 JP 橫幅（靜態圖）
+    this.load.image(JACKPOT_BANNER_TEXTURE, 'assets/MG_JP123.png');
     
     console.log('🔍 嘗試載入路徑:', scenePaths[0]);
     console.log('🔍 嘗試載入Goku皮膚: assets/Goku_1.png');
