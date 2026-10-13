@@ -29,7 +29,8 @@ export function streakTimeoutMs(streak: number): number {
  *
  * 每幀依距上次命中的時間：超過中斷時間 × WARNING_START_RATIO 進入警告（HIT 圖閃爍淡出）、超過中斷時間就中斷
  * （先發待發的獎勵再歸零）；中斷時間隨連擊數線性遞減（見 streakTimeoutMs）。CREDIT 等待續關期間與波間休息時暫停倒數（連擊停在當下），
- * 續關逾時離場時結算。小關卡通關時立即結算（settleAll）。獎勵的彩票加到該角色的彩票數，並在下方面板播放彩票噴發特效
+ * 續關逾時離場時結算。小關卡通關時立即結算（settleAll）。獎勵張數由回饋 buffer 決定（達到的階越高發得越多），
+ * 加到該角色的彩票數，並在下方面板播放彩票噴發特效
  */
 export class ComboRewardController {
   /** 上一次 update 的場景時間（算每幀經過時間，暫停倒數用） */
@@ -39,11 +40,13 @@ export class ComboRewardController {
    * @param scene 場景
    * @param characters 全部角色
    * @param isCountdownPaused 全員暫停倒數中（波間休息）
+   * @param payReward 發連擊報獎：從角色的連擊 buffer 依達到的里程碑索引發票，回傳發出的張數
    */
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly characters: () => ReadonlyArray<Character>,
-    private readonly isCountdownPaused: () => boolean
+    private readonly isCountdownPaused: () => boolean,
+    private readonly payReward: (actor: Character, tierIndex: number) => number
   ) {}
 
   /**
@@ -102,28 +105,28 @@ export class ComboRewardController {
     const milestones: readonly number[] = cfg.MILESTONES;
     const lastIndex = milestones.length - 1;
     if (combo.currentStreak >= milestones[lastIndex]) {
-      this.grant(actor, cfg.REWARDS[lastIndex], milestones[lastIndex]);
+      this.grant(actor, lastIndex);
       this.reset(combo);
       return;
     }
     const i = milestones.indexOf(combo.currentStreak);
     if (i < 0) return;
     combo.pendingRewardIndex = i;
-    combo.pendingRewardTickets = cfg.REWARDS[i];
-    combo.pendingRewardMilestone = milestones[i];
     combo.nextMilestone = i + 1 < milestones.length ? milestones[i + 1] : milestones[lastIndex];
   }
 
   /**
-   * 發獎：彩票加到角色的彩票數，並在下方面板播放彩票噴發（數量 / 速度隨里程碑變化）
+   * 發獎：依達到的里程碑從連擊 buffer 發票（加到角色的彩票數），並在下方面板播放彩票噴發（數量 / 速度隨里程碑變化）；
+   * buffer 還不到 1 張時不發、不播特效
    *
    * @param actor 獲得獎勵的角色
-   * @param tickets 彩票張數
-   * @param milestone 達成的里程碑（連擊數）
+   * @param tierIndex 達成的里程碑索引
    */
-  private grant(actor: Character, tickets: number, milestone: number): void {
+  private grant(actor: Character, tierIndex: number): void {
+    const tickets = this.payReward(actor, tierIndex);
+    if (tickets <= 0) return;
+    const milestone = GameConfig.comboReward.MILESTONES[tierIndex];
     actor.comboState.ticketsEarned += tickets;
-    actor.tickets += tickets;
     const ui = this.scene.scene.get('UIScene') as unknown as ComboRewardFxScene | null;
     if (ui?.playComboRewardFx) {
       ui.playComboRewardFx(actor.index, tickets, milestone);
@@ -146,9 +149,7 @@ export class ComboRewardController {
    */
   private settle(character: Character): void {
     const combo = character.comboState;
-    if (combo.pendingRewardTickets !== undefined && combo.pendingRewardTickets > 0) {
-      this.grant(character, combo.pendingRewardTickets, combo.pendingRewardMilestone!);
-    }
+    if (combo.pendingRewardIndex !== undefined) this.grant(character, combo.pendingRewardIndex);
     this.reset(combo);
   }
 
@@ -158,7 +159,5 @@ export class ComboRewardController {
     combo.isWarning = false;
     combo.nextMilestone = GameConfig.comboReward.MILESTONES[0];
     combo.pendingRewardIndex = undefined;
-    combo.pendingRewardTickets = undefined;
-    combo.pendingRewardMilestone = undefined;
   }
 }

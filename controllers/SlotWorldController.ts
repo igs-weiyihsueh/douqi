@@ -32,6 +32,8 @@ export interface SlotWorldHost {
   goIndicator(): GoIndicator;
   /** 隱藏入口（問號關前可能取代上方出口） */
   hiddenGate(): HiddenGateController;
+  /** 共用的寶藏密室 buffer 是否已存夠一次的加碼預算（存夠才開隱藏入口） */
+  treasureRoomFunded(): boolean;
   /** F4 背景圖：身後那張搬到前方新 slot */
   recycleBackground(side: Side, aheadSlot: Phaser.Geom.Rectangle): void;
   /** 清除所有角色的衝刺與速度（轉場會直接搬動角色座標） */
@@ -343,7 +345,7 @@ export class SlotWorldController {
 
   /**
    * 問號關前的雙出口：從 stage.mysteryExitCombos（左+上 / 右+上）中挑一組，排除回頭方向（dirLock = 'L' 時不出現右，反之亦然）。
-   * 左右照常平移；上方閃黑（這一區有隱藏入口時依機率改開拱門取代上方出口）
+   * 左右照常平移；上方閃黑（寶藏密室 buffer 已存夠時改開隱藏入口取代上方出口，這一區沒有拱門就補生成）
    */
   openMysteryExits(): void {
     const back = this.dirLock === 'L' ? 'R' : this.dirLock === 'R' ? 'L' : null;
@@ -352,8 +354,12 @@ export class SlotWorldController {
     this.openCrossing({ L: combo.includes('L'), R: combo.includes('R') });
     if (combo.includes('U')) {
       this.progressPhase = 'exiting'; // 左右出口仍在 crossingOpen 下偵測
-      if (this.host.hiddenGate().exists && Math.random() < GameConfig.stage.hiddenGate.openChance) this.openHiddenGateExit();
-      else this.showTopExit();
+      if (this.host.treasureRoomFunded()) {
+        this.host.hiddenGate().ensureSpawned(this.centerZone);
+        this.openHiddenGateExit();
+      } else {
+        this.showTopExit();
+      }
     }
   }
 

@@ -36,6 +36,12 @@ export interface CreditHost {
    * @param cycleIndex 這次投幣在 coinCycle 中的位置（0 起算）
    */
   onCoinInserted(c: Character, cycleIndex: number): void;
+  /**
+   * 扣了 1 點 CREDIT（回饋帳本依占比存進各獎項的 buffer）
+   *
+   * @param c 扣點的角色
+   */
+  onCreditSpent(c: Character): void;
 }
 
 /**
@@ -167,6 +173,7 @@ export class CreditController {
     if (!this.enabled || this.freePlay || c.creditState !== 'playing' || time >= c.chargeWindowUntil) return;
     c.chargeWindowUntil = 0;
     c.credit = Math.max(0, c.credit - 1);
+    this.host.onCreditSpent(c);
     if (c.credit === 0) {
       if (c.isBot) this.insertCoin(c);
       else this.pendingPause.add(c);

@@ -4,6 +4,7 @@ import type { Character } from '../objects/Character';
 import type { BossSkillKind, Enemy } from '../objects/Enemy';
 import type { TelegraphFx } from '../systems/telegraphFx';
 import { distanceToSegment } from '../systems/geometry';
+import type { PayoutController } from './PayoutController';
 
 /**
  * BossController 需要場景提供的能力。由 GameScene 建立並傳入；控制器不直接存取場景私有成員。
@@ -46,6 +47,8 @@ export interface BossHost {
   emitStats(): void;
   /** 非亂入的波次 BOSS 被打倒後，由場景決定通關 / 轉場 / 過關 */
   onWaveBossDefeated(): void;
+  /** 回饋帳本：亂入 BOSS 的彩票預算（共用 buffer）在登場時鎖定、打中時發、整段結束時退回 */
+  readonly payout: PayoutController;
 }
 
 /** 亂入 BOSS 被打倒後留下的屍體：expireAt 前 P1 靠近按 Z 可變身 */
@@ -153,6 +156,7 @@ export class BossController {
     boss.setScale(1);
     this.boss = boss;
     this.damageAccum = 0;
+    if (intruder) this.host.payout.startBoss();
     const txt = this.scene.add
       .text(GameConfig.width / 2, GameConfig.height * 0.32, intruder ? 'BOSS 亂入！' : 'BOSS 出現！', BANNER_STYLE)
       .setOrigin(0.5)
@@ -173,7 +177,10 @@ export class BossController {
   update(time: number): void {
     this.emitHud();
     if (this.intruderLeaveAt > 0 && time >= this.intruderLeaveAt) this.dismissIntruder(true);
-    if (this.corpse && time >= this.corpse.expireAt) this.clearCorpse();
+    if (this.corpse && time >= this.corpse.expireAt) {
+      this.clearCorpse();
+      this.settlePayout();
+    }
     this.updateForm(time);
   }
 
@@ -191,11 +198,13 @@ export class BossController {
     this.dismissIntruder(false);
     this.clearCorpse();
     this.endForm();
+    this.settlePayout();
   }
 
   /** 小關卡打完：BOSS 屍體消失（關卡打完後不能再變身） */
   onStageComplete(): void {
     this.clearCorpse();
+    this.settlePayout();
   }
 
   /** 作弊清場：BOSS 已由場景隨一般怪一起移除，這裡只收掉狀態與 HUD */
@@ -204,10 +213,11 @@ export class BossController {
     this.boss = null;
     this.intruderLeaveAt = 0;
     this.emitHidden();
+    this.settlePayout();
   }
 
   /**
-   * BOSS 被角色命中（非擊殺結算前）：累積傷害噴道具；亂入 BOSS 依機率掉彩票給命中者
+   * BOSS 被角色命中（非擊殺結算前）：累積傷害噴道具；亂入 BOSS 從這次的彩票預算發打中獎給命中者
    *
    * @param actor 命中的角色
    * @param boss 被命中的 BOSS
@@ -216,7 +226,7 @@ export class BossController {
    */
   onBossHit(actor: Character, boss: Enemy, damage: number, time: number): void {
     this.accumDamageDrop(damage, time);
-    if (this.intruderLeaveAt > 0 && !boss.dead) this.rollHitTicket(actor, boss);
+    if (this.intruderLeaveAt > 0 && !boss.dead) this.payHitTicket(actor, boss);
   }
 
   /**
@@ -245,6 +255,7 @@ export class BossController {
     }
     if (intruder) {
       this.spawnCorpse(bx, by);
+      this.settlePayout(); // 沒留屍體（非慢速模式 / 關卡已打完）就不會變身，變身預算直接退回
       return;
     }
     this.host.onWaveBossDefeated();
@@ -363,19 +374,19 @@ export class BossController {
       onComplete: () => { if (boss.dead) boss.disableBody(true, true); } // 淡出期間被物件池重用時不關閉
     });
     if (timeUp) this.host.showEventBanner('BOSS 離開了…');
+    this.settlePayout();
   }
 
   /**
-   * 亂入 BOSS 被命中時，依機率掉彩票給命中的角色（BOSS 頭上飄出「+N 🎫」）
+   * 亂入 BOSS 被命中時，從這次的彩票預算發打中獎給命中的角色（BOSS 頭上飄出「+N 🎫」；預算發完就不再給）
    *
    * @param actor 命中的角色
    * @param boss 被命中的 BOSS
    */
-  private rollHitTicket(actor: Character, boss: Enemy): void {
-    const cfg = GameConfig.stage.bossIntrude;
-    if (Math.random() >= cfg.hitTicketChance) return;
-    actor.tickets += cfg.hitTickets;
-    const txt = this.scene.add.text(boss.x, boss.y - boss.getBodyRadius(), `+${cfg.hitTickets} 🎫`, OVERHEAD_STYLE)
+  private payHitTicket(actor: Character, boss: Enemy): void {
+    const tickets = this.host.payout.payBossHit(actor);
+    if (tickets <= 0) return;
+    const txt = this.scene.add.text(boss.x, boss.y - boss.getBodyRadius(), `+${tickets} 🎫`, OVERHEAD_STYLE)
       .setOrigin(0.5).setDepth(40);
     this.scene.tweens.add({ targets: txt, y: txt.y - 60, alpha: 0, duration: 800, onComplete: () => txt.destroy() });
   }
@@ -446,6 +457,7 @@ export class BossController {
     this.form = { until, normalHits: 0, img, timer };
     this.host.spawnExpandingRing(p.x, p.y, cfg.normal.radius, 0xffd700, 400);
     this.host.showEventBanner('變身 BOSS！');
+    this.host.payout.startBossForm();
     this.host.onBossForm();
   }
 
@@ -477,6 +489,12 @@ export class BossController {
     if (p.invulnUntil === form.until) p.invulnUntil = this.scene.time.now; // 提前結束（換區）時一併收回變身的無敵
     if (p.alive) p.setAlpha(1);
     this.host.spawnExpandingRing(p.x, p.y, GameConfig.boss.radius * 2, 0xffffff, 300);
+    this.settlePayout();
+  }
+
+  /** 亂入 BOSS 整段結束（場上沒有 BOSS、沒有屍體、也不在變身中）時，把這次沒發完的彩票預算退回共用 buffer */
+  private settlePayout(): void {
+    if (!this.boss && !this.corpse && !this.form) this.host.payout.endBoss();
   }
 
   /**

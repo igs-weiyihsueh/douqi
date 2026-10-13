@@ -29,6 +29,8 @@ import { DashFx } from '../controllers/DashFx';
 import { EnemyAttackController, type EnemyAttackHost } from '../controllers/EnemyAttackController';
 import { SlotWorldController, type AreaTransition, type SlotWorldHost } from '../controllers/SlotWorldController';
 import { PerfOverlay } from '../controllers/PerfOverlay';
+import { PayoutController } from '../controllers/PayoutController';
+import { PayoutDebugPanel } from '../controllers/PayoutDebugPanel';
 import { GameDebugApi, type GameDebugHost } from '../controllers/GameDebugApi';
 import { TargetingController, type TargetingHost } from '../controllers/TargetingController';
 import { CharacterActionController, type CharacterActionHost, type SlowMoveKeys } from '../controllers/CharacterActionController';
@@ -86,6 +88,8 @@ export class GameScene extends Phaser.Scene {
   private spawner!: SpawnController;
   /** 戰鬥視覺回饋（特效、閃白、震動），每次 create() 重建 */
   private fx!: CombatFx;
+  /** 回饋（RTP）帳本與各獎項 buffer，每次 create() 重建 */
+  private payout!: PayoutController;
   /** 命中火花與敵人受擊反應（純視覺） */
   private hitFx!: HitReactionFx;
   /** 敵人的攻擊（近戰、投彈），每次 create() 重建 */
@@ -211,6 +215,8 @@ export class GameScene extends Phaser.Scene {
   create(): void {
     this.resetState();
     this.fx = new CombatFx(this);
+    this.payout = new PayoutController();
+    new PayoutDebugPanel(this, this.payout, () => this.characters); // 除錯：回饋帳本面板（自行註冊熱鍵與場景關閉時的清理）
     this.hitFx = new HitReactionFx(this);
     // 衝刺殘影、拉長與撞擊壓扁（純視覺；自行掛在場景事件上，場景關閉時解除）
     new DashFx(this, {
@@ -314,7 +320,9 @@ export class GameScene extends Phaser.Scene {
       runChildUpdate: false
     });
     this.breakableCtl = new BreakableController(this.createBreakableHost());
-    this.comboReward = new ComboRewardController(this, () => this.characters, () => this.waveState === 'intermission');
+    this.comboReward = new ComboRewardController(
+      this, () => this.characters, () => this.waveState === 'intermission', (actor, tierIndex) => this.payout.payCombo(actor, tierIndex)
+    );
     this.comboSkills = new ComboSkillController(this.createComboSkillHost());
     this.chargeWarnGfx = this.add.graphics().setDepth(2);
     this.footDiscGfx = this.add.graphics().setDepth(FOOT_DISC_DEPTH);
@@ -635,6 +643,7 @@ export class GameScene extends Phaser.Scene {
     this.offscreenIndicator.update(delta);
     this.enemyRally.update(time);
     this.creditCtl.update();
+    this.payout.update(time);
 
     // COMBO 連擊計時（警告 / 中斷）
     this.comboReward.update();
@@ -1200,9 +1209,9 @@ export class GameScene extends Phaser.Scene {
       this.monsterProfile = pickMonsterProfile(chest);
       this.subWavesTarget = this.monsterProfile.waves.length;
       this.waveQuota = this.stageWaveQuota(0);
-      // BOSS 亂入：開打時決定本關是否亂入，開打 delayMs 後登場
+      // BOSS 亂入：開打時決定本關是否亂入（允許的階級且共用 BOSS buffer 已存到門檻），開打 delayMs 後登場
       const intrude = GameConfig.stageMonsters.chests[chest].bossIntrude;
-      this.bossIntrudeAt = Math.random() < intrude.chance ? this.time.now + intrude.delayMs : 0;
+      this.bossIntrudeAt = intrude.allowed && this.payout.bossFunded ? this.time.now + intrude.delayMs : 0;
       this.crateDropPending = true; // 第一波的木箱（第一批怪出現時落下）
     } else {
       this.waveQuota = GameConfig.stage.quotaByChest[chest];
@@ -1214,14 +1223,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * 小關卡完成：依寶箱階級直接發彩票給每位存活玩家（面板播報獎特效），關卡編號 +1（卷軸 HUD 隨之遞補）
+   * 小關卡完成：每位存活玩家領取自己對應寶箱階級 buffer 的彩票（面板播報獎特效），關卡編號 +1（卷軸 HUD 隨之遞補）
    */
   private completeStage(): void {
     const chest = revealStageNode(this.stageQueue[0]);
     this.lastStageChest = chest;
-    const tickets = GameConfig.stage.chestTickets[chest];
     for (const c of this.characters) {
-      if (c.alive) this.grantTickets(c, tickets);
+      if (c.alive) this.showTicketReward(c, this.payout.payChest(c, chest));
     }
     this.comboReward.settleAll(); // 通關時 HIT 連擊立即結算彩票，不等中斷倒數
     this.bossCtl.onStageComplete(); // 關卡打完後不能再變身 BOSS
@@ -1233,16 +1241,18 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * 發放彩票獎勵（小關卡寶箱、打破木箱）：彩票加到該角色的彩票數，並在下方面板播放彩票特效
+   * 彩票獎勵（小關卡寶箱、打破木箱；彩票已由回饋帳本加到角色身上）：在下方面板播放彩票特效，0 張時不播
    *
    * @param c 獲得獎勵的角色
    * @param tickets 彩票張數
+   * @returns 彩票張數（原樣傳回）
    */
-  private grantTickets(c: Character, tickets: number): void {
-    c.tickets += tickets;
+  private showTicketReward(c: Character, tickets: number): number {
+    if (tickets <= 0) return 0;
     const uiScene = this.scene.get('UIScene') as any;
     // 彩票噴發數量隨張數變化：沿用 COMBO 報獎特效，以張數作為里程碑參數
     uiScene?.playComboRewardFx?.(c.index, tickets, tickets);
+    return tickets;
   }
 
   /**
@@ -1433,7 +1443,11 @@ export class GameScene extends Phaser.Scene {
       setCharacterVisible: (c, visible) => this.setCharacterVisible(c, visible),
       onCreditChanged: () => this.emitStats(),
       promptAnchorY: (c) => this.artStyle.headAnchorY(c, this.time.now) - this.artStyle.headOverlayHeight(c),
-      onCoinInserted: (c, cycleIndex) => this.game.events.emit('coin-inserted', { index: c.index, cycleIndex })
+      onCoinInserted: (c, cycleIndex) => {
+        this.payout.onCoinInserted(c);
+        this.game.events.emit('coin-inserted', { index: c.index, cycleIndex });
+      },
+      onCreditSpent: (c) => this.payout.onCreditSpent(c)
     };
   }
 
@@ -1483,7 +1497,7 @@ export class GameScene extends Phaser.Scene {
       canDropCrates: () => this.canDropCrates(),
       onBreakableHit: (actor, time) => this.creditCtl.onAttackHit(actor, time), // 打到木箱與打到怪一樣扣 CREDIT
       dropItemAt: (x, y, time) => this.dropItemAt(x, y, time),
-      grantCrateTickets: (actor, tickets) => this.grantTickets(actor, tickets),
+      grantCrateTickets: (actor) => this.showTicketReward(actor, this.payout.payCrate(actor)),
       // 最後一波打完（出口開放）後不出，避免寶箱怪出現時已經在離開
       spawnTreasureAt: (x, y, time) => (!this.levelMode || (this.stageInProgress && !this.pendingSubZoneComplete)) && this.treasures.spawnAt(x, y, time),
       spawnExpandingRing: (x, y, radius, color, ms) => this.fx.expandingRing(x, y, radius, color, ms),
@@ -1504,7 +1518,8 @@ export class GameScene extends Phaser.Scene {
       flashEnemy: (e) => this.fx.flashEnemy(e),
       spawnDamageText: (x, y, amount) => this.fx.damageText(x, y, amount),
       spawnExpandingRing: (x, y, radius, color, ms) => this.fx.expandingRing(x, y, radius, color, ms),
-      shakeOnce: (duration, intensity) => this.fx.shake(duration, intensity)
+      shakeOnce: (duration, intensity) => this.fx.shake(duration, intensity),
+      payRoomTickets: (actor, kill) => (kill ? this.payout.payRoomKill(actor) : this.payout.payRoomHit(actor))
     };
   }
 
@@ -1604,6 +1619,7 @@ export class GameScene extends Phaser.Scene {
       player: () => this.player,
       goIndicator: () => this.goIndicator,
       hiddenGate: () => this.hiddenGate,
+      treasureRoomFunded: () => this.payout.roomFunded,
       recycleBackground: (side, slot) => this.artStyle.recycleBackground(side, slot),
       resetCharacterMotion: () => this.resetCharacterMotion(),
       onAreaLeave: (to) => this.onAreaLeave(to),
@@ -1620,7 +1636,10 @@ export class GameScene extends Phaser.Scene {
   private onAreaLeave(to: AreaTransition): void {
     if (to === 'side') this.treasures.clear();
     this.bossCtl.onZoneLeave();
-    if (to === 'nextArea') this.treasureRoom.end();
+    if (to === 'nextArea') {
+      this.treasureRoom.end();
+      this.payout.endRoom(); // 密室沒發完的加碼退回共用 buffer
+    }
   }
 
   /**
@@ -1641,6 +1660,7 @@ export class GameScene extends Phaser.Scene {
       this.slotWorld.enterRoomArena(new Phaser.Geom.Rectangle(zone.centerX - size / 2, zone.centerY - size / 2, size, size));
       this.waveState = 'clearing';
       this.treasureRoom.begin(this.time.now);
+      this.payout.startRoom(); // 鎖定這次密室的加碼預算
       return;
     }
     if (to === 'side') this.breakableCtl.clearAll();
@@ -1679,7 +1699,8 @@ export class GameScene extends Phaser.Scene {
       showEventBanner: (text) => this.showEventBanner(text),
       emitStats: () => this.emitStats(),
       onWaveBossDefeated: () => this.onWaveBossDefeated(),
-      onBossForm: () => this.surgeOnBossForm()
+      onBossForm: () => this.surgeOnBossForm(),
+      payout: this.payout
     };
   }
 
@@ -2309,6 +2330,7 @@ export class GameScene extends Phaser.Scene {
     if (enemy.dead || !enemy.active) return;
     this.creditCtl.onAttackHit(actor, time); // 這一招第一次命中扣 1 點 CREDIT
     if (enemy.enemyType === 'treasure') { this.treasures.hit(enemy, actor); return; }
+    this.popTickets(enemy.x, enemy.y, this.payout.paySecondFormHit(actor, time)); // 二段變身期間打怪才給票
     const dmg = Math.max(1, Math.round(damage));
     enemy.aggroActive = true;
     const dead = enemy.takeDamage(dmg);
@@ -2332,6 +2354,7 @@ export class GameScene extends Phaser.Scene {
     enemy.kill();
     if (wasBoss) {
       actor.kills++;
+      this.popTickets(dx, dy, this.payout.payBossKill(actor)); // 亂入 BOSS 的打倒獎（波次 BOSS 沒有預算，不給）
       this.bossCtl.onBossKilled(dx, dy); // 大爆炸 + 掉落（波次 BOSS 再回呼 onWaveBossDefeated）
     } else if (etype === 'tower') {
       this.fx.expandingRing(dx, dy, 120, 0xff8844, 400);
@@ -2340,9 +2363,21 @@ export class GameScene extends Phaser.Scene {
       actor.kills++;
       if (countsTowardQuota) this.onWaveKill(); // 即時補怪不推進關卡進度
       this.fx.deathBurst(dx, dy);
+      if (actor === this.player && this.bossCtl.isTransformed) this.popTickets(dx, dy, this.payout.payBossFormKill(actor)); // 變身 BOSS 期間打怪給票
       if (this.controlMode === 'slow') this.comboSkills.grantKillEnergy(this.player, etype);
       if (Math.random() < GameConfig.items.dropChance) this.dropItemAt(dx, dy, time);
     }
+  }
+
+  /**
+   * 敵人位置飄出「+N 🎫」（二段變身、亂入 BOSS、變身 BOSS 的彩票；0 張時不顯示）
+   *
+   * @param x 敵人 x
+   * @param y 敵人 y
+   * @param tickets 彩票張數
+   */
+  private popTickets(x: number, y: number, tickets: number): void {
+    if (tickets > 0) this.fx.ticketText(x, y, tickets);
   }
 
   // ---------------------------------------------------------------------------

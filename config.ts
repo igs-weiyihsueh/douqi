@@ -269,6 +269,33 @@ export const GameConfig = {
   },
 
   /**
+   * 回饋（RTP）：彩票機每投 1 幣長期平均回饋 coinTickets × rtpCap 張（rtpCap 為整台 4 個 P 位合計的上限）。
+   * 平均 1 幣 CREDIT = credit.coinCycle 一輪的平均，每 CREDIT 平均回饋 = coinTickets × rtpCap ÷ 平均 1 幣 CREDIT。
+   * 每扣 1 CREDIT 依 shares（以 RTP 計，合計 = rtpCap）存進各獎項的 buffer，獎項觸發時從 buffer 發：
+   * - 各 P 位：secondForm 二段變身期間打怪 / combo HIT 連擊報獎 / crate 木箱 / lowChest、highChest 通關寶箱
+   * - 共用：boss 亂入 BOSS（打中 + 打倒 + 變身 BOSS 期間打怪）/ treasureRoom 寶藏密室加碼
+   * 細節：
+   * - comboTierShares：連擊達到第 i 個里程碑（comboReward.MILESTONES）時發出連擊 buffer 的比例
+   * - secondFormExpectedHits：二段變身每打中一下發 buffer ÷ 此值（發完為止）
+   * - boss：共用 buffer 存到 minBudget 才亂入；登場時鎖定整個 buffer，hitShare 給打中（每下 ÷ expectedHits）、killShare 給打倒、
+   *   其餘給變身 BOSS 期間打倒的怪（每隻 ÷ formExpectedKills）；沒發完的退回
+   * - treasureRoom：共用 buffer 存到 budget 才開密室入口；進去時鎖定 budget，killShare 給打倒（每隻 ÷ expectedKills）、
+   *   其餘分給每一下打中；沒發完的退回
+   * - debugKey：除錯面板（累計投幣 / CREDIT / 出票、實際 RTP、各 buffer）的開關鍵
+   */
+  payout: {
+    coinTickets: 30,
+    rtpCap: 1.3,
+    shares: { secondForm: 0.2, combo: 0.25, crate: 0.1, lowChest: 0.17, highChest: 0.28, boss: 0.17, treasureRoom: 0.13 },
+    comboTierShares: [0.1, 0.2, 0.35, 0.6, 1] as ReadonlyArray<number>,
+    secondFormExpectedHits: 15,
+    boss: { minBudget: 600, hitShare: 0.3, killShare: 0.3, expectedHits: 25, formExpectedKills: 20 },
+    treasureRoom: { budget: 300, killShare: 0.5, expectedKills: 8 },
+    debugKey: 'F8',
+    debugPanel: { x: 12, y: 12, fontSize: '16px', depth: 210 }
+  },
+
+  /**
    * 召集：玩家身邊的怪（engagedRadius 內的怪，加上正在追他或被召集去找他的怪）不超過 maxEngaged 隻持續 lonelyMs，
    * 就從 recruitRange 內挑最近的 recruitCount 隻閒置的怪去找他；走在鏡頭畫面外時移動速度 × offscreenSpeedMult，
    * 進到畫面內恢復原速。只在小關卡進行中（生怪 / 清場）啟用。
@@ -481,8 +508,6 @@ export const GameConfig = {
      * 最後一階為上限：達成時立即發獎並歸零重新累積
      */
     MILESTONES: [5, 10, 20, 50, 100] as const,
-    /** 對應票券獎勵：各里程碑對應的票券數量 */
-    REWARDS: [1, 3, 10, 50, 100] as const,
   },
 
   /**
@@ -843,11 +868,12 @@ export const GameConfig = {
     fieldBatchGrowthPerPlayer: 0.5,
     /**
      * 各寶箱階級：可抽的配置（等機率）與每波擊殺數倍率（高階沿用同三套、提高擊殺數）；
-     * bossIntrude 限時亂入 BOSS：小關卡開始時以 chance 機率決定，開打 delayMs 後登場（BOSS 本身沿用 stage.bossIntrude）
+     * bossIntrude 限時亂入 BOSS：allowed 的階級在小關卡開始時，若共用的 BOSS buffer 已存到門檻（payout.boss.minBudget）就亂入，
+     * 開打 delayMs 後登場（BOSS 本身沿用 stage.bossIntrude）
      */
     chests: {
-      low: { profiles: ['swarm', 'armor', 'artillery'], quotaMult: 1, bossIntrude: { chance: 0, delayMs: 3000 } },
-      high: { profiles: ['swarm', 'armor', 'artillery'], quotaMult: 1.4, bossIntrude: { chance: 0.3, delayMs: 3000 } }
+      low: { profiles: ['swarm', 'armor', 'artillery'], quotaMult: 1, bossIntrude: { allowed: false, delayMs: 3000 } },
+      high: { profiles: ['swarm', 'armor', 'artillery'], quotaMult: 1.4, bossIntrude: { allowed: true, delayMs: 3000 } }
     },
     /**
      * 配置：waves 各波擊殺數（單人的份量，逐波遞增；每波開始時乘上當下存活人數，BOT 也算；
@@ -1064,10 +1090,10 @@ export const GameConfig = {
      * 隱藏入口（熔岩拱門）：每區開打時 spawnChance 機率出現在上方邊界（距左右邊 edgeMargin、避開中央上方出口
      * centerExclusion），拱門底部在場地上緣往內 topInset，顯示高度 displayHeight；未開啟時灰暗（closedTint / closedAlpha），
      * 開啟後洞口中央（自底部算起 glowCenterRatio 高度、半徑約寬度 × doorwayRadiusRatio）出現熔岩光暈，脈動週期 glowPulseMs。
-     * openChance：問號關前出口組合含「上」且這一區有拱門時，改開拱門取代上方出口的機率。目前為測試期數值
+     * 問號關前出口組合含「上」且共用的密室 buffer 已存夠（payout.treasureRoom.budget）時，改開拱門取代上方出口（這一區沒有拱門就補生成）
      */
     hiddenGate: {
-      spawnChance: 0.7, openChance: 0.5,
+      spawnChance: 0.7,
       displayHeight: 230, topInset: 40, edgeMargin: 220, centerExclusion: 280, depth: 3,
       closedTint: 0x6b6b6b, closedAlpha: 0.9, openFlickerAlpha: 0.8,
       glowColor: 0xff7a1a, glowRadius: 120, glowCenterRatio: 0.4, doorwayRadiusRatio: 0.3, glowPulseMs: 600,
@@ -1084,12 +1110,12 @@ export const GameConfig = {
      * 寶箱怪：進場 firstSpawnDelayMs 後開始，每 spawnIntervalMs ÷ (1 + (存活人數 − 1) × spawnSpeedupPerExtraPlayer) 從外圍隨機一堆財寶跳出（噴 spawnCoinBurst 枚金幣），
      * 沿拋物線（費時 jumpMs、拱高 jumpHeight，地上影子由小變大）跳進正方形內（離金邊 landMargin），空中不能被打，落地壓扁彈回；
      * 場上最多 maxAliveBase + (存活人數 − 1) × maxAlivePerExtraPlayer 隻；每隻存在 lifetimeMs（從跳出起算），沒打死就跳回外圍財寶堆消失；
-     * 打 hitsToKill 下死，每次命中給命中者 ticketsPerHit 張彩票、擊殺再給 ticketsOnKill 張；密室時間到全部跳回外圍的財寶堆（jumpOutMs）後消失
+     * 打 hitsToKill 下死，每次命中與擊殺從這次密室的加碼預算發彩票（payout.treasureRoom）；密室時間到全部跳回外圍的財寶堆（jumpOutMs）後消失
      */
     treasureRoom: {
       durationMs: 60000, finalCountdownSec: 5, hudY: 104, hudLabel: '💰 寶藏密室',
       firstSpawnDelayMs: 1500, spawnIntervalMs: 2000, spawnSpeedupPerExtraPlayer: 0.33, maxAliveBase: 4, maxAlivePerExtraPlayer: 2, lifetimeMs: 12000, spawnCoinBurst: 16,
-      hitsToKill: 10, ticketsPerHit: 1, ticketsOnKill: 30,
+      hitsToKill: 10,
       enterBanner: '寶藏密室！限時 60 秒', endBanner: '時間到！',
       roomSize: 760,
       backdropColor: 0x1a1006, backdropDepth: 0.55,
@@ -1113,15 +1139,12 @@ export const GameConfig = {
     mysteryExitCombos: [['L', 'U'], ['R', 'U']] as ReadonlyArray<ReadonlyArray<'L' | 'R' | 'U'>>,
     /** 低階寶箱的左右平移只開一側：已鎖定方向開該側，尚未鎖定（剛進新區域）時開這一側 */
     defaultCrossSide: 'R' as 'L' | 'R',
-    /** 寶箱獎勵：完成小關卡直接發給每位存活玩家的彩票張數 */
-    chestTickets: { low: 5, high: 30 },
     /**
      * BOSS 限時亂入：問號揭曉為高階時以 chance 機率登場（揭曉橫幅後 entryDelayMs；啟用 stageMonsters 時改由其 chests.bossIntrude 決定）；
      * 不擋通關（不計擊殺數），
-     * durationMs 內沒打倒就淡出離場（leaveFadeMs），換區時也一併離場；
-     * 每次命中有 hitTicketChance 機率掉 hitTickets 張彩票給命中的角色
+     * durationMs 內沒打倒就淡出離場（leaveFadeMs），換區時也一併離場；彩票獎勵見 payout.boss
      */
-    bossIntrude: { chance: 0.3, entryDelayMs: 1700, durationMs: 60000, hp: 1000, hitTicketChance: 0.3, hitTickets: 1, leaveFadeMs: 500 },
+    bossIntrude: { chance: 0.3, entryDelayMs: 1700, durationMs: 60000, hp: 1000, leaveFadeMs: 500 },
     /** 無限關卡固定使用的場景配色（scene.levels 的 key；火山荒城主題） */
     sceneLevel: 1,
     /**
@@ -1747,11 +1770,10 @@ export const GameConfig = {
       /** 碰撞 / 命中範圍 = 圖片可見外框（矩形，已乘 displayScale）以中心縮放此倍率；1 = 與看到的木箱外框一致 */
       bodyScale: 1,
       /**
-       * 打破木箱的獎勵：ticketChance 機率給打破的人 tickets 張彩票（下方面板播 HIT 報獎特效，木箱位置爆出金光與「+N 彩票」）；
+       * 打破木箱的獎勵：ticketChance 機率中獎，發出打破者的木箱 buffer（payout；下方面板播 HIT 報獎特效，木箱位置爆出金光與「+N 彩票」）；
        * treasureChance 機率從木箱位置跳出寶箱怪（每個小關卡最多一隻，最後一波打完後不出）
        */
       ticketChance: 0.2,
-      tickets: 1,
       treasureChance: 0.08,
       /** 木箱位置的彩票提示：金光圈半徑 / 時間、文字（{n} = 張數）、上飄距離 / 時間與樣式 */
       ticketFx: {

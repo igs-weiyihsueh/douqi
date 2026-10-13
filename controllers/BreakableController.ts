@@ -36,12 +36,12 @@ export interface BreakableHost {
   onBreakableHit(actor: Character, time: number): void;
   dropItemAt(x: number, y: number, time: number): void;
   /**
-   * 打破木箱爆出彩票：加到角色的彩票數並在下方面板播 HIT 報獎特效
+   * 打破木箱中獎：發出該角色的木箱 buffer（加到彩票數並在下方面板播 HIT 報獎特效）
    *
    * @param actor 打破木箱的角色
-   * @param tickets 彩票張數
+   * @returns 發出的張數（0 = buffer 還不到 1 張，不播特效）
    */
-  grantCrateTickets(actor: Character, tickets: number): void;
+  grantCrateTickets(actor: Character): number;
   /**
    * 從打破的木箱位置跳出寶箱怪（小關卡最後一波打完後、這一關已出過等情況不出）
    *
@@ -438,8 +438,8 @@ export class BreakableController {
     if (allowDrop && Math.random() < GameConfig.items.dropChance) this.host.dropItemAt(bx, by, time);
     if (Math.random() < crate.treasureChance) this.host.spawnTreasureAt(cx, cy, time);
     if (Math.random() < crate.ticketChance) {
-      this.host.grantCrateTickets(actor, crate.tickets);
-      this.spawnTicketFx(cx, cy, crate.tickets);
+      const tickets = this.host.grantCrateTickets(actor);
+      if (tickets > 0) this.spawnTicketFx(cx, cy, tickets);
     }
   }
 

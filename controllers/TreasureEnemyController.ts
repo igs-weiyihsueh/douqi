@@ -21,6 +21,14 @@ export interface TreasureEnemyHost {
   spawnDamageText(x: number, y: number, amount: number): void;
   spawnExpandingRing(x: number, y: number, radius: number, color: number, ms?: number): void;
   shakeOnce(duration: number, intensity: number): void;
+  /**
+   * 密室寶箱怪被打中 / 打倒：從這次密室的加碼預算發彩票給命中者
+   *
+   * @param actor 命中的角色
+   * @param kill true = 打倒獎、false = 打中獎
+   * @returns 發出的張數（預算發完時為 0）
+   */
+  payRoomTickets(actor: Character, kill: boolean): number;
 }
 
 /** 出生點 / 跑點目標離移動區邊緣的距離 */
@@ -282,7 +290,7 @@ export class TreasureEnemyController {
 
   /**
    * 命中寶箱怪：計一下並噴少量金幣、顯示剩餘次數，達到命中數就打倒並噴大量金幣。
-   * 獎勵關的寶箱怪改用 treasureRoom.hitsToKill，每次命中給命中者 ticketsPerHit 張彩票、打倒再給 ticketsOnKill 張
+   * 獎勵關的寶箱怪改用 treasureRoom.hitsToKill，每次命中與打倒從密室的加碼預算發彩票給命中者（預算發完就不再給）
    *
    * @param enemy 寶箱怪
    * @param actor 命中的角色
@@ -304,16 +312,16 @@ export class TreasureEnemyController {
     this.spawnCoins(enemy.x, enemy.y, cfg.coinsPerHit, false);
     this.host.spawnDamageText(enemy.x, enemy.y - 10, hitsToKill - enemy.treasureHits);
     if (inRoom) {
-      actor.tickets += room.ticketsPerHit;
-      this.popTicketText(enemy.x, enemy.y - 40, room.ticketsPerHit);
+      const tickets = this.host.payRoomTickets(actor, false);
+      if (tickets > 0) this.popTicketText(enemy.x, enemy.y - 40, tickets);
     }
     if (enemy.treasureHits >= hitsToKill) {
       const dx = enemy.x, dy = enemy.y;
       enemy.kill();
       if (inRoom) {
         this.roomTreasures.delete(enemy);
-        actor.tickets += room.ticketsOnKill;
-        this.popTicketText(dx, dy - 70, room.ticketsOnKill);
+        const tickets = this.host.payRoomTickets(actor, true);
+        if (tickets > 0) this.popTicketText(dx, dy - 70, tickets);
       }
       if (this.treasure === enemy) { this.treasure = null; this.clearFx(); }
       this.spawnCoins(dx, dy, cfg.coinsOnDeath, true);
