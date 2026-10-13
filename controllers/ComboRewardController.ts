@@ -27,7 +27,7 @@ export function streakTimeoutMs(streak: number): number {
  * 打中幾隻都只算一下，擊殺不另外加），連擊達到里程碑時記下待發獎勵，中斷時才發；
  * 達到最高里程碑時立即發獎並歸零。
  *
- * 每幀依距上次命中的時間：超過中斷時間 × WARNING_START_RATIO 進入警告（HIT 圖閃爍淡出）、超過中斷時間就中斷
+ * 被敵人打中（實際受傷判定成立）時立即中斷（interrupt）。每幀依距上次命中的時間：超過中斷時間 × WARNING_START_RATIO 進入警告（HIT 圖閃爍淡出）、超過中斷時間就中斷
  * （先發待發的獎勵再歸零）；中斷時間隨連擊數線性遞減（見 streakTimeoutMs）。CREDIT 等待續關期間與波間休息時暫停倒數（連擊停在當下），
  * 續關逾時離場時結算。小關卡通關時立即結算（settleAll）。獎勵張數由回饋 buffer 決定（達到的階越高發得越多），
  * 加到該角色的彩票數，並在下方面板播放彩票噴發特效
@@ -50,13 +50,14 @@ export class ComboRewardController {
   ) {}
 
   /**
-   * 一次命中：連擊 +1、更新最後命中時間並解除警告，再檢查里程碑
+   * 一次命中：連擊 +1（同時更新本關最高連擊）、更新最後命中時間並解除警告，再檢查里程碑
    *
    * @param actor 命中的角色
    */
   hit(actor: Character): void {
     const combo = actor.comboState;
     combo.currentStreak++;
+    actor.stageStats.maxCombo = Math.max(actor.stageStats.maxCombo, combo.currentStreak);
     combo.lastKillTime = this.scene.time.now; // 欄位沿用舊名，實際記錄最後命中時間
     combo.isWarning = false;
     this.checkMilestone(actor);
@@ -133,6 +134,15 @@ export class ComboRewardController {
     } else {
       console.error('❌ UIScene.playComboRewardFx 不存在，COMBO 獎勵特效無法播放');
     }
+  }
+
+  /**
+   * 角色被敵人打中：連擊立即中斷（先發待發獎勵再歸零）
+   *
+   * @param character 被打中的角色
+   */
+  interrupt(character: Character): void {
+    if (character.comboState.currentStreak > 0) this.settle(character);
   }
 
   /** 小關卡通關：所有角色的連擊立即結算（發待發獎勵再歸零），不等中斷倒數 */

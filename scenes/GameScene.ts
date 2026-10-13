@@ -31,6 +31,7 @@ import { SlotWorldController, type AreaTransition, type SlotWorldHost } from '..
 import { PerfOverlay } from '../controllers/PerfOverlay';
 import { PayoutController } from '../controllers/PayoutController';
 import { StageSettlementController } from '../controllers/StageSettlementController';
+import type { UIScene } from './UIScene';
 import { PayoutDebugPanel } from '../controllers/PayoutDebugPanel';
 import { GameDebugApi, type GameDebugHost } from '../controllers/GameDebugApi';
 import { TargetingController, type TargetingHost } from '../controllers/TargetingController';
@@ -136,8 +137,6 @@ export class GameScene extends Phaser.Scene {
   private pendingEventComplete = false;
   /** 本關的怪已清完、等待關卡結算：場上寶箱怪 / 亂入 BOSS / 變身 BOSS 都結束才開始結算，結算播完才 onSubZoneComplete */
   private pendingSettlement = false;
-  /** 等待結算的那一關的編號（completeStage 時記下，關卡編號隨即 +1） */
-  private settlementStage = 0;
   private settlement!: StageSettlementController;
   /** 出口開啟時畫面邊緣的 GO 指示，每次 create() 重建 */
   private goIndicator!: GoIndicator;
@@ -223,12 +222,11 @@ export class GameScene extends Phaser.Scene {
     this.settlement = new StageSettlementController({
       scene: this,
       characters: () => this.characters,
-      screenPosOf: (c) => ({ x: c.x - this.cameras.main.scrollX, y: c.y - this.cameras.main.scrollY }),
+      ticketLayer: () => this.scene.get('UIScene'),
+      panelAnchorOf: (c) => (this.scene.get('UIScene') as UIScene).panelRewardAnchor(c.index)
+        ?? { x: c.x - this.cameras.main.scrollX, y: c.y - this.cameras.main.scrollY },
       payStageChest: (entries, tier) => this.payout.payStageChest(entries, tier),
-      onTicketsArrived: (c, tickets) => {
-        this.fx.ticketText(c.x, c.y, tickets);
-        this.showTicketReward(c, tickets);
-      },
+      onTicketsArrived: (c, tickets) => this.showTicketReward(c, tickets),
       onFinished: () => this.onSubZoneComplete()
     });
     new PayoutDebugPanel(this, this.payout, () => this.characters); // 除錯：回饋帳本面板（自行註冊熱鍵與場景關閉時的清理）
@@ -999,7 +997,7 @@ export class GameScene extends Phaser.Scene {
     if (!this.pendingSettlement) return;
     if (this.treasures.isOnField || this.bossCtl.current || this.bossCtl.isTransformed) return;
     this.pendingSettlement = false;
-    this.settlement.start(this.settlementStage, this.lastStageChest);
+    this.settlement.start(this.lastStageChest);
   }
 
   // ---------------------------------------------------------------------------
@@ -1223,7 +1221,7 @@ export class GameScene extends Phaser.Scene {
         this.bossCtl.spawn(true);
       });
     }
-    for (const c of this.characters) c.stageStats = { kills: 0, damage: 0, breaks: 0 }; // 關卡結算的戰績從這一關開打算起
+    for (const c of this.characters) c.stageStats = { kills: 0, maxCombo: 0, breaks: 0 }; // 關卡結算的戰績從這一關開打算起
     this.subWavesDone = 0;
     this.subWavesTarget = 1;
     if (GameConfig.stageMonsters.enabled) {
@@ -1245,11 +1243,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * 小關卡完成：記下寶箱階級與關卡編號給之後的關卡結算（寶箱彩票在結算時依分數分配），關卡編號 +1（卷軸 HUD 隨之遞補）
+   * 小關卡完成：記下寶箱階級給之後的關卡結算（寶箱彩票在結算時依分數分配），關卡編號 +1（卷軸 HUD 隨之遞補）
    */
   private completeStage(): void {
     this.lastStageChest = revealStageNode(this.stageQueue[0]);
-    this.settlementStage = this.currentStage;
     this.comboReward.settleAll(); // 通關時 HIT 連擊立即結算彩票，不等中斷倒數
     this.bossCtl.onStageComplete(); // 關卡打完後不能再變身 BOSS
     this.currentStage++;
@@ -2091,6 +2088,7 @@ export class GameScene extends Phaser.Scene {
     );
     if (applied) {
       this.fx.flashHurt(c);
+      this.comboReward.interrupt(c); // 被打中 → HIT 連擊中斷
       // 塔扇形/BOSS 招命中 → 定身 2 秒（取現有與新值較大者，避免縮短既有定身）
       if (rootMs > 0) {
         c.rootedUntil = Math.max(c.rootedUntil, this.time.now + rootMs);
@@ -2353,7 +2351,6 @@ export class GameScene extends Phaser.Scene {
     const dmg = Math.max(1, Math.round(damage));
     enemy.aggroActive = true;
     const dead = enemy.takeDamage(dmg);
-    actor.stageStats.damage += dmg;
     if (enemy.isBoss) {
       this.bossCtl.onBossHit(actor, enemy, dmg, time);
       if (this.controlMode === 'slow' && !enemy.dead) {

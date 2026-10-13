@@ -1634,6 +1634,17 @@ export class UIScene extends Phaser.Scene {
   }
 
   /**
+   * 角色在下方面板的領獎位置（HIT 顯示底圖中心，同 playComboRewardFx 的特效位置）
+   *
+   * @param index 角色索引（對應 panelHitCounters）
+   * @returns 畫面座標；該角色沒有面板時為 null
+   */
+  panelRewardAnchor(index: number): { x: number; y: number } | null {
+    const counter = this.panelHitCounters[index];
+    return counter ? { x: counter.centerX, y: counter.centerY } : null;
+  }
+
+  /**
    * 在下方面板播放 COMBO 報獎特效：彩票噴發 + 閃光 + 「獲得N票券！」文字
    *
    * 位置在該角色 HIT 顯示的底圖中心（已隨 F4 面板模式定位）

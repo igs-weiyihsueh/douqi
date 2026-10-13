@@ -10,11 +10,13 @@ export interface StageSettlementHost {
   readonly scene: Phaser.Scene;
   /** 已加入的角色（依 P 位順序） */
   characters(): ReadonlyArray<Character>;
-  /** 角色在畫面上的位置（畫面座標；彩票飛去的終點） */
-  screenPosOf(c: Character): { x: number; y: number };
+  /** 彩票飛行圖示所在的場景（疊在下方面板之上的 UI 場景，畫面座標與本場景一致） */
+  ticketLayer(): Phaser.Scene;
+  /** 角色對應下方面板的領獎位置（畫面座標；彩票飛去的終點） */
+  panelAnchorOf(c: Character): { x: number; y: number };
   /** 依分數分配寶箱獎池（PayoutController.payStageChest），回傳各角色張數 */
   payStageChest(entries: ReadonlyArray<{ c: Character; score: number }>, tier: 'low' | 'high'): number[];
-  /** 彩票送到角色身上（頭上飄字 + 下方面板特效） */
+  /** 彩票送到角色的下方面板（播放領獎特效） */
   onTicketsArrived(c: Character, tickets: number): void;
   /** 結算播完：場景開出口、恢復操作 */
   onFinished(): void;
@@ -23,6 +25,8 @@ export interface StageSettlementHost {
 /** 結算演出的畫面固定物件深度（面板在寶箱之上） */
 const PANEL_DEPTH = 82;
 const CHEST_DEPTH = 81;
+/** 飛行彩票在 UI 場景的深度（蓋過下方面板） */
+const TICKET_DEPTH = 300;
 
 /** 寶箱的排版與配色 */
 const CHEST_CONFIG = {
@@ -69,7 +73,7 @@ interface ChestFx {
  *
  * 1. 結算面板：4 個 P 位這一關的擊敗 / 傷害 / 破壞、分數與名次（StageSettlementPanel）
  * 2. 面板收起 → 寶箱從畫面上方降下 → 打開，參與玩家這一階寶箱 buffer 合成的獎池依分數比例分配
- * 3. 彩票從寶箱飛到各玩家身上 → 通知場景結束（開出口、恢復操作）
+ * 3. 彩票從寶箱飛到各 P 位的下方面板 → 通知場景結束（開出口、恢復操作）
  *
  * 參與者 = 開始結算時還在場上的角色；沒有人時直接結束。播放期間場景凍結角色（isActive）
  */
@@ -84,23 +88,22 @@ export class StageSettlementController {
   }
 
   /**
-   * 分數 = 擊敗 × perKill + 傷害 × perDamage + 破壞 × perBreak
+   * 分數 = 擊敗 × perKill + 最高連擊 × perMaxCombo + 破壞 × perBreak
    *
    * @param c 角色
    */
   static scoreOf(c: Character): number {
     const w = GameConfig.stageSettlement.score;
     const s = c.stageStats;
-    return Math.round(s.kills * w.perKill + s.damage * w.perDamage + s.breaks * w.perBreak);
+    return Math.round(s.kills * w.perKill + s.maxCombo * w.perMaxCombo + s.breaks * w.perBreak);
   }
 
   /**
    * 開始結算演出
    *
-   * @param stageNumber 剛打完的關卡編號（標題用）
    * @param tier 這一關的寶箱階級
    */
-  start(stageNumber: number, tier: 'low' | 'high'): void {
+  start(tier: 'low' | 'high'): void {
     const characters = this.host.characters();
     const entries = characters.filter((c) => c.alive).map((c) => ({ c, score: StageSettlementController.scoreOf(c) }));
     if (entries.length === 0) {
@@ -109,7 +112,7 @@ export class StageSettlementController {
     }
     this.active = true;
     const t = GameConfig.stageSettlement.timing;
-    const panel = new StageSettlementPanel(this.host.scene, `第 ${stageNumber} 關 結算`, this.buildColumns(characters, entries), PANEL_DEPTH);
+    const panel = new StageSettlementPanel(this.host.scene, '關卡結算', this.buildColumns(characters, entries), PANEL_DEPTH);
     // 依序排程各段演出：at = 這一段從結算開始算起的時間
     let at = 0;
     const schedule = (delayMs: number, fn: () => void): void => {
@@ -150,7 +153,7 @@ export class StageSettlementController {
     for (let i = 0; i < GameConfig.characters.count; i++) {
       const c = characters[i];
       const entry = entries.find((e) => e.c === c);
-      const base = { label: `${i + 1}P`, color: colors[i % colors.length], kills: 0, damage: 0, breaks: 0, score: 0, rank: 0 };
+      const base = { label: `${i + 1}P`, color: colors[i % colors.length], kills: 0, maxCombo: 0, breaks: 0, score: 0, rank: 0 };
       if (!c || !entry) {
         columns.push({ ...base, state: c ? 'waiting' : 'empty' });
         continue;
@@ -202,7 +205,7 @@ export class StageSettlementController {
   }
 
   /**
-   * 彩票圖示從寶箱飛到角色身上，最後一張到達時通知場景；0 張時不飛
+   * 彩票圖示從寶箱飛到角色的下方面板，最後一張到達時通知場景；0 張時不飛
    *
    * @param c 領獎的角色
    * @param tickets 張數
@@ -211,15 +214,15 @@ export class StageSettlementController {
   private flyTickets(c: Character, tickets: number, ms: number): void {
     if (tickets <= 0) return;
     const cfg = CHEST_CONFIG;
-    const scene = this.host.scene;
+    const layer = this.host.ticketLayer();
     const icons = Math.min(tickets, cfg.MAX_TICKET_ICONS);
     const flyMs = Math.max(1, ms - cfg.TICKET_STAGGER_MS * (icons - 1));
-    const to = this.host.screenPosOf(c);
+    const to = this.host.panelAnchorOf(c);
     for (let i = 0; i < icons; i++) {
-      const icon = scene.add.text(cfg.X, cfg.TO_Y - cfg.BODY_HEIGHT / 2, '🎫', cfg.TICKET_STYLE)
-        .setOrigin(0.5).setScrollFactor(0).setDepth(PANEL_DEPTH);
+      const icon = layer.add.text(cfg.X, cfg.TO_Y - cfg.BODY_HEIGHT / 2, '🎫', cfg.TICKET_STYLE)
+        .setOrigin(0.5).setScrollFactor(0).setDepth(TICKET_DEPTH);
       const last = i === icons - 1;
-      scene.tweens.add({
+      layer.tweens.add({
         targets: icon, x: to.x, y: to.y, delay: i * cfg.TICKET_STAGGER_MS, duration: flyMs, ease: 'Cubic.easeIn',
         onComplete: () => {
           icon.destroy();

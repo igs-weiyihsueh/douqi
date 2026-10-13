@@ -35,8 +35,8 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
     pendingRewardIndex: undefined as number | undefined
   };
   kills = 0;
-  /** 目前小關卡的戰績（關卡結算用，每關開打時歸零）：擊敗數、造成的傷害、破壞的物件數 */
-  stageStats = { kills: 0, damage: 0, breaks: 0 };
+  /** 目前小關卡的戰績（關卡結算用，每關開打時歸零）：擊敗數、最高連擊、破壞的物件數 */
+  stageStats = { kills: 0, maxCombo: 0, breaks: 0 };
   alive = true;
 
   invulnUntil = 0;
