@@ -52,9 +52,6 @@ const CHEST_CONFIG = {
     low: { body: 0x8d5524, trim: 0xd0d4dc },
     high: { body: 0xe0a800, trim: 0xfff3b0 }
   },
-  /** 寶箱上方的階級名稱 */
-  LABEL_OFFSET_Y: -150,
-  LABEL_STYLE: { fontFamily: 'monospace', fontSize: '40px', fontStyle: 'bold', color: '#ffe082', stroke: '#000000', strokeThickness: 6 },
   /** 飛出的彩票圖示：每人最多幾張、每張間隔、字型 */
   MAX_TICKET_ICONS: 5,
   TICKET_STAGGER_MS: 80,
@@ -88,14 +85,23 @@ export class StageSettlementController {
   }
 
   /**
-   * 分數 = 擊敗 × perKill + 最高連擊 × perMaxCombo + 破壞 × perBreak
+   * 三項戰績（擊敗敵人、最高連擊、破壞物件）各自換算的分數：數量 × perKill / perMaxCombo / perBreak
+   *
+   * @param c 角色
+   */
+  static statPoints(c: Character): number[] {
+    const w = GameConfig.stageSettlement.score;
+    const s = c.stageStats;
+    return [s.kills * w.perKill, s.maxCombo * w.perMaxCombo, s.breaks * w.perBreak].map((v) => Math.round(v));
+  }
+
+  /**
+   * 分數 = 三項戰績換算分數的合計
    *
    * @param c 角色
    */
   static scoreOf(c: Character): number {
-    const w = GameConfig.stageSettlement.score;
-    const s = c.stageStats;
-    return Math.round(s.kills * w.perKill + s.maxCombo * w.perMaxCombo + s.breaks * w.perBreak);
+    return StageSettlementController.statPoints(c).reduce((sum, v) => sum + v, 0);
   }
 
   /**
@@ -120,9 +126,11 @@ export class StageSettlementController {
       this.host.scene.time.delayedCall(at, fn);
     };
     panel.open(t.panelInMs);
-    schedule(t.panelInMs, () => panel.countStats(t.statsCountMs));
-    schedule(t.statsCountMs, () => panel.countScores(t.scoreCountMs));
-    schedule(t.scoreCountMs, () => panel.revealRanks(t.rankPopMs));
+    // 三項戰績由上而下逐列揭曉，再逐列把換算分數飛進分數，最後彈出名次
+    const rows = [0, 1, 2];
+    rows.forEach((row) => schedule(row === 0 ? t.panelInMs : t.statRowMs, () => panel.revealStat(row, t.statRowMs)));
+    rows.forEach((row) => schedule(row === 0 ? t.statRowMs : t.scoreStepMs, () => panel.addPoints(row, t.scoreStepMs)));
+    schedule(t.scoreStepMs, () => panel.revealRanks(t.rankPopMs));
     schedule(t.rankPopMs + t.holdMs, () => panel.close(t.panelOutMs));
     let chest: ChestFx | null = null;
     schedule(t.panelOutMs, () => { chest = this.dropChest(tier, t.chestDropMs); });
@@ -153,13 +161,17 @@ export class StageSettlementController {
     for (let i = 0; i < GameConfig.characters.count; i++) {
       const c = characters[i];
       const entry = entries.find((e) => e.c === c);
-      const base = { label: `${i + 1}P`, color: colors[i % colors.length], kills: 0, maxCombo: 0, breaks: 0, score: 0, rank: 0 };
+      const base = { label: `${i + 1}P`, color: colors[i % colors.length], values: [0, 0, 0], points: [0, 0, 0], score: 0, rank: 0 };
       if (!c || !entry) {
         columns.push({ ...base, state: c ? 'waiting' : 'empty' });
         continue;
       }
       const rank = 1 + entries.filter((e) => e.score > entry.score).length;
-      columns.push({ ...base, state: 'playing', ...c.stageStats, score: entry.score, rank });
+      const stats = c.stageStats;
+      columns.push({
+        ...base, state: 'playing', values: [stats.kills, stats.maxCombo, stats.breaks],
+        points: StageSettlementController.statPoints(c), score: entry.score, rank
+      });
     }
     return columns;
   }
@@ -167,7 +179,7 @@ export class StageSettlementController {
   /**
    * 寶箱從畫面上方彈跳降下
    *
-   * @param tier 寶箱階級（配色與名稱）
+   * @param tier 寶箱階級（配色）
    * @param ms 降落時長
    */
   private dropChest(tier: 'low' | 'high', ms: number): ChestFx {
@@ -183,8 +195,7 @@ export class StageSettlementController {
     const lid = scene.add.graphics({ x: 0, y: -h / 2 })
       .fillStyle(colors.body, 1).fillRoundedRect(-w / 2, -cfg.LID_HEIGHT, w, cfg.LID_HEIGHT, cfg.RADIUS)
       .lineStyle(cfg.TRIM_WIDTH, colors.trim, 1).strokeRoundedRect(-w / 2, -cfg.LID_HEIGHT, w, cfg.LID_HEIGHT, cfg.RADIUS);
-    const label = scene.add.text(0, cfg.LABEL_OFFSET_Y, tier === 'high' ? '高階寶箱' : '低階寶箱', cfg.LABEL_STYLE).setOrigin(0.5);
-    const root = scene.add.container(cfg.X, cfg.FROM_Y, [glow, body, lid, label]).setScrollFactor(0).setDepth(CHEST_DEPTH);
+    const root = scene.add.container(cfg.X, cfg.FROM_Y, [glow, body, lid]).setScrollFactor(0).setDepth(CHEST_DEPTH);
     scene.tweens.add({ targets: root, y: cfg.TO_Y, duration: ms, ease: 'Bounce.easeOut' });
     return { root, lid, glow };
   }

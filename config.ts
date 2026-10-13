@@ -301,16 +301,17 @@ export const GameConfig = {
    * 把參與玩家這一階寶箱 buffer 合成的獎池依分數比例分給各玩家（見 PayoutController.payStageChest），彩票飛到各 P 位下方面板的彩票欄。
    * 播放期間角色不能行動。
    * - score：分數 = 擊敗 × perKill + 最高連擊 × perMaxCombo + 破壞 × perBreak
-   * - timing：各段時長（毫秒），依序播放，合計約 9 秒（規格 10 秒內）
+   * - timing：各段時長（毫秒），依序播放，合計約 7.4 秒（規格 10 秒內）；statRowMs 為三項戰績由上而下每列揭曉的時長，
+   *   scoreStepMs 為計分演出每列（把該項換算的分數飛進分數）的時長
    */
   stageSettlement: {
     score: { perKill: 100, perMaxCombo: 50, perBreak: 50 },
     timing: {
       panelInMs: 300,
-      statsCountMs: 2400,
-      scoreCountMs: 1000,
+      statRowMs: 350,
+      scoreStepMs: 400,
       rankPopMs: 400,
-      holdMs: 1500,
+      holdMs: 1000,
       panelOutMs: 300,
       chestDropMs: 700,
       chestOpenDelayMs: 300,

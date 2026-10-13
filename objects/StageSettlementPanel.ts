@@ -28,13 +28,18 @@ const PANEL_CONFIG = {
   COLUMN_FILL_ALPHA: 0.06,
   TOP_RANK_BORDER: 0xffd54f,
   TOP_RANK_BORDER_WIDTH: 4,
-  /** 各列的 y：P 位名牌 / 擊敗敵人 / 最高連擊 / 破壞物件 / 分數 / 名次 */
+  /** 各列的 y：P 位名牌 / 三項戰績（擊敗敵人、最高連擊、破壞物件，與 STAT_LABELS 同順序）/ 分數 / 名次 */
   HEADER_Y: -165,
-  KILLS_Y: -85,
-  MAX_COMBO_Y: -15,
-  BREAKS_Y: 55,
+  STAT_YS: [-85, -15, 55],
   SCORE_Y: 135,
   RANK_Y: 220,
+  /** 戰績列名稱（與 SettlementColumn.values / points 同順序） */
+  STAT_LABELS: ['擊敗敵人', '最高連擊', '破壞物件'],
+  /** 數值出現時從 VALUE_POP_SCALE 彈回 */
+  VALUE_POP_SCALE: 1.5,
+  /** 計分演出：「+N」從該列數值往下飛進分數（飛行占這一步時長的 POINTS_FLY_RATIO），分數同時加上去 */
+  POINTS_STYLE: { fontFamily: 'monospace', fontSize: '30px', fontStyle: 'bold', color: '#ffd54f', stroke: '#000000', strokeThickness: 5 },
+  POINTS_FLY_RATIO: 0.6,
   /** P 位名牌（底色用該 P 位顏色） */
   HEADER_WIDTH: 120,
   HEADER_HEIGHT: 50,
@@ -64,9 +69,10 @@ export interface SettlementColumn {
   color: number;
   /** playing = 參與結算；waiting = 已加入但等待投幣；empty = 這個 P 位沒有人 */
   state: 'playing' | 'waiting' | 'empty';
-  kills: number;
-  maxCombo: number;
-  breaks: number;
+  /** 三項戰績：擊敗敵人、最高連擊、破壞物件（與 STAT_LABELS 同順序） */
+  values: ReadonlyArray<number>;
+  /** 三項戰績各自換算的分數（同順序；合計 = score） */
+  points: ReadonlyArray<number>;
   score: number;
   /** 名次（1 起算；只有 playing 有意義） */
   rank: number;
@@ -74,17 +80,19 @@ export interface SettlementColumn {
 
 /** 一欄的數值文字（只有參與結算的欄位有） */
 interface ColumnTexts {
-  kills: Phaser.GameObjects.Text;
-  maxCombo: Phaser.GameObjects.Text;
-  breaks: Phaser.GameObjects.Text;
+  /** 三項戰績的數值（同 STAT_LABELS 順序；揭曉前隱藏） */
+  values: Phaser.GameObjects.Text[];
   score: Phaser.GameObjects.Text;
   rank: Phaser.GameObjects.Text;
+  /** 計分演出目前已加到的分數 */
+  scoreShown: number;
 }
 
 /**
  * 關卡結算面板（畫面固定）：左側項目名稱，右邊 4 欄 P 位，各列擊敗敵人 / 最高連擊 / 破壞物件 / 分數與名次。
  *
- * - open → countStats（三項數字一起跳動）→ countScores → revealRanks（名次彈出、第 1 名欄位亮框）→ close
+ * - open → revealStat（三項戰績由上而下逐列跳出）→ addPoints（逐列把換算分數飛進分數並加上去）
+ *   → revealRanks（名次彈出、第 1 名欄位亮框）→ close
  * - 沒在玩的 P 位整欄淡化，只顯示「等待投幣」或「未加入」
  */
 export class StageSettlementPanel extends Phaser.GameObjects.Container {
@@ -110,8 +118,8 @@ export class StageSettlementPanel extends Phaser.GameObjects.Container {
       .lineStyle(cfg.BORDER_WIDTH, cfg.BORDER, 1)
       .strokeRoundedRect(-cfg.WIDTH / 2, -cfg.HEIGHT / 2, cfg.WIDTH, cfg.HEIGHT, cfg.RADIUS);
     this.add([bg, scene.add.text(0, cfg.TITLE_Y, title, cfg.TITLE_STYLE).setOrigin(0.5)]);
-    const rowLabels: Array<[string, number]> = [['擊敗敵人', cfg.KILLS_Y], ['最高連擊', cfg.MAX_COMBO_Y], ['破壞物件', cfg.BREAKS_Y], ['分數', cfg.SCORE_Y]];
-    for (const [text, y] of rowLabels) this.add(scene.add.text(cfg.LABEL_X, y, text, cfg.LABEL_STYLE).setOrigin(0.5));
+    cfg.STAT_LABELS.forEach((text, row) => this.add(scene.add.text(cfg.LABEL_X, cfg.STAT_YS[row], text, cfg.LABEL_STYLE).setOrigin(0.5)));
+    this.add(scene.add.text(cfg.LABEL_X, cfg.SCORE_Y, '分數', cfg.LABEL_STYLE).setOrigin(0.5));
     columns.forEach((col, i) => this.texts.push(this.createColumn(col, cfg.FIRST_COLUMN_X + i * cfg.COLUMN_STEP)));
     this.topRankFrame = scene.add.graphics().setVisible(false);
     this.add(this.topRankFrame);
@@ -129,30 +137,52 @@ export class StageSettlementPanel extends Phaser.GameObjects.Container {
   }
 
   /**
-   * 擊敗敵人 / 最高連擊 / 破壞物件三項數字從 0 一起跳到實際值
+   * 揭曉第 row 列戰績：各欄數值出現並彈跳，從 0 跳到實際值
    *
+   * @param row 戰績列索引（STAT_LABELS 順序）
    * @param ms 時長
    */
-  countStats(ms: number): void {
+  revealStat(row: number, ms: number): void {
+    const cfg = PANEL_CONFIG;
+    this.texts.forEach((texts) => {
+      const text = texts?.values[row];
+      if (!text) return;
+      text.setVisible(true).setScale(cfg.VALUE_POP_SCALE);
+      this.scene.tweens.add({ targets: text, scale: 1, duration: ms, ease: 'Back.easeOut' });
+    });
     this.countUp(ms, (t) => {
-      this.columns.forEach((col, i) => {
-        const texts = this.texts[i];
-        if (!texts) return;
-        texts.kills.setText(`${Math.round(col.kills * t)}`);
-        texts.maxCombo.setText(`${Math.round(col.maxCombo * t)}`);
-        texts.breaks.setText(`${Math.round(col.breaks * t)}`);
-      });
+      this.columns.forEach((col, i) => this.texts[i]?.values[row].setText(`${Math.round(col.values[row] * t)}`));
     });
   }
 
   /**
-   * 分數從 0 跳到實際值
+   * 計分第 row 列：各欄「+N」從該列數值飛進分數，分數從目前值加到加上這一列後的值（0 分的列不飛）
    *
+   * @param row 戰績列索引（STAT_LABELS 順序）
    * @param ms 時長
    */
-  countScores(ms: number): void {
+  addPoints(row: number, ms: number): void {
+    const cfg = PANEL_CONFIG;
+    const from: number[] = [];
+    this.columns.forEach((col, i) => {
+      const texts = this.texts[i];
+      if (!texts) return;
+      from[i] = texts.scoreShown;
+      texts.scoreShown += col.points[row];
+      if (col.points[row] <= 0) return;
+      const source = texts.values[row];
+      const fly = this.scene.add.text(source.x, source.y, `+${col.points[row]}`, cfg.POINTS_STYLE).setOrigin(0.5);
+      this.add(fly);
+      this.scene.tweens.add({
+        targets: fly, y: cfg.SCORE_Y, alpha: { from: 1, to: 0.2 }, duration: ms * cfg.POINTS_FLY_RATIO, ease: 'Quad.easeIn',
+        onComplete: () => fly.destroy()
+      });
+    });
     this.countUp(ms, (t) => {
-      this.columns.forEach((col, i) => this.texts[i]?.score.setText(`${Math.round(col.score * t)}`));
+      this.columns.forEach((col, i) => {
+        const texts = this.texts[i];
+        if (texts) texts.score.setText(`${Math.round(from[i] + col.points[row] * t)}`);
+      });
     });
   }
 
@@ -190,7 +220,7 @@ export class StageSettlementPanel extends Phaser.GameObjects.Container {
   }
 
   /**
-   * 建立一欄：底框、P 位名牌；參與結算的欄位建立數值文字（先顯示 0，名次先隱藏），否則整欄淡化並顯示狀態文字
+   * 建立一欄：底框、P 位名牌；參與結算的欄位建立數值文字（戰績與名次先隱藏、分數先顯示 0），否則整欄淡化並顯示狀態文字
    *
    * @param col 這一欄的資料
    * @param x 欄中心 x
@@ -212,17 +242,14 @@ export class StageSettlementPanel extends Phaser.GameObjects.Container {
       for (const obj of [box, header, idle]) obj.setAlpha(cfg.IDLE_ALPHA);
       return null;
     }
-    const value = (y: number, style: Phaser.Types.GameObjects.Text.TextStyle): Phaser.GameObjects.Text =>
-      scene.add.text(x, y, '0', style).setOrigin(0.5);
     const rankColor = cfg.RANK_COLORS[Math.min(col.rank, cfg.RANK_COLORS.length) - 1];
     const texts: ColumnTexts = {
-      kills: value(cfg.KILLS_Y, cfg.VALUE_STYLE),
-      maxCombo: value(cfg.MAX_COMBO_Y, cfg.VALUE_STYLE),
-      breaks: value(cfg.BREAKS_Y, cfg.VALUE_STYLE),
-      score: value(cfg.SCORE_Y, cfg.SCORE_STYLE),
-      rank: scene.add.text(x, cfg.RANK_Y, `第 ${col.rank} 名`, { ...cfg.RANK_STYLE, color: rankColor }).setOrigin(0.5).setVisible(false)
+      values: cfg.STAT_YS.map((y) => scene.add.text(x, y, '0', cfg.VALUE_STYLE).setOrigin(0.5).setVisible(false)),
+      score: scene.add.text(x, cfg.SCORE_Y, '0', cfg.SCORE_STYLE).setOrigin(0.5),
+      rank: scene.add.text(x, cfg.RANK_Y, `第 ${col.rank} 名`, { ...cfg.RANK_STYLE, color: rankColor }).setOrigin(0.5).setVisible(false),
+      scoreShown: 0
     };
-    this.add([texts.kills, texts.maxCombo, texts.breaks, texts.score, texts.rank]);
+    this.add([...texts.values, texts.score, texts.rank]);
     return texts;
   }
 
