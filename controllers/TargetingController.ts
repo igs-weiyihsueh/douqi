@@ -34,6 +34,13 @@ export interface TargetingHost {
 const LOCK_MARKER_DEPTH = 12;
 /** 鎖定框四角短線長度 */
 const LOCK_CORNER_LEN = 6;
+/** 鎖定框四個角的 P 位圓點位置（依角色 index：1P 右上、2P 左上、3P 右下、4P 左下） */
+const SLOT_CORNERS: ReadonlyArray<{ right: boolean; top: boolean }> = [
+  { right: true, top: true },
+  { right: false, top: true },
+  { right: true, top: false },
+  { right: false, top: false }
+];
 /** 「腳下」目標的判定距離加成（角色半徑之外）：這麼近的目標方向不穩定，不當作瞄準候選 */
 const UNDERFOOT_EXTRA = 12;
 
@@ -370,54 +377,63 @@ export class TargetingController {
   }
 
   /**
-   * 畫所有角色的鎖定標記：同一目標只畫一個共用框（圓 + 四角），框上緣置中排開各個鎖定者的代表色小圓點，
-   * P1 與多個 BOT 鎖同一目標也不重疊
+   * 畫所有角色的鎖定標記：同一目標只畫一個共用框（怪：圓 + 四角；木箱：四角括號），框的四個角是 P 位圓點
+   * （SLOT_CORNERS：1P 右上、2P 左上、3P 右下、4P 左下）。只畫已加入的 P 位，鎖著這個目標的填滿代表色、其餘空心
    */
   drawMarkers(): void {
     const g = this.gfx;
     g.clear();
     const m = GameConfig.lock.marker;
-    // 目標 → 鎖定它的角色 index（依角色順序，色點位置才穩定）
-    const groups = new Map<LockTarget, number[]>();
-    for (const c of this.host.characters()) {
+    const characters = this.host.characters();
+    // 已加入的 P 位（待機中的不畫圓點位置）
+    const joined = characters.filter((c) => c.creditState !== 'absent').map((c) => c.index);
+    // 目標 → 鎖定它的角色 index
+    const groups = new Map<LockTarget, Set<number>>();
+    for (const c of characters) {
       if (!c.alive) continue;
       const t = c.lockedTarget as unknown as LockTarget | null;
       if (!this.isLockValid(t)) continue;
-      const arr = groups.get(t!);
-      if (arr) arr.push(c.index);
-      else groups.set(t!, [c.index]);
+      const set = groups.get(t!);
+      if (set) set.add(c.index);
+      else groups.set(t!, new Set([c.index]));
     }
-    for (const [t, indices] of groups) {
+    for (const [t, lockers] of groups) {
       g.lineStyle(m.thickness, m.color, 0.95);
-      let dotX = t.x, dotY = t.y - m.dotOrbit;
+      // 框的左右上下緣（四個角就是 P 位圓點的位置）
+      let l: number, r: number, top: number, bot: number;
       if (this.isBreakable(t)) {
-        // 木箱：沿碰撞矩形外擴的四角括號，色點在框上緣上方
+        // 木箱：沿碰撞矩形外擴的四角括號
         const b = t.getBody();
         const pad = m.cratePadding, s = m.crateCornerLen;
-        const l = b.left - pad, r = b.right + pad, top = b.top - pad, bot = b.bottom + pad;
+        l = b.left - pad; r = b.right + pad; top = b.top - pad; bot = b.bottom + pad;
         for (const [x, y, sx, sy] of [[l, top, 1, 1], [r, top, -1, 1], [l, bot, 1, -1], [r, bot, -1, -1]]) {
           g.lineBetween(x, y, x + sx * s, y);
           g.lineBetween(x, y, x, y + sy * s);
         }
-        dotX = b.centerX;
-        dotY = top - m.dotRadius * 2;
       } else {
         g.strokeCircle(t.x, t.y, m.radius);
-        const r = m.radius;
+        const rad = m.radius;
         const s = LOCK_CORNER_LEN;
         for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-          g.lineBetween(t.x + sx * r, t.y + sy * r, t.x + sx * (r - s), t.y + sy * r);
-          g.lineBetween(t.x + sx * r, t.y + sy * r, t.x + sx * r, t.y + sy * (r - s));
+          g.lineBetween(t.x + sx * rad, t.y + sy * rad, t.x + sx * (rad - s), t.y + sy * rad);
+          g.lineBetween(t.x + sx * rad, t.y + sy * rad, t.x + sx * rad, t.y + sy * (rad - s));
         }
+        l = t.x - rad; r = t.x + rad; top = t.y - rad; bot = t.y + rad;
       }
-      const n = indices.length;
-      const startX = dotX - ((n - 1) * m.dotSpacing) / 2;
-      for (let k = 0; k < n; k++) {
-        const dx = startX + k * m.dotSpacing;
-        g.fillStyle(GameConfig.characters.colors[indices[k]] ?? 0xffffff, 1);
-        g.fillCircle(dx, dotY, m.dotRadius);
-        g.lineStyle(1, 0x000000, 0.8);
-        g.strokeCircle(dx, dotY, m.dotRadius);
+      for (const index of joined) {
+        const corner = SLOT_CORNERS[index];
+        if (!corner) continue;
+        const x = corner.right ? r : l;
+        const y = corner.top ? top : bot;
+        if (lockers.has(index)) {
+          g.fillStyle(GameConfig.characters.colors[index] ?? 0xffffff, 1);
+          g.fillCircle(x, y, m.slotRadius);
+          g.lineStyle(1, 0x000000, 0.8);
+          g.strokeCircle(x, y, m.slotRadius);
+        } else {
+          g.lineStyle(m.slotEmptyLineWidth, m.color, m.slotEmptyAlpha);
+          g.strokeCircle(x, y, m.slotRadius);
+        }
       }
     }
   }

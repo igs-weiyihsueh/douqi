@@ -1562,13 +1562,14 @@ export const GameConfig = {
       color: 0xffe66d,
       radius: 24,
       thickness: 2,
-      /** 角色代表色小色點半徑 */
-      dotRadius: 5,
-      /** 色點距框中心的半徑（畫在框外圈上方一圈） */
-      dotOrbit: 30,
-      /** 多個色點沿框上緣排開的間距（像素） */
-      dotSpacing: 14,
-      /** 鎖定木箱時的框：沿木箱碰撞矩形外擴 cratePadding 的四角括號（角線長 crateCornerLen），色點畫在框上緣上方 */
+      /**
+       * 框四個角的 P 位圓點（1P 右上、2P 左上、3P 右下、4P 左下）：只畫已加入的 P 位；
+       * 鎖著這個目標的 P 位填滿代表色（黑描邊），其餘為框色細線空心圓（透明度 slotEmptyAlpha）
+       */
+      slotRadius: 7,
+      slotEmptyAlpha: 0.5,
+      slotEmptyLineWidth: 1.5,
+      /** 鎖定木箱時的框：沿木箱碰撞矩形外擴 cratePadding 的四角括號（角線長 crateCornerLen），P 位圓點在四個角 */
       cratePadding: 6,
       crateCornerLen: 16
     }
