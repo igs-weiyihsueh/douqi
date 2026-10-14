@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "node scripts/check-glossary.mjs && tsc --noEmit && vite build",
+    "check:glossary": "node scripts/check-glossary.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
