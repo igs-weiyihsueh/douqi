@@ -380,10 +380,10 @@ export class GameScene extends Phaser.Scene {
       if (!this.gameOver) this.creditCtl.insertCoin(this.player);
     });
 
-    // X 鍵：切換免費攻擊（攻擊不扣 CREDIT），橫幅提示目前狀態
+    // X 鍵：切換免費模式（攻擊不扣 CREDIT），提示文字顯示目前狀態
     this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.X).on('down', () => {
       if (!this.creditCtl.enabled || this.gameOver) return;
-      this.showEventBanner(this.creditCtl.toggleFreePlay() ? '免費攻擊：開（攻擊不扣能量）' : '免費攻擊：關');
+      this.showEventBanner(this.creditCtl.toggleFreePlay() ? '免費模式：開（攻擊不扣 CREDIT）' : '免費模式：關');
     });
 
     // B 鍵：逐一加入 BOT 夥伴（最多湊滿 characters.count）

@@ -53,7 +53,7 @@ export interface CreditHost {
  * - 扣點：每次出手（openAttackWindow）後 attackWindowMs 內第一次命中敵人或木箱扣 1 點，一招最多扣 1 點；空揮不扣
  * - 多投多送：每次投幣依 coinCycle 循環給點（逾時離場才回到第一檔），下方面板量條亮一格並飛出光效（host.onCoinInserted）
  * - BOT：加入時自動投幣，用完自動再投
- * - 免費攻擊（X 鍵切換）：開啟時攻擊不扣 CREDIT
+ * - 免費模式（X 鍵切換）：開啟時攻擊不扣 CREDIT
  * - 等待中的角色頭上顯示「投幣續關」與倒數；未進場的提示在下方面板（UIScene）
  */
 export class CreditController {
@@ -65,7 +65,7 @@ export class CreditController {
   private readonly pendingPause = new Set<Character>();
   /** 多投多送：各角色下一次投幣在 coinCycle 中的位置（投幣續關逾時離場時歸零） */
   private readonly coinStep = new Map<Character, number>();
-  /** 免費攻擊：開啟時攻擊不扣 CREDIT（X 鍵切換） */
+  /** 免費模式：開啟時攻擊不扣 CREDIT（X 鍵切換） */
   private freePlay = false;
 
   constructor(private readonly host: CreditHost) {
@@ -78,9 +78,9 @@ export class CreditController {
   }
 
   /**
-   * 切換免費攻擊（攻擊不扣 CREDIT）
+   * 切換免費模式（攻擊不扣 CREDIT）
    *
-   * @returns 切換後是否為免費攻擊
+   * @returns 切換後是否為免費模式
    */
   toggleFreePlay(): boolean {
     this.freePlay = !this.freePlay;
@@ -164,7 +164,7 @@ export class CreditController {
   }
 
   /**
-   * 角色的攻擊命中（敵人或可破壞物件）：在這一招的扣點期限內且還沒扣過就扣 1 點（免費攻擊時不扣）；用完時 BOT 自動投幣，玩家下一幀進入等待
+   * 角色的攻擊命中（敵人或可破壞物件）：在這一招的扣點期限內且還沒扣過就扣 1 點（免費模式時不扣）；用完時 BOT 自動投幣，玩家下一幀進入等待
    *
    * @param c 攻擊的角色
    * @param time 目前場景時間
