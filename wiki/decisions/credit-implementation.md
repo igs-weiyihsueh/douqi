@@ -120,7 +120,7 @@ interface DisplaySeparation {
 - ✅ **HP系統移除**：`noHpLoss`標記控制，被打不扣血
 - ✅ **攻擊整合**：每次攻擊觸發攻擊窗口機制
 - ✅ **敵人仇恨**：等待續關角色不被敵人鎖定
-- ✅ **BOSS整合**：變身BOSS攻擊不扣CREDIT
+- ✅ **BOSS整合**：BOSS變身攻擊不扣CREDIT
 
 ### **對UI系統的影響**
 - ✅ **頭上顯示**：CREDIT點數和投幣提示

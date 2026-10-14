@@ -94,12 +94,12 @@ interface UILogicIssues {
 ```typescript
 /**
  * UI顯示邏輯重新設計：
- * - 頭上UI：等待續關倒數「投幣續關 15」
+ * - 角色面板：等待續關倒數「投幣續關 15」
  * - 下方面板：未進場提示「投幣加入遊戲」
  * - 功能分離：避免重複提示，建立清晰層次
  */
 const uiHierarchyRedesign = {
-  /** 頭上UI職責 */
+  /** 角色面板職責 */
   overheadUI: {
     primary: 'countdown_display',           // 主要：倒數顯示
     secondary: 'status_indication',         // 次要：狀態指示

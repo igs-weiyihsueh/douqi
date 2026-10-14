@@ -54,7 +54,7 @@ interface CharStat {
   alive: boolean;             // 存活狀態
   isPlayer: boolean;          // 玩家標記
   
-  // 世界座標 (頭上UI用)
+  // 世界座標 (角色面板用)
   x: number; y: number;
   
   // 階段二：貨幣系統
@@ -393,7 +393,7 @@ waveHud: {
 }
 ```
 
-## 頭上UI系統
+## 角色面板系統
 
 ### 角色跟隨UI
 ```typescript

@@ -179,7 +179,7 @@ private onBossHit(boss: Enemy, damage: number): void {
 
 ### **屍體與變身系統** (慢速模式)
 ```typescript
-// BossController.ts - 屍體管理
+// BossController.ts - 虛弱BOSS管理
 interface BossCorpse {
   img: Phaser.GameObjects.Image;
   hint: Phaser.GameObjects.Text;
@@ -203,13 +203,13 @@ private spawnBossCorpse(x: number, y: number): void {
 - ⌨️ **按鍵觸發**: 按Z鍵啟動變身
 - 🎭 **視覺變身**: P1外觀切換為BOSS造型
 
-### **變身 BOSS 生命週期保險機制** (08125a4調整)
+### **BOSS變身生命週期保險機制** (08125a4調整)
 `controllers/BossController.ts` 新增多項「不把 BOSS 狀態帶出本關」的保險：
 
 | 行為 | 方法 | 規則 |
 |------|------|------|
-| 留屍體 | `spawnCorpse()` (BossController.ts:412) | 只在 **慢速模式 `isSlowMode()` 且 小關卡進行中 `isStageActive()`** 時留；關卡打完後打倒亂入 BOSS 不留屍體 |
-| 關卡打完 | `onStageComplete()` (BossController.ts:197) | `clearCorpse()`——屍體消失，關卡打完後不能再變身。由 `GameScene.completeStage()` 呼叫（`scenes/GameScene.ts:1205`） |
+| 留虛弱BOSS | `spawnCorpse()` (BossController.ts:412) | 只在 **慢速模式 `isSlowMode()` 且 小關卡進行中 `isStageActive()`** 時留；關卡打完後打倒BOSS亂入不留虛弱BOSS |
+| 關卡打完 | `onStageComplete()` (BossController.ts:197) | `clearCorpse()`——虛弱BOSS消失，關卡打完後不能再變身。由 `GameScene.completeStage()` 呼叫（`scenes/GameScene.ts:1205`） |
 | 換區離場 | `onZoneLeave()` (BossController.ts:190) | `dismissIntruder()` + `clearCorpse()` + **`endForm()`**——變身中就結束變身，不帶到下一區 |
 | 提前結束變身 | `endForm()` (BossController.ts:474-477) | 若 `p.invulnUntil === form.until`，把無敵提前收回到 `time.now`（換區提前結束時一併收回變身的無敵，避免殘留無敵） |
 

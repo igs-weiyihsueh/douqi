@@ -268,7 +268,7 @@ onSubZoneComplete(): void {
 ```typescript
 // 達目標波數時（GameScene.ts:1016-1022）
 if (this.spawner.countQuotaExempt() > 0) {
-  // 即時補怪（二段變身 / 變身 BOSS）還在場上 → 先不結算
+  // 即時補怪（二段變身 / BOSS變身）還在場上 → 先不結算
   this.pendingSurgeClear = true;
   this.waveState = 'clearing';
 } else {

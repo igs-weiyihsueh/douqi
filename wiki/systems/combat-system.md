@@ -19,7 +19,7 @@ class CombatCreditIntegration {
     this.creditCtl.onEnemyHit(character, this.time.now);
   }
   
-  /** 變身BOSS攻擊不扣點 */
+  /** BOSS變身攻擊不扣點 */
   onBossTransformAttack(character: Character): void {
     this.creditCtl.cancelAttackWindow(character);
   }
