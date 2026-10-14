@@ -1,184 +1,130 @@
-# 鬥氣割草專案術語表
+# 鬥氣割草用語表
 
-> 統一專案核心概念和程式碼對照，便於開發團隊和AI理解專案架構
-
----
-
-## 角色系統 (Character System)
-
-| 術語 | 說明 | 程式碼位置 | 相關文檔 |
-|------|------|----------|----------|
-| **Character** | 玩家和BOT共用的角色基類 | `objects/Character.ts:16-25` | [戰鬥系統](./systems/combat-system.md) |
-| **Player** | 玩家控制的角色 (characters[0]) | `scenes/GameScene.ts:21-24` | [遊戲功能設計](./design/gameplay-evolution.md) |
-| **Bot** | AI控制的角色 (isBot: true) | `objects/Character.ts:17` | [戰鬥系統](./systems/combat-system.md) |
-| **spirit** | 連段計數值 | `objects/Character.ts:26` | [UI系統實作](./systems/ui-implementation.md) |
-| **energy** | v55新增能量值 (0-10) | `objects/Character.ts:28` | [戰鬥系統](./systems/combat-system.md) |
-| **credit** | 階段二貨幣點數 | `objects/Character.ts:30` | [UI系統實作](./systems/ui-implementation.md) |
-| **comboState** | 階段三COMBO獎勵系統狀態 | `objects/Character.ts:31-39` | [UI系統實作](./systems/ui-implementation.md) |
-| **skillLockUntil** | 技能演出鎖定時間戳 | `objects/Character.ts:45` | [戰鬥系統](./systems/combat-system.md) |
-| **lockedTarget** | 當前鎖定的目標 (敵人或道具) | `objects/Character.ts:64-66` | [資料流程](./architecture/data-flow.md) |
-| **empowered** | 慢速模式強化狀態標記 | `objects/Character.ts:54` | [戰鬥系統](./systems/combat-system.md) |
-| **empowerUntil** | 快速模式強化結束時間戳 | `objects/Character.ts:53` | [戰鬥系統](./systems/combat-system.md) |
-
-## 敵人系統 (Enemy System)
-
-| 術語 | 說明 | 程式碼位置 | 相關文檔 |
-|------|------|----------|----------|
-| **EnemyType** | 敵人類型聯合型別 | `objects/Enemy.ts:4` | [遊戲功能設計](./design/gameplay-evolution.md) |
-| **normal** | 基礎近戰敵人 | `objects/Enemy.ts:4` | [戰鬥系統](./systems/combat-system.md) |
-| **tank** | 高血量肉盾型敵人 | `objects/Enemy.ts:4` | [戰鬥系統](./systems/combat-system.md) |
-| **bomber** | 遠程爆炸型敵人 | `objects/Enemy.ts:4` | [戰鬥系統](./systems/combat-system.md) |
-| **treasure** | 寶箱怪 (特殊獎勵型) | `objects/Enemy.ts:4` | [遊戲功能設計](./design/gameplay-evolution.md) |
-| **boss** | BOSS級敵人 | `objects/Enemy.ts:4` | [戰鬥系統](./systems/combat-system.md) |
-| **tower** | 塔防事件敵人 | `objects/Enemy.ts:4` | [戰鬥系統](./systems/combat-system.md) |
-| **npc** | 非戰鬥角色 | `objects/Enemy.ts:4` | [戰鬥系統](./systems/combat-system.md) |
-| **aiState** | 敵人AI狀態機 | `objects/Enemy.ts:31` | [資料流程](./architecture/data-flow.md) |
-| **targetSeat** | 黏著目標角色索引 | `objects/Enemy.ts:49` | [戰鬥系統](./systems/combat-system.md) |
-| **forceChase** | 強制追擊模式 | `objects/Enemy.ts:58` | [戰鬥系統](./systems/combat-system.md) |
-| **aggroActive** | 主動仇恨標記 | `objects/Enemy.ts:63` | [戰鬥系統](./systems/combat-system.md) |
-| **treasureHits** | 寶箱怪被命中次數 | `objects/Enemy.ts:21` | [遊戲功能設計](./design/gameplay-evolution.md) |
-
-## 場景系統 (Scene System)
-
-| 術語 | 說明 | 程式碼位置 | 相關文檔 |
-|------|------|----------|----------|
-| **GameScene** | 核心遊戲邏輯場景 (422KB) | `scenes/GameScene.ts:26` | [遊戲引擎架構](./architecture/game-engine.md) |
-| **UIScene** | HUD系統覆蓋場景 (71KB) | `scenes/UIScene.ts:40` | [UI系統實作](./systems/ui-implementation.md) |
-| **TitleScene** | 主選單場景 (44KB) | `scenes/TitleScene.ts:7` | [UI/UX設計](./design/ui-ux-decisions.md) |
-| **BootScene** | 資源載入場景 (25KB) | `scenes/BootScene.ts` | [遊戲引擎架構](./architecture/game-engine.md) |
-| **MinigameMenuScene** | 小遊戲選單場景 | `scenes/MinigameMenuScene.ts` | [小遊戲系統](./design/minigame-system.md) |
-| **CollectRaceScene** | 收集競賽場景 (31KB) | `scenes/CollectRaceScene.ts:25` | [小遊戲系統](./design/minigame-system.md) |
-| **PushSurvivalScene** | 推人生存場景 (32KB) | `scenes/PushSurvivalScene.ts:29` | [小遊戲系統](./design/minigame-system.md) |
-| **BombArenaScene** | 炸彈人對戰場景 (36KB) | `scenes/BombArenaScene.ts` | [小遊戲系統](./design/minigame-system.md) |
-
-## 波次系統 (Wave System)
-
-| 術語 | 說明 | 程式碼位置 | 相關文檔 |
-|------|------|----------|----------|
-| **WaveSpawnState** | 波次生成狀態介面 | `systems/waveMath.ts:15` | [戰鬥系統](./systems/combat-system.md) |
-| **progress** | 本波已累積進度 | `systems/waveMath.ts:16` | [戰鬥系統](./systems/combat-system.md) |
-| **targetProgress** | 本波目標進度 | `systems/waveMath.ts:17` | [戰鬥系統](./systems/combat-system.md) |
-| **refilling** | 補生栓狀態 (防抖機制) | `systems/waveMath.ts:24` | [效能配置](./systems/performance-config.md) |
-| **shouldSpawnMore** | 生成控制函數 | `systems/waveMath.ts:39` | [戰鬥系統](./systems/combat-system.md) |
-| **waveState** | 波次狀態 ('spawning'等) | `scenes/GameScene.ts:94` | [資料流程](./architecture/data-flow.md) |
-
-## 配置系統 (Config System)
-
-| 術語 | 說明 | 程式碼位置 | 相關文檔 |
-|------|------|----------|----------|
-| **GameConfig** | 遊戲主配置物件 | `config.ts:5` | [效能配置](./systems/performance-config.md) |
-| **levelLerp** | 等級化數值計算函數 | `config.ts` | [效能配置](./systems/performance-config.md) |
-| **arena** | 場地配置 (經典模式) | `config.ts:107-115` | [UI/UX設計](./design/ui-ux-decisions.md) |
-| **characterParams** | 角色參數存讀檔系統 (5740cfc新增) | `systems/characterParams.ts:1` | [角色編輯器](./systems/character-editor.md) |
-| **CharacterEditorPanel** | 角色編輯器面板類別 (5740cfc新增) | `objects/CharacterEditorPanel.ts:70` | [角色編輯器](./systems/character-editor.md) |
-| **attackCooldownMs** | 攻擊冷卻間隔參數 (5740cfc可調) | `GameScene.ts:xxx` | [角色編輯器](./systems/character-editor.md) |
-| **markerColor** | HUD位置標記顏色(綠色) (05dafae新增) | `config.ts:84` | [關卡系統](./systems/stage-system.md) |
-| **BossController** | BOSS系統控制器類別 (9782518新增) | `controllers/BossController.ts:45` | [BOSS系統](./systems/boss-system.md) |
-| **BossHost** | BOSS控制器場景介面 (9782518新增) | `controllers/BossController.ts:7` | [專案架構](./architecture/project-structure.md) |
-| **TelegraphFx** | 預警特效介面型別 (9782518抽出) | `systems/telegraphFx.ts:5` | [BOSS系統](./systems/boss-system.md) |
-| **SkillController** | 招式系統控制器類別 (7bd6845新增) | `controllers/SkillController.ts:36` | [招式系統](./systems/skill-system.md) |
-| **SkillHost** | 招式控制器場景介面 (7bd6845新增) | `controllers/SkillController.ts:8` | [招式系統](./systems/skill-system.md) |
-| **ArtStyleController** | 美術切換控制器 (82f5fb6新增) | `controllers/ArtStyleController.ts:35` | [專案架構](./architecture/project-structure.md) |
-| **ScenePalette** | 場景配色介面 (fe938ff抽出) | `systems/zoneScenery.ts:12` | [場景渲染](./systems/scene-rendering.md) |
-| **isFixedEnemy** | 固定敵人判斷函式 (55cca6d統一) | `systems/enemyKinds.ts:10` | [專案架構](./architecture/project-structure.md) |
-| **GoIndicator** | GO指示器控制器類別 (7fe3754迭代) | `controllers/GoIndicator.ts:30` | [GO指示器](./systems/go-indicator.md) |
-| **GoDirection** | GO指示器方向型別 (69f5a1c新增) | `controllers/GoIndicator.ts:5` | [GO指示器](./systems/go-indicator.md) |
-| **EventController** | 事件系統控制器類別 (7bb93c4新增) | `controllers/EventController.ts:25` | [事件系統](./systems/event-system.md) |
-| **EventHost** | 事件控制器場景介面 (7bb93c4新增) | `controllers/EventController.ts:11` | [事件系統](./systems/event-system.md) |
-| **EventKind** | 限時事件種類型別 (7bb93c4新增) | `controllers/EventController.ts:8` | [事件系統](./systems/event-system.md) |
-| **SlotWorldController** | slot世界控制器類別 (cc7a433新增) | `controllers/SlotWorldController.ts:50` | [slot世界](./systems/slot-world.md) |
-| **SlotWorldHost** | 世界控制器場景介面 (cc7a433新增) | `controllers/SlotWorldController.ts:17` | [slot世界](./systems/slot-world.md) |
-| **AreaTransition** | 區域轉場類型 (cc7a433新增) | `controllers/SlotWorldController.ts:12` | [slot世界](./systems/slot-world.md) |
-| **TargetingController** | 鎖定系統控制器 (b7e9a77新增) | `controllers/TargetingController.ts:40` | [鎖定與行動](./systems/targeting-action.md) |
-| **CharacterActionController** | 行動系統控制器 (b7e9a77新增) | `controllers/CharacterActionController.ts:30` | [鎖定與行動](./systems/targeting-action.md) |
-| **GameDebugApi** | 除錯系統控制器 (3c143c8新增) | `controllers/GameDebugApi.ts:15` | [除錯系統](./systems/debug-system.md) |
-| **GameDebugHost** | GameScene除錯介面 (3c143c8新增) | `controllers/GameDebugApi.ts:369` | [除錯系統](./systems/debug-system.md) |
-| **LockTarget** | 可鎖定目標型別 (b7e9a77新增) | `controllers/TargetingController.ts:7` | [鎖定與行動](./systems/targeting-action.md) |
-| **markerDotScale** | 位置標記中心亮點縮放 (05dafae新增) | `config.ts:85` | [關卡系統](./systems/stage-system.md) |
-| **drawStageMarker** | HUD位置標記繪製函式 (05dafae新增) | `UIScene.ts:858` | [關卡系統](./systems/stage-system.md) |
-| **stageCycle** | 無限關卡循環配置 (874b8f9新增) | `config.ts:920` | [關卡系統](./systems/stage-system.md) |
-| **chestTickets** | 關卡寶箱彩票獎勵配置 (874b8f9新增) | `config.ts:927` | [關卡系統](./systems/stage-system.md) |
-| **areaVariant** | 場景變體標識('A'荒城/'B'火山) (874b8f9新增) | `GameScene.ts:91` | [關卡系統](./systems/stage-system.md) |
-| **dirLock** | 關卡轉場方向限制 (874b8f9新增) | `GameScene.ts:91` | [關卡系統](./systems/stage-system.md) |
-| **waveHud** | 卷軸HUD視覺配置 (874b8f9重構) | `config.ts:58` | [UI實作](./systems/ui-implementation.md) |
-| **stage** | 關卡模式配置 (2decdde更新→874b8f9重構) | `config.ts` | [架構決策演進](./decisions/architecture-evolution.md) |
-| **followDeadzoneW/H** | 鏡頭跟隨死區 (7975cc9新增) | `config.ts` | [架構決策演進](./decisions/architecture-evolution.md) |
-| **enemySeparation** | 敵人分離系統配置 | `config.ts:123-142` | [效能配置](./systems/performance-config.md) |
-| **enemySticky** | 敵人黏著目標配置 | `config.ts:151-158` | [戰鬥系統](./systems/combat-system.md) |
-| **debug** | 除錯開關配置 | `config.ts:17-22` | [技術選擇](./decisions/technical-choices.md) |
-
-## UI系統 (UI System)
-
-| 術語 | 說明 | 程式碼位置 | 相關文檔 |
-|------|------|----------|----------|
-| **CharStat** | 角色狀態顯示介面 | `scenes/UIScene.ts:18-35` | [UI系統實作](./systems/ui-implementation.md) |
-| **ComboState** | COMBO系統狀態介面 | `scenes/UIScene.ts:7-16` | [UI系統實作](./systems/ui-implementation.md) |
-| **StatsPayload** | 統計資料載體介面 | `scenes/UIScene.ts:37-50` | [UI系統實作](./systems/ui-implementation.md) |
-| **burstMark** | 角色爆發標記 | `objects/Character.ts:85` | [UI系統實作](./systems/ui-implementation.md) |
-| **rootMark** | 角色定身標記 | `objects/Character.ts:89` | [UI系統實作](./systems/ui-implementation.md) |
-| **empowerOrbit** | 強化軌道特效 | `objects/Character.ts:75` | [UI系統實作](./systems/ui-implementation.md) |
-| **hpBar** | 角色血條 | `objects/Character.ts:81` | [UI系統實作](./systems/ui-implementation.md) |
-| **spiritBar** | 連段條 | `objects/Character.ts:83` | [UI系統實作](./systems/ui-implementation.md) |
-
-## 小遊戲系統 (Minigame System)
-
-| 術語 | 說明 | 程式碼位置 | 相關文檔 |
-|------|------|----------|----------|
-| **MinigameEntry** | 小遊戲註冊介面 | `minigames/registry.ts:7-14` | [小遊戲系統](./design/minigame-system.md) |
-| **MINIGAMES** | 小遊戲註冊陣列 | `minigames/registry.ts:16` | [小遊戲系統](./design/minigame-system.md) |
-| **ShapeKey** | 收集競賽形狀類型 | `scenes/CollectRaceScene.ts:4` | [小遊戲系統](./design/minigame-system.md) |
-| **Fighter** | 推人生存角色介面 | `scenes/PushSurvivalScene.ts:5-21` | [小遊戲系統](./design/minigame-system.md) |
-| **WarnRing** | 推人生存危險圈 | `scenes/PushSurvivalScene.ts:23-31` | [小遊戲系統](./design/minigame-system.md) |
-
-## 物理系統 (Physics System)
-
-| 術語 | 說明 | 程式碼位置 | 相關文檔 |
-|------|------|----------|----------|
-| **Breakable** | 可破壞物件類 | `objects/Breakable.ts:6` | [遊戲功能設計](./design/gameplay-evolution.md) |
-| **Item** | 道具物件類 | `objects/Item.ts:4` | [戰鬥系統](./systems/combat-system.md) |
-| **SkillType** | 技能道具類型 | `objects/Item.ts:1` | [戰鬥系統](./systems/combat-system.md) |
-| **separateCharacterFromEnemies** | 角色敵人分離函數 | `scenes/GameScene.ts` | [效能配置](./systems/performance-config.md) |
-| **bounceRestitution** | 邊界反彈係數 | `config.ts:115` | [Phaser技術架構](./architecture/phaser-typescript.md) |
-
-## 技術架構 (Technical Architecture)
-
-| 術語 | 說明 | 程式碼位置 | 相關文檔 |
-|------|------|----------|----------|
-| **Phaser.Game** | 遊戲實例 | `main.ts:15` | [遊戲引擎架構](./architecture/game-engine.md) |
-| **__game** | 全域除錯接口 | `main.ts:25` | [Phaser技術架構](./architecture/phaser-typescript.md) |
-| **GameConfig** | 遊戲配置物件 | `main.ts:7` | [遊戲引擎架構](./architecture/game-engine.md) |
-| **levelLerp** | 動態數值計算 | `config.ts` | [效能配置](./systems/performance-config.md) |
-| **activeFxCount** | 特效計數器 | `scenes/GameScene.ts` | [效能配置](./systems/performance-config.md) |
-| **maxActiveFx** | 特效數量上限 | `config.ts` | [技術選擇](./decisions/technical-choices.md) |
+> 團隊討論、文件、與 AI 溝通一律使用「正式名稱」。每個名稱對到一個程式位置與設定，方便從企劃用語找到程式、也能從程式找回企劃用語。
+> 程式名稱寫「檔案 › 類別 / 函式 / 欄位」，不寫行號；設定指 `config.ts` 的 `GameConfig` 區塊。
+> 名稱由使用者逐章裁定（2026-10-14）；新增或改名請先與使用者確認，再更新本表。
 
 ---
 
-## 縮寫對照表
+## UI 介面
 
-| 縮寫 | 全稱 | 說明 |
-|------|------|------|
-| **AI** | Artificial Intelligence | 敵人人工智慧系統 |
-| **AOE** | Area of Effect | 範圍效果攻擊 |
-| **HUD** | Heads-Up Display | 抬頭顯示介面 |
-| **MVP** | Minimum Viable Product | 最小可行產品 |
-| **NPC** | Non-Player Character | 非玩家角色 |
-| **UI** | User Interface | 使用者介面 |
-| **UX** | User Experience | 使用者體驗 |
-| **FPS** | Frames Per Second | 每秒幀數 |
+| 正式名稱 | 說明 | 程式名稱 | 設定 |
+|---|---|---|---|
+| JP介面 | 畫面最上方置中的 JP 圖 | `scenes/UIScene.ts` | `jackpotBanner` |
+| 關卡進度 | 畫面上方的圓點＋量條，顯示本關進度與後續關卡的寶箱 | `scenes/UIScene.ts` › waveHud 繪製 | `waveHud` |
+| 波次間隔 | 波與波之間畫面中上方的 3→2→1 倒數 | `controllers/WaveCountdown.ts` › `WaveCountdown` | `stageMonsters.breakCountdown` |
+| 提示文字 | 畫面跳出的提示訊息 | `scenes/GameScene.ts` › `showEventBanner` | — |
+| 角色面板 | 跟著角色的頭上顯示（總稱） | `scenes/UIScene.ts` › `overheadUIs` | `headUi` |
+| P位欄 | 角色面板上的 1P / 2P… 編號 | `scenes/UIScene.ts` › `overheadUIs` | `characters.colors` |
+| CREDIT欄 | 角色面板上的劍形圖示＋CREDIT 數字 | `scenes/UIScene.ts` › `overheadUIs` | `credit` |
+| 二段變身量條 | 角色面板上的二段變身能量條，集滿可變身 | `scenes/UIScene.ts` › `overheadUIs`；`objects/Character.ts` › `energy` | `energy` |
+| 投幣提示 | CREDIT 用完時頭上的「投幣續關」＋倒數 | `controllers/CreditController.ts` | `credit.prompt`、`credit.continueText` |
+| P位面板 | 畫面下方每位玩家一格的面板（總稱；F4 美術版不另命名） | `scenes/UIScene.ts` › `rows`、`bottomPanelOverlays` | — |
+| 擊殺欄 | P位面板的 💀 擊殺數（暫留，之後可能拔掉） | `scenes/UIScene.ts` › `killBox` | — |
+| 彩票欄 | P位面板的 🎫 彩票數 | `scenes/UIScene.ts` › `ticketBox` | — |
+| 連段介面 | P位面板的 HIT 連段數，快中斷時閃爍 | `scenes/UIScene.ts` › `panelHitCounters` | `comboReward.WARNING_START_RATIO` |
+| 多投多送量條 | P位面板的膠囊形加贈進度 | `objects/CoinBonusBar.ts` › `CoinBonusBar` | `credit.coinBar` |
+| 待機提示 | 待機時 P位面板輪播「投幣加入遊戲／投越多送越多」 | `scenes/UIScene.ts` › `panelJoinTexts` | `credit.joinTexts` |
+| 鎖定框 | 被自動鎖定的目標身上的框 | `controllers/TargetingController.ts` | `lock.marker` |
+| 怪物提示 | 怪在畫面外時畫面邊緣的箭頭 | `controllers/OffscreenEnemyIndicator.ts` › `OffscreenEnemyIndicator` | `stage.offscreenIndicator` |
+| 移動提示 | 出口開啟時指引方向的 GO | `controllers/GoIndicator.ts` › `GoIndicator` | `stage.goIndicator` |
+| 結算介面 | 關卡結算的戰績、分數、名次面板 | `objects/StageSettlementPanel.ts` › `StageSettlementPanel` | `stageSettlement` |
 
----
+## 投幣與彩票
 
-## 重要常數
+| 正式名稱 | 說明 | 程式名稱 | 設定 |
+|---|---|---|---|
+| CREDIT | 投幣換得的遊玩點數，每招第一次命中扣 1 | `objects/Character.ts` › `credit`；`controllers/CreditController.ts` | `credit` |
+| 彩票 | 玩家贏得的獎勵票 | `objects/Character.ts` › `tickets` | `ticketEffect` |
+| 彩金池 | 每扣 1 CREDIT 依比例存進各獎項的彩票額度，獎項觸發時從這裡發票 | `controllers/PayoutController.ts` › `PayoutController` | `payout.shares` |
+| 多投多送 | 依投幣次數循環加贈 CREDIT | `controllers/CreditController.ts` › `coinCycleStep` | `credit.coinCycle` |
+| 投幣續關 | CREDIT 用完後倒數內投幣可繼續 | `controllers/CreditController.ts` | `credit.continueSeconds` |
+| 待機 | 角色狀態：這個 P 位還沒投幣進場（或續關倒數結束） | `objects/Character.ts` › `creditState` = `'absent'` | — |
+| 遊玩 | 角色狀態：有 CREDIT 在場上 | `objects/Character.ts` › `creditState` = `'playing'` | — |
+| 續關 | 角色狀態：CREDIT 用完、等投幣續關（不參加關卡結算分寶箱） | `objects/Character.ts` › `creditState` = `'waiting'` | — |
+| 關卡結算 | 關卡打完後播放結算介面，接著降下寶箱依分數分彩票 | `controllers/StageSettlementController.ts` › `StageSettlementController` | `stageSettlement` |
+| 低階寶箱 | 一般關卡的寶箱；打完開左右出口 | `scenes/GameScene.ts` › `lastStageChest` = `'low'`；`controllers/PayoutController.ts` › `payStageChest` | `payout.shares.lowChest` |
+| 高階寶箱 | 較高價值的寶箱；打完開上方出口 | `scenes/GameScene.ts` › `lastStageChest` = `'high'`；`controllers/PayoutController.ts` › `payStageChest` | `payout.shares.highChest` |
+| 連段獎勵 | 連段達 5/10/20/50/100 HIT 記下獎勵，中斷時發彩票 | `controllers/ComboRewardController.ts` › `ComboRewardController`；`controllers/PayoutController.ts` › `payCombo` | `comboReward`、`payout.shares.combo` |
+| 免費模式 | 除錯用：攻擊不扣 CREDIT（X 鍵） | `controllers/CreditController.ts` › `toggleFreePlay` | — |
 
-| 常數名稱 | 數值 | 說明 | 位置 |
-|----------|------|------|------|
-| **width** | 1920 | 遊戲解析度寬度 | `config.ts:10` |
-| **height** | 1080 | 遊戲解析度高度 | `config.ts:11` |
-| **maxActiveFx** | 40 | 同時特效上限 | 各場景 |
-| **footBarW** | 34 | 角色腳下狀態條寬度 | `objects/Character.ts:92` |
-| **padding** | 72 | 場地邊界內縮 | `config.ts:109` |
+## 操作與鎖定
 
----
+| 正式名稱 | 說明 | 程式名稱 | 設定 |
+|---|---|---|---|
+| 移動 | 八方向移動 | `controllers/CharacterActionController.ts` | `slow.moveSpeed` |
+| 攻擊鍵 | 出招 | `scenes/GameScene.ts` › `queuePlayerAttack` | — |
+| 特殊鍵 | 進入二段變身；靠近虛弱BOSS時改為 BOSS變身 | `controllers/ComboSkillController.ts` › `tryManualEmpower`；`controllers/BossController.ts` › `tryTransform` | — |
+| 投幣 | 投幣取得 CREDIT，待機時直接加入 | `controllers/CreditController.ts` › `insertCoin` | `credit` |
+| 自動鎖定 | 自動選鎖定範圍內的目標（怪、木箱） | `controllers/TargetingController.ts` › `updateSlowLock` | `lock` |
+| 鎖定範圍 | 自動鎖定能選到的距離（與衝刺距離同值，角色編輯器可調） | `scenes/GameScene.ts` › `slowTuning.lockRadius` | `slow.dashDistance` |
+| 面向優先 | 範圍內有多個目標時，優先選面朝方向的 | `controllers/TargetingController.ts` › `pickAimConeTarget` | `aim.aimConeDeg` |
+| 近戰攻擊 | 目標很近時原地揮扇形 | `controllers/CharacterActionController.ts` | `melee` |
+| 衝刺攻擊 | 目標較遠時衝過去打 | `controllers/CharacterActionController.ts` | `slow.dashSpeed` |
+| 衝刺 | 沒有目標時朝面向衝一段 | `controllers/CharacterActionController.ts` › `startDirectionDash` | `slow.dashDistance` |
+| 真空圈 | 角色腳下怪進不來的橢圓地盤 | `scenes/GameScene.ts` | `slow.vacuumRadius`、`slow.vacuumFlatten` |
 
-*本術語表基於專案程式碼 v2026-10-07 版本建立*  
-*維護者：文騎*
+## 二段變身
+
+| 正式名稱 | 說明 | 程式名稱 | 設定 |
+|---|---|---|---|
+| 二段變身 | 二段變身能量集滿按特殊鍵進入的強化狀態，約 7 秒，能量倒退到 0 結束 | `objects/Character.ts` › `empowered` | `energy`、`combo.empower` |
+| 二段變身能量 | 打倒敵人累積，滿了可二段變身 | `objects/Character.ts` › `energy`；`controllers/ComboSkillController.ts` › `grantKillEnergy` | `energy` |
+| 二段變身外觀 | 變身期間的金色調、光環、粒子 | `objects/Character.ts` › `empoweredForm` | `combo.empower.form` |
+| 強化攻擊 | 二段變身期間的攻擊：衝向目標，以它為中心炸範圍傷害（也打木箱） | `controllers/CharacterActionController.ts` › `empoweredDash`；`controllers/ComboSkillController.ts` › `empowerAoeBurst` | `combo.empower.aoe` |
+| 絕技 | 強化攻擊每打中 4 次自動觸發，原地亂打 16 下 | `controllers/ComboSkillController.ts` › `triggerBurst` | `combo.empower.burstEveryAoeHits`、`burst` |
+| 額外補怪 | 二段變身／BOSS變身期間額外即時生的怪，不算關卡目標，清完才進下一波或結算 | `controllers/SpawnController.ts` › `spawnSurge`、`countQuotaExempt` | `stageMonsters.profiles.*.surge`、`stageMonsters.bossFormSurge` |
+| 二段變身獎勵 | 二段變身期間打中怪發的彩票 | `controllers/PayoutController.ts` › `paySecondFormHit` | `payout.shares.secondForm` |
+
+## 戰鬥與招式
+
+| 正式名稱 | 說明 | 程式名稱 | 設定 |
+|---|---|---|---|
+| 連段 | 連續打中的 HIT 數，一段時間沒打中或受擊就中斷 | `controllers/ComboRewardController.ts`；`objects/Character.ts` › `comboState.currentStreak` | `comboReward` |
+| 蓄力 | 打中累積，4 下放招式1、8 下放招式2，放完歸零 | `controllers/ComboSkillController.ts` › `onComboHit`；`objects/Character.ts` › `spirit` | `combo.slowThresholds` |
+| 招式 | 蓄力集滿自動放的攻擊（招式1、招式2 總稱） | `controllers/ComboSkillController.ts` | `combo` |
+| 招式1 | 蓄力 4 下：圓形範圍攻擊 | `controllers/ComboSkillController.ts` › `comboCircle` | `combo.circle` |
+| 招式2 | 蓄力 8 下：直線貫穿攻擊 | `controllers/ComboSkillController.ts` › `comboLine` | `combo.line` |
+| 受擊 | 被怪打中（不扣血，連段中斷） | `scenes/GameScene.ts` › `damageCharacterFrom` | — |
+| 木箱 | 場上可打破的箱子 | `controllers/BreakableController.ts` › `BreakableController`；`objects/Breakable.ts` | `breakable` |
+| 木箱獎勵 | 打破木箱發的彩票 | `controllers/PayoutController.ts` › `payCrate` | `payout.shares.crate` |
+
+## 敵人
+
+| 正式名稱 | 說明 | 程式名稱 | 設定 |
+|---|---|---|---|
+| 小怪 | 基本近戰怪 | `objects/Enemy.ts` › `EnemyType` `'normal'` | `enemy.types.normal` |
+| 大怪 | 高血量、慢、體型大 | `objects/Enemy.ts` › `EnemyType` `'tank'` | `enemy.types.tank` |
+| 遠程怪 | 遠距離丟炸彈，落點有預警圈 | `objects/Enemy.ts` › `EnemyType` `'bomber'` | `enemy.types.bomber` |
+| 寶箱怪 | 跑來跑去、打中掉彩票的怪 | `controllers/TreasureEnemyController.ts`；`objects/Enemy.ts` › `EnemyType` `'treasure'` | `enemy.treasure` |
+| BOSS亂入 | 彩金池存夠時關卡中途限時出現的 BOSS，不打也能過關，時間到離開 | `controllers/BossController.ts` › `spawn(true)` | `stage.bossIntrude`、`stageMonsters.chests.*.bossIntrude` |
+| BOSS變身 | 靠近虛弱BOSS按特殊鍵，玩家變成 BOSS | `controllers/BossController.ts` › `tryTransform` | `boss` |
+| 虛弱BOSS | 打倒後留在地上的 BOSS，用來 BOSS變身 | `controllers/BossController.ts` › `corpse` | `boss` |
+| BOSS獎勵 | BOSS亂入打中、打倒與 BOSS變身期間打怪發的彩票 | `controllers/PayoutController.ts` › `payBossHit`、`payBossKill`、`payBossFormKill` | `payout.boss` |
+| 呼叫 | 玩家身邊怪太少時，從遠處叫怪過來 | `controllers/EnemyRallyController.ts` › `EnemyRallyController` | `enemyRally` |
+| 仇恨 | 怪鎖定某位玩家追著打 | `objects/Enemy.ts` › `targetSeat`、`aggroActive` | `enemySticky` |
+| 預警圈 | 遠程怪炸彈落點的預警 | `objects/Enemy.ts` › `telegraphing` | `enemy.types.bomber` |
+| 出怪組合 | 每關隨機抽的出怪配置（下列三種總稱） | `controllers/SpawnController.ts` | `stageMonsters.profiles` |
+| 小怪組合 | 小怪多、快節奏 | — | `stageMonsters.profiles.swarm` |
+| 大怪組合 | 大怪多、慢節奏 | — | `stageMonsters.profiles.armor` |
+| 遠程怪組合 | 遠程怪多 | — | `stageMonsters.profiles.artillery` |
+| 近身組 | 直接出在玩家身邊的怪 | `controllers/SpawnController.ts` | `spawnAlloc` |
+| 場上組 | 出在場地其他地方的怪 | `controllers/SpawnController.ts` | `spawnAlloc` |
+
+## 關卡流程
+
+| 正式名稱 | 說明 | 程式名稱 | 設定 |
+|---|---|---|---|
+| 關卡 | 打怪 → 關卡結算 → 走出口的一個單位 | `scenes/GameScene.ts` › `startStage`、`completeStage` | `stage` |
+| 波次 | 一關分 3 批出怪 | `scenes/GameScene.ts` › `subWavesDone`、`subWavesTarget` | `stageMonsters.profiles.*.waves` |
+| 關卡目標 | 一關要打倒的怪數（依寶箱階級與人數） | `scenes/GameScene.ts` › `waveQuota` | `stage.quotaByChest` |
+| 場地 | 一個可走的場地畫面 | `controllers/SlotWorldController.ts` › `SlotWorldController` | `stage.arenaW`、`stage.arenaH` |
+| 問號關 | 進去才揭曉低階或高階寶箱的關 | `systems/stageQueue.ts` › `StageNodeKind` `'mystery'` | `stage.mysteryHighChance` |
+| 出口 | 關卡結束後開啟的換場點 | `controllers/SlotWorldController.ts` | `stage.exitOrb` |
+| 左右出口 | 低階寶箱關打完開左或右一側，平移到相鄰場地 | `controllers/SlotWorldController.ts` › `openCrossing` | `stage.defaultCrossSide` |
+| 上方出口 | 高階寶箱關打完開上方出口，閃黑到新場地 | `controllers/SlotWorldController.ts` › `openTopExit` | — |
+| 分歧 | 問號關前同時開兩個出口選路 | `controllers/SlotWorldController.ts` › `openMysteryExits` | `stage.mysteryExitCombos` |
+| 轉場 | 換場地時的平移或閃黑 | `controllers/SlotWorldController.ts` › `AreaTransition` | — |
+| 隱藏入口 | 場地上方的熔岩拱門，彩金池存夠時開啟，通往派對密室 | `controllers/HiddenGateController.ts` | `stage.hiddenGate` |
+| 派對密室 | 限時獎勵房，寶箱怪從周圍財寶堆跳進來 | `controllers/TreasureRoomController.ts` › `TreasureRoomController` | `stage.treasureRoom` |
+| 派對獎勵 | 派對密室裡發的彩票 | `controllers/PayoutController.ts` › `payRoomHit`、`payRoomKill` | `payout.treasureRoom` |
