@@ -5,13 +5,13 @@ import { PayoutController, SEAT_PRIZES, SHARED_PRIZES, type PayoutPrize } from '
 
 /** 面板上各獎項的名稱 */
 const PRIZE_LABELS: Record<PayoutPrize, string> = {
-  secondForm: '二段變身',
-  combo: 'HIT連擊',
-  crate: '木箱',
+  secondForm: '二段變身獎勵',
+  combo: '連段獎勵',
+  crate: '木箱獎勵',
   lowChest: '低階寶箱',
   highChest: '高階寶箱',
-  boss: '亂入BOSS',
-  treasureRoom: '寶藏密室'
+  boss: 'BOSS獎勵',
+  treasureRoom: '派對獎勵'
 };
 /** 文字更新間隔（毫秒） */
 const REFRESH_MS = 200;
