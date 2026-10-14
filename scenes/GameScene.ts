@@ -2387,7 +2387,7 @@ export class GameScene extends Phaser.Scene {
       this.bossCtl.onBossHit(actor, enemy, dmg, time);
       if (this.controlMode === 'slow' && !enemy.dead) {
         const ecfg = GameConfig.energy;
-        if (!this.player.empowered && Math.random() < ecfg.bossHitChance) this.comboSkills.gainEnergy(this.player, ecfg.bossHitAmount);
+        if (!actor.empowered && Math.random() < ecfg.bossHitChance) this.comboSkills.gainEnergy(actor, ecfg.bossHitAmount);
       }
     }
     enemy.applyKnockback(fromX, fromY, knockback, time);
@@ -2415,7 +2415,7 @@ export class GameScene extends Phaser.Scene {
       if (countsTowardQuota) this.onWaveKill(); // 即時補怪不推進關卡進度
       this.fx.deathBurst(dx, dy);
       if (actor === this.player && this.bossCtl.isTransformed) this.popTickets(dx, dy, this.payout.payBossFormKill(actor)); // 變身 BOSS 期間打怪給票
-      if (this.controlMode === 'slow') this.comboSkills.grantKillEnergy(this.player, etype);
+      if (this.controlMode === 'slow') this.comboSkills.grantKillEnergy(actor, etype); // 能量給打倒的人（與擊殺數同一歸屬）
       if (Math.random() < GameConfig.items.dropChance) this.dropItemAt(dx, dy, time);
     }
   }
