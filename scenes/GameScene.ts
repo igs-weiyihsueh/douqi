@@ -420,6 +420,11 @@ export class GameScene extends Phaser.Scene {
       this.clearWaveByCheat();
     });
 
+    // K 鍵：秒殺場上所有怪（含寶箱怪、BOSS）並直接開下一關的入口（除錯熱鍵，跳過關卡結算）
+    this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.K).on('down', () => {
+      this.clearStageByCheat();
+    });
+
     // I 鍵:遊戲內【道具生成開關】toggle——即時 on/off + 螢幕橫幅提示;關→清掉場上現有道具(直覺)。
     this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.I).on('down', () => {
       this.toggleItems();
@@ -1890,6 +1895,33 @@ export class GameScene extends Phaser.Scene {
       this.waveKilled = this.waveQuota;
       this.enterIntermission();
     }
+  }
+
+  /**
+   * K 鍵：秒殺場上所有怪（含寶箱怪、亂入 BOSS；不計擊殺、不給彩票）並直接開下一關的入口。
+   * 剩下的波次一併跳過，關卡結算不播（這一關的寶箱 buffer 留著）；只在關卡制一般關卡進行中有效（密室、出口已開、轉場、結算中不處理）
+   */
+  private clearStageByCheat(): void {
+    if (this.gameOver || !this.levelMode || this.treasureRoom.isActive) return;
+    if (this.slotWorld.phase !== 'playing' || this.settlement.isActive) return;
+    for (const child of this.enemies.getChildren()) {
+      const e = child as Enemy;
+      if (e.active && !e.dead) {
+        this.fx.deathBurst(e.x, e.y);
+        e.kill();
+      }
+    }
+    this.treasures.forget();
+    this.bossCtl.forgetBoss();
+    this.pendingSurgeClear = false;
+    // 已在等待結算（本關已完成）時不重複完成關卡
+    if (!this.pendingSettlement) {
+      this.subWavesDone = this.subWavesTarget;
+      this.completeStage();
+    }
+    this.pendingSettlement = false;
+    this.onSubZoneComplete();
+    this.emitStats();
   }
 
   /**
