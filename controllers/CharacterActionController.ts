@@ -391,6 +391,8 @@ export class CharacterActionController {
     const radius = cfg.radius * (emp ? GameConfig.combo.empower.rangeMult : 1);
     const half = Phaser.Math.DegToRad(cfg.arcDeg) / 2;
     const atk = this.host.attackDamage() * (emp ? GameConfig.combo.empower.damageMult : 1);
+    // 先記普攻：這一刀觸發連段技時，連段技在後面記下，P1 Spine 播連段技動作而不是普攻
+    c.markAction('attack');
     let hitCount = 0;
     for (const child of this.host.enemies().getChildren()) {
       const enemy = child as Enemy;
@@ -407,7 +409,6 @@ export class CharacterActionController {
     if (hitCount > 0 || breakableHits > 0) this.host.triggerComboHit(c);
     this.host.flashWhite(c);
     this.host.spawnMeleeArcEffect(c.x, c.y, c.aimAngle);
-    c.markAction('attack');
   }
 
   /**

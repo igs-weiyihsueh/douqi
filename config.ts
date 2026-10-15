@@ -232,7 +232,8 @@ export const GameConfig = {
   /**
    * 怪物 Spine 動畫（新美術時取代該怪種的美術圖；碰撞、腳底佔位、AI 不變，只換外觀）。types 依怪種設定：
    * - skins 依序疊加成一套外觀；scale 為顯示縮放；腳底對齊原美術圖的腳底再加 offsetY；facesRight = 原始動畫面向右
-   * - anims：idle 待機 / move 走路（朝面向前進的實際位移速度超過 moveSpeedThreshold 像素/秒；被擋住走不動、被擊退或推擠往後退時算待機。
+   * - anims：idle 待機 / move 走路（實際位移速度超過 moveSpeedThreshold 像素/秒；被擋住走不動時算待機，被擊退往後滑不算走路。
+   *   門檻低於巡邏速度（enemy.ai.patrolSpeed 34），慢慢巡邏、被擠開也播走路，不會用待機姿勢平移；
    *   速度以 moveSmoothMs 平滑，避免單幀停頓或被推擠時走路 / 待機來回閃）/ hit 被打 / die 死亡（播完 dieFadeMs 淡出）/
    *   chargeIn → chargeLoop 蓄力（蓄力中重複）/ attack 出手；即時 Spine 的動畫切換混合 mixMs 毫秒；時停時動畫暫停
    * - speeds：各段動畫的播放速度（1 = 原速，2 = 兩倍快，0.5 = 慢一半）。蓄力多久由 enemy.chargeMsByType / enemy.chargeMs 決定，
@@ -273,7 +274,7 @@ export const GameConfig = {
         speeds: { idle: 1, move: 1, hit: 1, die: 1, chargeIn: 1, chargeLoop: 1, attack: 1 }
       }
     },
-    moveSpeedThreshold: 30,
+    moveSpeedThreshold: 12,
     moveSmoothMs: 120,
     mixMs: 100,
     dieFadeMs: 250,

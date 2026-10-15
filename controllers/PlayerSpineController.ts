@@ -18,7 +18,7 @@ export interface PlayerSpineHost {
 }
 
 /**
- * P1 Spine 外觀（GameConfig.playerSpine）：新美術皮膚圖顯示時把皮膚圖改成透明（仍留著給頭頂 UI、腳底量測用），
+ * P1 Spine 外觀（GameConfig.playerSpine）：皮膚圖顯示時把皮膚圖與 P1 本體都改成透明（皮膚圖仍留著給頭頂 UI、腳底量測用），
  * 改由 Spine 動畫物件跟著皮膚圖的位置、腳底、深度、面向與受擊閃爍顯示，並依 P1 狀態切換動畫：
  * 受擊硬直播 hit → 新出招（普攻兩段輪流 / 連段技 / 二段變身與爆發）播對應動作 → 衝刺中 sprint、衝刺結束 sprintEnd →
  * 單次動作播完前保持 → 移動中 move、其餘 idle。判定與手感不變，這裡只管畫面
@@ -33,6 +33,8 @@ export class PlayerSpineController {
   private actionSeq = 0;
   /** 普攻下一次用第幾段（anims.attack 輪流） */
   private attackIndex = 0;
+  /** P1 本體是否被 Spine 外觀藏起來（不顯示 Spine 時恢復） */
+  private baseHidden = false;
   /** 上一幀是否在衝刺、是否在受擊硬直 */
   private wasDashing = false;
   private wasHurt = false;
@@ -69,6 +71,10 @@ export class PlayerSpineController {
     if (!skin || !p.alive) {
       this.spine?.setVisible(false);
       this.current = null;
+      if (this.baseHidden) {
+        p.setAlpha(1);
+        this.baseHidden = false;
+      }
       return;
     }
     const spine = this.spine ?? this.create(p, time);
@@ -80,6 +86,9 @@ export class PlayerSpineController {
     spine.skeleton.scaleX = p.facingRight === cfg.facesRight ? 1 : -1;
     spine.animationState.timeScale = this.host.isPlayerFrozen() ? 0 : 1;
     skin.setAlpha(0);
+    // P1 本體（程式繪製的圓形）藏起來：揮擊時本體會閃白（flashWhite），Spine 的姿勢露出空隙時會隱約看到
+    p.setAlpha(0);
+    this.baseHidden = true;
     this.updateAnimation(p, time);
   }
 

@@ -522,6 +522,15 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.outOfRangeSince = 0;
   }
 
+  /**
+   * 被擊退中（命中凍結或擊退硬直；Spine 外觀這段期間不算在走路）
+   *
+   * @param time 目前場景時間
+   */
+  isKnockedBack(time: number): boolean {
+    return time < this.hitFreezeUntil || time < this.knockbackUntil;
+  }
+
   private beginCharge(time: number): void {
     this.aiState = 'charge';
     this.chargeStartAt = time;

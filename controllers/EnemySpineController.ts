@@ -127,7 +127,7 @@ interface EnemySpineView {
   lastX: number;
   lastY: number;
   lastTime: number;
-  /** 平滑後朝面向前進的實際位移速度（像素/秒；往後退為負） */
+  /** 平滑後的實際位移速度（像素/秒；被擊退中算 0） */
   speed: number;
   /** 目前是否在走（平滑速度超過門檻；時間沒前進的凍結幀維持上次結果） */
   moving: boolean;
@@ -290,8 +290,8 @@ export class EnemySpineController {
   }
 
   /**
-   * 依實際位移判斷有沒有在走：只算朝面向前進的位移（投影到面向方向），AI 給了速度但被擋住走不動、
-   * 或被擊退 / 推擠往後退時都算待機（否則會變成面向前方卻倒退走）；
+   * 依實際位移判斷有沒有在走：AI 給了速度但被擋住走不動時算待機；被擊退往後滑（Enemy.isKnockedBack）不算走路
+   * （否則會變成面向前方卻倒退走）；其餘只要有移動（含慢速巡邏、被擠開）就播走路，避免用待機姿勢平移。
    * 速度以 moveSmoothMs 做指數平滑，單幀停頓或被推一下不會讓走路 / 待機來回切換
    *
    * @param e 敵人
@@ -302,8 +302,7 @@ export class EnemySpineController {
     const dt = time - view.lastTime;
     if (dt <= 0) return;
     const cfg = GameConfig.enemySpine;
-    const forward = (e.x - view.lastX) * Math.cos(e.facing) + (e.y - view.lastY) * Math.sin(e.facing);
-    const speed = (forward * 1000) / dt;
+    const speed = e.isKnockedBack(time) ? 0 : (Phaser.Math.Distance.Between(view.lastX, view.lastY, e.x, e.y) * 1000) / dt;
     view.speed += (speed - view.speed) * Math.min(1, dt / cfg.moveSmoothMs);
     view.moving = view.speed > cfg.moveSpeedThreshold;
     view.lastX = e.x;
