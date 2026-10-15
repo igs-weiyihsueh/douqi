@@ -1390,15 +1390,14 @@ export class UIScene extends Phaser.Scene {
    *
    * @param graphics 用於繪製的Graphics對象
    * @param isFlashing 是否為閃爍狀態（Credit耗盡時顯示紅色）
-   * @param fillOverride 有給時整把劍改用這個顏色（例如多投多送量條亮格上的深色劍）
    */
-  private drawSwordIcon(graphics: Phaser.GameObjects.Graphics, isFlashing: boolean, fillOverride?: number): void {
+  private drawSwordIcon(graphics: Phaser.GameObjects.Graphics, isFlashing: boolean): void {
     const config = this.OVERHEAD_UI_CONFIG;
     const swordConfig = config.SWORD;
     const colors = config.COLORS;
     
     // 選擇顏色：正常金色或閃爍紅色
-    const fillColor = fillOverride ?? (isFlashing ? colors.FLASH_RED : colors.SWORD_FILL);
+    const fillColor = isFlashing ? colors.FLASH_RED : colors.SWORD_FILL;
     const strokeColor = isFlashing ? colors.FLASH_RED_BORDER : colors.SWORD_BORDER;
     
     graphics.clear();
@@ -1913,7 +1912,7 @@ export class UIScene extends Phaser.Scene {
     );
     const cycle = GameConfig.credit.coinCycle;
     this.panelCoinBars = this.rows.map(() =>
-      new CoinBonusBar(this, cycle.map((gain) => gain - cycle[0]), (g, fill) => this.drawSwordIcon(g, false, fill))
+      new CoinBonusBar(this, cycle.map((gain) => gain - cycle[0]), (g) => this.drawSwordIcon(g, false))
         .setDepth(cfg.DEPTH).setScrollFactor(0).setVisible(false)
     );
     this.panelJoinTexts = this.rows.map(() =>
@@ -1960,8 +1959,8 @@ export class UIScene extends Phaser.Scene {
   }
 
   /**
-   * 投幣（GameScene 的 coin-inserted 事件）：量條亮起這一格並彈跳（投滿最後一格時閃爍後清空）；
-   * 這一格有加贈時，從這一格飛出一道光沿弧線飛到角色頭頂（追著角色目前位置），到達時在角色身上爆一圈光
+   * 投幣（GameScene 的 coin-inserted 事件）：量條亮起這一次的投幣點（投滿一段時獎勵閃爍後換下一段）；
+   * 投滿一段有加贈時，從量條的獎勵飛出一道光沿弧線飛到角色面板的 CREDIT 欄（追著角色目前位置），到達時爆一圈光、CREDIT 數字彈跳
    *
    * @param e.index 角色索引
    * @param e.cycleIndex 這次投幣在 coinCycle 中的位置
@@ -1970,11 +1969,17 @@ export class UIScene extends Phaser.Scene {
     const bar = this.panelCoinBars[e.index];
     if (!bar) return;
     bar.lightCell(e.cycleIndex);
-    if (e.cycleIndex >= bar.cellCount - 1) bar.flashAndClear(bar.popMs);
     if (!bar.visible || !bar.hasBonus(e.cycleIndex)) return;
     const cfg = GameConfig.credit.coinBar;
-    const start = bar.cellCenter(e.cycleIndex);
+    const start = bar.rewardCenter();
+    const overhead = this.overheadUIs.get(e.index);
+    const creditIcon = (overhead as any)?.swordIcon as Phaser.GameObjects.Graphics | undefined;
     const target = (): { x: number; y: number } => {
+      if (overhead?.visible && creditIcon) {
+        const m = creditIcon.getWorldTransformMatrix();
+        return { x: m.tx, y: m.ty };
+      }
+      // 角色面板沒顯示時退回角色頭頂
       const c = this.lastChars[e.index];
       const gcam = (this.scene.get('GameScene') as Phaser.Scene | null)?.cameras?.main;
       if (!c) return start;
@@ -2005,6 +2010,11 @@ export class UIScene extends Phaser.Scene {
         const ring = this.add.circle(end.x, end.y, cfg.burstRadius, cfg.orbColor, 0.5).setDepth(cfg.depth)
           .setBlendMode(Phaser.BlendModes.ADD).setScale(0.2);
         this.tweens.add({ targets: ring, scale: 1, alpha: 0, duration: cfg.burstMs, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
+        const creditText = (overhead as any)?.creditText as Phaser.GameObjects.Text | undefined;
+        if (!creditText) return;
+        this.tweens.killTweensOf(creditText);
+        creditText.setScale(cfg.creditPopScale);
+        this.tweens.add({ targets: creditText, scale: 1, duration: cfg.creditPopMs, ease: 'Back.easeOut' });
       }
     });
   }

@@ -238,8 +238,9 @@ export const GameConfig = {
     /** 多投多送：第 1、2、3… 次投幣分別得到的 CREDIT，循環使用（超過第一檔的部分是加贈：偶數幣 +5 / +10 / +15，量條上只有這些格子標示） */
     coinCycle: [5, 10, 5, 15, 5, 20] as ReadonlyArray<number>,
     /**
-     * 多投多送量條：showWhenAbsent = 未進場的玩家也顯示（全暗）；有加贈的投幣光效從亮起的那一格飛到角色頭頂（離角色中心 targetOffsetY），
-     * 費時 flyMs、弧線拱起 arcHeight，拖尾粒子每 trailEveryMs 一顆；到達時在角色身上爆一圈光（burstRadius / burstMs）
+     * 多投多送量條：showWhenAbsent = 未進場的玩家也顯示（全暗）；投滿一段的加贈光效從量條的獎勵飛到角色面板的 CREDIT 欄
+     * （角色面板沒顯示時改飛到角色頭頂，離角色中心 targetOffsetY），費時 flyMs、弧線拱起 arcHeight，拖尾粒子每 trailEveryMs 一顆；
+     * 到達時爆一圈光（burstRadius / burstMs），CREDIT 數字從 creditPopScale 彈回（creditPopMs）
      */
     coinBar: {
       showWhenAbsent: true,
@@ -250,8 +251,10 @@ export const GameConfig = {
       orbColor: 0xffe066,
       trailEveryMs: 30,
       trailMs: 260,
-      burstRadius: 70,
+      burstRadius: 40,
       burstMs: 380,
+      creditPopScale: 1.5,
+      creditPopMs: 300,
       depth: 1600
     },
     /** 出手後多久內第一次命中敵人算這一招（毫秒；涵蓋衝刺、連段、爆發，一招最多扣 1 點） */
