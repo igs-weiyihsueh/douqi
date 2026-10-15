@@ -5,20 +5,101 @@ import type { Enemy, EnemyType } from '../objects/Enemy';
 import { visibleBottomOffset } from '../systems/spriteFeet';
 
 /** 有 Spine 動畫的怪種 */
-type SpineEnemyType = keyof typeof GameConfig.enemySpine & EnemyType;
-/** 設定裡怪種以外的鍵 */
-const NON_TYPE_KEYS: ReadonlySet<string> = new Set(['anims', 'speeds', 'moveSpeedThreshold', 'moveSmoothMs', 'mixMs', 'dieFadeMs']);
+type SpineEnemyType = keyof typeof GameConfig.enemySpine.types & EnemyType;
+/** 一個怪種的 Spine 設定 */
+type SpineTypeConfig = (typeof GameConfig.enemySpine.types)[SpineEnemyType];
+/** 設定裡的動畫鍵（anims / speeds 的鍵） */
+type SpineAnimKey = keyof SpineTypeConfig['anims'];
 /** 出手動畫判定：上一幀蓄力進度達到這個值、這一幀離開蓄力，視為出手（被打斷時進度不到） */
 const ATTACK_FIRED_PROGRESS = 0.95;
 
 /** 動畫狀態（決定播哪一段動畫） */
 type SpineAnimState = 'idle' | 'move' | 'hit' | 'charge' | 'attack';
-/** 設定裡的動畫（GameConfig.enemySpine.anims / speeds 的鍵） */
-type SpineAnimKey = keyof typeof GameConfig.enemySpine.anims;
 
-/** 一隻怪的 Spine 外觀 */
+/** 一隻怪的 Spine 外觀：疊加 skins、套用播放速度、依面向翻轉、畫面外暫停 */
+class EnemySpineDisplay {
+  readonly object: SpineGameObject;
+
+  /**
+   * @param scene 場景
+   * @param cfg 怪種設定（疊加 skins、縮放、動畫名稱與播放速度）
+   */
+  constructor(scene: Phaser.Scene, private readonly cfg: SpineTypeConfig) {
+    const spine = scene.add.spine(0, 0, cfg.dataKey, cfg.atlasKey);
+    const skin = new Skin(`${cfg.dataKey}-combined`);
+    for (const name of cfg.skins) {
+      const part = spine.skeleton.data.findSkin(name);
+      if (part) skin.addSkin(part);
+      else console.warn(`⚠️ Spine 素材 ${cfg.dataKey} 沒有 skin「${name}」`);
+    }
+    spine.skeleton.setSkin(skin);
+    spine.skeleton.setSlotsToSetupPose();
+    spine.animationStateData.defaultMix = GameConfig.enemySpine.mixMs / 1000;
+    spine.setScale(cfg.scale);
+    this.object = spine;
+  }
+
+  /**
+   * 播放一段動畫（套用 speeds）
+   *
+   * @param key 動畫鍵
+   * @param loop 是否重複播放
+   * @param queued true = 排在目前動畫播完後接著播，false = 立即切換
+   * @returns 實際播放時間（毫秒）
+   */
+  play(key: SpineAnimKey, loop: boolean, queued = false): number {
+    const state = this.object.animationState;
+    const entry: TrackEntry = queued
+      ? state.addAnimation(0, this.cfg.anims[key], loop, 0)
+      : state.setAnimation(0, this.cfg.anims[key], loop);
+    entry.timeScale = this.cfg.speeds[key];
+    return (entry.animation!.duration * 1000) / entry.timeScale;
+  }
+
+  /**
+   * 跟隨：腳底位置、深度、透明度與面向；不在畫面內（含 cullMargin）時不更新動畫也不繪製
+   *
+   * @param x 腳底 x
+   * @param footY 腳底 y
+   * @param depth 深度
+   * @param alpha 透明度
+   * @param faceRight 是否面向右
+   * @param onScreen 是否在畫面內
+   */
+  place(x: number, footY: number, depth: number, alpha: number, faceRight: boolean, onScreen: boolean): void {
+    this.object.setActive(onScreen).setVisible(onScreen);
+    if (!onScreen) return;
+    this.object.setPosition(x, footY).setDepth(depth).setAlpha(alpha);
+    this.object.skeleton.scaleX = faceRight === this.cfg.facesRight ? 1 : -1;
+  }
+
+  /**
+   * 動畫暫停 / 繼續（時停）
+   *
+   * @param paused 是否暫停
+   */
+  setPaused(paused: boolean): void {
+    this.object.animationState.timeScale = paused ? 0 : 1;
+  }
+
+  /** 啟用（從物件池取出時，從 idle 開始） */
+  activate(): void {
+    this.object.setActive(true).setVisible(true).setAlpha(1);
+    this.object.animationState.clearTracks();
+    this.object.skeleton.setToSetupPose();
+    this.object.animationState.timeScale = 1;
+    this.play('idle', true);
+  }
+
+  /** 停用（回收時） */
+  deactivate(): void {
+    this.object.setActive(false).setVisible(false);
+  }
+}
+
+/** 一隻怪的 Spine 外觀與動畫狀態 */
 interface EnemySpineView {
-  spine: SpineGameObject;
+  display: EnemySpineDisplay;
   /** 怪種（回收到對應的物件池） */
   type: SpineEnemyType;
   /** 目前的動畫狀態 */
@@ -49,16 +130,17 @@ export interface EnemySpineHost {
 }
 
 /**
- * 怪物 Spine 外觀（GameConfig.enemySpine）：新美術時，有 Spine 素材的怪種（目前為大怪）隱藏原本的美術圖，
+ * 怪物 Spine 外觀（GameConfig.enemySpine）：新美術時，有 Spine 素材的怪種（大怪、一般兵）隱藏原本的美術圖，
  * 改由一個 Spine 動畫物件跟著怪的位置、深度、面向與透明度（登場閃爍）顯示，並依怪的狀態切換動畫：
  * 被打（血量下降）播 hit、蓄力播 chargeIn → chargeLoop、蓄力完出手播 attack、移動中 move、其餘 idle；
- * 怪死亡時原地播 die 後淡出。碰撞、腳底佔位與 AI 仍由原本的 Enemy 處理，這裡只管畫面
+ * 怪死亡時原地播 die 後淡出。畫面外（cullMargin 以外）的怪不更新動畫也不繪製，省效能。
+ * 碰撞、腳底佔位與 AI 仍由原本的 Enemy 處理，這裡只管畫面
  */
 export class EnemySpineController {
   /** 場上各怪的 Spine 外觀 */
   private readonly views = new Map<Enemy, EnemySpineView>();
-  /** 回收待用的 Spine 物件（依怪種） */
-  private readonly pool = new Map<SpineEnemyType, SpineGameObject[]>();
+  /** 回收待用的 Spine 外觀（依怪種） */
+  private readonly pool = new Map<SpineEnemyType, EnemySpineDisplay[]>();
 
   /**
    * @param scene 場景
@@ -67,13 +149,16 @@ export class EnemySpineController {
   constructor(private readonly scene: Phaser.Scene, private readonly host: EnemySpineHost) {}
 
   /**
-   * 預載 Spine 素材（BootScene.preload 呼叫）
+   * 預載 Spine 素材（BootScene.preload 呼叫；多個怪種共用同一份素材時只載一次）
    *
    * @param load 載入器
    */
   static preload(load: Phaser.Loader.LoaderPlugin): void {
+    const loaded = new Set<string>();
     for (const type of EnemySpineController.spineTypes()) {
-      const cfg = GameConfig.enemySpine[type];
+      const cfg = GameConfig.enemySpine.types[type];
+      if (loaded.has(cfg.dataKey)) continue;
+      loaded.add(cfg.dataKey);
       load.spineJson(cfg.dataKey, cfg.jsonUrl);
       load.spineAtlas(cfg.atlasKey, cfg.atlasUrl);
     }
@@ -81,7 +166,7 @@ export class EnemySpineController {
 
   /** 設定裡有 Spine 素材的怪種 */
   private static spineTypes(): SpineEnemyType[] {
-    return Object.keys(GameConfig.enemySpine).filter((k) => !NON_TYPE_KEYS.has(k)) as SpineEnemyType[];
+    return Object.keys(GameConfig.enemySpine.types) as SpineEnemyType[];
   }
 
   /**
@@ -92,7 +177,8 @@ export class EnemySpineController {
    */
   sync(enemies: Phaser.GameObjects.Group, time: number): void {
     const art = this.host.artEnemies();
-    const timeScale = this.host.isTimeStopped() ? 0 : 1;
+    const paused = this.host.isTimeStopped();
+    const worldView = this.scene.cameras.main.worldView;
     for (const child of enemies.getChildren()) {
       const e = child as Enemy;
       const type = this.spineTypeOf(e);
@@ -106,8 +192,8 @@ export class EnemySpineController {
         view = undefined;
       }
       if (!view) view = this.attach(e, type, time);
-      this.follow(e, view);
-      view.spine.animationState.timeScale = timeScale;
+      this.follow(e, view, worldView);
+      view.display.setPaused(paused);
       this.updateAnimation(e, view, time);
     }
     // 已不在群組裡的怪（被移除）
@@ -122,24 +208,21 @@ export class EnemySpineController {
    * @param e 敵人
    */
   private spineTypeOf(e: Enemy): SpineEnemyType | null {
-    return e.enemyType in GameConfig.enemySpine && !NON_TYPE_KEYS.has(e.enemyType) ? (e.enemyType as SpineEnemyType) : null;
+    return e.enemyType in GameConfig.enemySpine.types ? (e.enemyType as SpineEnemyType) : null;
   }
 
   /**
-   * 替怪掛上 Spine 外觀（優先用回收的物件），從 idle 開始
+   * 替怪掛上 Spine 外觀（優先用回收的），從 idle 開始
    *
    * @param e 敵人
    * @param type 怪種
    * @param time 目前場景時間
    */
   private attach(e: Enemy, type: SpineEnemyType, time: number): EnemySpineView {
-    const spine = this.pool.get(type)?.pop() ?? this.create(type);
-    spine.setActive(true).setVisible(true).setAlpha(1);
-    spine.animationState.clearTracks();
-    spine.skeleton.setToSetupPose();
-    EnemySpineController.play(spine, 'idle', true);
+    const display = this.pool.get(type)?.pop() ?? new EnemySpineDisplay(this.scene, GameConfig.enemySpine.types[type]);
+    display.activate();
     const view: EnemySpineView = {
-      spine, type, state: 'idle', lastHp: e.hp, wasCharging: false, lastChargeProgress: 0, oneShotUntil: time,
+      display, type, state: 'idle', lastHp: e.hp, wasCharging: false, lastChargeProgress: 0, oneShotUntil: time,
       lastX: e.x, lastY: e.y, lastTime: time, speed: 0, moving: false
     };
     this.views.set(e, view);
@@ -147,38 +230,20 @@ export class EnemySpineController {
   }
 
   /**
-   * 建立一個 Spine 物件：疊加設定的 skins 成一套外觀、設定動畫混合時間
-   *
-   * @param type 怪種
-   */
-  private create(type: SpineEnemyType): SpineGameObject {
-    const cfg = GameConfig.enemySpine[type];
-    const spine = this.scene.add.spine(0, 0, cfg.dataKey, cfg.atlasKey);
-    const data = spine.skeleton.data;
-    const skin = new Skin(`${type}-combined`);
-    for (const name of cfg.skins) {
-      const part = data.findSkin(name);
-      if (part) skin.addSkin(part);
-      else console.warn(`⚠️ Spine 素材 ${cfg.dataKey} 沒有 skin「${name}」`);
-    }
-    spine.skeleton.setSkin(skin);
-    spine.skeleton.setSlotsToSetupPose();
-    spine.animationStateData.defaultMix = GameConfig.enemySpine.mixMs / 1000;
-    spine.setScale(cfg.scale);
-    return spine;
-  }
-
-  /**
-   * Spine 外觀跟著怪：腳底對齊原美術圖腳底、深度相同、依面向左右翻轉、透明度相同（登場閃爍）；原美術圖隱藏
+   * Spine 外觀跟著怪：腳底對齊原美術圖腳底、深度相同、依面向左右翻轉、透明度相同（登場閃爍）；原美術圖隱藏。
+   * 怪不在鏡頭畫面（外擴 cullMargin）內時 Spine 不更新也不繪製
    *
    * @param e 敵人
    * @param view Spine 外觀
+   * @param worldView 鏡頭目前看到的世界範圍
    */
-  private follow(e: Enemy, view: EnemySpineView): void {
-    const cfg = GameConfig.enemySpine[view.type];
+  private follow(e: Enemy, view: EnemySpineView, worldView: Phaser.Geom.Rectangle): void {
+    const cfg = GameConfig.enemySpine.types[view.type];
+    const margin = GameConfig.enemySpine.cullMargin;
+    const onScreen = e.x >= worldView.left - margin && e.x <= worldView.right + margin
+      && e.y >= worldView.top - margin && e.y <= worldView.bottom + margin;
     const footY = e.y + visibleBottomOffset(this.scene.textures, e.texture.key) * e.scaleY + cfg.offsetY;
-    view.spine.setPosition(e.x, footY).setDepth(e.depth).setAlpha(e.alpha);
-    view.spine.skeleton.scaleX = e.facingRight === cfg.facesRight ? 1 : -1;
+    view.display.place(e.x, footY, e.depth, e.alpha, e.facingRight, onScreen);
     e.setVisible(false);
   }
 
@@ -201,8 +266,8 @@ export class EnemySpineController {
     } else if (charging) {
       if (view.state !== 'charge') {
         view.state = 'charge';
-        EnemySpineController.play(view.spine, 'chargeIn', false);
-        EnemySpineController.play(view.spine, 'chargeLoop', true, true);
+        view.display.play('chargeIn', false);
+        view.display.play('chargeLoop', true, true);
       }
     } else if (time >= view.oneShotUntil || view.state === 'charge') {
       this.playLoop(view, view.moving ? 'move' : 'idle');
@@ -235,33 +300,6 @@ export class EnemySpineController {
   }
 
   /**
-   * 播放設定裡的一段動畫，播放速度套用 GameConfig.enemySpine.speeds
-   *
-   * @param spine Spine 物件
-   * @param key 動畫
-   * @param loop 是否重複播放
-   * @param queued true = 排在目前動畫播完後接著播，false = 立即切換
-   * @returns 這段動畫的播放項目
-   */
-  private static play(spine: SpineGameObject, key: SpineAnimKey, loop: boolean, queued = false): TrackEntry {
-    const cfg = GameConfig.enemySpine;
-    const entry = queued
-      ? spine.animationState.addAnimation(0, cfg.anims[key], loop, 0)
-      : spine.animationState.setAnimation(0, cfg.anims[key], loop);
-    entry.timeScale = cfg.speeds[key];
-    return entry;
-  }
-
-  /**
-   * 實際播放時間（毫秒）：動畫長度 ÷ 播放速度
-   *
-   * @param entry 播放項目
-   */
-  private static playMs(entry: TrackEntry): number {
-    return (entry.animation!.duration * 1000) / entry.timeScale;
-  }
-
-  /**
    * 播一次的動畫（hit / attack）：從頭播，播完前不切回移動 / 待機
    *
    * @param view Spine 外觀
@@ -270,7 +308,7 @@ export class EnemySpineController {
    */
   private playOnce(view: EnemySpineView, state: 'hit' | 'attack', time: number): void {
     view.state = state;
-    view.oneShotUntil = time + EnemySpineController.playMs(EnemySpineController.play(view.spine, state, false));
+    view.oneShotUntil = time + view.display.play(state, false);
   }
 
   /**
@@ -282,11 +320,11 @@ export class EnemySpineController {
   private playLoop(view: EnemySpineView, state: 'idle' | 'move'): void {
     if (view.state === state) return;
     view.state = state;
-    EnemySpineController.play(view.spine, state, true);
+    view.display.play(state, true);
   }
 
   /**
-   * 收掉一隻怪的 Spine 外觀：死亡時原地播 die 再淡出，其餘（換區清場、切回舊美術）立即收起；收起的物件回收待用。
+   * 收掉一隻怪的 Spine 外觀：死亡時原地播 die 再淡出，其餘（換區清場、切回舊美術）立即收起；收起的外觀回收待用。
    * 怪還在場上（切回舊美術）時恢復顯示原美術圖
    *
    * @param e 敵人
@@ -296,22 +334,22 @@ export class EnemySpineController {
   private release(e: Enemy, view: EnemySpineView, playDeath: boolean): void {
     this.views.delete(e);
     if (e.active && !e.dead) e.setVisible(true);
-    const spine = view.spine;
+    const display = view.display;
     const recycle = (): void => {
-      spine.setActive(false).setVisible(false);
+      display.deactivate();
       const pool = this.pool.get(view.type) ?? [];
-      pool.push(spine);
+      pool.push(display);
       this.pool.set(view.type, pool);
     };
     if (!playDeath) {
       recycle();
       return;
     }
-    spine.animationState.timeScale = 1;
-    const entry = EnemySpineController.play(spine, 'die', false);
+    display.setPaused(false);
+    display.object.setActive(true).setVisible(true);
+    const dieMs = display.play('die', false);
     this.scene.tweens.add({
-      targets: spine, alpha: 0, delay: EnemySpineController.playMs(entry), duration: GameConfig.enemySpine.dieFadeMs,
-      onComplete: recycle
+      targets: display.object, alpha: 0, delay: dieMs, duration: GameConfig.enemySpine.dieFadeMs, onComplete: recycle
     });
   }
 }

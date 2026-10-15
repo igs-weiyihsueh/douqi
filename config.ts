@@ -220,40 +220,54 @@ export const GameConfig = {
   },
 
   /**
-   * 怪物 Spine 動畫（新美術時取代該怪種的美術圖；碰撞、腳底佔位、AI 不變，只換外觀）：
-   * - tank：大怪 = EN01 骷髏兵（public/assets/spine/）。skins 依序疊加成一套外觀；scale 為顯示縮放；
-   *   腳底對齊原美術圖的腳底再加 offsetY；facesRight = 原始動畫面向右
-   * - 動畫：idle 待機 / move 走路（朝面向前進的實際位移速度超過 moveSpeedThreshold 像素/秒；被擋住走不動、被擊退或推擠往後退時算待機。
+   * 怪物 Spine 動畫（新美術時取代該怪種的美術圖；碰撞、腳底佔位、AI 不變，只換外觀）。types 依怪種設定：
+   * - skins 依序疊加成一套外觀；scale 為顯示縮放；腳底對齊原美術圖的腳底再加 offsetY；facesRight = 原始動畫面向右
+   * - anims：idle 待機 / move 走路（朝面向前進的實際位移速度超過 moveSpeedThreshold 像素/秒；被擋住走不動、被擊退或推擠往後退時算待機。
    *   速度以 moveSmoothMs 平滑，避免單幀停頓或被推擠時走路 / 待機來回閃）/ hit 被打 / die 死亡（播完 dieFadeMs 淡出）/
-   *   chargeIn → chargeLoop 蓄力（蓄力中重複）/ attack 出手；動畫切換混合 mixMs 毫秒；時停時動畫暫停
+   *   chargeIn → chargeLoop 蓄力（蓄力中重複）/ attack 出手；即時 Spine 的動畫切換混合 mixMs 毫秒；時停時動畫暫停
    * - speeds：各段動畫的播放速度（1 = 原速，2 = 兩倍快，0.5 = 慢一半）。蓄力多久由 enemy.chargeMsByType / enemy.chargeMs 決定，
    *   chargeIn 播完後重複 chargeLoop 直到出手；出手的傷害在 attack 開始那一刻就判定，attack 調慢只會讓揮擊畫面比傷害晚
+   * - tank：大怪 = EN01 骷髏兵（穿盔甲、近戰動作）；normal：一般兵 = 同一份素材的骷髏（沒穿盔甲、拿槍、遠攻動作）
+   * - cullMargin：鏡頭畫面外擴這麼多像素以外的怪不更新動畫也不繪製（省效能，回到畫面內從停住的姿勢繼續）
    */
   enemySpine: {
-    tank: {
-      dataKey: 'spine-en01-data',
-      atlasKey: 'spine-en01-atlas',
-      jsonUrl: 'assets/spine/EN01_Skeleton_Soldier.json',
-      atlasUrl: 'assets/spine/EN01.atlas',
-      skins: ['Armor', 'Weapon'] as ReadonlyArray<string>,
-      scale: 0.115,
-      offsetY: 0,
-      facesRight: false
+    types: {
+      tank: {
+        dataKey: 'spine-en01-data',
+        atlasKey: 'spine-en01-atlas',
+        jsonUrl: 'assets/spine/EN01_Skeleton_Soldier.json',
+        atlasUrl: 'assets/spine/EN01.atlas',
+        skins: ['Armor', 'Weapon'] as ReadonlyArray<string>,
+        scale: 0.115,
+        offsetY: 0,
+        facesRight: false,
+        anims: {
+          idle: 'idle', move: 'move', hit: 'hit', die: 'die',
+          chargeIn: 'close_attack_in', chargeLoop: 'close_attack_loop', attack: 'close_attack_at'
+        },
+        speeds: { idle: 1, move: 1, hit: 1, die: 1, chargeIn: 1, chargeLoop: 1, attack: 1 }
+      },
+      normal: {
+        dataKey: 'spine-en01-data',
+        atlasKey: 'spine-en01-atlas',
+        jsonUrl: 'assets/spine/EN01_Skeleton_Soldier.json',
+        atlasUrl: 'assets/spine/EN01.atlas',
+        skins: ['Skeleton', 'Weapon'] as ReadonlyArray<string>,
+        scale: 0.115,
+        offsetY: 0,
+        facesRight: false,
+        anims: {
+          idle: 'idle', move: 'move', hit: 'hit', die: 'die',
+          chargeIn: 'ranged_attack_in', chargeLoop: 'ranged_attack_loop', attack: 'ranged_attack_at'
+        },
+        speeds: { idle: 1, move: 1, hit: 1, die: 1, chargeIn: 1, chargeLoop: 1, attack: 1 }
+      }
     },
-    anims: {
-      idle: 'idle',
-      move: 'move',
-      hit: 'hit',
-      die: 'die',
-      chargeIn: 'close_attack_in',
-      chargeLoop: 'close_attack_loop',
-      attack: 'close_attack_at'
-    },
-    speeds: { idle: 1, move: 1, hit: 1, die: 1, chargeIn: 1, chargeLoop: 1, attack: 1 },
     moveSpeedThreshold: 30,
     moveSmoothMs: 120,
     mixMs: 100,
-    dieFadeMs: 250
+    dieFadeMs: 250,
+    cullMargin: 150
   },
 
   /**
