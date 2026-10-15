@@ -188,6 +188,8 @@ export const GameConfig = {
    * - 動畫：idle 待機 / move 走路（實際位移速度超過 moveSpeedThreshold 像素/秒；被擋住走不動時算待機。速度以 moveSmoothMs 平滑，
    *   避免單幀停頓或被推擠時走路 / 待機來回閃）/ hit 被打 / die 死亡（播完 dieFadeMs 淡出）/
    *   chargeIn → chargeLoop 蓄力（蓄力中重複）/ attack 出手；動畫切換混合 mixMs 毫秒；時停時動畫暫停
+   * - speeds：各段動畫的播放速度（1 = 原速，2 = 兩倍快，0.5 = 慢一半）。蓄力多久由 enemy.chargeMsByType / enemy.chargeMs 決定，
+   *   chargeIn 播完後重複 chargeLoop 直到出手；出手的傷害在 attack 開始那一刻就判定，attack 調慢只會讓揮擊畫面比傷害晚
    */
   enemySpine: {
     tank: {
@@ -209,6 +211,7 @@ export const GameConfig = {
       chargeLoop: 'close_attack_loop',
       attack: 'close_attack_at'
     },
+    speeds: { idle: 1, move: 1, hit: 1, die: 1, chargeIn: 1, chargeLoop: 1, attack: 1 },
     moveSpeedThreshold: 30,
     moveSmoothMs: 120,
     mixMs: 100,
@@ -784,6 +787,8 @@ export const GameConfig = {
     knockbackStunMs: 500,
     /** 蓄力/前搖時間（毫秒）：改「由內而外填滿」讀條式預警，填滿瞬間發動 */
     chargeMs: 950,
+    /** 各怪種另外指定的蓄力時間（毫秒；沒列的怪種用 chargeMs）：tank = 大怪 */
+    chargeMsByType: { tank: 950 } as Record<string, number>,
     /** 發動攻擊時的近身傷害範圍（玩家在此半徑內才扣血，像素） */
     attackRadius: 46,
     /** 每次攻擊命中對玩家的傷害 */

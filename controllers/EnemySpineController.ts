@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { Skin, type SpineGameObject } from '@esotericsoftware/spine-phaser';
+import { Skin, type SpineGameObject, type TrackEntry } from '@esotericsoftware/spine-phaser';
 import { GameConfig } from '../config';
 import type { Enemy, EnemyType } from '../objects/Enemy';
 import { visibleBottomOffset } from '../systems/spriteFeet';
@@ -7,12 +7,14 @@ import { visibleBottomOffset } from '../systems/spriteFeet';
 /** 有 Spine 動畫的怪種 */
 type SpineEnemyType = keyof typeof GameConfig.enemySpine & EnemyType;
 /** 設定裡怪種以外的鍵 */
-const NON_TYPE_KEYS: ReadonlySet<string> = new Set(['anims', 'moveSpeedThreshold', 'moveSmoothMs', 'mixMs', 'dieFadeMs']);
+const NON_TYPE_KEYS: ReadonlySet<string> = new Set(['anims', 'speeds', 'moveSpeedThreshold', 'moveSmoothMs', 'mixMs', 'dieFadeMs']);
 /** 出手動畫判定：上一幀蓄力進度達到這個值、這一幀離開蓄力，視為出手（被打斷時進度不到） */
 const ATTACK_FIRED_PROGRESS = 0.95;
 
 /** 動畫狀態（決定播哪一段動畫） */
 type SpineAnimState = 'idle' | 'move' | 'hit' | 'charge' | 'attack';
+/** 設定裡的動畫（GameConfig.enemySpine.anims / speeds 的鍵） */
+type SpineAnimKey = keyof typeof GameConfig.enemySpine.anims;
 
 /** 一隻怪的 Spine 外觀 */
 interface EnemySpineView {
@@ -135,7 +137,7 @@ export class EnemySpineController {
     spine.setActive(true).setVisible(true).setAlpha(1);
     spine.animationState.clearTracks();
     spine.skeleton.setToSetupPose();
-    spine.animationState.setAnimation(0, GameConfig.enemySpine.anims.idle, true);
+    EnemySpineController.play(spine, 'idle', true);
     const view: EnemySpineView = {
       spine, type, state: 'idle', lastHp: e.hp, wasCharging: false, lastChargeProgress: 0, oneShotUntil: time,
       lastX: e.x, lastY: e.y, lastTime: time, speed: 0, moving: false
@@ -188,23 +190,22 @@ export class EnemySpineController {
    * @param time 目前場景時間
    */
   private updateAnimation(e: Enemy, view: EnemySpineView, time: number): void {
-    const anims = GameConfig.enemySpine.anims;
     const charging = e.isCharging();
     const progress = e.chargeProgress(time);
     const fired = view.wasCharging && !charging && view.lastChargeProgress >= ATTACK_FIRED_PROGRESS;
     this.updateMoving(e, view, time);
     if (e.hp < view.lastHp) {
-      this.playOnce(view, 'hit', anims.hit, time);
+      this.playOnce(view, 'hit', time);
     } else if (fired) {
-      this.playOnce(view, 'attack', anims.attack, time);
+      this.playOnce(view, 'attack', time);
     } else if (charging) {
       if (view.state !== 'charge') {
         view.state = 'charge';
-        view.spine.animationState.setAnimation(0, anims.chargeIn, false);
-        view.spine.animationState.addAnimation(0, anims.chargeLoop, true, 0);
+        EnemySpineController.play(view.spine, 'chargeIn', false);
+        EnemySpineController.play(view.spine, 'chargeLoop', true, true);
       }
     } else if (time >= view.oneShotUntil || view.state === 'charge') {
-      this.playLoop(view, view.moving ? 'move' : 'idle', view.moving ? anims.move : anims.idle);
+      this.playLoop(view, view.moving ? 'move' : 'idle');
     }
     view.lastHp = e.hp;
     view.wasCharging = charging;
@@ -232,30 +233,54 @@ export class EnemySpineController {
   }
 
   /**
+   * 播放設定裡的一段動畫，播放速度套用 GameConfig.enemySpine.speeds
+   *
+   * @param spine Spine 物件
+   * @param key 動畫
+   * @param loop 是否重複播放
+   * @param queued true = 排在目前動畫播完後接著播，false = 立即切換
+   * @returns 這段動畫的播放項目
+   */
+  private static play(spine: SpineGameObject, key: SpineAnimKey, loop: boolean, queued = false): TrackEntry {
+    const cfg = GameConfig.enemySpine;
+    const entry = queued
+      ? spine.animationState.addAnimation(0, cfg.anims[key], loop, 0)
+      : spine.animationState.setAnimation(0, cfg.anims[key], loop);
+    entry.timeScale = cfg.speeds[key];
+    return entry;
+  }
+
+  /**
+   * 實際播放時間（毫秒）：動畫長度 ÷ 播放速度
+   *
+   * @param entry 播放項目
+   */
+  private static playMs(entry: TrackEntry): number {
+    return (entry.animation!.duration * 1000) / entry.timeScale;
+  }
+
+  /**
    * 播一次的動畫（hit / attack）：從頭播，播完前不切回移動 / 待機
    *
    * @param view Spine 外觀
-   * @param state 動畫狀態
-   * @param anim 動畫名稱
+   * @param state 動畫狀態（也是動畫鍵）
    * @param time 目前場景時間
    */
-  private playOnce(view: EnemySpineView, state: SpineAnimState, anim: string, time: number): void {
+  private playOnce(view: EnemySpineView, state: 'hit' | 'attack', time: number): void {
     view.state = state;
-    const entry = view.spine.animationState.setAnimation(0, anim, false);
-    view.oneShotUntil = time + entry.animation!.duration * 1000;
+    view.oneShotUntil = time + EnemySpineController.playMs(EnemySpineController.play(view.spine, state, false));
   }
 
   /**
    * 重複播放的動畫（idle / move）：狀態沒變就不重設
    *
    * @param view Spine 外觀
-   * @param state 動畫狀態
-   * @param anim 動畫名稱
+   * @param state 動畫狀態（也是動畫鍵）
    */
-  private playLoop(view: EnemySpineView, state: SpineAnimState, anim: string): void {
+  private playLoop(view: EnemySpineView, state: 'idle' | 'move'): void {
     if (view.state === state) return;
     view.state = state;
-    view.spine.animationState.setAnimation(0, anim, true);
+    EnemySpineController.play(view.spine, state, true);
   }
 
   /**
@@ -281,9 +306,9 @@ export class EnemySpineController {
       return;
     }
     spine.animationState.timeScale = 1;
-    const entry = spine.animationState.setAnimation(0, GameConfig.enemySpine.anims.die, false);
+    const entry = EnemySpineController.play(spine, 'die', false);
     this.scene.tweens.add({
-      targets: spine, alpha: 0, delay: entry.animation!.duration * 1000, duration: GameConfig.enemySpine.dieFadeMs,
+      targets: spine, alpha: 0, delay: EnemySpineController.playMs(entry), duration: GameConfig.enemySpine.dieFadeMs,
       onComplete: recycle
     });
   }

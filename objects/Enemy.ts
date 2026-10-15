@@ -522,7 +522,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private beginCharge(time: number): void {
     this.aiState = 'charge';
     this.chargeStartAt = time;
-    this.chargeUntil = time + GameConfig.enemy.chargeMs;
+    this.chargeUntil = time + this.chargeDuration();
     (this.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
     // 蓄力預警只靠 GameScene 畫的「由內而外填滿」範圍圈；身體不染色
   }
@@ -549,8 +549,13 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   /** 蓄力進度 0→1（供 GameScene 畫由內而外填滿的預警圈） */
   chargeProgress(time: number): number {
     if (this.aiState !== 'charge') return 0;
-    const span = GameConfig.enemy.chargeMs;
+    const span = this.chargeDuration();
     return Phaser.Math.Clamp((time - this.chargeStartAt) / span, 0, 1);
+  }
+
+  /** 這個怪種的蓄力時間（毫秒）：enemy.chargeMsByType 有列就用它，否則用 enemy.chargeMs */
+  private chargeDuration(): number {
+    return GameConfig.enemy.chargeMsByType[this.enemyType] ?? GameConfig.enemy.chargeMs;
   }
 
   /** 除錯：目前近戰 AI 狀態（patrol/chase/charge/cooldown） */
