@@ -3,6 +3,7 @@ import { GameConfig } from '../config';
 import type { Character } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
 import { isRegularEnemy } from '../systems/enemyKinds';
+import { monsterAttack } from '../systems/monsterAttackParams';
 
 /** EnemyRallyController 需要場景提供的能力 */
 export interface EnemyRallyHost {
@@ -24,7 +25,7 @@ function isEngaged(e: Enemy, characters: ReadonlyArray<Character>): boolean {
   if (e.isRallying()) return true;
   if (e.enemyType !== 'bomber') return e.getAiState() !== 'patrol';
   const target = characters[e.targetSeat];
-  return !!target?.alive && (e.x - target.x) ** 2 + (e.y - target.y) ** 2 <= GameConfig.enemy.bomber.throwRange ** 2;
+  return !!target?.alive && (e.x - target.x) ** 2 + (e.y - target.y) ** 2 <= monsterAttack('bomber').engage ** 2;
 }
 
 /**

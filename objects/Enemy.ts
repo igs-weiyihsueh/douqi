@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { GameConfig } from '../config';
 import { hitFeel } from '../systems/hitFeelParams';
+import { monsterAttackFor } from '../systems/monsterAttackParams';
 
 /** BOSS 招式：a 範圍普攻 / b 直線衝刺 / c 扇形攻擊 */
 export type BossSkillKind = 'a' | 'b' | 'c';
@@ -546,7 +547,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.cancelCharge();
     this.onAttackFire?.(this);
     this.aiState = 'cooldown';
-    this.cooldownUntil = time + GameConfig.enemy.attackCooldownMs;
+    this.cooldownUntil = time + monsterAttackFor(this.enemyType).cooldownMs;
   }
 
   /** 結束蓄力外觀（蓄力 tween、縮放、染色還原） */
@@ -568,9 +569,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     return Phaser.Math.Clamp((time - this.chargeStartAt) / span, 0, 1);
   }
 
-  /** 這個怪種的蓄力時間（毫秒）：enemy.chargeMsByType 有列就用它，否則用 enemy.chargeMs */
+  /** 這個怪種的蓄力時間（毫秒；systems/monsterAttackParams） */
   private chargeDuration(): number {
-    return GameConfig.enemy.chargeMsByType[this.enemyType] ?? GameConfig.enemy.chargeMs;
+    return monsterAttackFor(this.enemyType).chargeMs;
   }
 
   /** 除錯：目前近戰 AI 狀態（patrol/chase/charge/cooldown） */
@@ -581,24 +582,25 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   // --- bomber：走位（或定點站立）+ 停下蓄力投擲炸彈到玩家落點---
   private updateBomber(targetX: number, targetY: number, time: number): void {
     const cfg = GameConfig.enemy.bomber;
+    const attack = monsterAttackFor('bomber');
     const body = this.body as Phaser.Physics.Arcade.Body;
     const dist = Phaser.Math.Distance.Between(this.x, this.y, targetX, targetY);
 
     if (this.bombState === 'charging') {
       body.setVelocity(0, 0);
-      const prog = Phaser.Math.Clamp((time - this.bombChargeStartAt) / cfg.bombChargeMs, 0, 1);
+      const prog = this.bombChargeProgress(time);
       if (prog >= 1) {
         this.onBombThrow?.(this, this.bombTargetX, this.bombTargetY);
         this.bombState = 'idle';
-        this.nextBombAt = time + cfg.bombCooldownMs;
+        this.nextBombAt = time + attack.cooldownMs;
         this.clearTint();
       }
       return;
     }
 
-    if (this.rallyUntil > 0 && (time >= this.rallyUntil || dist <= cfg.throwRange)) this.endRally();
-    // 射程內且冷卻好 → 停下開始蓄力投擲（鎖定玩家「當下位置」當落點）；走位時太近（retreatRange 內）先退開不投
-    const canThrow = dist <= cfg.throwRange && time >= this.nextBombAt && (!cfg.moveEnabled || dist >= cfg.retreatRange);
+    if (this.rallyUntil > 0 && (time >= this.rallyUntil || dist <= attack.engage)) this.endRally();
+    // 射程內且冷卻好 → 停下開始蓄力投擲（鎖定玩家「當下位置」當落點）；走位時太近（後退距離內）先退開不投
+    const canThrow = dist <= attack.engage && time >= this.nextBombAt && (!cfg.moveEnabled || dist >= this.bomberRanges().retreat);
     if (cfg.moveEnabled && !canThrow) this.moveBomber(targetX, targetY, dist, time);
     else body.setVelocity(0, 0);
     if (canThrow) {
@@ -611,7 +613,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * bomber 走位：離目標超過 throwRange 走近、小於 retreatRange 後退，其餘往 preferRange 靠（差距在 preferTolerance 內站定）；
+   * bomber 走位：離目標超過投擲距離走近、小於後退距離後退，其餘往保持距離靠（差距在 preferTolerance 內站定；見 bomberRanges）；
    * 目標在 chaseRadius 內才走向目標（不受活動範圍限制，走到射程內）；更遠時在出生點附近巡邏、不靠近
    * （若改成「走到活動範圍邊緣再折返」，會在邊緣每幀來回切換而抖動）。召集中一律走向目標
    *
@@ -623,10 +625,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private moveBomber(targetX: number, targetY: number, dist: number, time: number): void {
     const cfg = GameConfig.enemy.bomber;
     const body = this.body as Phaser.Physics.Arcade.Body;
+    const ranges = this.bomberRanges();
     let dir = 0; // 1 = 走近、-1 = 後退、0 = 站定
-    if (dist > cfg.throwRange) dir = 1;
-    else if (dist < cfg.retreatRange) dir = -1;
-    else if (Math.abs(dist - cfg.preferRange) > cfg.preferTolerance) dir = dist > cfg.preferRange ? 1 : -1;
+    if (dist > ranges.throw) dir = 1;
+    else if (dist < ranges.retreat) dir = -1;
+    else if (Math.abs(dist - ranges.prefer) > cfg.preferTolerance) dir = dist > ranges.prefer ? 1 : -1;
     if (this.rallyUntil === 0 && dist > cfg.chaseRadius) {
       this.homeX = this.spawnX; this.homeY = this.spawnY;
       this.patrolStep(time);
@@ -641,6 +644,17 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     body.setVelocity(Math.cos(ang) * speed * dir, Math.sin(ang) * speed * dir);
   }
 
+  /**
+   * bomber 的走位距離：投擲距離（範圍 / 判定編輯器可調），保持距離與後退距離取 config，但不超過投擲距離
+   * （投擲距離調小時往內縮，各留 preferTolerance，避免站在射程外丟不到、或在射程邊緣來回抖動）
+   */
+  private bomberRanges(): { throw: number; prefer: number; retreat: number } {
+    const cfg = GameConfig.enemy.bomber;
+    const throwRange = monsterAttackFor('bomber').engage;
+    const prefer = Math.min(cfg.preferRange, throwRange - cfg.preferTolerance);
+    return { throw: throwRange, prefer, retreat: Math.min(cfg.retreatRange, prefer - cfg.preferTolerance) };
+  }
+
   /** bomber 是否正在蓄力投擲（供 GameScene 畫落點預警） */
   isChargingBomb(): boolean {
     return this.enemyType === 'bomber' && this.bombState === 'charging' && !this.telegraphing;
@@ -649,7 +663,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   /** bomber 投擲蓄力進度 0→1 */
   bombChargeProgress(time: number): number {
     if (this.bombState !== 'charging') return 0;
-    return Phaser.Math.Clamp((time - this.bombChargeStartAt) / GameConfig.enemy.bomber.bombChargeMs, 0, 1);
+    return Phaser.Math.Clamp((time - this.bombChargeStartAt) / monsterAttackFor('bomber').chargeMs, 0, 1);
   }
 
   /** bomber 目前鎖定的落點 */
@@ -661,7 +675,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private interruptBomb(time: number): void {
     if (this.bombState === 'charging') {
       this.bombState = 'idle';
-      this.nextBombAt = time + GameConfig.enemy.bomber.bombCooldownMs;
+      this.nextBombAt = time + monsterAttackFor('bomber').cooldownMs;
       if (this.active) this.clearTint();
     }
   }
@@ -757,7 +771,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.chargeTween = undefined;
       this.setScale(this.baseScale);
       this.aiState = 'cooldown';
-      this.cooldownUntil = time + GameConfig.enemy.attackCooldownMs;
+      this.cooldownUntil = time + monsterAttackFor(this.enemyType).cooldownMs;
     }
     // 打斷 bomber 投擲蓄力
     this.interruptBomb(time);

@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { GameConfig } from '../config';
 import type { Character } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
+import { drawHitShape, hitShapeContains } from '../systems/hitShapes';
+import { monsterAttack, monsterAttackFor, placeBombAttack, placeMeleeAttack } from '../systems/monsterAttackParams';
 import type { CombatFx } from './CombatFx';
 
 /**
@@ -13,8 +15,6 @@ export interface EnemyAttackHost {
   /** 全部角色（攻擊判定對象） */
   characters(): ReadonlyArray<Character>;
   isGameOver(): boolean;
-  /** 近戰怪出手時是否打中這個角色（快速模式看距離 ≤ attackRadius；慢速模式看怪腳底離真空圈邊緣的距離） */
-  meleeHits(enemy: Enemy, c: Character): boolean;
   /** 守護事件中可被攻擊的守護目標；不在守護事件或目標已倒為 null */
   hittableGuardNpc(): Enemy | null;
   /** 守護目標被打中一次（扣血、可能使事件失敗） */
@@ -28,6 +28,8 @@ export interface EnemyAttackHost {
 /** 投彈：落點預警圈、炸彈本體、爆炸環 */
 const BOMB_WARN_COLOR = 0xff4d4d;
 const BOMB_WARN_DEPTH = 3;
+const BOMB_WARN_FILL_ALPHA = 0.15;
+const BOMB_WARN_LINE_ALPHA = 0.7;
 const BOMB_WARN_BLINK_MS = 200;
 const BOMB_RADIUS = 8;
 const BOMB_COLOR = 0xe0b0ff;
@@ -59,26 +61,30 @@ export class EnemyAttackController {
     e.onBombThrow = this.onBombThrow;
   }
 
-  /** 近戰蓄力發動：閃一下攻擊範圍，範圍內所有存活角色受傷 */
+  /** 近戰蓄力發動：閃一下攻擊範圍（systems/monsterAttackParams），範圍內所有存活角色受傷 */
   private readonly onAttackFire = (enemy: Enemy): void => {
     if (this.host.isGameOver()) return;
-    this.host.fx().attackFlash(enemy.x, enemy.y);
+    const shape = placeMeleeAttack(enemy);
+    this.host.fx().attackFlash(shape);
+    const damage = monsterAttackFor(enemy.enemyType).damage;
     for (const c of this.host.characters()) {
-      if (!c.alive) continue;
-      if (!this.host.meleeHits(enemy, c)) continue;
-      this.host.damageCharacter(c, GameConfig.enemy.attackDamage, enemy.x, enemy.y);
+      if (!c.alive || !hitShapeContains(shape, c.x, c.y)) continue;
+      this.host.damageCharacter(c, damage, enemy.x, enemy.y);
     }
   };
 
   /**
-   * 投彈兵投彈：落點顯示閃爍預警圈，炸彈飛到落點後爆炸，半徑內存活且非無敵的角色受傷
-   * （守護目標另有每隻怪的攻擊冷卻），並有爆炸環與震動
+   * 投彈兵投彈：落點顯示閃爍的爆炸範圍預警，炸彈飛到落點後爆炸，範圍內存活且非無敵的角色受傷
+   * （守護目標另有每隻怪的攻擊冷卻），並有爆炸特效（圓形是擴張環、其他形狀閃一下範圍）與震動
    */
   private readonly onBombThrow = (enemy: Enemy, tx: number, ty: number): void => {
     if (this.host.isGameOver() || !enemy.active) return;
     const cfg = GameConfig.enemy.bomber;
-    const warn = this.scene.add.circle(tx, ty, cfg.bombRadius, BOMB_WARN_COLOR, 0.15).setDepth(BOMB_WARN_DEPTH);
-    warn.setStrokeStyle(2, BOMB_WARN_COLOR, 0.7);
+    const shape = placeBombAttack(enemy.x, enemy.y, tx, ty);
+    const damage = monsterAttack('bomber').damage;
+    const warn = this.scene.add.graphics().setDepth(BOMB_WARN_DEPTH);
+    warn.fillStyle(BOMB_WARN_COLOR, BOMB_WARN_FILL_ALPHA).lineStyle(2, BOMB_WARN_COLOR, BOMB_WARN_LINE_ALPHA);
+    drawHitShape(warn, shape);
     const warnTween = this.scene.tweens.add({ targets: warn, alpha: 0.3, duration: BOMB_WARN_BLINK_MS, yoyo: true, repeat: -1 });
     const bomb = this.scene.add.circle(enemy.x, enemy.y, BOMB_RADIUS, BOMB_COLOR, 1).setDepth(BOMB_DEPTH);
     bomb.setStrokeStyle(2, BOMB_STROKE, 1);
@@ -92,11 +98,12 @@ export class EnemyAttackController {
         const now = this.scene.time.now;
         for (const c of this.host.characters()) {
           if (!c.alive || c.isInvulnerable(now)) continue;
-          if (Phaser.Math.Distance.Between(c.x, c.y, tx, ty) <= cfg.bombRadius) this.host.damageCharacter(c, cfg.bombDamage, tx, ty);
+          if (hitShapeContains(shape, c.x, c.y)) this.host.damageCharacter(c, damage, tx, ty);
         }
         const npc = this.host.hittableGuardNpc();
-        if (npc && Phaser.Math.Distance.Between(npc.x, npc.y, tx, ty) <= cfg.bombRadius) this.hitGuardNpcOnce(enemy, now);
-        this.host.fx().expandingRing(tx, ty, cfg.bombRadius, BOMB_RING_COLOR, BOMB_RING_MS);
+        if (npc && hitShapeContains(shape, npc.x, npc.y)) this.hitGuardNpcOnce(enemy, now);
+        if (shape.kind === 'circle') this.host.fx().expandingRing(shape.x, shape.y, shape.radius, BOMB_RING_COLOR, BOMB_RING_MS);
+        else this.host.fx().shapeFlash(shape, BOMB_RING_COLOR, BOMB_RING_MS);
         if (GameConfig.juice.enemyAttackShake) this.host.fx().shake(BOMB_SHAKE_MS, BOMB_SHAKE_INTENSITY);
       }
     });

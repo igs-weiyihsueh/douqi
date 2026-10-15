@@ -2,10 +2,14 @@ import Phaser from 'phaser';
 import type { PlayerAnimKey, PlayerPosePreview } from '../controllers/PlayerSpineController';
 import {
   ATTACK_HIT_EVENT, ATTACK_MOVES, HIT_POINT_FIELDS, MAX_HIT_POINTS, MELEE_ENEMY_RANGE_DEF, attackTuning, clampHitPointField,
-  exportAttackTuning, hasHitShape, isTimedMove, moveHitPoints, resetAllAttackTuning, resetMoveHitPoints, setMeleeEnemyRange, setMoveHitPoints,
+  attackTuningSnapshot, hasHitShape, isTimedMove, moveHitPoints, resetAllAttackTuning, resetMoveHitPoints, setMeleeEnemyRange, setMoveHitPoints,
   type AttackMove, type HitPoint, type HitPointField, type TimedAttackMove
 } from '../systems/attackTuningParams';
-import { HIT_SHAPE_KINDS, HIT_SHAPE_LABELS, drawHitShape, placeHitShape, type HitShapeKind } from '../systems/hitShapes';
+import { HIT_SHAPE_KINDS, HIT_SHAPE_LABELS, drawHitShape, placeHitShape, type HitShape, type HitShapeKind } from '../systems/hitShapes';
+import {
+  MONSTER_KINDS, clampMonsterField, monsterAttack, monsterAttackSnapshot, monsterFieldDefs, placeBombAttack, resetAllMonsterAttacks,
+  resetMonsterAttack, setMonsterAttack, type MonsterKind, type MonsterValueField
+} from '../systems/monsterAttackParams';
 import type { Character } from './Character';
 
 /** 面板版面與配色（畫面座標，固定在畫面左側，不擋住中央的角色與木樁） */
@@ -76,6 +80,13 @@ const OVERLAY = {
     dash: 0xfde047,
     pierce: 0xf87171
   } as Readonly<Record<AttackMove, number>>,
+  /** 怪物頁：各怪種的攻擊範圍顏色（分頁色票同色）、遠程幽靈投擲距離圈的透明度 */
+  MONSTERS: {
+    normal: 0xfca5a5,
+    tank: 0xf97316,
+    bomber: 0xa78bfa
+  } as Readonly<Record<MonsterKind, number>>,
+  THROW_RANGE_LINE: 0.5,
   /** 時間軸目前這一格判定的打擊點 / 其他打擊點（淡）的填色與線框透明度 */
   ACTIVE_FILL: 0.25,
   ACTIVE_LINE: 0.95,
@@ -93,6 +104,52 @@ const OVERLAY = {
 
 /** 時間軸一格的長度（毫秒；每秒 30 格） */
 const FRAME_MS = 1000 / 30;
+
+/** 判定範圍的欄位（形狀種類與 HitShape 的數值） */
+type ShapeField = 'shape' | 'offsetForward' | 'offsetSide' | 'radius' | 'arcDeg' | 'length' | 'width';
+
+/** 範圍的欄位：形狀、往前 / 往上下偏移、該形狀的尺寸 */
+function shapeFields(shape: HitShape): ShapeField[] {
+  return ['shape', 'offsetForward', 'offsetSide', ...SHAPE_SIZE_FIELDS[shape.kind]];
+}
+
+/**
+ * 範圍調整一格（新物件）：形狀循環切換、其他欄位加減一格並夾在合法範圍內
+ *
+ * @param shape 範圍
+ * @param field 欄位
+ * @param dir −1 / +1
+ */
+function stepShape(shape: HitShape, field: ShapeField, dir: -1 | 1): HitShape {
+  const next = { ...shape };
+  if (field === 'shape') {
+    const count = HIT_SHAPE_KINDS.length;
+    next.kind = HIT_SHAPE_KINDS[(HIT_SHAPE_KINDS.indexOf(shape.kind) + dir + count) % count];
+  } else {
+    next[field] = clampHitPointField(field, shape[field] + dir * HIT_POINT_FIELDS[field].step, shape[field]);
+  }
+  return next;
+}
+
+/**
+ * 範圍某欄位的顯示文字
+ *
+ * @param shape 範圍
+ * @param field 欄位
+ */
+function shapeValueText(shape: HitShape, field: ShapeField): string {
+  return field === 'shape' ? HIT_SHAPE_LABELS[shape.kind] : `${shape[field]}${HIT_POINT_FIELDS[field].unit}`;
+}
+
+/** 怪物頁的數值欄位順序 */
+const MONSTER_VALUE_FIELDS: ReadonlyArray<MonsterValueField> = ['engage', 'chargeMs', 'cooldownMs', 'damage'];
+
+/** 編輯器的頁面：我方招式 / 怪物 */
+type EditorMode = 'player' | 'monster';
+const EDITOR_MODES: ReadonlyArray<{ mode: EditorMode; label: string }> = [
+  { mode: 'player', label: '我方招式' },
+  { mode: 'monster', label: '怪物' }
+];
 
 /** 打擊點本身（不在判定範圍 shape 裡）的數值欄位 */
 type PointLevelField = 'timeMs' | 'durationMs' | 'damagePct' | 'pauseMs';
@@ -134,6 +191,8 @@ export interface AttackTuningEditorHost {
   previewPose(preview: PlayerPosePreview | null): void;
   /** P1 某個動作的長度（毫秒） */
   animationMs(key: PlayerAnimKey, index: number): number;
+  /** 木樁換成某個怪種（怪物頁預覽：照該怪種的攻擊設定蓄力、出手並打得到 P1；null = 木樁模式預設的怪種，只做動作不打人） */
+  setDummyType(kind: MonsterKind | null): void;
 }
 
 /**
@@ -147,10 +206,12 @@ export interface AttackTuningEditorHost {
  * - 選中打擊點的參數：形狀（扇形 / 圓形 / 長方形）、判定中心往前 / 往上下偏移、該形狀的尺寸、傷害 %、頓點（打中怪時出招者停住多久）
  *   （systems/attackTuningParams，每次調整即時套用並存在瀏覽器）；爆發、強化衝刺、一般衝刺只有一個打擊點、沒有時間軸，
  *   一般衝刺只有傷害 % 與頓點（以衝刺判定半徑碰撞，沒有判定範圍）
- * - 最下面是普攻共用的近戰觸發距離與恢復預設、匯出設定（JSON 複製到剪貼簿並下載，交給開發寫成預設值）、關閉
+ * - 最下面是普攻共用的近戰觸發距離與恢復預設、匯出設定（我方招式與怪物一起存成 JSON，複製到剪貼簿並下載，交給開發寫成預設值）、關閉
+ * - 標題下方切換「我方招式 / 怪物」。怪物頁：一般兵、大怪、遠程幽靈分頁，調攻擊範圍（形狀 / 位置偏移 / 尺寸）、
+ *   出手距離、蓄力時間、攻擊冷卻、傷害（systems/monsterAttackParams）；木樁換成選中的怪種，照設定蓄力攻擊 P1，可直接看預警與出手
  *
- * 角色身上畫選中招式的打擊點：時間軸目前這一格判定的打擊點畫深色、其他畫淡色、選中的打擊點線框加粗；
- * P1 出招判定的那一刻，該打擊點閃亮一下。面板建在 UIScene（UIScene 疊在上面且有「點畫面 = 攻擊」），面板上的點擊都會攔下來
+ * 我方招式頁在角色身上畫選中招式的打擊點：時間軸目前這一格判定的打擊點畫深色、其他畫淡色、選中的打擊點線框加粗；
+ * P1 出招判定的那一刻，該打擊點閃亮一下。怪物頁在木樁上畫它朝 P1 的攻擊範圍（遠程幽靈畫投擲距離與落在 P1 腳下的爆炸範圍）。面板建在 UIScene（UIScene 疊在上面且有「點畫面 = 攻擊」），面板上的點擊都會攔下來
  */
 export class AttackTuningEditor {
   private panel: Phaser.GameObjects.Container | null = null;
@@ -158,6 +219,9 @@ export class AttackTuningEditor {
   private readonly valueTexts = new Map<string, Phaser.GameObjects.Text>();
   /** 時間軸的動態元件（拖動時只更新它們，不重建面板） */
   private timeline: { label: Phaser.GameObjects.Text; markers: Phaser.GameObjects.Graphics; barX: number; barTop: number; barWidth: number } | null = null;
+  /** 目前的頁面與怪物頁選中的怪種 */
+  private mode: EditorMode = 'player';
+  private selectedMonster: MonsterKind = 'normal';
   /** 選中的招式、打擊點與時間軸目前時間（毫秒） */
   private selected: AttackMove = 'attack1';
   private selectedPoint = 0;
@@ -197,11 +261,15 @@ export class AttackTuningEditor {
     else this.open();
   }
 
-  /** 每幀：面板開啟時重畫選中招式的打擊點與近戰觸發圈 */
+  /** 每幀：面板開啟時重畫選中招式的打擊點與近戰觸發圈（怪物頁畫木樁的攻擊範圍） */
   update(): void {
     if (!this.overlay) return;
     const p = this.host.player();
     const g = this.overlay.clear();
+    if (this.mode === 'monster') {
+      this.drawMonsterOverlay(g, p);
+      return;
+    }
     const now = this.scene.time.now;
     const color = OVERLAY.MOVES[this.selected];
     const anchor = this.anchorOf(this.selected, p);
@@ -217,6 +285,27 @@ export class AttackTuningEditor {
     });
     g.lineStyle(OVERLAY.LINE_WIDTH, OVERLAY.TRIGGER.color, OVERLAY.TRIGGER.line)
       .strokeCircle(p.x, p.y, attackTuning().meleeEnemyRange + (this.host.dummy()?.radius ?? 0));
+  }
+
+  /**
+   * 怪物頁的範圍顯示：近戰怪在木樁上畫朝 P1 的攻擊範圍；遠程幽靈畫投擲距離圈與落在 P1 腳下的爆炸範圍
+   *
+   * @param g 畫布
+   * @param p P1
+   */
+  private drawMonsterOverlay(g: Phaser.GameObjects.Graphics, p: Character): void {
+    const dummy = this.host.dummy();
+    if (!dummy) return;
+    const kind = this.selectedMonster;
+    const color = OVERLAY.MONSTERS[kind];
+    const attack = monsterAttack(kind);
+    g.fillStyle(color, OVERLAY.ACTIVE_FILL).lineStyle(OVERLAY.SELECTED_LINE_WIDTH, color, OVERLAY.ACTIVE_LINE);
+    if (kind === 'bomber') {
+      drawHitShape(g, placeBombAttack(dummy.x, dummy.y, p.x, p.y));
+      g.lineStyle(OVERLAY.LINE_WIDTH, color, OVERLAY.THROW_RANGE_LINE).strokeCircle(dummy.x, dummy.y, attack.engage);
+    } else {
+      drawHitShape(g, placeHitShape(attack.shape, dummy.x, dummy.y, Phaser.Math.Angle.Between(dummy.x, dummy.y, p.x, p.y)));
+    }
   }
 
   /**
@@ -241,7 +330,34 @@ export class AttackTuningEditor {
     ui.input.on(Phaser.Input.Events.POINTER_UP, up);
     this.uiInput = { scene: ui, move, up };
     this.overlay = this.scene.add.graphics().setDepth(OVERLAY.DEPTH);
-    this.selectMove(this.selected);
+    this.selectMode(this.mode);
+  }
+
+  /**
+   * 切換頁面：我方招式頁木樁恢復預設怪種、依時間軸定格；怪物頁結束定格、木樁換成選中的怪種
+   *
+   * @param mode 頁面
+   */
+  private selectMode(mode: EditorMode): void {
+    this.mode = mode;
+    if (mode === 'player') {
+      this.host.setDummyType(null);
+      this.selectMove(this.selected);
+    } else {
+      this.host.previewPose(null);
+      this.selectMonster(this.selectedMonster);
+    }
+  }
+
+  /**
+   * 怪物頁選中一個怪種：木樁換成它，重建面板
+   *
+   * @param kind 怪種
+   */
+  private selectMonster(kind: MonsterKind): void {
+    this.selectedMonster = kind;
+    this.host.setDummyType(kind);
+    this.render();
   }
 
   /** 關閉面板、範圍顯示與定格預覽 */
@@ -380,7 +496,7 @@ export class AttackTuningEditor {
     this.refreshValues();
   }
 
-  /** （重新）建立面板：招式分頁、時間軸、選中打擊點的參數、近戰觸發距離與底部按鈕；建在 UIScene */
+  /** （重新）建立面板：頁面切換、該頁的內容（我方招式 / 怪物）與底部按鈕；建在 UIScene */
   private render(): void {
     this.panel?.destroy();
     this.valueTexts.clear();
@@ -390,26 +506,26 @@ export class AttackTuningEditor {
     const background = ui.add.rectangle(0, 0, LAYOUT.WIDTH, 1, LAYOUT.BG_COLOR, LAYOUT.BG_ALPHA).setOrigin(0, 0).setStrokeStyle(2, LAYOUT.BORDER_COLOR);
     panel.add(background);
     panel.add(this.text(ui, LAYOUT.PADDING, LAYOUT.PADDING, '範圍 / 判定編輯器（P 開關）', LAYOUT.COLORS.TITLE, '20px'));
-    let y = LAYOUT.TITLE_HEIGHT;
-    y = this.renderTabs(ui, panel, y) + LAYOUT.SECTION_GAP;
-    if (isTimedMove(this.selected)) y = this.renderTimeline(ui, panel, y) + LAYOUT.SECTION_GAP;
-    const point = moveHitPoints(this.selected)[this.selectedPoint];
-    for (const field of this.pointFields(point)) {
-      this.addRow(ui, panel, y, field, () => this.pointValueText(field), (dir) => this.stepPoint(field, dir));
-      y += LAYOUT.ROW_HEIGHT;
-    }
-    y += LAYOUT.SECTION_GAP;
-    const def = MELEE_ENEMY_RANGE_DEF;
-    this.addRow(ui, panel, y, 'meleeEnemyRange', () => `${attackTuning().meleeEnemyRange}${def.unit}`,
-      (dir) => setMeleeEnemyRange(attackTuning().meleeEnemyRange + dir * def.step), def.label, def.hint);
-    y += LAYOUT.ROW_HEIGHT + LAYOUT.SECTION_GAP;
+    let y = this.renderModeTabs(ui, panel, LAYOUT.TITLE_HEIGHT) + LAYOUT.SECTION_GAP;
+    y = (this.mode === 'player' ? this.renderPlayerPage(ui, panel, y) : this.renderMonsterPage(ui, panel, y)) + LAYOUT.SECTION_GAP;
     const buttonY = y + LAYOUT.BUTTON_HEIGHT / 2;
     const slot = LAYOUT.WIDTH / LAYOUT.BOTTOM_BUTTONS;
     const bw = slot - LAYOUT.PADDING;
     const status = this.text(ui, LAYOUT.PADDING, y + LAYOUT.BUTTON_HEIGHT + LAYOUT.SECTION_GAP, '', LAYOUT.COLORS.HINT, '12px');
+    const monster = this.mode === 'monster';
     const bottomButtons: Array<{ label: string; color: number; onClick: () => void }> = [
-      { label: '這招恢復預設', color: LAYOUT.COLORS.MOVE_RESET, onClick: () => { resetMoveHitPoints(this.selected); this.selectPoint(0); } },
-      { label: '全部恢復預設', color: LAYOUT.COLORS.RESET, onClick: () => { resetAllAttackTuning(); this.selectPoint(0); } },
+      {
+        label: monster ? '這隻恢復預設' : '這招恢復預設',
+        color: LAYOUT.COLORS.MOVE_RESET,
+        onClick: monster
+          ? () => { resetMonsterAttack(this.selectedMonster); this.render(); }
+          : () => { resetMoveHitPoints(this.selected); this.selectPoint(0); }
+      },
+      {
+        label: '全部恢復預設',
+        color: LAYOUT.COLORS.RESET,
+        onClick: monster ? () => { resetAllMonsterAttacks(); this.render(); } : () => { resetAllAttackTuning(); this.selectPoint(0); }
+      },
       { label: '匯出設定', color: LAYOUT.COLORS.EXPORT, onClick: () => this.exportSettings(status) },
       { label: '關閉', color: LAYOUT.COLORS.CLOSE, onClick: () => this.close() }
     ];
@@ -425,13 +541,115 @@ export class AttackTuningEditor {
   }
 
   /**
-   * 匯出設定：所有招式的打擊點與近戰觸發距離存成 JSON，複製到剪貼簿並下載成檔案（剪貼簿無法使用時只下載），
-   * 交給開發寫成新的預設值；結果顯示在提示列
+   * 頁面切換（我方招式 / 怪物）
+   *
+   * @param ui 面板所在場景
+   * @param panel 面板
+   * @param y 上緣（相對面板）
+   * @returns 下緣
+   */
+  private renderModeTabs(ui: Phaser.Scene, panel: Phaser.GameObjects.Container, y: number): number {
+    const tabWidth = (LAYOUT.WIDTH - LAYOUT.PADDING * 2 - LAYOUT.TAB_GAP * (EDITOR_MODES.length - 1)) / EDITOR_MODES.length;
+    EDITOR_MODES.forEach(({ mode, label }, i) => {
+      const tx = LAYOUT.PADDING + i * (tabWidth + LAYOUT.TAB_GAP);
+      const color = mode === this.mode ? LAYOUT.TAB_SELECTED_COLOR : LAYOUT.TAB_COLOR;
+      panel.add(this.blockClicks(ui.add.rectangle(tx, y, tabWidth, LAYOUT.TAB_HEIGHT, color).setOrigin(0, 0)
+        .setStrokeStyle(1, LAYOUT.BORDER_COLOR), () => { if (mode !== this.mode) this.selectMode(mode); }));
+      panel.add(this.text(ui, tx + tabWidth / 2, y + LAYOUT.TAB_HEIGHT / 2, label, LAYOUT.COLORS.TEXT, '16px').setOrigin(0.5));
+    });
+    return y + LAYOUT.TAB_HEIGHT;
+  }
+
+  /**
+   * 我方招式頁：招式分頁、時間軸、選中打擊點的參數、近戰觸發距離
+   *
+   * @param ui 面板所在場景
+   * @param panel 面板
+   * @param y 上緣（相對面板）
+   * @returns 下緣
+   */
+  private renderPlayerPage(ui: Phaser.Scene, panel: Phaser.GameObjects.Container, y: number): number {
+    y = this.renderTabs(ui, panel, y) + LAYOUT.SECTION_GAP;
+    if (isTimedMove(this.selected)) y = this.renderTimeline(ui, panel, y) + LAYOUT.SECTION_GAP;
+    const point = moveHitPoints(this.selected)[this.selectedPoint];
+    for (const field of this.pointFields(point)) {
+      this.addRow(ui, panel, y, field, () => this.pointValueText(field), (dir) => this.stepPoint(field, dir));
+      y += LAYOUT.ROW_HEIGHT;
+    }
+    y += LAYOUT.SECTION_GAP;
+    const def = MELEE_ENEMY_RANGE_DEF;
+    this.addRow(ui, panel, y, 'meleeEnemyRange', () => `${attackTuning().meleeEnemyRange}${def.unit}`,
+      (dir) => setMeleeEnemyRange(attackTuning().meleeEnemyRange + dir * def.step), def.label, def.hint);
+    return y + LAYOUT.ROW_HEIGHT;
+  }
+
+  /**
+   * 怪物頁：怪種分頁、攻擊範圍（形狀 / 位置偏移 / 尺寸）與出手距離、蓄力時間、攻擊冷卻、傷害
+   *
+   * @param ui 面板所在場景
+   * @param panel 面板
+   * @param y 上緣（相對面板）
+   * @returns 下緣
+   */
+  private renderMonsterPage(ui: Phaser.Scene, panel: Phaser.GameObjects.Container, y: number): number {
+    const tabWidth = (LAYOUT.WIDTH - LAYOUT.PADDING * 2 - LAYOUT.TAB_GAP * (MONSTER_KINDS.length - 1)) / MONSTER_KINDS.length;
+    MONSTER_KINDS.forEach(({ kind, label }, i) => {
+      const tx = LAYOUT.PADDING + i * (tabWidth + LAYOUT.TAB_GAP);
+      const color = kind === this.selectedMonster ? LAYOUT.TAB_SELECTED_COLOR : LAYOUT.TAB_COLOR;
+      panel.add(this.blockClicks(ui.add.rectangle(tx, y, tabWidth, LAYOUT.TAB_HEIGHT, color).setOrigin(0, 0)
+        .setStrokeStyle(1, OVERLAY.MONSTERS[kind]), () => this.selectMonster(kind)));
+      panel.add(ui.add.rectangle(tx + 14, y + LAYOUT.TAB_HEIGHT / 2, LAYOUT.SWATCH_SIZE, LAYOUT.SWATCH_SIZE, OVERLAY.MONSTERS[kind]));
+      panel.add(this.text(ui, tx + 28, y + LAYOUT.TAB_HEIGHT / 2, label, LAYOUT.COLORS.TEXT, '15px').setOrigin(0, 0.5));
+    });
+    y += LAYOUT.TAB_HEIGHT + LAYOUT.TAB_GAP + LAYOUT.SECTION_GAP;
+    const kind = this.selectedMonster;
+    for (const field of shapeFields(monsterAttack(kind).shape)) {
+      this.addRow(ui, panel, y, field, () => shapeValueText(monsterAttack(this.selectedMonster).shape, field), (dir) => this.stepMonsterShape(field, dir));
+      y += LAYOUT.ROW_HEIGHT;
+    }
+    const defs = monsterFieldDefs(kind);
+    for (const field of MONSTER_VALUE_FIELDS) {
+      const def = defs[field];
+      this.addRow(ui, panel, y, field, () => `${monsterAttack(this.selectedMonster)[field]}${def.unit}`,
+        (dir) => this.stepMonsterValue(field, dir), def.label, def.hint);
+      y += LAYOUT.ROW_HEIGHT;
+    }
+    return y;
+  }
+
+  /**
+   * 怪物頁：調整選中怪種攻擊範圍的一個欄位一格並立即套用、存檔；換形狀後重建面板
+   *
+   * @param field 欄位
+   * @param dir −1 / +1
+   */
+  private stepMonsterShape(field: ShapeField, dir: -1 | 1): void {
+    const current = monsterAttack(this.selectedMonster);
+    setMonsterAttack(this.selectedMonster, { ...current, shape: stepShape(current.shape, field, dir) });
+    if (field === 'shape') this.render();
+  }
+
+  /**
+   * 怪物頁：調整選中怪種的一個數值一格並立即套用、存檔
+   *
+   * @param field 欄位
+   * @param dir −1 / +1
+   */
+  private stepMonsterValue(field: MonsterValueField, dir: -1 | 1): void {
+    const kind = this.selectedMonster;
+    const current = monsterAttack(kind);
+    const value = clampMonsterField(kind, field, current[field] + dir * monsterFieldDefs(kind)[field].step, current[field]);
+    setMonsterAttack(kind, { ...current, shape: { ...current.shape }, [field]: value });
+  }
+
+  /**
+   * 匯出設定：我方各招的打擊點、近戰觸發距離與各怪種的攻擊設定存成 JSON，複製到剪貼簿並下載成檔案
+   * （剪貼簿無法使用時只下載），交給開發寫成新的預設值；結果顯示在提示列
    *
    * @param status 提示列
    */
   private exportSettings(status: Phaser.GameObjects.Text): void {
-    const json = exportAttackTuning();
+    const json = JSON.stringify({ ...attackTuningSnapshot(), monsterAttacks: monsterAttackSnapshot() }, null, 2);
     const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
     const link = document.createElement('a');
     link.href = url;
@@ -539,9 +757,7 @@ export class AttackTuningEditor {
    * @param point 打擊點
    */
   private pointFields(point: HitPoint): HitPointField[] {
-    const fields: HitPointField[] = hasHitShape(this.selected)
-      ? ['shape', 'offsetForward', 'offsetSide', ...SHAPE_SIZE_FIELDS[point.shape.kind]]
-      : [];
+    const fields: HitPointField[] = hasHitShape(this.selected) ? shapeFields(point.shape) : [];
     if (isTimedMove(this.selected) || this.selected === 'pierce') fields.push('damagePct');
     fields.push('pauseMs');
     return fields;
@@ -563,9 +779,7 @@ export class AttackTuningEditor {
    */
   private pointValueText(field: HitPointField): string {
     const point = moveHitPoints(this.selected)[this.selectedPoint];
-    if (field === 'shape') return HIT_SHAPE_LABELS[point.shape.kind];
-    const value = isPointLevelField(field) ? point[field] : point.shape[field];
-    return `${value}${HIT_POINT_FIELDS[field].unit}`;
+    return isPointLevelField(field) ? `${point[field]}${HIT_POINT_FIELDS[field].unit}` : shapeValueText(point.shape, field);
   }
 
   /**
@@ -578,13 +792,10 @@ export class AttackTuningEditor {
   private stepPoint(field: HitPointField, dir: -1 | 1): void {
     const points = moveHitPoints(this.selected).map((p) => ({ ...p, shape: { ...p.shape } }));
     const point = points[this.selectedPoint];
-    if (field === 'shape') {
-      const count = HIT_SHAPE_KINDS.length;
-      point.shape.kind = HIT_SHAPE_KINDS[(HIT_SHAPE_KINDS.indexOf(point.shape.kind) + dir + count) % count];
-    } else if (isPointLevelField(field)) {
+    if (isPointLevelField(field)) {
       point[field] = clampHitPointField(field, point[field] + dir * HIT_POINT_FIELDS[field].step, point[field]);
     } else {
-      point.shape[field] = clampHitPointField(field, point.shape[field] + dir * HIT_POINT_FIELDS[field].step, point.shape[field]);
+      point.shape = stepShape(point.shape, field, dir);
     }
     // 只依時間排序，改這些欄位不會換位置
     setMoveHitPoints(this.selected, points);

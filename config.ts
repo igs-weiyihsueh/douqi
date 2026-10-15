@@ -240,7 +240,7 @@ export const GameConfig = {
    *   門檻低於巡邏速度（enemy.ai.patrolSpeed 34），慢慢巡邏、被擠開也播走路，不會用待機姿勢平移；
    *   速度以 moveSmoothMs 平滑，避免單幀停頓或被推擠時走路 / 待機來回閃）/ hit 被打 / die 死亡（播完 dieFadeMs 淡出）/
    *   chargeIn → chargeLoop 蓄力（蓄力中重複）/ attack 出手；即時 Spine 的動畫切換混合 mixMs 毫秒；時停時動畫暫停
-   * - speeds：各段動畫的播放速度（1 = 原速，2 = 兩倍快，0.5 = 慢一半）。蓄力多久由 enemy.chargeMsByType / enemy.chargeMs 決定，
+   * - speeds：各段動畫的播放速度（1 = 原速，2 = 兩倍快，0.5 = 慢一半）。蓄力多久由 monsterAttack.*.chargeMs（範圍 / 判定編輯器的怪物頁可調）決定，
    *   chargeIn 播完後重複 chargeLoop 直到出手；出手的傷害在 attack 開始那一刻就判定，attack 調慢只會讓揮擊畫面比傷害晚
    * - tank：大怪 = EN01 骷髏兵（穿盔甲、近戰動作）；normal：一般兵 = 同一份素材的骷髏（沒穿盔甲、拿槍、遠攻動作）
    * - cullMargin：鏡頭畫面外擴這麼多像素以外的怪不更新動畫也不繪製（省效能，回到畫面內從停住的姿勢繼續）
@@ -521,11 +521,7 @@ export const GameConfig = {
     vacuumFlatten: 0.45,
     /** 真空圈中心相對角色腳底的偏移（px）；X 正值往右、Y 正值往下 */
     vacuumOffsetX: 4,
-    vacuumOffsetY: -12,
-    /** 近戰怪在真空邊緣再往外多少像素內開始蓄力 */
-    vacuumEngageMargin: 10,
-    /** 近戰怪出手時，離真空邊緣多少像素內的角色會被打中（比蓄力餘量大，角色稍微退開仍打得到） */
-    vacuumHitMargin: 16
+    vacuumOffsetY: -12
   },
 
   /**
@@ -864,16 +860,6 @@ export const GameConfig = {
     engageRange: 40,
     /** 被擊退後的硬直時間（毫秒）：期間不主動追不進攻 */
     knockbackStunMs: 500,
-    /** 蓄力/前搖時間（毫秒）：改「由內而外填滿」讀條式預警，填滿瞬間發動 */
-    chargeMs: 950,
-    /** 各怪種另外指定的蓄力時間（毫秒；沒列的怪種用 chargeMs）：tank = 大怪 */
-    chargeMsByType: { tank: 950 } as Record<string, number>,
-    /** 發動攻擊時的近身傷害範圍（玩家在此半徑內才扣血，像素） */
-    attackRadius: 46,
-    /** 每次攻擊命中對玩家的傷害 */
-    attackDamage: 12,
-    /** 攻擊後冷卻（毫秒），冷卻結束才能再次蓄力*/
-    attackCooldownMs: 2000,
 
     /**
      * 警戒 + 巡邏 AI（normal/tank 套用）。
@@ -1001,8 +987,9 @@ export const GameConfig = {
     /** 投射兵（bomber）行為參數（蓄力後投擲炸彈到玩家落點） */
     bomber: {
       /**
-       * 走位開關：true = 投擲冷卻中依距離走位（超過 throwRange 走近、小於 retreatRange 後退、其餘往 preferRange 靠），
-       * 冷卻好且距離在 retreatRange ~ throwRange 內就停下蓄力投擲；目標在 chaseRadius 外時在出生點附近巡邏。
+       * 走位開關：true = 投擲冷卻中依距離走位（超過投擲距離 monsterAttack.bomber.engage 走近、小於 retreatRange 後退、其餘往 preferRange 靠；
+       * 投擲距離調小時 preferRange / retreatRange 跟著往內縮），冷卻好且距離在 retreatRange ~ 投擲距離內就停下蓄力投擲；
+       * 目標在 chaseRadius 外時在出生點附近巡邏。
        * false = 生成後站在原地不動
        */
       moveEnabled: true,
@@ -1014,18 +1001,8 @@ export const GameConfig = {
       chaseRadius: 900,
       /** 小於此距離就後退（也不投擲） */
       retreatRange: 200,
-      /** 進入此距離開始蓄力投擲 */
-      throwRange: 480,
-      /** 蓄力填滿時間（毫秒），期間鎖定落點=玩家當下位置 */
-      bombChargeMs: 1200,
-      /** 兩次投擲之間冷卻（毫秒） */
-      bombCooldownMs: 2200,
-      /** 炸彈飛行時間（毫秒，從投出到落地爆炸；期間落點顯示預警圈） */
-      bombFlightMs: 650,
-      /** 爆炸半徑（落點此半徑內存活角色受傷） */
-      bombRadius: 90,
-      /** 爆炸傷害 */
-      bombDamage: 30
+      /** 炸彈飛行時間（毫秒，從投出到落地爆炸；期間落點顯示預警範圍） */
+      bombFlightMs: 650
     }
   },
 
@@ -1820,6 +1797,21 @@ export const GameConfig = {
     maxFreezeMs: 120,
     /** 凍結結束後多久內不再凍結（毫秒；0 = 無冷卻）：讓持續被圍毆的怪在凍結到上限後確實被擊退一段，不會一直被定住 */
     cooldownMs: 100
+  },
+
+  /**
+   * 怪物攻擊預設值（範圍 / 判定編輯器的「怪物」頁可調，實際值見 systems/monsterAttackParams；BOSS 另有自己的規則）：
+   * - 近戰怪（normal 一般兵、tank 大怪）：engage = 慢速模式離角色真空圈邊緣多少像素內開始蓄力（快速模式用 enemy.engageRange）；
+   *   蓄力 chargeMs（地上預警範圍由內而外填滿）後出手，shape 為攻擊範圍（以怪為基準、朝目標，角色中心在範圍內就打中），
+   *   之後冷卻 cooldownMs 才能再蓄力；damage 為傷害（慢速模式 P1 不扣血，只算被打一次）
+   * - 遠程幽靈（bomber）：engage = 投擲距離；蓄力 chargeMs 後把炸彈丟向角色當下位置，shape 為爆炸範圍
+   *   （以落點為基準、朝投擲方向），冷卻 cooldownMs
+   * 預設範圍：近戰怪以圓形涵蓋原本「怪擋在真空圈邊緣、出手時角色離圈邊 16px 內」的距離（一般兵橫向約 112px 開始蓄力）
+   */
+  monsterAttack: {
+    normal: { engage: 10, chargeMs: 950, cooldownMs: 2000, damage: 12, radius: 125 },
+    tank: { engage: 10, chargeMs: 950, cooldownMs: 2000, damage: 12, radius: 135 },
+    bomber: { engage: 480, chargeMs: 1200, cooldownMs: 2200, damage: 30, radius: 90 }
   },
 
   /**

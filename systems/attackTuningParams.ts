@@ -160,24 +160,33 @@ export function clampHitPointField(field: HitPointField, value: unknown, fallbac
  * @param base 預設打擊點
  */
 function sanitizeHitPoint(raw: unknown, base: HitPoint): HitPoint {
-  const r = (raw ?? {}) as { timeMs?: unknown; durationMs?: unknown; damagePct?: unknown; pauseMs?: unknown; shape?: Partial<HitShape> };
-  const s: Partial<HitShape> = r.shape ?? {};
-  const savedKind = s.kind ? HIT_SHAPE_KINDS.indexOf(s.kind) : -1;
-  const kindIndex = savedKind >= 0 ? savedKind : HIT_SHAPE_KINDS.indexOf(base.shape.kind);
+  const r = (raw ?? {}) as { timeMs?: unknown; durationMs?: unknown; damagePct?: unknown; pauseMs?: unknown; shape?: unknown };
   return {
     timeMs: clampHitPointField('timeMs', r.timeMs, base.timeMs),
     durationMs: clampHitPointField('durationMs', r.durationMs, base.durationMs),
     damagePct: clampHitPointField('damagePct', r.damagePct, base.damagePct),
     pauseMs: clampHitPointField('pauseMs', r.pauseMs, base.pauseMs),
-    shape: {
-      kind: HIT_SHAPE_KINDS[kindIndex],
-      offsetForward: clampHitPointField('offsetForward', s.offsetForward, base.shape.offsetForward),
-      offsetSide: clampHitPointField('offsetSide', s.offsetSide, base.shape.offsetSide),
-      radius: clampHitPointField('radius', s.radius, base.shape.radius),
-      arcDeg: clampHitPointField('arcDeg', s.arcDeg, base.shape.arcDeg),
-      length: clampHitPointField('length', s.length, base.shape.length),
-      width: clampHitPointField('width', s.width, base.shape.width)
-    }
+    shape: sanitizeHitShape(r.shape, base.shape)
+  };
+}
+
+/**
+ * 整理成合法的判定範圍（缺漏或錯誤的欄位用 base 的值；怪物攻擊範圍也用這裡）
+ *
+ * @param raw 讀到 / 傳入的資料
+ * @param base 預設範圍
+ */
+export function sanitizeHitShape(raw: unknown, base: HitShape): HitShape {
+  const s = (raw ?? {}) as Partial<HitShape>;
+  const savedKind = s.kind ? HIT_SHAPE_KINDS.indexOf(s.kind) : -1;
+  return {
+    kind: savedKind >= 0 ? HIT_SHAPE_KINDS[savedKind] : base.kind,
+    offsetForward: clampHitPointField('offsetForward', s.offsetForward, base.offsetForward),
+    offsetSide: clampHitPointField('offsetSide', s.offsetSide, base.offsetSide),
+    radius: clampHitPointField('radius', s.radius, base.radius),
+    arcDeg: clampHitPointField('arcDeg', s.arcDeg, base.arcDeg),
+    length: clampHitPointField('length', s.length, base.length),
+    width: clampHitPointField('width', s.width, base.width)
   };
 }
 
@@ -330,13 +339,13 @@ export function resetAllAttackTuning(): void {
 }
 
 /**
- * 匯出目前所有設定（每招的打擊點與近戰觸發距離，含沒改過的招式）成 JSON 文字：
+ * 目前所有設定（每招的打擊點與近戰觸發距離，含沒改過的招式）：範圍 / 判定編輯器匯出成 JSON，
  * 給開發寫進程式成為新的預設值
  */
-export function exportAttackTuning(): string {
+export function attackTuningSnapshot(): { moveTimelines: Record<string, ReadonlyArray<HitPoint>>; meleeEnemyRange: number } {
   const moveTimelines: Record<string, ReadonlyArray<HitPoint>> = {};
   for (const { move } of ATTACK_MOVES) moveTimelines[move] = timelines[move];
-  return JSON.stringify({ moveTimelines, meleeEnemyRange: meleeRange.meleeEnemyRange }, null, 2);
+  return { moveTimelines, meleeEnemyRange: meleeRange.meleeEnemyRange };
 }
 
 /** 重新讀取存檔（打擊點與近戰觸發距離） */

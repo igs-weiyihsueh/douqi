@@ -40,6 +40,8 @@ const STREAK_CORE_COLOR = 0xffffff;
 const ATTACK_FLASH_COLOR = 0xff3344;
 const ATTACK_FLASH_DEPTH = 3;
 const ATTACK_FLASH_MS = 160;
+const ATTACK_FLASH_ALPHA = 0.35;
+const ATTACK_FLASH_LINE_ALPHA = 0.8;
 
 /**
  * 戰鬥視覺回饋（不影響判定與數值）：擴張環、衝撞衝擊、扇形劍氣、斬擊圈、傷害數字、死亡爆散、敵人近戰閃光、
@@ -163,10 +165,27 @@ export class CombatFx {
     });
   }
 
-  /** 敵人近戰發動：攻擊範圍閃一下紅圈 */
-  attackFlash(x: number, y: number): void {
-    const ring = this.scene.add.circle(x, y, GameConfig.enemy.attackRadius, ATTACK_FLASH_COLOR, 0.35).setDepth(ATTACK_FLASH_DEPTH);
-    this.scene.tweens.add({ targets: ring, alpha: 0, scale: 1.15, duration: ATTACK_FLASH_MS, onComplete: () => ring.destroy() });
+  /**
+   * 敵人近戰發動：攻擊範圍閃一下紅色
+   *
+   * @param shape 放好的攻擊範圍
+   */
+  attackFlash(shape: PlacedHitShape): void {
+    this.shapeFlash(shape, ATTACK_FLASH_COLOR, ATTACK_FLASH_MS);
+  }
+
+  /**
+   * 範圍閃一下後淡出（怪物攻擊、非圓形的炸彈爆炸）
+   *
+   * @param shape 放好的範圍
+   * @param color 顏色
+   * @param ms 淡出時間
+   */
+  shapeFlash(shape: PlacedHitShape, color: number, ms: number): void {
+    const g = this.scene.add.graphics().setDepth(ATTACK_FLASH_DEPTH);
+    g.fillStyle(color, ATTACK_FLASH_ALPHA).lineStyle(2, color, ATTACK_FLASH_LINE_ALPHA);
+    drawHitShape(g, shape);
+    this.scene.tweens.add({ targets: g, alpha: 0, duration: ms, onComplete: () => g.destroy() });
   }
 
   /** 螢幕震動：鏡頭正在震動時忽略新的（不疊加） */

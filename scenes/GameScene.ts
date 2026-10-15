@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { GameConfig } from '../config';
 import { Character } from '../objects/Character';
-import { Enemy } from '../objects/Enemy';
+import { Enemy, type EnemyType } from '../objects/Enemy';
 import { Item, type SkillType } from '../objects/Item';
 import { Breakable } from '../objects/Breakable';
 import { loadCharacterParams, type CharacterParams } from '../systems/characterParams';
@@ -54,6 +54,7 @@ import { EnemySpineController } from '../controllers/EnemySpineController';
 import { PlayerSpineController } from '../controllers/PlayerSpineController';
 import { AttackTuningEditor } from '../objects/AttackTuningEditor';
 import { reloadAttackTuning } from '../systems/attackTuningParams';
+import { monsterAttackFor, reloadMonsterAttacks } from '../systems/monsterAttackParams';
 
 /** 敵人上方彩票獲得提示的深度與離敵人中心的高度（樣式見 GameConfig.ticketFx；不受特效節流，獎勵一定要看得到） */
 const TICKET_POP_DEPTH = 51;
@@ -188,6 +189,12 @@ export class GameScene extends Phaser.Scene {
   private training = false;
   /** 木樁模式的木樁 */
   private trainingDummy: Enemy | null = null;
+  /**
+   * 木樁的怪種與攻擊是否打得到 P1：平常是 GameConfig.training.dummyType 且只做蓄力動作（不干擾測試招式）；
+   * 範圍編輯器的怪物頁換成選中的怪種，攻擊照設定打 P1（預覽出手範圍與時機）
+   */
+  private trainingDummyType: EnemyType = GameConfig.training.dummyType;
+  private trainingDummyHits = false;
   /** 木樁模式的範圍編輯器（其他模式為 null） */
   private tuningEditor: AttackTuningEditor | null = null;
   /**
@@ -517,7 +524,8 @@ export class GameScene extends Phaser.Scene {
           return d?.active && !d.dead ? { x: d.x, y: d.y, radius: d.getBodyRadius() } : null;
         },
         previewPose: (preview) => this.playerSpine.setPreview(preview),
-        animationMs: (key, index) => this.playerSpine.animationDurationMs(key, index)
+        animationMs: (key, index) => this.playerSpine.animationDurationMs(key, index),
+        setDummyType: (kind) => this.setTrainingDummy(kind ?? GameConfig.training.dummyType, kind !== null)
       });
       this.input.keyboard!.on(`keydown-${GameConfig.training.tuningEditorKey}`, () => this.tuningEditor?.toggle());
     } else {
@@ -543,11 +551,14 @@ export class GameScene extends Phaser.Scene {
 
   private resetState(): void {
     this.trainingDummy = null;
+    this.trainingDummyType = GameConfig.training.dummyType;
+    this.trainingDummyHits = false;
     this.tuningEditor = null;
     // 角色編輯器參數：每局重新讀取（主選單可能剛改過），衝刺距離/速度同步到慢速即時調參，鎖敵範圍跟衝刺距離同步
     this.charParams = loadCharacterParams();
     reloadHitFeel(); // 打擊感參數：每局重新讀取（主選單打擊感編輯器可能剛改過）
     reloadAttackTuning(); // 攻擊範圍參數：每局重新讀取（木樁模式的範圍編輯器可能剛改過）
+    reloadMonsterAttacks(); // 怪物攻擊參數：同上（範圍編輯器的怪物頁）
     this.slowTuning.dashDistance = this.charParams.dashDistance;
     this.slowTuning.dashSpeed = this.charParams.dashSpeed;
     this.slowTuning.lockRadius = this.charParams.dashDistance; // 鎖敵範圍跟衝刺距離同步
@@ -1392,8 +1403,6 @@ export class GameScene extends Phaser.Scene {
       scene: this,
       characters: () => this.characters,
       isGameOver: () => this.gameOver,
-      meleeHits: (enemy, c) => this.vacuumMeleeInRange(enemy, c, GameConfig.slow.vacuumHitMargin)
-        ?? Phaser.Math.Distance.Between(enemy.x, enemy.y, c.x, c.y) <= GameConfig.enemy.attackRadius,
       hittableGuardNpc: () => (this.waveState === 'event' ? this.eventCtl.hittableGuardNpc : null),
       hitGuardNpc: () => { this.eventCtl.hitGuardNpc(); },
       damageCharacter: (c, amount, fromX, fromY) => this.damageCharacterFrom(c, amount, fromX, fromY),
@@ -2125,7 +2134,7 @@ export class GameScene extends Phaser.Scene {
         // 黏著目標(階段1):追【綁定目標】(生成時綁最近、黏著不亂換),事件覆寫>黏著>就近重綁。
         //   取代舊「每幀 findNearestCharacter 選最近」→ 別的角色走過去不會把已綁的怪吸走(解問題③)。
         const target: Character | { x: number; y: number } | null = this.resolveEnemyTarget(enemy, time);
-        if (target) enemy.updateAI(target.x, target.y, time, this.vacuumMeleeInRange(enemy, target, GameConfig.slow.vacuumEngageMargin));
+        if (target) enemy.updateAI(target.x, target.y, time, this.vacuumMeleeInRange(enemy, target, monsterAttackFor(enemy.enemyType).engage));
         else enemy.updateIdle(time); // 場上沒有玩家（例如都在等投幣）：巡邏、不攻擊
         // 木樁（anchored）站在原地不移動：AI 照跑（面向、蓄力攻擊靠近的玩家），只是不走路，不會擠到玩家
         if (enemy.anchored) (enemy.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
@@ -2188,10 +2197,29 @@ export class GameScene extends Phaser.Scene {
     const x = Phaser.Math.Clamp(this.player.x + cfg.dummyOffsetX, this.arena.left, this.arena.right);
     const e = this.enemies.get(x, this.player.y) as Enemy | null;
     if (!e) return;
-    e.spawn(x, this.player.y, this.time.now, cfg.dummyType, 1);
+    e.spawn(x, this.player.y, this.time.now, this.trainingDummyType, 1);
+    if (this.trainingDummyHits) this.wireEnemyCallbacks(e);
+    else {
+      e.onAttackFire = undefined;
+      e.onBombThrow = undefined;
+    }
     e.immortal = true;
     e.anchored = true;
     this.trainingDummy = e;
+  }
+
+  /**
+   * 木樁換成另一個怪種：收掉目前的木樁，下一幀由 keepTrainingReady 以新設定重新生成（設定沒變時不動作）
+   *
+   * @param type 怪種
+   * @param hits 攻擊是否打得到 P1
+   */
+  private setTrainingDummy(type: EnemyType, hits: boolean): void {
+    if (type === this.trainingDummyType && hits === this.trainingDummyHits) return;
+    this.trainingDummyType = type;
+    this.trainingDummyHits = hits;
+    const dummy = this.trainingDummy;
+    if (dummy?.active && !dummy.dead) dummy.kill();
   }
 
   /** T 熱鍵——遊戲進行中直接乾淨重開一局（沿用 create 的 resetState/scene 重啟機制） */
@@ -2683,7 +2711,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * 慢速模式：近戰怪的腳底是否已在真空圈邊緣外 margin 以內（怪被擋在圈外，從圈邊緣蓄力 / 出手）。
+   * 慢速模式：近戰怪的腳底是否已在真空圈邊緣外 margin 以內（怪被擋在圈外，在圈邊緣開始蓄力；margin = 怪物攻擊的出手距離）。
    * 快速模式或目標不是角色（例如守護 NPC）時回傳 undefined，由呼叫端用原本的固定距離判斷
    *
    * @param enemy 近戰怪
