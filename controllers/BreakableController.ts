@@ -46,11 +46,12 @@ export interface BreakableHost {
   /** 木箱被打破（給打破的人二段變身能量） */
   onCrateBroken(actor: Character): void;
   /**
-   * 從打破的木箱位置跳出寶箱怪（小關卡最後一波打完後、這一關已出過等情況不出）
+   * 從打破的木箱位置跳出寶箱怪（打破者的寶箱怪獎金還沒存夠、小關卡最後一波打完後、這一關已出過等情況不出）
    *
+   * @param actor 打破木箱的角色
    * @returns 是否有出現
    */
-  spawnTreasureAt(x: number, y: number, time: number): boolean;
+  spawnTreasureAt(x: number, y: number, time: number, actor: Character): boolean;
   spawnExpandingRing(x: number, y: number, radius: number, color: number, ms?: number): void;
   shakeOnce(duration: number, intensity: number): void;
 }
@@ -423,7 +424,7 @@ export class BreakableController {
 
   /**
    * 打破一個物件：爆炸桶進入倒數；木箱碎裂噴粒子並回收、給打破的人二段變身能量，（allowDrop 時）機率掉道具，
-   * 另外機率跳出寶箱怪、機率爆出彩票給打破的人
+   * 另外機率跳出寶箱怪（打破者的寶箱怪獎金要存夠）、機率爆出彩票給打破的人
    *
    * @param bk 打破的物件
    * @param actor 打破它的角色
@@ -441,7 +442,7 @@ export class BreakableController {
     bk.despawn();
     this.host.onCrateBroken(actor);
     if (allowDrop && Math.random() < GameConfig.items.dropChance) this.host.dropItemAt(bx, by, time);
-    if (Math.random() < crate.treasureChance) this.host.spawnTreasureAt(cx, cy, time);
+    if (Math.random() < crate.treasureChance) this.host.spawnTreasureAt(cx, cy, time, actor);
     if (Math.random() < crate.ticketChance) {
       const tickets = this.host.grantCrateTickets(actor);
       if (tickets > 0) this.spawnTicketFx(cx, cy, tickets);

@@ -7,7 +7,7 @@ import { visibleBottomOffset } from '../systems/spriteFeet';
 /** 有 Spine 動畫的怪種 */
 type SpineEnemyType = keyof typeof GameConfig.enemySpine & EnemyType;
 /** 設定裡怪種以外的鍵 */
-const NON_TYPE_KEYS: ReadonlySet<string> = new Set(['anims', 'moveSpeedThreshold', 'mixMs', 'dieFadeMs']);
+const NON_TYPE_KEYS: ReadonlySet<string> = new Set(['anims', 'moveSpeedThreshold', 'moveSmoothMs', 'mixMs', 'dieFadeMs']);
 /** 出手動畫判定：上一幀蓄力進度達到這個值、這一幀離開蓄力，視為出手（被打斷時進度不到） */
 const ATTACK_FIRED_PROGRESS = 0.95;
 
@@ -28,6 +28,14 @@ interface EnemySpineView {
   lastChargeProgress: number;
   /** hit / attack 這種播一次的動畫播到何時（場景時間） */
   oneShotUntil: number;
+  /** 上一幀的位置與場景時間（用實際位移判斷有沒有在走） */
+  lastX: number;
+  lastY: number;
+  lastTime: number;
+  /** 平滑後的實際位移速度（像素/秒） */
+  speed: number;
+  /** 目前是否在走（平滑速度超過門檻；時間沒前進的凍結幀維持上次結果） */
+  moving: boolean;
 }
 
 /** 控制器需要的場景資訊 */
@@ -129,7 +137,8 @@ export class EnemySpineController {
     spine.skeleton.setToSetupPose();
     spine.animationState.setAnimation(0, GameConfig.enemySpine.anims.idle, true);
     const view: EnemySpineView = {
-      spine, type, state: 'idle', lastHp: e.hp, wasCharging: false, lastChargeProgress: 0, oneShotUntil: time
+      spine, type, state: 'idle', lastHp: e.hp, wasCharging: false, lastChargeProgress: 0, oneShotUntil: time,
+      lastX: e.x, lastY: e.y, lastTime: time, speed: 0, moving: false
     };
     this.views.set(e, view);
     return view;
@@ -183,6 +192,7 @@ export class EnemySpineController {
     const charging = e.isCharging();
     const progress = e.chargeProgress(time);
     const fired = view.wasCharging && !charging && view.lastChargeProgress >= ATTACK_FIRED_PROGRESS;
+    this.updateMoving(e, view, time);
     if (e.hp < view.lastHp) {
       this.playOnce(view, 'hit', anims.hit, time);
     } else if (fired) {
@@ -194,13 +204,31 @@ export class EnemySpineController {
         view.spine.animationState.addAnimation(0, anims.chargeLoop, true, 0);
       }
     } else if (time >= view.oneShotUntil || view.state === 'charge') {
-      const body = e.body as Phaser.Physics.Arcade.Body;
-      const moving = body.velocity.length() > GameConfig.enemySpine.moveSpeedThreshold;
-      this.playLoop(view, moving ? 'move' : 'idle', moving ? anims.move : anims.idle);
+      this.playLoop(view, view.moving ? 'move' : 'idle', view.moving ? anims.move : anims.idle);
     }
     view.lastHp = e.hp;
     view.wasCharging = charging;
     view.lastChargeProgress = progress;
+  }
+
+  /**
+   * 依實際位移判斷有沒有在走：AI 給了速度但被角色 / 其他怪擋住走不動時算待機（不用速度判斷）；
+   * 速度以 moveSmoothMs 做指數平滑，單幀停頓或被推一下不會讓走路 / 待機來回切換
+   *
+   * @param e 敵人
+   * @param view Spine 外觀
+   * @param time 目前場景時間
+   */
+  private updateMoving(e: Enemy, view: EnemySpineView, time: number): void {
+    const dt = time - view.lastTime;
+    if (dt <= 0) return;
+    const cfg = GameConfig.enemySpine;
+    const speed = (Phaser.Math.Distance.Between(view.lastX, view.lastY, e.x, e.y) * 1000) / dt;
+    view.speed += (speed - view.speed) * Math.min(1, dt / cfg.moveSmoothMs);
+    view.moving = view.speed > cfg.moveSpeedThreshold;
+    view.lastX = e.x;
+    view.lastY = e.y;
+    view.lastTime = time;
   }
 
   /**

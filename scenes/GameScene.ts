@@ -677,6 +677,7 @@ export class GameScene extends Phaser.Scene {
     this.enemyRally.update(time);
     this.creditCtl.update();
     this.payout.update(time);
+    if (!this.treasures.isOnField) this.payout.refundTreasurePrize();
 
     // COMBO 連擊計時（警告 / 中斷）
     this.comboReward.update();
@@ -1551,11 +1552,27 @@ export class GameScene extends Phaser.Scene {
       onCrateBroken: (actor) => {
         if (this.controlMode === 'slow') this.comboSkills.gainEnergy(actor, GameConfig.energy.perCrate);
       },
-      // 最後一波打完（出口開放）後不出，避免寶箱怪出現時已經在離開
-      spawnTreasureAt: (x, y, time) => (!this.levelMode || (this.stageInProgress && !this.pendingSettlement)) && this.treasures.spawnAt(x, y, time),
+      spawnTreasureAt: (x, y, time, actor) => this.spawnTreasureFromCrate(x, y, time, actor),
       spawnExpandingRing: (x, y, radius, color, ms) => this.fx.expandingRing(x, y, radius, color, ms),
       shakeOnce: (duration, intensity) => this.fx.shake(duration, intensity)
     };
+  }
+
+  /**
+   * 木箱跳出寶箱怪：打破者的寶箱怪 buffer 要存到完整獎金（payout.treasure.prize），最後一波打完（出口開放）後不出，
+   * 避免寶箱怪出現時已經在離開；出現時鎖定獎金
+   *
+   * @param x 木箱位置 x
+   * @param y 木箱位置 y
+   * @param time 目前場景時間
+   * @param actor 打破木箱的角色
+   * @returns 是否有出現
+   */
+  private spawnTreasureFromCrate(x: number, y: number, time: number, actor: Character): boolean {
+    if (this.levelMode && (!this.stageInProgress || this.pendingSettlement)) return false;
+    if (!this.payout.treasureFunded(actor) || !this.treasures.spawnAt(x, y, time)) return false;
+    this.payout.lockTreasurePrize(actor);
+    return true;
   }
 
   /**

@@ -56,6 +56,8 @@ export class PayoutController {
   private readonly secondFormPerHit = new Map<Character, number>();
   private bossBudget: BossBudget | null = null;
   private roomBudget: RoomBudget | null = null;
+  /** 關卡中寶箱怪鎖定的獎金（出現時從打破木箱者的 buffer 扣下，打倒時發完、離場時退回） */
+  private treasurePrize: { owner: Character; remaining: number } | null = null;
 
   /** 平均 1 幣 CREDIT（多投多送一輪的平均） */
   static averageCreditsPerCoin(): number {
@@ -176,32 +178,59 @@ export class PayoutController {
   }
 
   /**
-   * 打中關卡中的寶箱怪：有 payout.treasure.hitChance 機率從命中者的寶箱怪 buffer 發 hitTickets 張；
-   * 發完後 buffer 要還留得下 killReserve 張給打倒，不夠就不發
+   * 這位玩家的寶箱怪 buffer 是否已存到完整獎金（payout.treasure.prize），且場上沒有鎖定中的寶箱怪獎金——存夠才能從木箱跳出寶箱怪
+   *
+   * @param c 打破木箱的角色
+   */
+  treasureFunded(c: Character): boolean {
+    return this.treasurePrize === null && this.seatBalance(c, 'treasure') >= GameConfig.payout.treasure.prize;
+  }
+
+  /**
+   * 寶箱怪出現：從打破木箱者的寶箱怪 buffer 扣下完整獎金，鎖定成這隻寶箱怪的獎金（誰打都從這筆發）
+   *
+   * @param c 打破木箱的角色
+   */
+  lockTreasurePrize(c: Character): void {
+    const prize = GameConfig.payout.treasure.prize;
+    this.seatOf(c).treasure -= prize;
+    this.treasurePrize = { owner: c, remaining: prize };
+  }
+
+  /** 寶箱怪沒被打倒就離場：沒發完的獎金退回鎖定時的玩家 buffer（沒有鎖定中的獎金時不做事） */
+  refundTreasurePrize(): void {
+    const prize = this.treasurePrize;
+    if (!prize) return;
+    this.seatOf(prize.owner).treasure += prize.remaining;
+    this.treasurePrize = null;
+  }
+
+  /**
+   * 打中關卡中的寶箱怪：有 payout.treasure.hitChance 機率從鎖定的獎金發 hitTickets 張給命中者；
+   * 發完後獎金要還留得下 killReserve 張給打倒，不夠就不發
    *
    * @param c 命中的角色
-   * @returns 發出的張數（0 = 這下沒中或 buffer 不夠）
+   * @returns 發出的張數（0 = 這下沒中、獎金不夠或沒有鎖定中的獎金）
    */
   payTreasureHit(c: Character): number {
     const cfg = GameConfig.payout.treasure;
-    const seat = this.seatOf(c);
-    if (Math.random() >= cfg.hitChance || Math.floor(seat.treasure) - cfg.hitTickets < cfg.killReserve) return 0;
-    seat.treasure -= cfg.hitTickets;
+    const prize = this.treasurePrize;
+    if (!prize || Math.random() >= cfg.hitChance || prize.remaining - cfg.hitTickets < cfg.killReserve) return 0;
+    prize.remaining -= cfg.hitTickets;
     return this.pay(c, cfg.hitTickets);
   }
 
   /**
-   * 打倒關卡中的寶箱怪：發出打倒者寶箱怪 buffer 的整數部分全部，保證至少 payout.treasure.killMinTickets 張——
-   * buffer 不夠時先借（buffer 變負），之後扣 CREDIT 存進來的先還，長期 RTP 不變
+   * 打倒關卡中的寶箱怪：鎖定的獎金剩下的全部發給打倒者，獎金解除
    *
    * @param c 打倒的角色
-   * @returns 發出的張數
+   * @returns 發出的張數（沒有鎖定中的獎金時為 0）
    */
   payTreasureKill(c: Character): number {
-    const seat = this.seatOf(c);
-    const amount = Math.max(Math.floor(seat.treasure), GameConfig.payout.treasure.killMinTickets);
-    seat.treasure -= amount;
-    return this.pay(c, amount);
+    const prize = this.treasurePrize;
+    if (!prize) return 0;
+    this.treasurePrize = null;
+    return prize.remaining > 0 ? this.pay(c, prize.remaining) : 0;
   }
 
   /**

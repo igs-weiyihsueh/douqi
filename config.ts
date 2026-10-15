@@ -185,7 +185,8 @@ export const GameConfig = {
    * 怪物 Spine 動畫（F4 新美術時取代該怪種的美術圖；碰撞、腳底佔位、AI 不變，只換外觀）：
    * - tank：大怪 = EN01 骷髏兵（public/assets/spine/）。skins 依序疊加成一套外觀；scale 為顯示縮放；
    *   腳底對齊原美術圖的腳底再加 offsetY；facesRight = 原始動畫面向右
-   * - 動畫：idle 待機 / move 走路（移動速度超過 moveSpeedThreshold）/ hit 被打 / die 死亡（播完 dieFadeMs 淡出）/
+   * - 動畫：idle 待機 / move 走路（實際位移速度超過 moveSpeedThreshold 像素/秒；被擋住走不動時算待機。速度以 moveSmoothMs 平滑，
+   *   避免單幀停頓或被推擠時走路 / 待機來回閃）/ hit 被打 / die 死亡（播完 dieFadeMs 淡出）/
    *   chargeIn → chargeLoop 蓄力（蓄力中重複）/ attack 出手；動畫切換混合 mixMs 毫秒；時停時動畫暫停
    */
   enemySpine: {
@@ -195,7 +196,7 @@ export const GameConfig = {
       jsonUrl: 'assets/spine/EN01_Skeleton_Soldier.json',
       atlasUrl: 'assets/spine/EN01.atlas',
       skins: ['Armor', 'Weapon'] as ReadonlyArray<string>,
-      scale: 0.18,
+      scale: 0.115,
       offsetY: 0,
       facesRight: false
     },
@@ -208,7 +209,8 @@ export const GameConfig = {
       chargeLoop: 'close_attack_loop',
       attack: 'close_attack_at'
     },
-    moveSpeedThreshold: 15,
+    moveSpeedThreshold: 30,
+    moveSmoothMs: 120,
     mixMs: 100,
     dieFadeMs: 250
   },
@@ -324,8 +326,9 @@ export const GameConfig = {
    * - comboMinTickets：連擊報獎保底張數——按比例算出的張數不到這個數（含沒達到第一個里程碑的保底報獎）時改發這個數，
    *   buffer 不夠時發 buffer 的整數部分（不超過已存的量，RTP 不變）
    * - secondFormExpectedHits：二段變身每打中一下發 buffer ÷ 此值（發完為止）
-   * - treasure：關卡中的寶箱怪每打中一下有 hitChance 機率發命中者 buffer 的 hitTickets 張（buffer 要留得下 killReserve 張給打倒才發）；
-   *   打倒時發打倒者 buffer 的整數部分全部，至少 killMinTickets 張（buffer 不夠時先借，之後扣 CREDIT 存進來的先還，長期 RTP 不變）
+   * - treasure：打破木箱的玩家寶箱怪 buffer 存到 prize 張，木箱才可能跳出寶箱怪（breakable.crate.treasureChance）；出現時從他的 buffer
+   *   扣下 prize 張鎖定成這隻寶箱怪的獎金，誰打都從這筆發：每打中一下有 hitChance 機率發 hitTickets 張（要留得下 killReserve 張給打倒才發），
+   *   打倒時剩下的全部發給打倒者；沒打倒就離場時退回原本的玩家
    * - boss：共用 buffer 存到 minBudget 才亂入；登場時鎖定整個 buffer，hitShare 給打中（每下 ÷ expectedHits）、killShare 給打倒、
    *   其餘給變身 BOSS 期間打倒的怪（每隻 ÷ formExpectedKills）；沒發完的退回
    * - treasureRoom：共用 buffer 存到 budget 才開密室入口；進去時鎖定 budget，killShare 給打倒（每隻 ÷ expectedKills）、
@@ -339,7 +342,7 @@ export const GameConfig = {
     comboTierShares: [0.1, 0.2, 0.35, 0.6, 1] as ReadonlyArray<number>,
     comboMinTickets: 1,
     secondFormExpectedHits: 15,
-    treasure: { hitChance: 0.3, hitTickets: 1, killReserve: 1, killMinTickets: 1 },
+    treasure: { prize: 30, hitChance: 0.3, hitTickets: 1, killReserve: 1 },
     boss: { minBudget: 600, hitShare: 0.3, killShare: 0.3, expectedHits: 25, formExpectedKills: 20 },
     treasureRoom: { budget: 300, killShare: 0.5, expectedKills: 8 },
     debugKey: 'F8',
