@@ -1,15 +1,17 @@
 import Phaser from 'phaser';
+import type { LoopMove } from '../controllers/CharacterActionController';
 import type { PlayerAnimKey, PlayerPosePreview } from '../controllers/PlayerSpineController';
 import {
   ATTACK_HIT_EVENT, ATTACK_MOVES, HIT_POINT_FIELDS, MAX_HIT_POINTS, MELEE_ENEMY_RANGE_DEF, attackTuning, clampHitPointField,
-  attackTuningSnapshot, hasHitShape, isTimedMove, moveHitPoints, resetAllAttackTuning, resetMoveHitPoints, setMeleeEnemyRange, setMoveHitPoints,
+  hasHitShape, isTimedMove, moveHitPoints, resetAllAttackTuning, resetMoveHitPoints, setMeleeEnemyRange, setMoveHitPoints,
   type AttackMove, type HitPoint, type HitPointField, type TimedAttackMove
 } from '../systems/attackTuningParams';
 import { HIT_SHAPE_KINDS, HIT_SHAPE_LABELS, drawHitShape, placeHitShape, type HitShape, type HitShapeKind } from '../systems/hitShapes';
 import {
-  MONSTER_KINDS, clampMonsterField, monsterAttack, monsterAttackSnapshot, monsterFieldDefs, placeBombAttack, resetAllMonsterAttacks,
+  MONSTER_KINDS, clampMonsterField, monsterAttack, monsterFieldDefs, placeBombAttack, resetAllMonsterAttacks,
   resetMonsterAttack, setMonsterAttack, type MonsterKind, type MonsterValueField
 } from '../systems/monsterAttackParams';
+import { TUNING_SLOTS, applySlot, currentSettings, diffSettings, importSettings, saveSlot, slotSettings } from '../systems/tuningSettings';
 import type { Character } from './Character';
 
 /** 面板版面與配色（畫面座標，固定在畫面左側，不擋住中央的角色與木樁） */
@@ -62,8 +64,27 @@ const LAYOUT = {
   },
   /** 底部按鈕一列幾個、匯出結果提示列的高度 */
   BOTTOM_BUTTONS: 4,
-  STATUS_HEIGHT: 24
+  STATUS_HEIGHT: 24,
+  /** 工具列（循環出招 / 匯入 / A/B 比較）的高度、顏色（開啟中的較亮） */
+  TOOL_HEIGHT: 30,
+  TOOL_COLOR: 0x334155,
+  TOOL_ACTIVE_COLOR: 0x1d4ed8,
+  /** A/B 比較頁：差異最多列幾行、每行高度 */
+  DIFF_MAX_LINES: 16,
+  DIFF_LINE_HEIGHT: 20
 } as const;
+
+/** 可以循環出招的招式（爆發、強化衝刺要在二段變身中才能放，不支援） */
+const LOOP_MOVES: ReadonlyArray<LoopMove> = ['attack1', 'attack2', 'circle', 'line', 'pierce'];
+
+/**
+ * 招式是否可以循環出招
+ *
+ * @param move 招式
+ */
+function isLoopMove(move: AttackMove): move is LoopMove {
+  return (LOOP_MOVES as ReadonlyArray<AttackMove>).includes(move);
+}
 
 /** 編輯面板的深度（UIScene 上；招式編輯器模式只顯示這個深度以上的物件） */
 export const EDITOR_PANEL_DEPTH = LAYOUT.DEPTH;
@@ -194,6 +215,8 @@ export interface AttackTuningEditorHost {
   previewPose(preview: PlayerPosePreview | null): void;
   /** P1 某個動作的長度（毫秒） */
   animationMs(key: PlayerAnimKey, index: number): number;
+  /** P1 朝木樁放一次指定的招式（循環出招；正在出招 / 冷卻中時不動作） */
+  loopMove(move: LoopMove): void;
   /** 木樁換成某個怪種（怪物頁預覽：照該怪種的攻擊設定蓄力、出手並打得到 P1；null = 木樁模式預設的怪種，只做動作不打人） */
   setDummyType(kind: MonsterKind | null): void;
 }
@@ -210,6 +233,8 @@ export interface AttackTuningEditorHost {
  *   （systems/attackTuningParams，每次調整即時套用並存在瀏覽器）；爆發、強化衝刺、一般衝刺只有一個打擊點、沒有時間軸，
  *   一般衝刺只有傷害 % 與頓點（以衝刺判定半徑碰撞，沒有判定範圍）
  * - 最下面是普攻共用的近戰觸發距離與恢復預設、匯出設定（我方招式與怪物一起存成 JSON，複製到剪貼簿並下載，交給開發寫成預設值）、關閉
+ * - 工具列：循環出招（選中的招式自動朝木樁重複放）、匯入設定（選匯出的 JSON 檔套用）、A/B 比較（目前設定存成 A / B、
+ *   套用 A / B，並排列出兩組不同的數值；systems/tuningSettings）
  * - 標題下方切換「我方招式 / 怪物」。怪物頁：一般兵、大怪、遠程幽靈分頁，調攻擊範圍（形狀 / 位置偏移 / 尺寸）、
  *   出手距離、蓄力時間、攻擊冷卻、傷害（systems/monsterAttackParams）；木樁換成選中的怪種，照設定蓄力攻擊 P1，可直接看預警與出手
  *
@@ -224,6 +249,12 @@ export class AttackTuningEditor {
   private timeline: { label: Phaser.GameObjects.Text; markers: Phaser.GameObjects.Graphics; barX: number; barTop: number; barWidth: number } | null = null;
   /** 目前的頁面與怪物頁選中的怪種 */
   private mode: EditorMode = 'player';
+  /** 循環出招中（我方招式頁：選中的招式自動重複放，定格預覽暫停）、A/B 比較頁開啟中 */
+  private looping = false;
+  private comparing = false;
+  /** 提示列與它的文字（重建面板時保留） */
+  private status: Phaser.GameObjects.Text | null = null;
+  private statusMessage = '';
   private selectedMonster: MonsterKind = 'normal';
   /** 選中的招式、打擊點與時間軸目前時間（毫秒） */
   private selected: AttackMove = 'attack1';
@@ -271,6 +302,7 @@ export class AttackTuningEditor {
   update(): void {
     if (!this.overlay) return;
     this.refreshTimeline();
+    if (this.looping && this.mode === 'player' && isLoopMove(this.selected)) this.host.loopMove(this.selected);
     const p = this.host.player();
     const g = this.overlay.clear();
     if (this.mode === 'monster') {
@@ -409,7 +441,7 @@ export class AttackTuningEditor {
 
   /** 依時間軸更新 P1 定格預覽（沒有時間軸的招式結束預覽） */
   private applyPreview(): void {
-    if (!isTimedMove(this.selected)) {
+    if (!isTimedMove(this.selected) || this.looping) {
       this.host.previewPose(null);
       return;
     }
@@ -513,12 +545,16 @@ export class AttackTuningEditor {
     const background = ui.add.rectangle(0, 0, LAYOUT.WIDTH, 1, LAYOUT.BG_COLOR, LAYOUT.BG_ALPHA).setOrigin(0, 0).setStrokeStyle(2, LAYOUT.BORDER_COLOR);
     panel.add(background);
     panel.add(this.text(ui, LAYOUT.PADDING, LAYOUT.PADDING, '範圍 / 判定編輯器（P 開關）', LAYOUT.COLORS.TITLE, '20px'));
-    let y = this.renderModeTabs(ui, panel, LAYOUT.TITLE_HEIGHT) + LAYOUT.SECTION_GAP;
-    y = (this.mode === 'player' ? this.renderPlayerPage(ui, panel, y) : this.renderMonsterPage(ui, panel, y)) + LAYOUT.SECTION_GAP;
+    let y = this.renderModeTabs(ui, panel, LAYOUT.TITLE_HEIGHT) + LAYOUT.TAB_GAP;
+    y = this.renderToolbar(ui, panel, y) + LAYOUT.SECTION_GAP;
+    if (this.comparing) y = this.renderComparePage(ui, panel, y);
+    else y = this.mode === 'player' ? this.renderPlayerPage(ui, panel, y) : this.renderMonsterPage(ui, panel, y);
+    y += LAYOUT.SECTION_GAP;
     const buttonY = y + LAYOUT.BUTTON_HEIGHT / 2;
     const slot = LAYOUT.WIDTH / LAYOUT.BOTTOM_BUTTONS;
     const bw = slot - LAYOUT.PADDING;
-    const status = this.text(ui, LAYOUT.PADDING, y + LAYOUT.BUTTON_HEIGHT + LAYOUT.SECTION_GAP, '', LAYOUT.COLORS.HINT, '12px');
+    const status = this.text(ui, LAYOUT.PADDING, y + LAYOUT.BUTTON_HEIGHT + LAYOUT.SECTION_GAP, this.statusMessage, LAYOUT.COLORS.HINT, '12px');
+    this.status = status;
     const monster = this.mode === 'monster';
     const bottomButtons: Array<{ label: string; color: number; onClick: () => void }> = [
       {
@@ -533,7 +569,7 @@ export class AttackTuningEditor {
         color: LAYOUT.COLORS.RESET,
         onClick: monster ? () => { resetAllMonsterAttacks(); this.render(); } : () => { resetAllAttackTuning(); this.selectPoint(0); }
       },
-      { label: '匯出設定', color: LAYOUT.COLORS.EXPORT, onClick: () => this.exportSettings(status) },
+      { label: '匯出設定', color: LAYOUT.COLORS.EXPORT, onClick: () => this.exportSettings() },
       { label: '關閉', color: LAYOUT.COLORS.CLOSE, onClick: () => this.close() }
     ];
     bottomButtons.forEach((b, i) => {
@@ -545,6 +581,120 @@ export class AttackTuningEditor {
     this.blockClicks(background);
     this.panel = panel;
     this.refreshValues();
+  }
+
+  /**
+   * 提示列顯示一段文字（重建面板時保留）
+   *
+   * @param message 文字
+   */
+  private setStatus(message: string): void {
+    this.statusMessage = message;
+    if (this.status?.active) this.status.setText(message);
+  }
+
+  /**
+   * 工具列：循環出招（我方招式頁）、匯入設定、A/B 比較
+   *
+   * @param ui 面板所在場景
+   * @param panel 面板
+   * @param y 上緣（相對面板）
+   * @returns 下緣
+   */
+  private renderToolbar(ui: Phaser.Scene, panel: Phaser.GameObjects.Container, y: number): number {
+    const tools: Array<{ label: string; active: boolean; onClick: () => void }> = [
+      { label: this.looping ? '■ 停止循環' : '▶ 循環出招', active: this.looping, onClick: () => this.toggleLoop() },
+      { label: '匯入設定', active: false, onClick: () => this.importFromFile() },
+      { label: 'A/B 比較', active: this.comparing, onClick: () => { this.comparing = !this.comparing; this.render(); } }
+    ];
+    const width = LAYOUT.WIDTH - LAYOUT.PADDING * 2;
+    const bw = (width - LAYOUT.TAB_GAP * (tools.length - 1)) / tools.length;
+    tools.forEach((t, i) => {
+      const cx = LAYOUT.PADDING + i * (bw + LAYOUT.TAB_GAP) + bw / 2;
+      panel.add(this.button(ui, cx, y + LAYOUT.TOOL_HEIGHT / 2, bw, LAYOUT.TOOL_HEIGHT, t.label, t.active ? LAYOUT.TOOL_ACTIVE_COLOR : LAYOUT.TOOL_COLOR, t.onClick));
+    });
+    return y + LAYOUT.TOOL_HEIGHT;
+  }
+
+  /**
+   * 循環出招開 / 關：開啟時切到我方招式頁、結束定格預覽，選中的招式（普攻 1 / 2、招式1 / 2、一般衝刺）自動朝木樁重複放；
+   * 關閉時回到時間軸的定格預覽
+   */
+  private toggleLoop(): void {
+    this.looping = !this.looping;
+    if (this.looping) {
+      this.setStatus(isLoopMove(this.selected) ? '' : '這招不能循環：爆發、強化衝刺要在二段變身中才能放');
+      if (this.mode !== 'player' || this.comparing) {
+        this.comparing = false;
+        this.selectMode('player');
+        return;
+      }
+    }
+    this.applyPreview();
+    this.render();
+  }
+
+  /** 匯入設定：選一個匯出的 JSON 檔，套用裡面的招式 / 怪物設定（其他維持不變），結果顯示在提示列 */
+  private importFromFile(): void {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,application/json';
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      void file.text().then((text) => {
+        const result = importSettings(text);
+        this.setStatus(result
+          ? `已匯入 ${file.name}：${result.moves} 招、${result.monsters} 種怪${result.meleeRange ? '、近戰觸發距離' : ''}`
+          : `${file.name} 不是匯出的設定檔，沒有套用`);
+        if (this.panel) this.selectMode(this.mode);
+      });
+    };
+    input.click();
+  }
+
+  /**
+   * A/B 比較頁：把目前的設定存成 A / B、套用 A / B，下方逐行列出 A 與 B 不同的數值（A ｜ B 並排）
+   *
+   * @param ui 面板所在場景
+   * @param panel 面板
+   * @param y 上緣（相對面板）
+   * @returns 下緣
+   */
+  private renderComparePage(ui: Phaser.Scene, panel: Phaser.GameObjects.Container, y: number): number {
+    const width = LAYOUT.WIDTH - LAYOUT.PADDING * 2;
+    const actions: Array<{ label: string; onClick: () => void }> = [];
+    for (const slot of TUNING_SLOTS) {
+      actions.push({ label: `目前存成 ${slot}`, onClick: () => { saveSlot(slot); this.setStatus(`目前的設定已存成 ${slot}`); this.render(); } });
+    }
+    for (const slot of TUNING_SLOTS) {
+      actions.push({
+        label: `套用 ${slot}`,
+        onClick: () => {
+          this.setStatus(applySlot(slot) ? `已套用 ${slot}，可以出招比較手感` : `${slot} 還沒存過`);
+          this.render();
+        }
+      });
+    }
+    const bw = (width - LAYOUT.TAB_GAP * (actions.length - 1)) / actions.length;
+    actions.forEach((a, i) => {
+      const cx = LAYOUT.PADDING + i * (bw + LAYOUT.TAB_GAP) + bw / 2;
+      panel.add(this.button(ui, cx, y + LAYOUT.TOOL_HEIGHT / 2, bw, LAYOUT.TOOL_HEIGHT, a.label, LAYOUT.TOOL_COLOR, a.onClick));
+    });
+    y += LAYOUT.TOOL_HEIGHT + LAYOUT.SECTION_GAP;
+    const a = slotSettings('A'), b = slotSettings('B');
+    let lines: string[];
+    if (!a || !b) lines = [`先把要比較的兩組設定分別存成 A、B（${a ? 'A 已存' : 'A 未存'}，${b ? 'B 已存' : 'B 未存'}）`];
+    else {
+      const diff = diffSettings(a, b);
+      lines = diff.length === 0 ? ['A 與 B 完全相同'] : ['差異（A ｜ B）：', ...diff.slice(0, LAYOUT.DIFF_MAX_LINES)];
+      if (diff.length > LAYOUT.DIFF_MAX_LINES) lines.push(`…還有 ${diff.length - LAYOUT.DIFF_MAX_LINES} 項`);
+    }
+    for (const line of lines) {
+      panel.add(this.text(ui, LAYOUT.PADDING, y, line, LAYOUT.COLORS.TEXT, '13px'));
+      y += LAYOUT.DIFF_LINE_HEIGHT;
+    }
+    return y;
   }
 
   /**
@@ -561,7 +711,12 @@ export class AttackTuningEditor {
       const tx = LAYOUT.PADDING + i * (tabWidth + LAYOUT.TAB_GAP);
       const color = mode === this.mode ? LAYOUT.TAB_SELECTED_COLOR : LAYOUT.TAB_COLOR;
       panel.add(this.blockClicks(ui.add.rectangle(tx, y, tabWidth, LAYOUT.TAB_HEIGHT, color).setOrigin(0, 0)
-        .setStrokeStyle(1, LAYOUT.BORDER_COLOR), () => { if (mode !== this.mode) this.selectMode(mode); }));
+        .setStrokeStyle(1, LAYOUT.BORDER_COLOR), () => {
+        // 點頁面分頁也會離開 A/B 比較頁
+        if (mode === this.mode && !this.comparing) return;
+        this.comparing = false;
+        this.selectMode(mode);
+      }));
       panel.add(this.text(ui, tx + tabWidth / 2, y + LAYOUT.TAB_HEIGHT / 2, label, LAYOUT.COLORS.TEXT, '16px').setOrigin(0.5));
     });
     return y + LAYOUT.TAB_HEIGHT;
@@ -652,11 +807,9 @@ export class AttackTuningEditor {
   /**
    * 匯出設定：我方各招的打擊點、近戰觸發距離與各怪種的攻擊設定存成 JSON，複製到剪貼簿並下載成檔案
    * （剪貼簿無法使用時只下載），交給開發寫成新的預設值；結果顯示在提示列
-   *
-   * @param status 提示列
    */
-  private exportSettings(status: Phaser.GameObjects.Text): void {
-    const json = JSON.stringify({ ...attackTuningSnapshot(), monsterAttacks: monsterAttackSnapshot() }, null, 2);
+  private exportSettings(): void {
+    const json = JSON.stringify(currentSettings(), null, 2);
     const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
     const link = document.createElement('a');
     link.href = url;
@@ -664,7 +817,7 @@ export class AttackTuningEditor {
     link.click();
     URL.revokeObjectURL(url);
     const done = (copied: boolean): void => {
-      if (status.active) status.setText(`${copied ? '已複製到剪貼簿並' : '已'}下載 ${EXPORT_FILE_NAME}，把內容或檔案傳給開發即可設為預設值`);
+      this.setStatus(`${copied ? '已複製到剪貼簿並' : '已'}下載 ${EXPORT_FILE_NAME}，把內容或檔案傳給開發即可設為預設值`);
     };
     if (navigator.clipboard) navigator.clipboard.writeText(json).then(() => done(true), () => done(false));
     else done(false);

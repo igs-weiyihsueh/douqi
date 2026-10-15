@@ -528,7 +528,11 @@ export class GameScene extends Phaser.Scene {
         },
         previewPose: (preview) => this.playerSpine.setPreview(preview),
         animationMs: (key, index) => this.playerSpine.animationDurationMs(key, index),
-        setDummyType: (kind) => this.setTrainingDummy(kind ?? GameConfig.training.dummyType, kind !== null)
+        setDummyType: (kind) => this.setTrainingDummy(kind ?? GameConfig.training.dummyType, kind !== null),
+        loopMove: (move) => {
+          const d = this.trainingDummy;
+          if (d?.active && !d.dead && this.player.alive) this.actions.performLoopMove(this.player, move, d, this.time.now);
+        }
       });
       this.input.keyboard!.on(`keydown-${GameConfig.training.tuningEditorKey}`, () => this.tuningEditor?.toggle());
       if (this.editorMode) this.openEditorWhenUiReady();

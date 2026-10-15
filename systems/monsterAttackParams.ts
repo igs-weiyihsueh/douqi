@@ -193,6 +193,25 @@ export function monsterAttackSnapshot(): Readonly<Record<MonsterKind, MonsterAtt
   return attacks;
 }
 
+/**
+ * 套用一份怪物攻擊設定（匯入 / A/B 比較）：有列出的怪種換成它的設定（逐欄夾在合法範圍內），其他維持不變
+ *
+ * @param data 各怪種的設定（monsterAttackSnapshot 的格式）
+ * @returns 套用的怪種數
+ */
+export function applyMonsterAttacks(data: unknown): number {
+  if (!data || typeof data !== 'object') return 0;
+  const d = data as Record<string, unknown>;
+  let count = 0;
+  for (const { kind } of MONSTER_KINDS) {
+    if (!d[kind] || typeof d[kind] !== 'object') continue;
+    attacks[kind] = sanitizeMonsterAttack(kind, d[kind]);
+    count++;
+  }
+  saveMonsterAttacks();
+  return count;
+}
+
 /** 重新讀取存檔 */
 export function reloadMonsterAttacks(): void {
   attacks = loadMonsterAttacks();

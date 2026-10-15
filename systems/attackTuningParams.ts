@@ -313,6 +313,26 @@ export function attackTuningSnapshot(): { moveTimelines: Record<string, Readonly
   return { moveTimelines, meleeEnemyRange: meleeRange.meleeEnemyRange };
 }
 
+/**
+ * 套用一份設定（匯入 / A/B 比較）：有列出的招式換成它的打擊點（逐欄夾在合法範圍內），有近戰觸發距離就一併套用；其他維持不變
+ *
+ * @param data 設定（attackTuningSnapshot 的格式）
+ * @returns 套用的招式數、是否套用了近戰觸發距離
+ */
+export function applyAttackTuning(data: unknown): { moves: number; meleeRange: boolean } {
+  const d = (data ?? {}) as { moveTimelines?: Record<string, unknown>; meleeEnemyRange?: unknown };
+  let moves = 0;
+  for (const { move } of ATTACK_MOVES) {
+    const list = d.moveTimelines?.[move];
+    if (!Array.isArray(list) || list.length === 0) continue;
+    setMoveHitPoints(move, list as HitPoint[]);
+    moves++;
+  }
+  const meleeRangeOk = typeof d.meleeEnemyRange === 'number' && Number.isFinite(d.meleeEnemyRange);
+  if (meleeRangeOk) setMeleeEnemyRange(d.meleeEnemyRange as number);
+  return { moves, meleeRange: meleeRangeOk };
+}
+
 /** 重新讀取存檔（打擊點與近戰觸發距離） */
 export function reloadAttackTuning(): void {
   timelines = loadTimelines();

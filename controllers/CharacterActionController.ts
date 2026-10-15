@@ -99,6 +99,9 @@ interface SwingHits {
   rewardCounted: boolean;
 }
 
+/** 範圍 / 判定編輯器可以循環出招的招式 */
+export type LoopMove = 'attack1' | 'attack2' | 'circle' | 'line' | 'pierce';
+
 /** 普攻段數（兩段輪流，對應範圍 / 判定編輯器的普攻 1 / 2 與 P1 Spine 的 Attack01 / Attack02） */
 const MELEE_SEGMENTS = GameConfig.playerSpine.anims.attack.length;
 /** 近戰往前踏停的距離最多是判定範圍最遠處的這個比例（確保打得到鎖定的敵人） */
@@ -159,6 +162,34 @@ export class CharacterActionController {
     const jitter = Phaser.Math.Between(-GameConfig.bot.attackJitterMs, GameConfig.bot.attackJitterMs);
     bot.nextBotActAt = time + GameConfig.bot.attackIntervalMs + jitter;
     if (target) this.tryAct(bot, time);
+  }
+
+  /**
+   * 範圍 / 判定編輯器的循環出招：可以出手時（不在衝刺 / 招式演出 / 頓點 / 受擊硬直 / 冷卻中）朝目標放指定的招式，
+   * 普攻 1 / 2 原地揮對應的那一段、招式1 / 2 直接放出、一般衝刺朝目標衝過去；回傳是否有出手
+   *
+   * @param c 出手的角色
+   * @param move 招式（普攻 1 / 2、招式1 / 2、一般衝刺）
+   * @param target 朝向的目標（木樁）
+   * @param time 目前場景時間
+   */
+  performLoopMove(c: Character, move: LoopMove, target: { x: number; y: number }, time: number): boolean {
+    if (c.isBursting || c.isDashing || c.isSkillLocked(time) || c.isHitPaused(time) || c.isHurtStunned(time)) return false;
+    if (time < c.nextAttackAllowedAt) return false;
+    c.aimAngle = Phaser.Math.Angle.Between(c.x, c.y, target.x, target.y);
+    if (move === 'pierce') {
+      this.startDirectionDash(c, time);
+      return true;
+    }
+    if (move === 'circle' || move === 'line') {
+      c.readyCombo = move;
+      this.host.releaseReadyCombo(c, time);
+    } else {
+      c.attackStep = move === 'attack1' ? 0 : 1;
+      this.performMeleeArc(c, time);
+    }
+    c.nextAttackAllowedAt = time + this.attackCooldownMs();
+    return true;
   }
 
   /**
