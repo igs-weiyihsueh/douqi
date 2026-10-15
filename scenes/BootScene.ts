@@ -22,7 +22,7 @@ export class BootScene extends Phaser.Scene {
     }
     // 各敵人類型各一張貼圖
     const types = GameConfig.enemy.types;
-    // 普通怪：保留程式生成紋理用於F4切換
+    // 普通怪：保留程式生成紋理用於美術切換
     this.makeCircleTexture('enemy-normal', types.normal.radius, types.normal.color, types.normal.stroke);
     // 其他敵人類型仍使用程式生成的圓形
     this.makeCircleTexture('enemy-tank', types.tank.radius, types.tank.color, types.tank.stroke);
@@ -94,7 +94,7 @@ export class BootScene extends Phaser.Scene {
     // 載入二段變身皮膚：Goku_2.png (金色光環版本)
     this.load.image('character-goku-skin-2', 'assets/Goku_2.png');
     
-    // 載入怪物美術圖（F4 新美術）：骷髏戰士 = 肉怪、Skeleton_B = 一般兵、Ticket = 遠程怪
+    // 載入怪物美術圖（新美術）：骷髏戰士 = 肉怪、Skeleton_B = 一般兵、Ticket = 遠程怪
     this.load.image('skeleton-warrior', 'assets/skeleton-warrior.png');
     this.load.image('enemy-skeleton-b', 'assets/Skeleton_B.png');
     this.load.image('enemy-ticket', 'assets/Ticket.png');

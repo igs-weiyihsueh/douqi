@@ -182,7 +182,15 @@ export const GameConfig = {
   },
 
   /**
-   * 怪物 Spine 動畫（F4 新美術時取代該怪種的美術圖；碰撞、腳底佔位、AI 不變，只換外觀）：
+   * 新舊美術：newArtByDefault = 開局就用新美術（Scene.png 背景、P1 皮膚與 UI、怪物美術圖 / Spine）；toggleKey 切換新舊美術（Phaser 鍵名，例 'V'；不用 F 鍵，筆電常要按 Fn 才送得出來）
+   */
+  artStyle: {
+    newArtByDefault: true,
+    toggleKey: 'V'
+  },
+
+  /**
+   * 怪物 Spine 動畫（新美術時取代該怪種的美術圖；碰撞、腳底佔位、AI 不變，只換外觀）：
    * - tank：大怪 = EN01 骷髏兵（public/assets/spine/）。skins 依序疊加成一套外觀；scale 為顯示縮放；
    *   腳底對齊原美術圖的腳底再加 offsetY；facesRight = 原始動畫面向右
    * - 動畫：idle 待機 / move 走路（朝面向前進的實際位移速度超過 moveSpeedThreshold 像素/秒；被擋住走不動、被擊退或推擠往後退時算待機。
@@ -220,7 +228,7 @@ export const GameConfig = {
 
   /**
    * 敵人↔敵人碰撞分離（讓怪不再完全重疊擠成團）——照異靈藍圖：軟分離 steering(主力) + 硬 de-overlap(補刀)。
-   * 純幾何、不走 Phaser collider，config 可調手感。舊美術純俯視無縱深壓縮→圓形判定；F4 新美術改用腳底佔位橢圓（footprintFlatten / footprintSteerScale）。
+   * 純幾何、不走 Phaser collider，config 可調手感。舊美術純俯視無縱深壓縮→圓形判定；新美術改用腳底佔位橢圓（footprintFlatten / footprintSteerScale）。
    */
   enemySeparation: {
     /** 總開關 */
@@ -242,11 +250,11 @@ export const GameConfig = {
      */
     maxStepPx: 9,
     /**
-     * F4 新美術（側視站立圖）的地面佔位：腳寬由圖片自動量出（左右半徑），上下半徑 = 左右半徑 × footprintFlatten，
+     * 新美術（側視站立圖）的地面佔位：腳寬由圖片自動量出（左右半徑），上下半徑 = 左右半徑 × footprintFlatten，
      * 與慢速真空圈相同的透視壓扁（slow.vacuumFlatten）。中心在腳底，判定與真空圈同一基準。
      */
     footprintFlatten: 0.45,
-    /** F4 新美術的軟分離影響範圍 = 兩個佔位橢圓相加的邊界 × 此倍數（舊美術 radiusPx 44 ÷ 半徑和 28 ≈ 1.6） */
+    /** 新美術的軟分離影響範圍 = 兩個佔位橢圓相加的邊界 × 此倍數（舊美術 radiusPx 44 ÷ 半徑和 28 ≈ 1.6） */
     footprintSteerScale: 1.6
   },
 
@@ -1277,7 +1285,7 @@ export const GameConfig = {
     /** 無限關卡固定使用的場景配色（scene.levels 的 key；火山荒城主題） */
     sceneLevel: 1,
     /**
-     * 移動區(arena)尺寸:左右貼齊 slot(=F4 背景圖寬),上下扣掉背景圖的熔岩斷崖/岩石禁區。
+     * 移動區(arena)尺寸:左右貼齊 slot(=新美術背景圖寬),上下扣掉背景圖的熔岩斷崖/岩石禁區。
      * slot = (arenaW + 2×sceneMarginX) × (arenaH + sceneMarginTop + sceneMarginBottom) = 2520×1680,
      * 比畫面(1920×1080)大,鏡頭跟隨玩家在 slot 內捲動。
      */
@@ -1810,7 +1818,7 @@ export const GameConfig = {
       depth: 44
     },
     /**
-     * F4 新美術的命中特效放大：火花與刀光尺寸 × √(怪的顯示高度 / fxReferenceHeight)，上限 fxMaxScale。
+     * 新美術的命中特效放大：火花與刀光尺寸 × √(怪的顯示高度 / fxReferenceHeight)，上限 fxMaxScale。
      * 特效原本依舊美術小怪（約 32px）設計；舊美術外觀維持 1 倍
      */
     fxReferenceHeight: 32,

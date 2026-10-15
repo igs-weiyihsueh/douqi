@@ -6,7 +6,7 @@ import { HitSparks, hitPoseAt } from '../controllers/HitReactionFx';
 import { dashStretchMult, impactSquashAt } from '../controllers/DashFx';
 import { hitFeel } from '../systems/hitFeelParams';
 
-/** 示範用的敵人圖（F4 一般兵骷髏；原圖面向右） */
+/** 示範用的敵人圖（新美術一般兵骷髏；原圖面向右） */
 const ENEMY_TEXTURE = 'enemy-skeleton-b';
 
 /** 預覽版面（相對預覽區中心，px） */
@@ -173,7 +173,7 @@ export class HitFeelPreview {
       this.hitFired = true;
       const wx = this.container.x + enemyX;
       const wy = this.container.y + groundY - this.enemy.displayHeight / 2;
-      // 與遊戲中 F4 美術怪相同的特效放大規則（依顯示高度）
+      // 與遊戲中新美術怪相同的特效放大規則（依顯示高度）
       const j = GameConfig.juice;
       const sizeMult = Phaser.Math.Clamp(Math.sqrt(this.enemy.displayHeight / j.fxReferenceHeight), 1, j.fxMaxScale);
       if (p.streakEnabled === 1) this.fx.slashStreak(wx, wy, 0, false, this.depth + 3, sizeMult);

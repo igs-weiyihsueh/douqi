@@ -86,9 +86,9 @@ export class GameScene extends Phaser.Scene {
   /** P1 腳下圓盤（地面標記，畫在角色 / 敵人下方） */
   private footDiscGfx!: Phaser.GameObjects.Graphics;
 
-  /** F4 新舊美術切換（背景圖、P1 皮膚與覆蓋 UI、一般怪外觀），每次 create() 重建 */
+  /** 新舊美術切換（背景圖、P1 皮膚與覆蓋 UI、一般怪外觀），每次 create() 重建 */
   private artStyle!: ArtStyleController;
-  /** 怪物 Spine 外觀（F4 新美術時的大怪骨架動畫） */
+  /** 怪物 Spine 外觀（新美術時的大怪骨架動畫） */
   private enemySpine!: EnemySpineController;
 
   private survivalMs = 0;
@@ -283,7 +283,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // F4 新舊美術切換：需在 slot 佈局建立後，背景圖才能對齊各 slot
+    // 新舊美術切換：需在 slot 佈局建立後，背景圖才能對齊各 slot
     this.enemySpine = new EnemySpineController(this, {
       artEnemies: () => this.artStyle.enemyLookIsArt(),
       isTimeStopped: () => this.timeStopped
@@ -361,8 +361,9 @@ export class GameScene extends Phaser.Scene {
     // 開場只有 P1 一人。BOT 由按 B 逐一加入（見 tryAddBot）。
     this.createCharacter(0, false);
 
-    // F4 用的 P1 皮膚與頭上覆蓋圖（需在 P1 建立後）
+    // 新美術用的 P1 皮膚與頭上覆蓋圖（需在 P1 建立後）
     this.artStyle.createPlayerOverlays();
+    this.artStyle.applyDefaultLook();
     this.prewarmEnemyPool();
 
     // 方案e:玩家建立後啟用鏡頭跟隨(限制在 A slot 內、deadzone 緩衝)。
@@ -2106,7 +2107,7 @@ export class GameScene extends Phaser.Scene {
         if (joinsEnemySeparation(e)) separators.push(e);
       }
       // 軟分離（改移動方向）為主，硬分離（推開殘留重疊）補刀
-      // F4 新美術外觀的怪改用腳底佔位橢圓（舊美術查不到佔位，維持圓形判定）
+      // 新美術外觀的怪改用腳底佔位橢圓（舊美術查不到佔位，維持圓形判定）
       const footprintOf = (e: Enemy) => this.artStyle.enemyFootprint(e);
       separateEnemies(separators, this.arena, footprintOf);
     }
@@ -2590,7 +2591,7 @@ export class GameScene extends Phaser.Scene {
 
   /**
    * 角色的真空圈：大小 / 扁度 / 偏移取自角色編輯器參數，中心在角色腳底 + 偏移。
-   * 腳底依目前顯示的圖像（P1 新美術用皮膚）；敵人腳底依自己的紋理與縮放，F4 外觀的怪以地面佔位的腳寬碰圈
+   * 腳底依目前顯示的圖像（P1 新美術用皮膚）；敵人腳底依自己的紋理與縮放，新美術外觀的怪以地面佔位的腳寬碰圈
    *
    * @param c 角色
    */
@@ -2607,7 +2608,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * 命中特效（火花、刀光）的尺寸倍率：F4 新美術外觀的怪依顯示高度放大（√ 比例、有上限），舊美術外觀為 1
+   * 命中特效（火花、刀光）的尺寸倍率：新美術外觀的怪依顯示高度放大（√ 比例、有上限），舊美術外觀為 1
    *
    * @param enemy 被打的怪
    */
@@ -2701,7 +2702,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * 怪生成時應使用的外觀（Enemy.spawn 查詢；隨 F4 切換）；沒有新美術外觀的怪種回傳 null
+   * 怪生成時應使用的外觀（Enemy.spawn 查詢；隨美術切換）；沒有新美術外觀的怪種回傳 null
    *
    * @param type 怪種
    */

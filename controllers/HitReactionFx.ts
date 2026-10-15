@@ -57,7 +57,7 @@ export class HitSparks {
    * @param y 命中點 y
    * @param angle 噴發方向（弧度）
    * @param empowered 強化攻擊（金色、數量 × empoweredCountMult）
-   * @param sizeMult 尺寸倍率（大小與飛行速度一起放大；F4 大圖用）
+   * @param sizeMult 尺寸倍率（大小與飛行速度一起放大；新美術大圖用）
    */
   emit(x: number, y: number, angle: number, empowered: boolean, sizeMult = 1): void {
     const p = hitFeel();
@@ -152,7 +152,7 @@ export class HitReactionFx {
    * @param fromX 攻擊來源 x（火花往遠離來源的方向噴）
    * @param fromY 攻擊來源 y
    * @param empowered 是否為強化攻擊（金色、數量加倍）
-   * @param sizeMult 火花尺寸倍率（F4 大圖用，見 GameScene.hitFxScale）
+   * @param sizeMult 火花尺寸倍率（新美術大圖用，見 GameScene.hitFxScale）
    */
   onEnemyHit(enemy: Enemy, fromX: number, fromY: number, empowered: boolean, sizeMult = 1): void {
     this.sparks.emit(enemy.x, enemy.y, Math.atan2(enemy.y - fromY, enemy.x - fromX), empowered, sizeMult);

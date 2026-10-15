@@ -111,7 +111,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
   private burstMark!: Phaser.GameObjects.Text;
   /** 爆標記脈動 tween */
   private burstMarkTween?: Phaser.Tweens.Tween;
-  /** F4 新美術下隱藏舊美術的名稱標籤、腳下血條 / 鬥氣條與「爆」標記（新美術改用覆蓋圖 UI） */
+  /** 新美術下隱藏舊美術的名稱標籤、腳下血條 / 鬥氣條與「爆」標記（新美術改用覆蓋圖 UI） */
   private legacyUiHidden = false;
   /** 被定身時的「定身!」提示 + 鎖鏈環（讓玩家知道為何不能動） */
   private rootMark!: Phaser.GameObjects.Text;
@@ -266,7 +266,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * 切換舊美術頭上 / 腳下 UI（名稱標籤、腳下血條 / 鬥氣條、「爆」標記）的顯示：F4 新美術時隱藏、舊美術時恢復。
+   * 切換舊美術頭上 / 腳下 UI（名稱標籤、腳下血條 / 鬥氣條、「爆」標記）的顯示：新美術時隱藏、舊美術時恢復。
    * 「定身!」狀態提示不受影響
    *
    * @param hidden 是否隱藏
@@ -288,7 +288,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
     }
   }
 
-  /** F4 新美術時把舊美術 UI 元件設為隱藏（其他流程可能把它們設回顯示，每幀 syncLabel 結尾再套一次） */
+  /** 新美術時把舊美術 UI 元件設為隱藏（其他流程可能把它們設回顯示，每幀 syncLabel 結尾再套一次） */
   private hideLegacyUi(): void {
     if (!this.legacyUiHidden) return;
     for (const o of [this.label, this.hpBarBg, this.hpBar, this.spiritBarBg, this.spiritBar]) o.setVisible(false);

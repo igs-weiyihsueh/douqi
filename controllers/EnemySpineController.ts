@@ -42,14 +42,14 @@ interface EnemySpineView {
 
 /** 控制器需要的場景資訊 */
 export interface EnemySpineHost {
-  /** 目前是否用新美術（F4）：只有新美術才顯示 Spine 動畫 */
+  /** 目前是否用新美術（美術切換）：只有新美術才顯示 Spine 動畫 */
   artEnemies(): boolean;
   /** 時停中（動畫暫停） */
   isTimeStopped(): boolean;
 }
 
 /**
- * 怪物 Spine 外觀（GameConfig.enemySpine）：F4 新美術時，有 Spine 素材的怪種（目前為大怪）隱藏原本的美術圖，
+ * 怪物 Spine 外觀（GameConfig.enemySpine）：新美術時，有 Spine 素材的怪種（目前為大怪）隱藏原本的美術圖，
  * 改由一個 Spine 動畫物件跟著怪的位置、深度、面向與透明度（登場閃爍）顯示，並依怪的狀態切換動畫：
  * 被打（血量下降）播 hit、蓄力播 chargeIn → chargeLoop、蓄力完出手播 attack、移動中 move、其餘 idle；
  * 怪死亡時原地播 die 後淡出。碰撞、腳底佔位與 AI 仍由原本的 Enemy 處理，這裡只管畫面

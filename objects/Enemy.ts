@@ -7,7 +7,7 @@ export type BossSkillKind = 'a' | 'b' | 'c';
 
 export type EnemyType = 'normal' | 'tank' | 'bomber' | 'boss' | 'tower' | 'npc' | 'treasure';
 
-/** 提供怪物外觀的場景（GameScene）：依 F4 新舊美術回傳一般兵 / 肉怪 / 遠程怪的紋理，其他怪種為 null */
+/** 提供怪物外觀的場景（GameScene）：依新舊美術回傳一般兵 / 肉怪 / 遠程怪的紋理，其他怪種為 null */
 interface EnemyLookProvider {
   getEnemyLook?(type: EnemyType): { texture: string; scale: number } | null;
 }
@@ -213,7 +213,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.bodyRadius = t.radius;
     }
 
-    // 設定紋理：一般兵 / 肉怪 / 遠程怪依 F4 新舊美術（GameScene 查詢），其餘怪種用 enemy-{type}
+    // 設定紋理：一般兵 / 肉怪 / 遠程怪依新舊美術（GameScene 查詢），其餘怪種用 enemy-{type}
     const look = (this.scene as unknown as EnemyLookProvider).getEnemyLook?.(type) ?? null;
     if (look) this.setLook(look.texture, look.scale);
     else this.setLook(`enemy-${type}`, 1);
@@ -804,7 +804,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * 換外觀：設定紋理與基準縮放（之後的縮放復原都回到這個值；F4 切換一般怪外觀也走這裡）
+   * 換外觀：設定紋理與基準縮放（之後的縮放復原都回到這個值；美術切換一般怪外觀也走這裡）
    *
    * @param texture 紋理 key
    * @param scale 基準縮放

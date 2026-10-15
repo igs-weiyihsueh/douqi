@@ -21,7 +21,7 @@ export interface ArtStyleHost {
   backgroundRects(): Phaser.Geom.Rectangle[];
 }
 
-/** F4 場景背景圖（Scene.png）的紋理 key */
+/** 新美術場景背景圖（Scene.png）的紋理 key */
 export const SCENE_BG_TEXTURE_KEY = 'scene-background';
 /** F2 強制重載 Scene.png 的路徑（會加 timestamp 防快取） */
 const SCENE_BG_RELOAD_URL = 'assets/Scene.png';
@@ -42,7 +42,7 @@ const ENEMY_TICKET_TEXTURE = 'enemy-ticket';
 const TEXTURES_FACING_LEFT: ReadonlySet<string> = new Set([SKIN_TEXTURE, SKIN_EMPOWERED_TEXTURE]);
 /** P1 頭上覆蓋圖（1P 與積分），與頭上 UI 系統使用相同的位置基準（headAnchorY） */
 const UI_OVERLAY_TEXTURE = 'character-ui-overlay';
-/** 一般怪種的兩種外觀：新美術圖（F4）/ 舊版程式繪製圓形 */
+/** 一般怪種的兩種外觀：新美術圖/ 舊版程式繪製圓形 */
 const ENEMY_LOOKS = {
   normal: { art: { texture: ENEMY_SKELETON_B_TEXTURE, scale: 1.0 }, classic: { texture: 'enemy-normal', scale: 1.0 } },
   tank: { art: { texture: ENEMY_SKELETON_WARRIOR_TEXTURE, scale: 1.0 }, classic: { texture: 'enemy-tank', scale: 1.0 } },
@@ -57,11 +57,11 @@ const UI_RETRY_MAX = 5;
 const UI_RETRY_MS = 100;
 
 /**
- * F4 新舊美術切換：
+ * 新舊美術切換（開局預設依 GameConfig.artStyle.newArtByDefault）：
  * - 新美術：顯示 Scene.png 背景、P1 皮膚與頭上覆蓋圖、怪物改用美術圖（一般兵骷髏 / 肉怪骷髏戰士 / 遠程票券幽靈），並隱藏原 P1 頭頂 UI、改用 1P.png 底部面板
  * - 舊美術：還原程式繪製場景與原 UI
  *
- * 熱鍵：F4 = 全部切換、F6 = 只切背景、F2 = 強制重載 Scene.png
+ * 熱鍵：GameConfig.artStyle.toggleKey（V）= 全部切換、F6 = 只切背景、F2 = 強制重載 Scene.png
  */
 export class ArtStyleController {
   /** 場景背景圖，關卡制為 [左, 中, 右] 三張 */
@@ -83,11 +83,11 @@ export class ArtStyleController {
     return this.host.scene;
   }
 
-  /** 建立背景圖並註冊 F4 / F6 / F2 熱鍵（slot 佈局建立後呼叫） */
+  /** 建立背景圖並註冊美術切換（artStyle.toggleKey）/ F6 / F2 熱鍵（slot 佈局建立後呼叫） */
   createBackgrounds(): void {
     this.buildBackgrounds();
     const keyboard = this.scene.input.keyboard;
-    keyboard?.on('keydown-F4', () => {
+    keyboard?.on(`keydown-${GameConfig.artStyle.toggleKey}`, () => {
       this.toggleBackground();
       this.toggleEnemyLook();
     });
@@ -99,7 +99,7 @@ export class ArtStyleController {
   createPlayerOverlays(): void {
     const p = this.host.player();
     const textures = this.scene.textures;
-    // 新美術圖的腳底 / 腳寬開局就先量好，F4 切換與二段變身時不必當場量
+    // 新美術圖的腳底 / 腳寬開局就先量好，美術切換與二段變身時不必當場量
     warmFeetMetrics(textures, [SKIN_TEXTURE, SKIN_EMPOWERED_TEXTURE, ...ENEMY_ART_TEXTURES]);
     if (textures.exists(SKIN_TEXTURE)) {
       this.skin = this.scene.add.image(p.x, p.y, SKIN_TEXTURE).setDepth(p.depth + OVERLAY_DEPTH_STEP).setVisible(false);
@@ -112,6 +112,13 @@ export class ArtStyleController {
     } else {
       console.warn(`⚠️ 角色 UI 覆蓋資源不存在：${UI_OVERLAY_TEXTURE}`);
     }
+  }
+
+  /** 開局套用預設外觀：GameConfig.artStyle.newArtByDefault 時直接切到新美術（背景、P1 皮膚與 UI、怪物外觀；P1 皮膚與 UI 建立後呼叫） */
+  applyDefaultLook(): void {
+    if (!GameConfig.artStyle.newArtByDefault || this.active) return;
+    this.toggleBackground();
+    this.toggleEnemyLook();
   }
 
   /**
@@ -221,7 +228,7 @@ export class ArtStyleController {
   }
 
   /**
-   * 敵人在地面上的佔位橢圓（敵人間碰撞用）：只有 F4 新美術外觀的怪才有，依圖片腳寬自動計算；
+   * 敵人在地面上的佔位橢圓（敵人間碰撞用）：只有新美術外觀的怪才有，依圖片腳寬自動計算；
    * 舊美術外觀回傳 null，沿用中心 + 身體半徑的圓
    *
    * @param e 敵人
@@ -237,13 +244,13 @@ export class ArtStyleController {
     };
   }
 
-  /** 怪物目前是否用新美術外觀（F4；Spine 動畫只在新美術時顯示） */
+  /** 怪物目前是否用新美術外觀（Spine 動畫只在新美術時顯示） */
   enemyLookIsArt(): boolean {
     return this.artEnemies;
   }
 
   /**
-   * 怪生成時應使用的外觀（Enemy.spawn 透過 GameScene 查詢）：一般兵 / 肉怪 / 遠程怪依 F4 用新美術圖或舊版圓形；
+   * 怪生成時應使用的外觀（Enemy.spawn 透過 GameScene 查詢）：一般兵 / 肉怪 / 遠程怪依美術切換用新美術圖或舊版圓形；
    * 其他怪種（BOSS、塔等）回傳 null，沿用 enemy-{type}
    *
    * @param type 怪種
@@ -264,7 +271,7 @@ export class ArtStyleController {
       .map((rect) => createCoverImage(this.scene, SCENE_BG_TEXTURE_KEY, rect, SCENE_BG_DEPTH, this.active && !this.backgroundSuppressed));
   }
 
-  /** 切換新舊背景與 P1 覆蓋 UI（F4 / F6） */
+  /** 切換新舊背景與 P1 覆蓋 UI（美術切換 / F6） */
   private toggleBackground(): void {
     if (this.backgrounds.length === 0) this.buildBackgrounds(); // 紋理晚到時補建
     if (this.backgrounds.length === 0) {
@@ -308,7 +315,7 @@ export class ArtStyleController {
     this.uiOverlay?.setVisible(this.active && shown);
   }
 
-  /** 切換怪物外觀（新美術圖 / 舊版圓形），並套用到場上現有的一般兵、肉怪、遠程怪（F4） */
+  /** 切換怪物外觀（新美術圖 / 舊版圓形），並套用到場上現有的一般兵、肉怪、遠程怪（美術切換） */
   private toggleEnemyLook(): void {
     this.artEnemies = !this.artEnemies;
     for (const child of this.host.enemies().getChildren()) {
@@ -340,7 +347,7 @@ export class ArtStyleController {
     const ui = this.scene.scene.get('UIScene') as unknown as UiSceneHandle | null;
     const fn = ui?.[method];
     if (!ui || typeof fn !== 'function') {
-      console.error(`❌ [F4 切換] UIScene.${method} 不存在`);
+      console.error(`❌ [美術切換] UIScene.${method} 不存在`);
       return;
     }
     if (isReady(ui)) {
@@ -348,12 +355,12 @@ export class ArtStyleController {
     } else if (attempt < UI_RETRY_MAX) {
       this.scene.time.delayedCall(UI_RETRY_MS, () => this.callUiWhenReady(method, isReady, value, attempt + 1));
     } else {
-      console.error(`❌ [F4 切換] UIScene.${method} 重試次數已達上限`);
+      console.error(`❌ [美術切換] UIScene.${method} 重試次數已達上限`);
     }
   }
 }
 
-/** F4 切換用到的 UIScene 成員（UIScene 的這些成員為私有，這裡只描述執行期的形狀） */
+/** 美術切換用到的 UIScene 成員（UIScene 的這些成員為私有，這裡只描述執行期的形狀） */
 interface UiSceneHandle {
   overheadUIs?: Map<number, unknown>;
   rows?: unknown[];

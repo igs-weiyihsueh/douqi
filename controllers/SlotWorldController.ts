@@ -34,7 +34,7 @@ export interface SlotWorldHost {
   hiddenGate(): HiddenGateController;
   /** 共用的寶藏密室 buffer 是否已存夠一次的加碼預算（存夠才開隱藏入口） */
   treasureRoomFunded(): boolean;
-  /** F4 背景圖：身後那張搬到前方新 slot */
+  /** 新美術背景圖：身後那張搬到前方新 slot */
   recycleBackground(side: Side, aheadSlot: Phaser.Geom.Rectangle): void;
   /** 清除所有角色的衝刺與速度（轉場會直接搬動角色座標） */
   resetCharacterMotion(): void;
@@ -179,7 +179,7 @@ export class SlotWorldController {
     return this.slotA;
   }
 
-  /** 三格（左鄰、中央、右鄰），F4 背景圖對齊用 */
+  /** 三格（左鄰、中央、右鄰），新美術背景圖對齊用 */
   get slots(): Phaser.Geom.Rectangle[] {
     return [this.slotBLeft, this.slotA, this.slotBRight];
   }
@@ -752,7 +752,7 @@ export class SlotWorldController {
   /**
    * 把 side 側的格重新標記為中央：
    * - 原中央變成反側鄰格（場景物件保留，畫面不變）
-   * - 身後最遠的格回收（場景物件銷毀、F4 背景圖搬到前方新格重用）
+   * - 身後最遠的格回收（場景物件銷毀、新美術背景圖搬到前方新格重用）
    * - 前方新增一格並繪製場景（變體 = 新中央的另一種）
    * - 走廊：中央與身後鄰格之間那條保留為反側走廊，前方走廊下次開放時再畫
    *

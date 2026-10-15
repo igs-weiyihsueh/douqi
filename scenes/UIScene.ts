@@ -186,7 +186,7 @@ export class UIScene extends Phaser.Scene {
   private panelCoinBars: CoinBonusBar[] = [];
   /** 最近一次 stats 的角色資料（投幣光效追蹤角色位置用） */
   private lastChars: CharStat[] = [];
-  /** 下方面板 COMBO 顯示設定：HIT 顯示與投幣提示的左下角錨點，原版色塊面板與 F4 面板圖各有一組位置 */
+  /** 下方面板 COMBO 顯示設定：HIT 顯示與投幣提示的左下角錨點，原版色塊面板與美術版面板圖各有一組位置 */
   private readonly PANEL_COMBO_CONFIG = {
     FONT_SIZE: '36px',
     STROKE_WIDTH: 4,
@@ -196,16 +196,16 @@ export class UIScene extends Phaser.Scene {
     CLASSIC_OFFSET_X: 0,
     CLASSIC_OFFSET_Y: -2,
     /**
-     * F4 面板圖：相對面板圖左上角的位置（面板圖原尺寸像素）——左緣對齊彩票欄左緣（x 91），
+     * 美術版面板圖：相對面板圖左上角的位置（面板圖原尺寸像素）——左緣對齊彩票欄左緣（x 91），
      * 下緣在彩票欄上緣（y 66）上方 4px；彩票欄上方是透明區，左邊的頭像在 x 98 以內，不會蓋到面板。
      * 膠囊寬 269（5 格）：右端在面板左緣 + 360，小於面板間距（267 + 150），不會蓋到下一位的面板
      */
     OVERLAY_OFFSET_X: 91,
     OVERLAY_OFFSET_Y: 62,
-    /** F4 面板圖彩票欄的中心（相對面板圖左上角，面板圖原尺寸像素；關卡結算的彩票飛到這裡） */
+    /** 美術版面板圖彩票欄的中心（相對面板圖左上角，面板圖原尺寸像素；關卡結算的彩票飛到這裡） */
     OVERLAY_TICKET_FIELD_X: 165,
     OVERLAY_TICKET_FIELD_Y: 88,
-    /** 高於 F4 面板圖（depth 1000+i） */
+    /** 高於美術版面板圖（depth 1000+i） */
     DEPTH: 1010,
     /** 「獲得N票券！」文字樣式與動畫 */
     REWARD_TEXT_FONT_SIZE: '42px',
@@ -342,7 +342,7 @@ export class UIScene extends Phaser.Scene {
       }
     });
     this.overheadUIs.clear();
-    // F4 覆蓋模式隨 GameScene 重開回到預設(關閉),否則重開後 P1 頭頂 UI 會維持隱藏
+    // 新美術覆蓋模式隨 GameScene 重開回到預設(關閉),否則重開後 P1 頭頂 UI 會維持隱藏
     this.isP1HeadUIHidden = false;
     const w = GameConfig.width;
     const h = GameConfig.height;
@@ -567,7 +567,7 @@ export class UIScene extends Phaser.Scene {
       });
     }
 
-    // 下方面板 COMBO 文字（需在 rows 與 F4 面板圖建立後，才能對齊兩種面板）
+    // 下方面板 COMBO 文字（需在 rows 與美術版面板圖建立後，才能對齊兩種面板）
     this.createPanelCombos();
 
     this.aimGraphics = this.add.graphics().setDepth(-1); // 衝刺距離指示線（腳下圓盤由 GameScene 畫）
@@ -1640,7 +1640,7 @@ export class UIScene extends Phaser.Scene {
   }
 
   /**
-   * 角色下方面板彩票欄的中心：F4 面板圖顯示中用面板圖上的彩票欄，否則用原版色塊面板的彩票數小框
+   * 角色下方面板彩票欄的中心：美術版面板圖顯示中用面板圖上的彩票欄，否則用原版色塊面板的彩票數小框
    *
    * @param index 角色索引（對應 rows）
    * @returns 畫面座標；該角色沒有面板時為 null
@@ -1661,7 +1661,7 @@ export class UIScene extends Phaser.Scene {
   /**
    * 在下方面板播放 COMBO 報獎特效：彩票噴發 + 閃光 + 「獲得N票券！」文字
    *
-   * 位置在該角色 HIT 顯示的底圖中心（已隨 F4 面板模式定位）
+   * 位置在該角色 HIT 顯示的底圖中心（已隨面板模式定位）
    *
    * @param index 角色索引（對應 panelHitCounters）
    * @param tickets 獲得的票券數量
@@ -1859,7 +1859,7 @@ export class UIScene extends Phaser.Scene {
    * 創建1P、2P、3P、4P的底部面板覆蓋UI
    * - 每個角色使用獨立的覆蓋圖片 (1P.png, 2P.png, 3P.png, 4P.png)
    * - 精確定位到對應角色的原始面板位置
-   * - 初始隱藏，由F4切換統一控制所有角色
+   * - 初始隱藏，由美術切換統一控制所有角色
    */
   private initMultiPlayerBottomPanelOverlays(): void {
     const w = GameConfig.width;
@@ -1919,7 +1919,7 @@ export class UIScene extends Phaser.Scene {
 
   /**
    * 建立下方面板的 HIT 連擊顯示與投幣加入提示（每個角色各一，預設隱藏），先對齊原版色塊面板；
-   * F4 切換時由 setBottomPanelOverlay → positionPanelCombos 重新定位
+   * 美術切換時由 setBottomPanelOverlay → positionPanelCombos 重新定位
    */
   private createPanelCombos(): void {
     const cfg = this.PANEL_COMBO_CONFIG;
@@ -1945,9 +1945,9 @@ export class UIScene extends Phaser.Scene {
   }
 
   /**
-   * 依面板模式把多投多送量條（左下角）移到對應面板上方（F4 面板圖時在彩票欄上方），HIT 顯示與投幣提示疊在量條上方
+   * 依面板模式把多投多送量條（左下角）移到對應面板上方（美術版面板圖時在彩票欄上方），HIT 顯示與投幣提示疊在量條上方
    *
-   * @param useOverlay - true = F4 面板圖；false = 原版色塊面板（該角色沒有面板圖時也退回原版位置）
+   * @param useOverlay - true = 美術版面板圖；false = 原版色塊面板（該角色沒有面板圖時也退回原版位置）
    */
   private positionPanelCombos(useOverlay: boolean): void {
     const cfg = this.PANEL_COMBO_CONFIG;

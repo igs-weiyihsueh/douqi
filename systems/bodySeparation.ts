@@ -67,7 +67,7 @@ function isWallLike(e: Enemy): boolean {
 }
 
 /**
- * 敵人在地面上的佔位橢圓（F4 新美術的側視站立圖用）：中心在腳底，左右半徑 rx、上下半徑 ry
+ * 敵人在地面上的佔位橢圓（新美術的側視站立圖用）：中心在腳底，左右半徑 rx、上下半徑 ry
  */
 export interface GroundFootprint {
   /** 腳底離敵人中心的垂直距離 */
@@ -201,7 +201,7 @@ export function separateEnemies(agents: ReadonlyArray<Enemy>, arena: Phaser.Geom
  * 與敵人目前的移動方向（先正規化）合成新方向，只改方向、保留速度大小。
  * 移動方向一定要先正規化，否則遠距追擊的速度會蓋過分離力，怪還是疊成一團。
  * 像牆的怪與站定（速度 ≈ 0）的怪不改向，交給硬分離處理。
- * 影響範圍：圓形對圓形為 radiusPx；有地面佔位（F4 新美術）時為兩個佔位橢圓相加的邊界 × footprintSteerScale
+ * 影響範圍：圓形對圓形為 radiusPx；有地面佔位（新美術）時為兩個佔位橢圓相加的邊界 × footprintSteerScale
  *
  * @param agent 要調整方向的敵人
  * @param neighbors 附近的其他敵人（原陣列順序）
@@ -349,7 +349,7 @@ export interface VacuumZone {
   flatten: number;
   /** 敵人腳底離敵人中心的垂直距離 */
   enemyFoot(e: Enemy): number;
-  /** 敵人的地面佔位（F4 新美術）；有值時以佔位橢圓的腳寬碰圈，null = 以身體半徑碰圈 */
+  /** 敵人的地面佔位（新美術）；有值時以佔位橢圓的腳寬碰圈，null = 以身體半徑碰圈 */
   enemyFootprint: FootprintOf;
 }
 
@@ -379,7 +379,7 @@ export function vacuumGap(c: Character, e: Enemy, zone: VacuumZone): { gap: numb
   const cx = c.x + zone.offsetX, cy = c.y + zone.offsetY;
   const fp = zone.enemyFootprint(e);
   if (fp) {
-    // F4 新美術：圈 + 佔位橢圓相加的邊界（腳尖剛好碰到圈線），與敵人間碰撞同一份佔位資料
+    // 新美術：圈 + 佔位橢圓相加的邊界（腳尖剛好碰到圈線），與敵人間碰撞同一份佔位資料
     const { nx, ny, d } = normalBetween(cx, cy, e.x, e.y + fp.footY);
     const a = zone.radius + fp.rx, b = zone.radius * zone.flatten + fp.ry;
     return { gap: d - (a * b) / Math.hypot(b * nx, a * ny), nx, ny };
