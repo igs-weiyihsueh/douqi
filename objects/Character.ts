@@ -85,7 +85,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
   cutInVelocityY = 0;
   /** 本次衝刺是否為強化攻擊（慢速模式二段變身）：撞到敵人時以它為中心炸圓形 AOE，而不是單體普攻 */
   dashEmpowerStrike = false;
-  /** 切入的目標：目標死亡 / 消失時立即停下（沒有東西可「陷入」就不滑行） */
+  /** 切入的目標：目標死亡 / 消失時結束切入（強化衝刺停下、一般衝刺繼續穿透；沒有東西可「陷入」就不滑行） */
   cutInTarget: { readonly active: boolean; readonly dead: boolean } | null = null;
   /** 目前瞄準角度（弧度） */
   aimAngle = 0;

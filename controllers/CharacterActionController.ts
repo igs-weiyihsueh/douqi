@@ -122,6 +122,8 @@ export class CharacterActionController {
    * 到點後敵人仍在劍氣範圍內就補一刀（finishAttackDash）；結束衝刺時清除
    */
   private readonly attackDashTargets = new Map<Character, Enemy>();
+  /** 各角色這一次衝刺已穿透打過的敵人（一般衝刺途中碰到的每隻怪各打一次；開始衝刺時清空） */
+  private readonly dashPiercedEnemies = new Map<Character, Set<Enemy>>();
 
   constructor(private readonly host: CharacterActionHost) {}
 
@@ -283,7 +285,7 @@ export class CharacterActionController {
   }
 
   /**
-   * 普攻衝刺結束時沒撞到目標：目標仍可傷且在劍氣半徑內就面向它揮一刀（場地邊緣的敵人也打得到）
+   * 普攻衝刺結束時沒撞到目標（這次衝刺沒穿透打到它）：目標仍可傷且在劍氣半徑內就面向它揮一刀（場地邊緣的敵人也打得到）
    *
    * @param c 結束衝刺的角色
    * @param time 目前場景時間
@@ -291,7 +293,7 @@ export class CharacterActionController {
   private finishAttackDash(c: Character, time: number): void {
     const target = this.attackDashTargets.get(c);
     this.attackDashTargets.delete(c);
-    if (!target || !target.active || !target.isVulnerable()) return;
+    if (!target || !target.active || !target.isVulnerable() || this.dashPiercedEnemies.get(c)?.has(target)) return;
     const aim = Phaser.Math.Angle.Between(c.x, c.y, target.x, target.y);
     const points = moveHitPoints(meleeMove(c.attackStep % MELEE_SEGMENTS));
     if (!points.some((p) => hitShapeContains(placeHitShape(p.shape, c.x, c.y, aim), target.x, target.y))) return;
@@ -580,6 +582,7 @@ export class CharacterActionController {
     c.isDashing = true;
     c.dashToItem = toItem;
     this.dashHitBreakables.get(c)?.clear();
+    this.dashPiercedEnemies.get(c)?.clear();
     c.nextAttackAllowedAt = time + this.attackCooldownMs();
     if (GameConfig.player.dashShieldInvuln) c.dashShielded = true;
     c.showDashShield(true);
@@ -600,8 +603,9 @@ export class CharacterActionController {
   }
 
   /**
-   * 每幀推進衝刺：P1 撞到路上的可破壞物件（每個物件一次衝刺只算一下，撞到就算一下 HIT）；一般衝刺撞到敵人停下攻擊（BOSS / 塔停在外緣）；
-   * 否則朝固定終點前進（方向不隨滑鼠改變），到點停下
+   * 每幀推進衝刺：P1 撞到路上的可破壞物件（每個物件一次衝刺只算一下，撞到就算一下 HIT）；
+   * 一般衝刺穿透途中碰到的敵人（每隻打一次，見 pierceEnemies），撞到 BOSS / 塔才停在外緣；
+   * 二段強化衝刺撞到第一隻敵人炸 AOE 後切入停下；否則朝固定終點前進（方向不隨滑鼠改變），到點停下
    *
    * @param c 角色
    * @param time 目前場景時間
@@ -616,32 +620,38 @@ export class CharacterActionController {
       }
       if (this.host.hitBreakablesInRange(c, GameConfig.aim.dashHitRadius, 0, false, time, hitSet) > 0) this.host.triggerComboHit(c);
     }
-    // 切入中：以減速繼續陷入敵人，時間到才停下（不再判定撞擊，避免同一次衝刺連打）
+    const dashSpeed = this.currentDashSpeed(c, time);
+    const piercing = !c.dashToItem && !c.dashEmpowerStrike;
+    // 切入中：以減速繼續陷入敵人（強化衝刺不再判定撞擊，避免同一次衝刺連打；穿透衝刺照樣打碰到的其他怪）
     if (c.cutInUntil > 0) {
       const target = c.cutInTarget;
       if (time < c.cutInUntil && target && target.active && !target.dead) {
         // 撞擊停頓中完全停住，之後才以切入速度陷入
         const paused = time < c.cutInPauseUntil;
         (c.body as Phaser.Physics.Arcade.Body).setVelocity(paused ? 0 : c.cutInVelocityX, paused ? 0 : c.cutInVelocityY);
+        if (piercing) this.pierceEnemies(c, dashSpeed, time);
         return;
       }
-      c.stopMoving();
-      this.endDashState(c);
-      return;
+      if (!piercing) {
+        this.endDashState(c);
+        return;
+      }
+      // 穿透衝刺：切入結束後繼續衝向終點
+      c.cutInUntil = 0;
+      c.cutInTarget = null;
     }
-    const dashSpeed = this.currentDashSpeed(c, time);
-    if (!c.dashToItem) {
-      const hitRadius = GameConfig.aim.dashHitRadius;
-      const hit = this.targeting.findFirstEnemyInRangeOf(c, hitRadius);
+    if (piercing && this.pierceEnemies(c, dashSpeed, time)) return;
+    if (c.dashEmpowerStrike && !c.dashToItem) {
+      const hit = this.targeting.findFirstEnemyInRangeOf(c, GameConfig.aim.dashHitRadius);
       if (hit) {
         c.stopMoving();
         c.dashImpactAt = time;
-        if (c.dashEmpowerStrike) this.host.empowerStrike(c, hit.x, hit.y, time);
-        else this.host.performAttackOn(c, hit, time);
+        this.host.empowerStrike(c, hit.x, hit.y, time);
         if (isStructureEnemy(hit)) {
           standCharacterOutside(c, hit, this.host.arena());
           this.endDashState(c);
         } else {
+          this.spawnDashStreak(c, hit, time);
           this.beginCutIn(c, hit, dashSpeed, time);
         }
         return;
@@ -682,8 +692,69 @@ export class CharacterActionController {
   }
 
   /**
-   * 衝刺撞到敵人：開始「切入」——先撞擊停頓（完全停住），再以減速沿衝刺方向陷入一小段才停（刀切進肉的阻力感），並畫刀光。
-   * 只影響攻擊者自己，且發生在普攻冷卻內，不延遲任何輸入；關閉時、或這一擊（或切入途中）怪已死亡時立即停下
+   * 一般衝刺的穿透：碰到的敵人（衝刺判定半徑 + 敵人身體半徑內）這次衝刺還沒打過的，各受一下普攻傷害與擊退、畫刀光；
+   * 這次衝刺第一次打中時算一次連段與 HIT 並切入（撞擊停頓 → 減速陷入 → 繼續衝刺）。撞到 BOSS / 塔就攻擊並停在它外緣、結束衝刺
+   *
+   * @param c 衝刺中的角色
+   * @param dashSpeed 目前的衝刺速度
+   * @param time 目前場景時間
+   * @returns 衝刺是否因此結束
+   */
+  private pierceEnemies(c: Character, dashSpeed: number, time: number): boolean {
+    let pierced = this.dashPiercedEnemies.get(c);
+    if (!pierced) {
+      pierced = new Set();
+      this.dashPiercedEnemies.set(c, pierced);
+    }
+    const hits: Enemy[] = [];
+    for (const child of this.host.enemies().getChildren()) {
+      const enemy = child as Enemy;
+      if (pierced.has(enemy) || !enemy.isVulnerable()) continue;
+      if (Math.hypot(enemy.x - c.x, enemy.y - c.y) > GameConfig.aim.dashHitRadius + enemy.getBodyRadius()) continue;
+      if (isStructureEnemy(enemy)) {
+        c.stopMoving();
+        c.dashImpactAt = time;
+        this.host.performAttackOn(c, enemy, time);
+        standCharacterOutside(c, enemy, this.host.arena());
+        this.endDashState(c);
+        return true;
+      }
+      hits.push(enemy);
+    }
+    if (hits.length === 0) return false;
+    const firstHit = pierced.size === 0;
+    const atk = this.host.attackDamage() * (c.isEmpowered(time) ? GameConfig.combo.empower.damageMult : 1);
+    for (const enemy of hits) {
+      pierced.add(enemy);
+      this.host.damageEnemy(c, enemy, atk, GameConfig.player.knockback, time);
+      this.spawnDashStreak(c, enemy, time);
+    }
+    if (firstHit) {
+      c.dashImpactAt = time;
+      this.host.onComboHit(c, time);
+      this.host.triggerComboHit(c);
+      this.host.flashWhite(c);
+      if (c.cutInUntil === 0) this.beginCutIn(c, hits[0], dashSpeed, time);
+    }
+    return false;
+  }
+
+  /**
+   * 衝刺打中敵人的刀光（打擊感編輯器的刀光開關打開時；沿衝刺方向穿過被砍的怪）
+   *
+   * @param c 衝刺中的角色
+   * @param hit 打中的敵人
+   * @param time 目前場景時間
+   */
+  private spawnDashStreak(c: Character, hit: Enemy, time: number): void {
+    if (hitFeel().streakEnabled !== 1) return;
+    this.host.spawnSlashStreak(hit, Math.atan2(c.dashDestY - c.y, c.dashDestX - c.x), c.isEmpowered(time));
+  }
+
+  /**
+   * 衝刺撞到敵人：開始「切入」——先撞擊停頓（完全停住），再以減速沿衝刺方向陷入一小段（刀切進肉的阻力感）。
+   * 只影響攻擊者自己，且發生在普攻冷卻內，不延遲任何輸入。強化衝刺切入完就停下（關閉切入或怪已死亡時立即停下）；
+   * 一般衝刺（穿透）切入完繼續衝向終點（關閉切入或怪已死亡時直接繼續）
    *
    * @param c 衝刺中的角色
    * @param hit 撞到的敵人
@@ -693,10 +764,9 @@ export class CharacterActionController {
   private beginCutIn(c: Character, hit: Enemy, dashSpeed: number, time: number): void {
     const p = hitFeel();
     const angle = Math.atan2(c.dashDestY - c.y, c.dashDestX - c.x);
-    if (p.streakEnabled === 1) this.host.spawnSlashStreak(hit, angle, c.isEmpowered(time));
-    // 關閉切入，或這一擊已把怪打死（沒有東西可陷入）→ 立即停下
+    // 關閉切入，或這一擊已把怪打死（沒有東西可陷入）
     if (p.cutInEnabled !== 1 || p.cutInMs <= 0 || hit.dead || !hit.active) {
-      this.endDashState(c);
+      if (c.dashEmpowerStrike) this.endDashState(c);
       return;
     }
     const speed = dashSpeed * p.cutInSpeedRatio;
