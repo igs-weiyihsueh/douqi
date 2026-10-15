@@ -217,12 +217,12 @@ export interface AttackTuningEditorHost {
   animationMs(key: PlayerAnimKey, index: number): number;
   /** P1 朝木樁放一次指定的招式（循環出招；正在出招 / 冷卻中時不動作） */
   loopMove(move: LoopMove): void;
-  /** 木樁換成某個怪種（怪物頁預覽：照該怪種的攻擊設定蓄力、出手並打得到 P1；null = 木樁模式預設的怪種，只做動作不打人） */
+  /** 木樁換成某個怪種（怪物頁預覽：照該怪種的攻擊設定蓄力、出手並打得到 P1；null = 木樁預設的怪種，只做動作不打人） */
   setDummyType(kind: MonsterKind | null): void;
 }
 
 /**
- * 木樁模式的範圍 / 判定編輯器（GameConfig.training.tuningEditorKey 開關）。畫面左側面板：
+ * 招式編輯器模式的範圍 / 判定編輯器（一開始就打開，GameConfig.moveEditor.panelToggleKey 收起 / 打開）。畫面左側面板：
  *
  * - 上方招式分頁（普攻 1、普攻 2、招式1、招式2、爆發、強化衝刺、一般衝刺）
  * - 有時間軸的招式（普攻、招式1 / 2）：時間軸長度 = 該動作長度，點或拖動時間軸、按 ◀ ▶ 一格一格（1/30 秒）前後看，

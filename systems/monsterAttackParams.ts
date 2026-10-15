@@ -3,7 +3,7 @@ import { sanitizeHitShape, type HitPointFieldDef } from './attackTuningParams';
 import { placeHitShape, type HitShape, type PlacedHitShape } from './hitShapes';
 
 /**
- * 怪物攻擊參數（木樁模式「範圍 / 判定編輯器」的怪物頁可調整，所有模式都套用；BOSS 另有自己的規則，不在這裡）。
+ * 怪物攻擊參數（招式編輯器「範圍 / 判定編輯器」的怪物頁可調整，所有模式都套用；BOSS 另有自己的規則，不在這裡）。
  *
  * - 怪種：一般兵（normal）、大怪（tank）是近戰怪，遠程幽靈（bomber）丟炸彈
  * - 每種怪：攻擊範圍（形狀 / 位置偏移 / 尺寸，同我方招式的判定範圍，見 systems/hitShapes）、出手距離、蓄力時間、冷卻、傷害

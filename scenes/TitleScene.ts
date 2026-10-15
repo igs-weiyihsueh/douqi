@@ -4,11 +4,11 @@ import { CharacterEditorPanel } from '../objects/CharacterEditorPanel';
 import { HitFeelEditorPanel } from '../objects/HitFeelEditorPanel';
 import { BoundaryEditorPanel } from '../objects/BoundaryEditorPanel';
 
-/** 主選單的模式：木樁模式（測試角色動作）/ 慢速模式（正式玩法）/ 招式編輯器（調我方招式與怪物攻擊） */
-type TitleMode = 'training' | 'slow' | 'editor';
+/** 主選單的模式：慢速模式（正式玩法）/ 招式編輯器（調我方招式與怪物攻擊） */
+type TitleMode = 'slow' | 'editor';
 
 /** 模式按鈕由左到右的順序（← → 切換） */
-const TITLE_MODES: ReadonlyArray<TitleMode> = ['training', 'slow', 'editor'];
+const TITLE_MODES: ReadonlyArray<TitleMode> = ['slow', 'editor'];
 
 /**
  * TitleScene：進入遊戲的第一個畫面。
@@ -19,9 +19,9 @@ const TITLE_MODES: ReadonlyArray<TitleMode> = ['training', 'slow', 'editor'];
 export class TitleScene extends Phaser.Scene {
   private started = false;
   /** 目前用鍵盤選中的模式 + 黃框物件 + 兩鈕 x 座標 */
-  private selected: TitleMode = 'training';
+  private selected: TitleMode = 'slow';
   private highlightRect?: Phaser.GameObjects.Rectangle;
-  private hlPos: Record<TitleMode, number> = { training: 0, slow: 0, editor: 0 };
+  private hlPos: Record<TitleMode, number> = { slow: 0, editor: 0 };
   /** 角色編輯器面板；開啟時主選單的鍵盤/按鈕操作暫停 */
   private charEditor!: CharacterEditorPanel;
   /** 打擊感編輯器面板；開啟時主選單的鍵盤/按鈕操作暫停 */
@@ -79,18 +79,17 @@ export class TitleScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(5);
 
-    // 三個模式按鈕並排——「木樁模式」「慢速模式」「招式編輯器」
+    // 兩個模式按鈕並排——「慢速模式」「招式編輯器」
     // 鍵盤選擇（方向鍵切換、選中黃框、空白鍵確認）。滑鼠點擊仍保留。
     const btnW = 240;
     const btnH = 66;
     const btnY = h * 0.5;
     const gap = 40;
-    const cxTraining = w / 2 - (btnW + gap);
-    const cxSlow = w / 2;
-    const cxEditor = w / 2 + (btnW + gap);
+    const cxSlow = w / 2 - (btnW + gap) / 2;
+    const cxEditor = w / 2 + (btnW + gap) / 2;
     // 黃色選中外框（罩在選中的鈕上）
     const highlight = this.add
-      .rectangle(cxTraining, btnY, btnW + 16, btnH + 16)
+      .rectangle(cxSlow, btnY, btnW + 16, btnH + 16)
       .setStrokeStyle(5, 0xffe066, 1)
       .setDepth(7);
     const makeBtn = (cx: number, label: string, sub: string, color: number, hover: number, mode: TitleMode): void => {
@@ -114,19 +113,18 @@ export class TitleScene extends Phaser.Scene {
       btn.on('pointerout', () => bg.setFillStyle(color, 0.92));
       btn.on('pointerdown', () => this.startGame(mode));
     };
-    makeBtn(cxTraining, '木樁模式', '打不死的大怪·測試角色動作', 0xb5772f, 0xcf8d40, 'training');
     makeBtn(cxSlow, '慢速模式', '鍵盤八方向·範圍鎖定', 0x4a90d9, 0x63a8ec, 'slow');
     makeBtn(cxEditor, '招式編輯器', '調我方招式與怪物攻擊', 0x2f855a, 0x38a169, 'editor');
     // 選取狀態 + 黃框移動 + 脈動
-    this.selected = 'training';
+    this.selected = 'slow';
     this.highlightRect = highlight;
-    this.hlPos = { training: cxTraining, slow: cxSlow, editor: cxEditor };
-    this.selectMode('training');
+    this.hlPos = { slow: cxSlow, editor: cxEditor };
+    this.selectMode('slow');
     this.tweens.add({ targets: highlight, alpha: { from: 1, to: 0.4 }, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     // 方向鍵切換選擇（左右/上下都可）
     const kb = this.input.keyboard!;
     const KC = Phaser.Input.Keyboard.KeyCodes;
-    // 左右（上下）在三個模式間移動，到兩端循環
+    // 左右（上下）在兩個模式間切換，到兩端循環
     const step = (dir: number) => () => {
       const i = TITLE_MODES.indexOf(this.selected);
       this.selectMode(TITLE_MODES[(i + dir + TITLE_MODES.length) % TITLE_MODES.length]);
@@ -280,7 +278,7 @@ export class TitleScene extends Phaser.Scene {
     bdBtn.on('pointerdown', () => this.openBoundaryEditor());
     this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.B).on('down', () => this.openBoundaryEditor());
 
-    // ── 小遊戲入口：🎮 小遊戲 (G) → MinigameMenuScene（與木樁 / 慢速開始戰鬥並列，互不干擾）──
+    // ── 小遊戲入口：🎮 小遊戲 (G) → MinigameMenuScene（與慢速模式 / 招式編輯器並列，互不干擾）──
     const mgBtnW = 200, mgBtnH = 44;
     const mgX = mgBtnW / 2 + 20, mgY = h - mgBtnH / 2 - 20; // 左下角
     const mgBg = this.add
@@ -379,7 +377,7 @@ export class TitleScene extends Phaser.Scene {
   }
 
   /**
-   * 開始遊戲：都是慢速操作，木樁模式另外帶 training 旗標、招式編輯器帶 editor 旗標（見 GameScene.init / UIScene.init）
+   * 開始遊戲：都是慢速操作，招式編輯器另外帶 editor 旗標（見 GameScene.init / UIScene.init）
    *
    * @param mode 選中的模式
    */
@@ -388,7 +386,7 @@ export class TitleScene extends Phaser.Scene {
     if (this.editorOpen) return; // 編輯器開啟中：空白鍵/點擊不開始遊戲
     this.started = true;
 
-    this.scene.start('GameScene', { controlMode: 'slow', training: mode === 'training', editor: mode === 'editor' });
+    this.scene.start('GameScene', { controlMode: 'slow', editor: mode === 'editor' });
     this.scene.launch('UIScene', { editor: mode === 'editor' });
   }
 }

@@ -25,9 +25,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   hp = 0;
   /** 擊殺原子性旗標——第一個致命命中設 true，防止同幀多角色重複計殺/掉落/kill() 重入 */
   dead = false;
-  /** 打不死（木樁模式的木樁）：每次 spawn 重設為 false，由生成端設定 */
+  /** 打不死（招式編輯器的木樁）：每次 spawn 重設為 false，由生成端設定 */
   immortal = false;
-  /** 木樁模式的木樁：站在原地不移動、不會被擊退也不會被角色推動（角色反而被它擋住）：每次 spawn 重設為 false，由生成端設定 */
+  /** 招式編輯器的木樁：站在原地不移動、不會被擊退也不會被角色推動（角色反而被它擋住）：每次 spawn 重設為 false，由生成端設定 */
   anchored = false;
   private maxHp = 0;
   private moveSpeed = 0;
@@ -813,7 +813,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * 扣血，回傳是否致命；打不死的怪（immortal，木樁模式）血量見底時補滿、永遠不致命
+   * 扣血，回傳是否致命；打不死的怪（immortal，招式編輯器的木樁）血量見底時補滿、永遠不致命
    *
    * @param amount 傷害
    */

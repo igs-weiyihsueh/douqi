@@ -36,7 +36,7 @@ export interface ComboSkillHost {
   /** P1 普攻命中次數 +1（結算統計） */
   countP1AttackHit(): void;
   spawnExpandingRing(x: number, y: number, radius: number, color: number, ms?: number): void;
-  /** 是否畫出招式的判定範圍特效（木樁模式調範圍時才畫；正式模式動作有自己的特效） */
+  /** 是否畫出招式的判定範圍特效（招式編輯器調範圍時才畫；正式模式動作有自己的特效） */
   showsRangeFx(): boolean;
   shakeOnce(duration: number, intensity: number): void;
   flashWhite(c: Character): void;

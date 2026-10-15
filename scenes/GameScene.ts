@@ -185,19 +185,20 @@ export class GameScene extends Phaser.Scene {
   private itemToggleBanner: Phaser.GameObjects.Text | null = null;
   /** 操作模式——'fast'(現況:滑鼠融合瞄準+衝刺移動合一)｜'slow'(純鍵盤:八方向走+面向+範圍圈鎖定) */
   private controlMode: 'fast' | 'slow' = 'fast';
-  /** 木樁模式（GameConfig.training）：不開關卡、不生怪，只有一隻打不死的木樁 */
-  private training = false;
-  /** 招式編輯器模式（主選單「招式編輯器」）：木樁模式 + 範圍 / 判定編輯器一開始就打開、不顯示 HUD（見 UIScene.editorMode） */
-  private editorMode = false;
-  /** 木樁模式的木樁 */
-  private trainingDummy: Enemy | null = null;
   /**
-   * 木樁的怪種與攻擊是否打得到 P1：平常是 GameConfig.training.dummyType 且只做蓄力動作（不干擾測試招式）；
+   * 招式編輯器模式（主選單「招式編輯器」，GameConfig.moveEditor）：不開關卡、不生怪，只有一隻打不死的木樁；
+   * 範圍 / 判定編輯器一開始就打開、不顯示 HUD（見 UIScene.editorMode）
+   */
+  private editorMode = false;
+  /** 招式編輯器的木樁 */
+  private editorDummy: Enemy | null = null;
+  /**
+   * 木樁的怪種與攻擊是否打得到 P1：平常是 GameConfig.moveEditor.dummyType 且只做蓄力動作（不干擾測試招式）；
    * 範圍編輯器的怪物頁換成選中的怪種，攻擊照設定打 P1（預覽出手範圍與時機）
    */
-  private trainingDummyType: EnemyType = GameConfig.training.dummyType;
-  private trainingDummyHits = false;
-  /** 木樁模式的範圍編輯器（其他模式為 null） */
+  private editorDummyType: EnemyType = GameConfig.moveEditor.dummyType;
+  private editorDummyHits = false;
+  /** 招式編輯器模式的範圍 / 判定編輯器（其他模式為 null） */
   private tuningEditor: AttackTuningEditor | null = null;
   /**
    * 慢速模式【即時可調參數】——遊戲中用下方調參欄位 −/+ 調整，即時生效。
@@ -240,10 +241,9 @@ export class GameScene extends Phaser.Scene {
     super('GameScene');
   }
 
-  /** 接收 TitleScene 傳入的操作模式（預設 fast，保持向後相容/直接啟動也不壞）與是否為木樁模式 */
-  init(data?: { controlMode?: 'fast' | 'slow'; training?: boolean; editor?: boolean }): void {
+  /** 接收 TitleScene 傳入的操作模式（預設 fast，保持向後相容/直接啟動也不壞）與是否為招式編輯器模式 */
+  init(data?: { controlMode?: 'fast' | 'slow'; editor?: boolean }): void {
     this.controlMode = data?.controlMode === 'slow' ? 'slow' : 'fast';
-    this.training = data?.training === true || data?.editor === true;
     this.editorMode = data?.editor === true;
   }
 
@@ -516,26 +516,26 @@ export class GameScene extends Phaser.Scene {
     // 初始同步按鈕面(依 config.items.spawnEnabled 的開/關)
     this.game.events.emit('items-state', this.itemsEnabled);
 
-    if (this.training) {
-      // 木樁模式：P1 直接進場，只生木樁；可開範圍編輯器
+    if (this.editorMode) {
+      // 招式編輯器模式：P1 直接進場，只生木樁；範圍 / 判定編輯器一開始就打開，按鍵收起 / 打開
       this.creditCtl.insertCoin(this.player);
-      this.keepTrainingReady();
+      this.keepEditorDummyReady();
       this.tuningEditor = new AttackTuningEditor(this, {
         player: () => this.player,
         dummy: () => {
-          const d = this.trainingDummy;
+          const d = this.editorDummy;
           return d?.active && !d.dead ? { x: d.x, y: d.y, radius: d.getBodyRadius() } : null;
         },
         previewPose: (preview) => this.playerSpine.setPreview(preview),
         animationMs: (key, index) => this.playerSpine.animationDurationMs(key, index),
-        setDummyType: (kind) => this.setTrainingDummy(kind ?? GameConfig.training.dummyType, kind !== null),
+        setDummyType: (kind) => this.setEditorDummy(kind ?? GameConfig.moveEditor.dummyType, kind !== null),
         loopMove: (move) => {
-          const d = this.trainingDummy;
+          const d = this.editorDummy;
           if (d?.active && !d.dead && this.player.alive) this.actions.performLoopMove(this.player, move, d, this.time.now);
         }
       });
-      this.input.keyboard!.on(`keydown-${GameConfig.training.tuningEditorKey}`, () => this.tuningEditor?.toggle());
-      if (this.editorMode) this.openEditorWhenUiReady();
+      this.input.keyboard!.on(`keydown-${GameConfig.moveEditor.panelToggleKey}`, () => this.tuningEditor?.toggle());
+      this.openEditorWhenUiReady();
     } else {
       // 開場第一波灑幾個可打破物件
       this.breakableCtl.spawnForWave();
@@ -558,14 +558,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   private resetState(): void {
-    this.trainingDummy = null;
-    this.trainingDummyType = GameConfig.training.dummyType;
-    this.trainingDummyHits = false;
+    this.editorDummy = null;
+    this.editorDummyType = GameConfig.moveEditor.dummyType;
+    this.editorDummyHits = false;
     this.tuningEditor = null;
     // 角色編輯器參數：每局重新讀取（主選單可能剛改過），衝刺距離/速度同步到慢速即時調參，鎖敵範圍跟衝刺距離同步
     this.charParams = loadCharacterParams();
     reloadHitFeel(); // 打擊感參數：每局重新讀取（主選單打擊感編輯器可能剛改過）
-    reloadAttackTuning(); // 攻擊範圍參數：每局重新讀取（木樁模式的範圍編輯器可能剛改過）
+    reloadAttackTuning(); // 攻擊範圍參數：每局重新讀取（招式編輯器可能剛改過）
     reloadMonsterAttacks(); // 怪物攻擊參數：同上（範圍編輯器的怪物頁）
     this.slowTuning.dashDistance = this.charParams.dashDistance;
     this.slowTuning.dashSpeed = this.charParams.dashSpeed;
@@ -734,7 +734,7 @@ export class GameScene extends Phaser.Scene {
     this.creditCtl.update();
     this.payout.update(time);
     if (!this.treasures.isOnField) this.payout.refundTreasurePrize();
-    if (this.training) this.keepTrainingReady();
+    if (this.editorMode) this.keepEditorDummyReady();
 
     // COMBO 連擊計時（警告 / 中斷）
     this.comboReward.update();
@@ -1091,7 +1091,7 @@ export class GameScene extends Phaser.Scene {
   // 生成
   // ---------------------------------------------------------------------------
   private handleSpawning(delta: number): void {
-    if (this.training) return; // 木樁模式只有木樁，不生怪
+    if (this.editorMode) return; // 招式編輯器只有木樁，不生怪
     // 沒有人在場上（都還沒投幣 / 等待續關）時照常出怪：場上維持 1 人份的量（同時在場上限、本波怪數都以 1 人計），
     // 只出場上組、各自巡邏，讓待機畫面有怪在活動；有人投幣進場後直接開打
     // 波次制狀態機
@@ -1445,7 +1445,7 @@ export class GameScene extends Phaser.Scene {
   private createComboSkillHost(): ComboSkillHost {
     return {
       scene: this,
-      showsRangeFx: () => this.training,
+      showsRangeFx: () => this.editorMode,
       enemies: () => this.enemies,
       player: () => this.player,
       isGameOver: () => this.gameOver,
@@ -1731,7 +1731,7 @@ export class GameScene extends Phaser.Scene {
       pickEmpowerTarget: (c) => this.comboSkills.pickEmpowerTarget(c),
       empowerStrike: (c, x, y, time, exclude) => this.comboSkills.empowerStrike(c, x, y, time, exclude),
       flashWhite: (c) => this.fx.flashWhite(c),
-      spawnMeleeShapeEffect: (shape) => { if (this.training) this.fx.meleeShape(shape); },
+      spawnMeleeShapeEffect: (shape) => { if (this.editorMode) this.fx.meleeShape(shape); },
       hitBreakablesInShape: (c, shape, time, exclude) => this.breakableCtl.hitInShape(c, shape, time, exclude),
       spawnSlashStreak: (target, angle, empowered) =>
         this.fx.slashStreak(target.x, target.y, angle, empowered, undefined, this.hitFxScale(target))
@@ -2196,27 +2196,27 @@ export class GameScene extends Phaser.Scene {
     this.emitStats();
   }
 
-  /** 木樁模式每幀：P1 的 CREDIT 補回 training.credit；木樁不在場上（被清掉）時在 P1 右方重新生成（打不死、不會被擊退） */
-  private keepTrainingReady(): void {
-    const cfg = GameConfig.training;
+  /** 招式編輯器模式每幀：P1 的 CREDIT 補回 moveEditor.credit；木樁不在場上（被清掉）時在 P1 右方重新生成（打不死、不會被擊退） */
+  private keepEditorDummyReady(): void {
+    const cfg = GameConfig.moveEditor;
     this.player.credit = Math.max(this.player.credit, cfg.credit);
-    const dummy = this.trainingDummy;
+    const dummy = this.editorDummy;
     if (dummy && dummy.active && !dummy.dead) return;
     const x = Phaser.Math.Clamp(this.player.x + cfg.dummyOffsetX, this.arena.left, this.arena.right);
     const e = this.enemies.get(x, this.player.y) as Enemy | null;
     if (!e) return;
-    e.spawn(x, this.player.y, this.time.now, this.trainingDummyType, 1);
-    if (this.trainingDummyHits) this.wireEnemyCallbacks(e);
+    e.spawn(x, this.player.y, this.time.now, this.editorDummyType, 1);
+    if (this.editorDummyHits) this.wireEnemyCallbacks(e);
     else {
       e.onAttackFire = undefined;
       e.onBombThrow = undefined;
     }
     e.immortal = true;
     e.anchored = true;
-    this.trainingDummy = e;
+    this.editorDummy = e;
   }
 
-  /** 招式編輯器模式：UIScene 建好後打開範圍 / 判定編輯器（面板建在 UIScene，GameScene 先建立時它可能還沒開始） */
+  /** UIScene 建好後打開範圍 / 判定編輯器（面板建在 UIScene，GameScene 先建立時它可能還沒開始） */
   private openEditorWhenUiReady(): void {
     const ui = this.scene.get('UIScene');
     const open = (): void => { if (!this.tuningEditor?.isOpen) this.tuningEditor?.toggle(); };
@@ -2225,16 +2225,16 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * 木樁換成另一個怪種：收掉目前的木樁，下一幀由 keepTrainingReady 以新設定重新生成（設定沒變時不動作）
+   * 木樁換成另一個怪種：收掉目前的木樁，下一幀由 keepEditorDummyReady 以新設定重新生成（設定沒變時不動作）
    *
    * @param type 怪種
    * @param hits 攻擊是否打得到 P1
    */
-  private setTrainingDummy(type: EnemyType, hits: boolean): void {
-    if (type === this.trainingDummyType && hits === this.trainingDummyHits) return;
-    this.trainingDummyType = type;
-    this.trainingDummyHits = hits;
-    const dummy = this.trainingDummy;
+  private setEditorDummy(type: EnemyType, hits: boolean): void {
+    if (type === this.editorDummyType && hits === this.editorDummyHits) return;
+    this.editorDummyType = type;
+    this.editorDummyHits = hits;
+    const dummy = this.editorDummy;
     if (dummy?.active && !dummy.dead) dummy.kill();
   }
 
@@ -2244,8 +2244,8 @@ export class GameScene extends Phaser.Scene {
     this.tweens.killAll();
     this.time.removeAllEvents();
     this.scene.stop('UIScene');
-    // 重開保留當前操作模式、木樁模式與招式編輯器模式
-    this.scene.start('GameScene', { controlMode: this.controlMode, training: this.training, editor: this.editorMode });
+    // 重開保留當前操作模式與招式編輯器模式
+    this.scene.start('GameScene', { controlMode: this.controlMode, editor: this.editorMode });
     this.scene.launch('UIScene', { editor: this.editorMode });
   }
 

@@ -4,7 +4,7 @@ import { HIT_SHAPE_KINDS, type HitShape } from './hitShapes';
 import { createParamStore, type ParamDef } from './paramStore';
 
 /**
- * 每一招的打擊點（木樁模式的「範圍 / 判定編輯器」可調整，所有模式都套用）。
+ * 每一招的打擊點（招式編輯器的「範圍 / 判定編輯器」可調整，所有模式都套用）。
  *
  * - 招式：普攻第 1 / 2 段、招式1（Combo01，原圓形斬）、招式2（Combo02，原直線氣波）、爆發（Unique_skill，二段變身中的連打）、
  *   強化衝刺（二段變身衝刺第一次撞到敵人時以撞擊點為基準的 AOE 範圍）、一般衝刺（穿透途中碰到的怪），以及所有普攻共用的近戰觸發距離

@@ -182,16 +182,16 @@ export const GameConfig = {
   },
 
   /**
-   * 木樁模式（主選單，測試角色動作用）：慢速操作，不開關卡、不生怪也不灑木箱，只在 P1 右方 dummyOffsetX 生一隻打不死的 dummyType
-   * （血量見底就補滿、站在原地不移動、不會被擊退、玩家靠近時照常攻擊）；P1 自動進場且 CREDIT 維持在 credit。
-   * tuningEditorKey 開關範圍編輯器（調整攻擊範圍並畫在 P1 身上，見 objects/AttackTuningEditor）；
-   * 招式的判定範圍特效（普攻劍氣扇形、招式1 / 2、強化衝刺的範圍圖形）只在木樁模式畫出，正式的慢速模式靠動作本身的特效
+   * 招式編輯器模式（主選單「招式編輯器」，調我方招式與怪物攻擊用）：慢速操作，不開關卡、不生怪也不灑木箱，只在 P1 右方 dummyOffsetX
+   * 生一隻打不死的 dummyType 當木樁（血量見底就補滿、站在原地不移動、不會被擊退、玩家靠近時照常攻擊）；P1 自動進場且 CREDIT 維持在 credit。
+   * 範圍 / 判定編輯器（見 objects/AttackTuningEditor）一開始就打開，panelToggleKey 收起 / 打開面板；
+   * 招式的判定範圍特效（普攻劍氣扇形、招式1 / 2、強化衝刺的範圍圖形）只在招式編輯器畫出，正式的慢速模式靠動作本身的特效
    */
-  training: {
+  moveEditor: {
     dummyType: 'tank' as 'normal' | 'tank' | 'bomber',
     dummyOffsetX: 260,
     credit: 999,
-    tuningEditorKey: 'P'
+    panelToggleKey: 'P'
   },
 
   /**
