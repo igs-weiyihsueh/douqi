@@ -200,7 +200,7 @@ export const GameConfig = {
       skins: ['Armor', 'Weapon'] as ReadonlyArray<string>,
       scale: 0.115,
       offsetY: 0,
-      facesRight: false
+      facesRight: true
     },
     anims: {
       idle: 'idle',
