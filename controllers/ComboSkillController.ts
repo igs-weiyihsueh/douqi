@@ -4,7 +4,7 @@ import type { Character, ReadyCombo } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
 import type { TargetingController } from './TargetingController';
 import {
-  ATTACK_HIT_EVENT, createHitWindowState, lastHitMs, moveHitPoints, runHitWindow, type HitPoint, type HitWindowState
+  ATTACK_HIT_EVENT, applyWindowHitPause, createHitWindowState, lastHitMs, moveHitPoints, runHitWindow, type HitPoint, type HitWindowState
 } from '../systems/attackTuningParams';
 import { drawHitShape, hitShapeContains, placeHitShape, type PlacedHitShape } from '../systems/hitShapes';
 
@@ -307,7 +307,7 @@ export class ComboSkillController {
 
   /**
    * 連段技一個打擊點判定段的一次判定：以它的判定範圍（朝放出時的方向）判定，範圍內這一段還沒打過的敵人受「招式傷害 × 傷害 %」
-   * 並從判定中心往外擊退，順手打範圍內的物件；這一段第一次打中敵人時出招者頓點 pauseMs。
+   * 並從判定中心往外擊退，順手打範圍內的物件；這一段每打到新的敵人出招者就頓點（同一段累計有上限，見 applyWindowHitPause） pauseMs。
    * 這一段的第一次判定才播特效（招式1 的圓形範圍播擴張環、其他形狀畫範圍特效，只在顯示範圍特效的模式）、震動與判定事件。
    * 同一次施放的多個打擊點只在第一次打中時算 COMBO 連擊
    *
@@ -333,10 +333,7 @@ export class ComboSkillController {
       c.scene.events.emit(ATTACK_HIT_EVENT, c, cast.kind, index);
     }
     const hits = this.hitInShape(c, shape, dmg, cfg.knockback, time, hitWindow.targets);
-    if (hits.enemies > 0 && !hitWindow.paused) {
-      hitWindow.paused = true;
-      c.applyHitPause(point.pauseMs, time);
-    }
+    if (hits.enemies > 0) applyWindowHitPause(c, hitWindow, point.pauseMs, time);
     if (hits.enemies + hits.breakables > 0 && !cast.rewardCounted) {
       cast.rewardCounted = true;
       this.host.comboRewardHit(c);

@@ -363,15 +363,31 @@ export function afterHitDelay(c: Character, delayMs: number, time: number, resol
 /** 判定段每次判定的間隔（毫秒；約一幀） */
 const HIT_WINDOW_TICK_MS = 1000 / 60;
 
-/** 一個打擊點判定段的狀態：這一段已經打過的目標（敵人與物件，每段只打一次）、這一段是否已經頓點過 */
+/** 一個打擊點判定段的狀態：這一段已經打過的目標（敵人與物件，每段只打一次）、這一段累計的頓點毫秒數 */
 export interface HitWindowState {
   readonly targets: Set<object>;
-  paused: boolean;
+  pausedMs: number;
 }
 
 /** 新的判定段狀態 */
 export function createHitWindowState(): HitWindowState {
-  return { targets: new Set(), paused: false };
+  return { targets: new Set(), pausedMs: 0 };
+}
+
+/**
+ * 判定段打到新的敵人時的頓點：每次停打擊點的頓點，同一段累計不超過「頓點 × GameConfig.attackerHitPauseWindowCapMult」
+ * （到上限後只停剩下的、之後不再停）
+ *
+ * @param c 出招的角色
+ * @param hitWindow 這個打擊點判定段的狀態
+ * @param pauseMs 打擊點的頓點（毫秒）
+ * @param time 目前場景時間
+ */
+export function applyWindowHitPause(c: Character, hitWindow: HitWindowState, pauseMs: number, time: number): void {
+  const remaining = pauseMs * GameConfig.attackerHitPauseWindowCapMult - hitWindow.pausedMs;
+  const ms = Math.min(pauseMs, remaining);
+  if (ms <= 0) return;
+  hitWindow.pausedMs += c.applyHitPause(ms, time);
 }
 
 /**

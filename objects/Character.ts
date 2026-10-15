@@ -245,15 +245,17 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
    *
    * @param ms 頓點長度（毫秒；0 以下不停）
    * @param time 目前場景時間
+   * @returns 實際多停的毫秒數（和進行中的頓點重疊的部分不算）
    */
-  applyHitPause(ms: number, time: number): void {
-    if (ms <= 0) return;
+  applyHitPause(ms: number, time: number): number {
+    if (ms <= 0) return 0;
     const added = Math.max(0, time + ms - Math.max(time, this.hitPauseUntil));
-    if (added <= 0) return;
+    if (added <= 0) return 0;
     this.hitPauseUntil = Math.max(this.hitPauseUntil, time + ms);
     this.hitPauseTotalMs += added;
     if (this.nextAttackAllowedAt > time) this.nextAttackAllowedAt += added;
     if (this.skillLockUntil > time) this.skillLockUntil += added;
+    return added;
   }
 
   /** v55(slow-A)：慢速模式 P1 無血量、不會死——被打只扣能量、不扣血。GameScene init 時設 true(只 P1+slow)。 */

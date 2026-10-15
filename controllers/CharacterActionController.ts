@@ -10,7 +10,7 @@ import { isStructureEnemy } from '../systems/enemyKinds';
 import type { EdgeMargins } from '../systems/spriteFeet';
 import type { LockTarget, TargetingController } from './TargetingController';
 import {
-  ATTACK_HIT_EVENT, attackTuning, createHitWindowState, meleeMove, moveHitPoints, moveReach, runHitWindow, type AttackMove, type HitPoint,
+  ATTACK_HIT_EVENT, applyWindowHitPause, attackTuning, createHitWindowState, meleeMove, moveHitPoints, moveReach, runHitWindow, type AttackMove, type HitPoint,
   type HitWindowState
 } from '../systems/attackTuningParams';
 import { hitShapeContains, placeHitShape, type PlacedHitShape } from '../systems/hitShapes';
@@ -458,7 +458,7 @@ export class CharacterActionController {
 
   /**
    * 普攻一個打擊點判定段的一次判定：以它的判定範圍（朝 aimAngle；二段變身時尺寸放大）劈出，範圍內這一段還沒打過的敵人受
-   * 「普攻傷害 × 傷害 %」與擊退、順手打可破壞物件；這一段第一次打中敵人時出招者頓點 pauseMs；
+   * 「普攻傷害 × 傷害 %」與擊退、順手打可破壞物件；這一段每打到新的敵人出招者就頓點（同一段累計有上限，見 applyWindowHitPause） pauseMs；
    * 同一下普攻的多個打擊點只在第一次打中時累積連段與 HIT；閃白、劍氣特效與判定事件只在這一段的第一次判定
    *
    * @param c 攻擊的角色
@@ -485,10 +485,7 @@ export class CharacterActionController {
       hitCount++;
     }
     const breakableHits = this.host.hitBreakablesInShape(c, shape, time, hitWindow.targets);
-    if (hitCount > 0 && !hitWindow.paused) {
-      hitWindow.paused = true;
-      c.applyHitPause(point.pauseMs, time);
-    }
+    if (hitCount > 0) applyWindowHitPause(c, hitWindow, point.pauseMs, time);
     if (hitCount > 0 && !swing.comboCounted) {
       swing.comboCounted = true;
       this.host.onComboHit(c, time);

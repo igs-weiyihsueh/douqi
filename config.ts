@@ -1828,6 +1828,11 @@ export const GameConfig = {
    * 爆發一次連打、一般衝刺（pierce，穿透）一次衝刺都只在第一次命中時停一次
    */
   attackerHitPauseMs: { attack: 60, combo: 100, burst: 100, dash: 60, pierce: 35 },
+  /**
+   * 打擊點判定段（長度 > 0）內每打到新的敵人就頓點一次，同一段累計的頓點最多是「該打擊點頓點 × 此倍數」，
+   * 圍毆一群怪時不會一直卡住
+   */
+  attackerHitPauseWindowCapMult: 2,
 
   /**
    * 衝刺動態（純視覺，攻擊者自己）：衝刺中的殘影與沿移動方向拉長、撞到敵人時壓扁回彈。
