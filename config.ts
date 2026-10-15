@@ -242,13 +242,18 @@ export const GameConfig = {
      * 多投多送的投幣窗口（毫秒）：每次投幣後重新計時，這段時間內沒再投就回到第一檔，量條隱藏（遊玩中平時不顯示量條）。
      * 沒投滿一輪時平均每幣 CREDIT 不超過一輪的平均（10 / 7.5 / 10 / 8.75），回饋不會超過 RTP 上限
      */
-    coinWindowMs: 5000,
+    coinWindowMs: 6000,
     /**
      * 多投多送量條：showWhenAbsent = 未進場的玩家也顯示（全暗）；投幣光效從亮起的那一格飛到角色頭頂（離角色中心 targetOffsetY），
-     * 費時 flyMs、弧線拱起 arcHeight，拖尾粒子每 trailEveryMs 一顆；到達時在角色身上爆一圈光（burstRadius / burstMs）
+     * 費時 flyMs、弧線拱起 arcHeight，拖尾粒子每 trailEveryMs 一顆；到達時在角色身上爆一圈光（burstRadius / burstMs）；
+     * 投幣窗口剩 warnMs 內整條閃爍提醒（蓋一層 warnColor 的光，透明度在 0 ~ warnAlpha 間來回，半週期 warnBlinkMs）
      */
     coinBar: {
       showWhenAbsent: true,
+      warnMs: 3000,
+      warnBlinkMs: 250,
+      warnColor: 0xffffff,
+      warnAlpha: 0.55,
       targetOffsetY: -130,
       flyMs: 550,
       arcHeight: 160,

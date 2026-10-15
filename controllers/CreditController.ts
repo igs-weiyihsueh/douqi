@@ -125,12 +125,13 @@ export class CreditController {
   }
 
   /**
-   * 多投多送：角色是否在投幣窗口中（最後一次投幣後 coinWindowMs 內、還沒投滿一輪；下方面板量條顯示中）
+   * 多投多送：角色投幣窗口的剩餘時間（毫秒；0 = 不在窗口中）。窗口 = 最後一次投幣後 coinWindowMs 內、還沒投滿一輪，下方面板量條顯示中
    *
    * @param c 角色
    */
-  isCoinWindowOpen(c: Character): boolean {
-    return this.coinWindowUntil.has(c);
+  coinWindowLeftMs(c: Character): number {
+    const until = this.coinWindowUntil.get(c);
+    return until === undefined ? 0 : Math.max(0, until - this.host.scene.time.now);
   }
 
   /**

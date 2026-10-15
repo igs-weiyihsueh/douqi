@@ -2632,7 +2632,7 @@ export class GameScene extends Phaser.Scene {
         tickets: c.tickets,
         creditState: c.creditState,
         coinStep: this.creditCtl.coinCycleStep(c),
-        coinWindowOpen: this.creditCtl.isCoinWindowOpen(c),
+        coinWindowLeftMs: this.creditCtl.coinWindowLeftMs(c),
         // 階段三：COMBO獎勵系統狀態
         combo: { ...c.comboState }  // 淺拷貝避免引用問題
       })),

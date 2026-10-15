@@ -53,8 +53,8 @@ interface CharStat {
   creditState: 'absent' | 'playing' | 'waiting';
   /** 多投多送：這一輪已投幾次（量條亮的格數） */
   coinStep: number;
-  /** 多投多送：投幣窗口中（最後一次投幣後 credit.coinWindowMs 內，量條顯示中） */
-  coinWindowOpen: boolean;
+  /** 多投多送：投幣窗口的剩餘時間（毫秒；0 = 不在窗口中。最後一次投幣後 credit.coinWindowMs 內，量條顯示中） */
+  coinWindowLeftMs: number;
   // 階段三：COMBO獎勵系統狀態
   combo: ComboState;
 }
@@ -1976,7 +1976,7 @@ export class UIScene extends Phaser.Scene {
 
   /**
    * 投幣（GameScene 的 coin-inserted 事件）：打開量條、亮起這一格並彈跳，從這一格飛出光效；
-   * 投滿最後一格時改成整條發光、化成一道大飛光飛到角色身上後消失
+   * 投滿最後一格時改成整條發光、化成一道大飛光飛到角色身上後消失；上一輪的投滿演出還沒播完就先收掉（飛光照常放出）
    *
    * @param e.index 角色索引
    * @param e.cycleIndex 這次投幣在 coinCycle 中的位置
@@ -1984,6 +1984,7 @@ export class UIScene extends Phaser.Scene {
   private playCoinInserted(e: { index: number; cycleIndex: number }): void {
     const bar = this.panelCoinBars[e.index];
     if (!bar) return;
+    bar.interruptRound();
     // 投幣當下就打開量條（stats 下一幀才會帶到投幣窗口），光效才有起點
     bar.setShown(true);
     bar.lightCell(e.cycleIndex);
@@ -2042,7 +2043,8 @@ export class UIScene extends Phaser.Scene {
    * 更新下方面板的 COMBO 顯示：HIT 連擊圖（連擊數改變時彈跳、連擊快斷時閃爍淡出），連擊為 0、角色未加入或陣亡時隱藏
    * （CREDIT 等待續關時照常顯示，連擊停在當下）；
    * CREDIT 未進場時改在同一位置輪流顯示 joinTexts（每 joinRotateMs 換一句，文字不閃）；
-   * 多投多送量條在 HIT 顯示下方，只在投幣窗口內（投幣後 credit.coinWindowMs）、續關中、未進場（showWhenAbsent）時顯示，遊玩中平時隱藏
+   * 多投多送量條在 HIT 顯示下方，只在投幣窗口內（投幣後 credit.coinWindowMs）、續關中、未進場（showWhenAbsent）時顯示，遊玩中平時隱藏；
+   * 投幣窗口剩 coinBar.warnMs 內閃爍提醒
    *
    * @param index 角色索引（對應 rows / panelHitCounters / panelJoinTexts / panelCoinBars）
    * @param character 角色數據（未加入時為 undefined）
@@ -2061,8 +2063,9 @@ export class UIScene extends Phaser.Scene {
       if (joinText.text !== line) joinText.setText(line);
     }
     const barShown = credit.enabled && !!character
-      && (absent ? credit.coinBar.showWhenAbsent : character.creditState === 'waiting' || character.coinWindowOpen);
+      && (absent ? credit.coinBar.showWhenAbsent : character.creditState === 'waiting' || character.coinWindowLeftMs > 0);
     bar.setShown(barShown);
+    bar.setWarning(!!character && character.coinWindowLeftMs > 0 && character.coinWindowLeftMs <= credit.coinBar.warnMs);
     if (character) bar.setLit(character.coinStep);
     const shown = character?.alive || character?.creditState === 'waiting';
     const combo = shown ? character?.combo : undefined;
