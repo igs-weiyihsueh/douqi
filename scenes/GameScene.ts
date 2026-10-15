@@ -529,6 +529,7 @@ export class GameScene extends Phaser.Scene {
         previewPose: (preview) => this.playerSpine.setPreview(preview),
         animationMs: (key, index) => this.playerSpine.animationDurationMs(key, index),
         setDummyType: (kind) => this.setEditorDummy(kind ?? GameConfig.moveEditor.dummyType, kind !== null),
+        panelShown: (open) => this.setEditorDemoView(open),
         loopMove: (move) => {
           const d = this.editorDummy;
           if (d?.active && !d.dead && this.player.alive) this.actions.performLoopMove(this.player, move, d, this.time.now);
@@ -2214,6 +2215,20 @@ export class GameScene extends Phaser.Scene {
     e.immortal = true;
     e.anchored = true;
     this.editorDummy = e;
+  }
+
+  /**
+   * 招式編輯器的遊戲畫面：面板打開時主鏡頭只畫在面板右邊的演示區，收起時恢復全畫面；
+   * 切換時鏡頭對準 P1 與木樁的中點（之後照常跟隨，兩者都在跟隨緩衝區內時鏡頭不動）
+   *
+   * @param panelOpen 面板是否打開
+   */
+  private setEditorDemoView(panelOpen: boolean): void {
+    const left = panelOpen ? GameConfig.moveEditor.panelWidth : 0;
+    const cam = this.cameras.main.setViewport(left, 0, GameConfig.width - left, GameConfig.height);
+    const dummy = this.editorDummy;
+    const midX = dummy?.active ? (this.player.x + dummy.x) / 2 : this.player.x;
+    cam.centerOn(midX, this.player.y);
   }
 
   /** UIScene 建好後打開範圍 / 判定編輯器（面板建在 UIScene，GameScene 先建立時它可能還沒開始） */

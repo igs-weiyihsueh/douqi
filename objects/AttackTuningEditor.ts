@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { GameConfig } from '../config';
 import type { LoopMove } from '../controllers/CharacterActionController';
 import type { PlayerAnimKey, PlayerPosePreview } from '../controllers/PlayerSpineController';
 import {
@@ -14,32 +15,34 @@ import {
 import { TUNING_SLOTS, applySlot, currentSettings, diffSettings, importSettings, saveSlot, slotSettings } from '../systems/tuningSettings';
 import type { Character } from './Character';
 
-/** 面板版面與配色（畫面座標，固定在畫面左側，不擋住中央的角色與木樁） */
+/** 面板版面與配色（畫面座標，佔畫面左邊 GameConfig.moveEditor.panelWidth；右邊是遊戲畫面的演示區，見 AttackTuningEditorHost.panelShown） */
 const LAYOUT = {
-  X: 20,
-  Y: 100,
-  WIDTH: 470,
-  PADDING: 16,
-  TITLE_HEIGHT: 50,
+  X: 0,
+  Y: 0,
+  WIDTH: GameConfig.moveEditor.panelWidth,
+  /** 面板至少這麼高（用滿畫面；內容更多時跟著加高） */
+  MIN_HEIGHT: GameConfig.height,
+  PADDING: 22,
+  TITLE_HEIGHT: 64,
   /** 招式分頁：每列 TABS_PER_ROW 個 */
-  TAB_HEIGHT: 34,
-  TABS_PER_ROW: 3,
-  TAB_GAP: 6,
+  TAB_HEIGHT: 48,
+  TABS_PER_ROW: 4,
+  TAB_GAP: 8,
   /** 時間軸：說明列、軸、按鈕列 */
-  TIMELINE_LABEL_HEIGHT: 24,
-  BAR_HEIGHT: 22,
-  BAR_MARKER_WIDTH: 6,
-  PLAYHEAD_WIDTH: 2,
-  PLAYHEAD_OVERHANG: 4,
+  TIMELINE_LABEL_HEIGHT: 34,
+  BAR_HEIGHT: 32,
+  BAR_MARKER_WIDTH: 8,
+  PLAYHEAD_WIDTH: 3,
+  PLAYHEAD_OVERHANG: 6,
   /** 按在選中判定段的開始 / 結束這個距離內（像素）就是拖動那一端，否則是拖動時間軸 */
-  EDGE_GRAB_PX: 10,
+  EDGE_GRAB_PX: 14,
   /** 判定段色塊的透明度（選中的打擊點兩端另畫實心把手） */
   SEGMENT_ALPHA: 0.55,
-  TIMELINE_BUTTON_HEIGHT: 30,
-  TIMELINE_BUTTON_GAP: 6,
-  ROW_HEIGHT: 38,
-  SECTION_GAP: 10,
-  BUTTON_HEIGHT: 38,
+  TIMELINE_BUTTON_HEIGHT: 42,
+  TIMELINE_BUTTON_GAP: 8,
+  ROW_HEIGHT: 52,
+  SECTION_GAP: 14,
+  BUTTON_HEIGHT: 52,
   DEPTH: 3000,
   BG_COLOR: 0x111827,
   BG_ALPHA: 0.92,
@@ -51,27 +54,35 @@ const LAYOUT = {
   MARKER_SELECTED_COLOR: 0xfef08a,
   PLAYHEAD_COLOR: 0xffffff,
   TIMELINE_BUTTON_COLOR: 0x334155,
-  /** 每列：名稱、數值、−、+ 的 x（相對面板左緣） */
-  LABEL_X: 24,
-  VALUE_X: 300,
-  MINUS_X: 370,
-  PLUS_X: 425,
-  SWATCH_SIZE: 12,
+  /** 每列：名稱、數值、−、+ 的 x（相對面板左緣）；名稱 / 說明相對列中心的 y */
+  LABEL_X: 34,
+  VALUE_X: 620,
+  MINUS_X: 810,
+  PLUS_X: 890,
+  ROW_LABEL_DY: -13,
+  ROW_HINT_DY: 11,
+  /** 分頁上的色票：大小、中心相對分頁左緣的 x；分頁名稱左緣相對分頁左緣的 x */
+  SWATCH_SIZE: 17,
+  SWATCH_X: 20,
+  TAB_LABEL_X: 40,
   FONT: 'monospace',
+  FONT_SIZES: {
+    TITLE: '28px', MODE_TAB: '22px', TAB: '21px', TIMELINE: '20px', ROW_LABEL: '21px', ROW_HINT: '15px',
+    VALUE: '22px', STEP: '34px', BUTTON: '18px', STATUS: '17px', DIFF: '18px'
+  },
   COLORS: {
     TEXT: '#e5e7eb', HINT: '#94a3b8', TITLE: '#93c5fd', VALUE: '#fde68a', STEP: '#93c5fd',
     MOVE_RESET: 0x7c2d12, RESET: 0x92400e, EXPORT: 0x065f46, CLOSE: 0x374151
   },
-  /** 底部按鈕一列幾個、匯出結果提示列的高度 */
-  BOTTOM_BUTTONS: 4,
-  STATUS_HEIGHT: 24,
+  /** 匯出結果提示列的高度 */
+  STATUS_HEIGHT: 34,
   /** 工具列（循環出招 / 匯入 / A/B 比較）的高度、顏色（開啟中的較亮） */
-  TOOL_HEIGHT: 30,
+  TOOL_HEIGHT: 42,
   TOOL_COLOR: 0x334155,
   TOOL_ACTIVE_COLOR: 0x1d4ed8,
   /** A/B 比較頁：差異最多列幾行、每行高度 */
   DIFF_MAX_LINES: 16,
-  DIFF_LINE_HEIGHT: 20
+  DIFF_LINE_HEIGHT: 28
 } as const;
 
 /** 可以循環出招的招式（爆發、強化衝刺要在二段變身中才能放，不支援） */
@@ -219,10 +230,12 @@ export interface AttackTuningEditorHost {
   loopMove(move: LoopMove): void;
   /** 木樁換成某個怪種（怪物頁預覽：照該怪種的攻擊設定蓄力、出手並打得到 P1；null = 木樁預設的怪種，只做動作不打人） */
   setDummyType(kind: MonsterKind | null): void;
+  /** 面板打開 / 收起（招式編輯器模式依此把遊戲畫面縮到面板右邊的演示區，或恢復全畫面） */
+  panelShown(open: boolean): void;
 }
 
 /**
- * 招式編輯器模式的範圍 / 判定編輯器（一開始就打開，GameConfig.moveEditor.panelToggleKey 收起 / 打開）。畫面左側面板：
+ * 招式編輯器模式的範圍 / 判定編輯器（一開始就打開，GameConfig.moveEditor.panelToggleKey 收起 / 打開）。面板佔畫面左邊 panelWidth、高度用滿畫面，右邊是演示區：
  *
  * - 上方招式分頁（普攻 1、普攻 2、招式1、招式2、爆發、強化衝刺、一般衝刺）
  * - 有時間軸的招式（普攻、招式1 / 2）：時間軸長度 = 該動作長度，點或拖動時間軸、按 ◀ ▶ 一格一格（1/30 秒）前後看，
@@ -280,7 +293,7 @@ export class AttackTuningEditor {
     scene.events.on(ATTACK_HIT_EVENT, onHit);
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       scene.events.off(ATTACK_HIT_EVENT, onHit);
-      this.close();
+      this.close(false);
     });
   }
 
@@ -370,6 +383,7 @@ export class AttackTuningEditor {
     this.uiInput = { scene: ui, move, up };
     this.overlay = this.scene.add.graphics().setDepth(OVERLAY.DEPTH);
     this.selectMode(this.mode);
+    this.host.panelShown(true);
   }
 
   /**
@@ -399,8 +413,12 @@ export class AttackTuningEditor {
     this.render();
   }
 
-  /** 關閉面板、範圍顯示與定格預覽 */
-  private close(): void {
+  /**
+   * 關閉面板、範圍顯示與定格預覽
+   *
+   * @param notifyHost 是否通知場景面板收起了（場景關閉時不通知）
+   */
+  private close(notifyHost = true): void {
     if (this.uiInput) {
       this.uiInput.scene.input.off(Phaser.Input.Events.POINTER_MOVE, this.uiInput.move);
       this.uiInput.scene.input.off(Phaser.Input.Events.POINTER_UP, this.uiInput.up);
@@ -413,7 +431,9 @@ export class AttackTuningEditor {
     this.overlay?.destroy();
     this.overlay = null;
     this.valueTexts.clear();
+    if (!notifyHost) return;
     this.host.previewPose(null);
+    this.host.panelShown(false);
   }
 
   /**
@@ -544,16 +564,14 @@ export class AttackTuningEditor {
     const panel = ui.add.container(LAYOUT.X, LAYOUT.Y).setDepth(LAYOUT.DEPTH);
     const background = ui.add.rectangle(0, 0, LAYOUT.WIDTH, 1, LAYOUT.BG_COLOR, LAYOUT.BG_ALPHA).setOrigin(0, 0).setStrokeStyle(2, LAYOUT.BORDER_COLOR);
     panel.add(background);
-    panel.add(this.text(ui, LAYOUT.PADDING, LAYOUT.PADDING, '範圍 / 判定編輯器（P 開關）', LAYOUT.COLORS.TITLE, '20px'));
+    panel.add(this.text(ui, LAYOUT.PADDING, LAYOUT.PADDING, `範圍 / 判定編輯器（${GameConfig.moveEditor.panelToggleKey} 收起 / 打開）`, LAYOUT.COLORS.TITLE, LAYOUT.FONT_SIZES.TITLE));
     let y = this.renderModeTabs(ui, panel, LAYOUT.TITLE_HEIGHT) + LAYOUT.TAB_GAP;
     y = this.renderToolbar(ui, panel, y) + LAYOUT.SECTION_GAP;
     if (this.comparing) y = this.renderComparePage(ui, panel, y);
     else y = this.mode === 'player' ? this.renderPlayerPage(ui, panel, y) : this.renderMonsterPage(ui, panel, y);
     y += LAYOUT.SECTION_GAP;
     const buttonY = y + LAYOUT.BUTTON_HEIGHT / 2;
-    const slot = LAYOUT.WIDTH / LAYOUT.BOTTOM_BUTTONS;
-    const bw = slot - LAYOUT.PADDING;
-    const status = this.text(ui, LAYOUT.PADDING, y + LAYOUT.BUTTON_HEIGHT + LAYOUT.SECTION_GAP, this.statusMessage, LAYOUT.COLORS.HINT, '12px');
+    const status = this.text(ui, LAYOUT.PADDING, y + LAYOUT.BUTTON_HEIGHT + LAYOUT.SECTION_GAP, this.statusMessage, LAYOUT.COLORS.HINT, LAYOUT.FONT_SIZES.STATUS);
     this.status = status;
     const monster = this.mode === 'monster';
     const bottomButtons: Array<{ label: string; color: number; onClick: () => void }> = [
@@ -572,12 +590,16 @@ export class AttackTuningEditor {
       { label: '匯出設定', color: LAYOUT.COLORS.EXPORT, onClick: () => this.exportSettings() },
       { label: '關閉', color: LAYOUT.COLORS.CLOSE, onClick: () => this.close() }
     ];
+    // 跟工具列一樣左右對齊內容區
+    const bw = (LAYOUT.WIDTH - LAYOUT.PADDING * 2 - LAYOUT.TAB_GAP * (bottomButtons.length - 1)) / bottomButtons.length;
     bottomButtons.forEach((b, i) => {
-      panel.add(this.button(ui, slot * (i + 0.5), buttonY, bw, LAYOUT.BUTTON_HEIGHT, b.label, b.color, b.onClick));
+      const cx = LAYOUT.PADDING + i * (bw + LAYOUT.TAB_GAP) + bw / 2;
+      panel.add(this.button(ui, cx, buttonY, bw, LAYOUT.BUTTON_HEIGHT, b.label, b.color, b.onClick));
     });
     panel.add(status);
-    // 背景高度依內容決定，再設成可點（攔下面板上的點擊）
-    background.setSize(LAYOUT.WIDTH, y + LAYOUT.BUTTON_HEIGHT + LAYOUT.SECTION_GAP + LAYOUT.STATUS_HEIGHT + LAYOUT.PADDING);
+    // 背景用滿畫面高度（內容更多時跟著加高），再設成可點（攔下面板上的點擊）
+    const contentHeight = y + LAYOUT.BUTTON_HEIGHT + LAYOUT.SECTION_GAP + LAYOUT.STATUS_HEIGHT + LAYOUT.PADDING;
+    background.setSize(LAYOUT.WIDTH, Math.max(LAYOUT.MIN_HEIGHT, contentHeight));
     this.blockClicks(background);
     this.panel = panel;
     this.refreshValues();
@@ -691,7 +713,7 @@ export class AttackTuningEditor {
       if (diff.length > LAYOUT.DIFF_MAX_LINES) lines.push(`…還有 ${diff.length - LAYOUT.DIFF_MAX_LINES} 項`);
     }
     for (const line of lines) {
-      panel.add(this.text(ui, LAYOUT.PADDING, y, line, LAYOUT.COLORS.TEXT, '13px'));
+      panel.add(this.text(ui, LAYOUT.PADDING, y, line, LAYOUT.COLORS.TEXT, LAYOUT.FONT_SIZES.DIFF));
       y += LAYOUT.DIFF_LINE_HEIGHT;
     }
     return y;
@@ -717,7 +739,7 @@ export class AttackTuningEditor {
         this.comparing = false;
         this.selectMode(mode);
       }));
-      panel.add(this.text(ui, tx + tabWidth / 2, y + LAYOUT.TAB_HEIGHT / 2, label, LAYOUT.COLORS.TEXT, '16px').setOrigin(0.5));
+      panel.add(this.text(ui, tx + tabWidth / 2, y + LAYOUT.TAB_HEIGHT / 2, label, LAYOUT.COLORS.TEXT, LAYOUT.FONT_SIZES.MODE_TAB).setOrigin(0.5));
     });
     return y + LAYOUT.TAB_HEIGHT;
   }
@@ -760,8 +782,8 @@ export class AttackTuningEditor {
       const color = kind === this.selectedMonster ? LAYOUT.TAB_SELECTED_COLOR : LAYOUT.TAB_COLOR;
       panel.add(this.blockClicks(ui.add.rectangle(tx, y, tabWidth, LAYOUT.TAB_HEIGHT, color).setOrigin(0, 0)
         .setStrokeStyle(1, OVERLAY.MONSTERS[kind]), () => this.selectMonster(kind)));
-      panel.add(ui.add.rectangle(tx + 14, y + LAYOUT.TAB_HEIGHT / 2, LAYOUT.SWATCH_SIZE, LAYOUT.SWATCH_SIZE, OVERLAY.MONSTERS[kind]));
-      panel.add(this.text(ui, tx + 28, y + LAYOUT.TAB_HEIGHT / 2, label, LAYOUT.COLORS.TEXT, '15px').setOrigin(0, 0.5));
+      panel.add(ui.add.rectangle(tx + LAYOUT.SWATCH_X, y + LAYOUT.TAB_HEIGHT / 2, LAYOUT.SWATCH_SIZE, LAYOUT.SWATCH_SIZE, OVERLAY.MONSTERS[kind]));
+      panel.add(this.text(ui, tx + LAYOUT.TAB_LABEL_X, y + LAYOUT.TAB_HEIGHT / 2, label, LAYOUT.COLORS.TEXT, LAYOUT.FONT_SIZES.TAB).setOrigin(0, 0.5));
     });
     y += LAYOUT.TAB_HEIGHT + LAYOUT.TAB_GAP + LAYOUT.SECTION_GAP;
     const kind = this.selectedMonster;
@@ -839,8 +861,8 @@ export class AttackTuningEditor {
       const color = move === this.selected ? LAYOUT.TAB_SELECTED_COLOR : LAYOUT.TAB_COLOR;
       panel.add(this.blockClicks(ui.add.rectangle(tx, ty, tabWidth, LAYOUT.TAB_HEIGHT, color).setOrigin(0, 0)
         .setStrokeStyle(1, OVERLAY.MOVES[move]), () => this.selectMove(move)));
-      panel.add(ui.add.rectangle(tx + 14, ty + LAYOUT.TAB_HEIGHT / 2, LAYOUT.SWATCH_SIZE, LAYOUT.SWATCH_SIZE, OVERLAY.MOVES[move]));
-      panel.add(this.text(ui, tx + 28, ty + LAYOUT.TAB_HEIGHT / 2, label, LAYOUT.COLORS.TEXT, '15px').setOrigin(0, 0.5));
+      panel.add(ui.add.rectangle(tx + LAYOUT.SWATCH_X, ty + LAYOUT.TAB_HEIGHT / 2, LAYOUT.SWATCH_SIZE, LAYOUT.SWATCH_SIZE, OVERLAY.MOVES[move]));
+      panel.add(this.text(ui, tx + LAYOUT.TAB_LABEL_X, ty + LAYOUT.TAB_HEIGHT / 2, label, LAYOUT.COLORS.TEXT, LAYOUT.FONT_SIZES.TAB).setOrigin(0, 0.5));
     });
     const rows = Math.ceil(ATTACK_MOVES.length / LAYOUT.TABS_PER_ROW);
     return y + rows * (LAYOUT.TAB_HEIGHT + LAYOUT.TAB_GAP);
@@ -856,7 +878,7 @@ export class AttackTuningEditor {
    */
   private renderTimeline(ui: Phaser.Scene, panel: Phaser.GameObjects.Container, y: number): number {
     const barX = LAYOUT.PADDING, barWidth = LAYOUT.WIDTH - LAYOUT.PADDING * 2;
-    const label = this.text(ui, barX, y, '', LAYOUT.COLORS.TEXT, '14px');
+    const label = this.text(ui, barX, y, '', LAYOUT.COLORS.TEXT, LAYOUT.FONT_SIZES.TIMELINE);
     panel.add(label);
     y += LAYOUT.TIMELINE_LABEL_HEIGHT;
     const barTop = y;
@@ -1012,10 +1034,10 @@ export class AttackTuningEditor {
   ): void {
     const fieldDef = id in HIT_POINT_FIELDS ? HIT_POINT_FIELDS[id as HitPointField] : null;
     const rowY = y + LAYOUT.ROW_HEIGHT / 2;
-    panel.add(this.text(ui, LAYOUT.LABEL_X, rowY - 9, label ?? fieldDef?.label ?? id, LAYOUT.COLORS.TEXT, '15px'));
+    panel.add(this.text(ui, LAYOUT.LABEL_X, rowY + LAYOUT.ROW_LABEL_DY, label ?? fieldDef?.label ?? id, LAYOUT.COLORS.TEXT, LAYOUT.FONT_SIZES.ROW_LABEL).setOrigin(0, 0.5));
     const rowHint = hint ?? fieldDef?.hint ?? '';
-    if (rowHint) panel.add(this.text(ui, LAYOUT.LABEL_X, rowY + 8, rowHint, LAYOUT.COLORS.HINT, '11px'));
-    const value = this.text(ui, LAYOUT.VALUE_X, rowY, valueText(), LAYOUT.COLORS.VALUE, '16px').setOrigin(0.5);
+    if (rowHint) panel.add(this.text(ui, LAYOUT.LABEL_X, rowY + LAYOUT.ROW_HINT_DY, rowHint, LAYOUT.COLORS.HINT, LAYOUT.FONT_SIZES.ROW_HINT).setOrigin(0, 0.5));
+    const value = this.text(ui, LAYOUT.VALUE_X, rowY, valueText(), LAYOUT.COLORS.VALUE, LAYOUT.FONT_SIZES.VALUE).setOrigin(0.5);
     value.setData('valueText', valueText);
     this.valueTexts.set(id, value);
     panel.add(value);
@@ -1071,7 +1093,7 @@ export class AttackTuningEditor {
    * @param onClick 點擊時呼叫
    */
   private stepButton(ui: Phaser.Scene, x: number, y: number, label: string, onClick: () => void): Phaser.GameObjects.Text {
-    const button = this.text(ui, x, y, label, LAYOUT.COLORS.STEP, '24px').setOrigin(0.5);
+    const button = this.text(ui, x, y, label, LAYOUT.COLORS.STEP, LAYOUT.FONT_SIZES.STEP).setOrigin(0.5);
     this.blockClicks(button, onClick);
     button.input!.cursor = 'pointer';
     return button;
@@ -1093,7 +1115,7 @@ export class AttackTuningEditor {
     ui: Phaser.Scene, x: number, y: number, width: number, height: number, label: string, color: number, onClick: () => void
   ): Phaser.GameObjects.Container {
     const bg = this.blockClicks(ui.add.rectangle(0, 0, width, height, color), onClick);
-    const caption = this.text(ui, 0, 0, label, LAYOUT.COLORS.TEXT, '13px').setOrigin(0.5);
+    const caption = this.text(ui, 0, 0, label, LAYOUT.COLORS.TEXT, LAYOUT.FONT_SIZES.BUTTON).setOrigin(0.5);
     return ui.add.container(x, y, [bg, caption]);
   }
 }
