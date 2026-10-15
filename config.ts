@@ -226,7 +226,7 @@ export const GameConfig = {
       sprint: ['Sprint'],
       hit: ['hit']
     } as Record<string, ReadonlyArray<string>>,
-    speeds: { idle: 1, move: 1, attack: 1, comboCircle: 1, comboLine: 1, unique: 1, sprint: 1, hit: 1 } as Record<string, number>,
+    speeds: { idle: 1, move: 1, attack: 1.4, comboCircle: 1, comboLine: 1, unique: 1, sprint: 1, hit: 1 } as Record<string, number>,
     moveSpeedThreshold: 30,
     mixMs: 80,
     /** 原檔動作本身朝背後出招的動作鍵：播放時左右翻轉，讓招式朝面向打出去（目前的動作都朝面向，沒有需要翻轉的） */
@@ -506,8 +506,11 @@ export const GameConfig = {
     dashDistance: 250,
     /** 慢速專屬「衝刺速度」預設(用戶定案700)；fast 用 GameConfig.player.dashSpeed 不受影響 */
     dashSpeed: 700,
-    /** 慢速模式普攻間隔（毫秒；角色編輯器的預設值，快速模式仍用 player.attackCooldownMs）：配合 P1 Spine 普攻動畫長度 0.5 秒 */
-    attackCooldownMs: 500,
+    /**
+     * 慢速模式普攻間隔（毫秒；角色編輯器的預設值，快速模式仍用 player.attackCooldownMs）：配合 P1 Spine 普攻動畫實際播放長度
+     * （原長 0.5 秒 ÷ playerSpine.speeds.attack 1.4 ≈ 0.36 秒）
+     */
+    attackCooldownMs: 360,
     /**
      * 真空圈（腳下地盤 = 敵人進不來的範圍，P1 與 BOT 都有）：左右半徑 vacuumRadius，上下 = vacuumRadius × vacuumFlatten。
      * 大小 / 扁度 / 偏移為預設值，實際值取自角色編輯器（systems/characterParams）。
@@ -1774,7 +1777,8 @@ export const GameConfig = {
     swingDistance: 80,
     /**
      * 普攻判定時間點：出手（開始播普攻動作）後幾毫秒才判定命中，[第 1 段, 第 2 段]（兩段輪流，對應 P1 Spine 的 Attack01 / Attack02；
-     * 預設取自動作裡劍光出現的那一格）；判定前進入受擊硬直就取消這一下
+     * 預設取自動作裡劍光出現的那一格）；這是動作時間，實際判定在「動作時間 ÷ playerSpine.speeds.attack」毫秒，動作加快判定也跟著提早；
+     * 判定前進入受擊硬直就取消這一下
      */
     hitDelayMs: [230, 230] as ReadonlyArray<number>,
     /** 扇形總角度（度，朝 aimAngle 左右各半） */

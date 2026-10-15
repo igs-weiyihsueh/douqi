@@ -430,7 +430,8 @@ export class CharacterActionController {
 
   /**
    * 普攻出手：記下這一下是第幾段（兩段輪流，P1 Spine 依此播 Attack01 / Attack02）並開始播動作，
-   * 該段的每個打擊點（moveHitPoints）到了自己的判定時間各判定一次；判定前角色倒下或進入受擊硬直，之後的打擊點都取消
+   * 該段的每個打擊點（moveHitPoints）到了自己的判定時間各判定一次；判定前角色倒下或進入受擊硬直，之後的打擊點都取消。
+   * 打擊點的時間是動作時間（編輯器時間軸上的格），依普攻動作的播放速度（playerSpine.speeds.attack）換算成實際時間，判定才會對上畫面
    *
    * @param c 攻擊的角色
    * @param time 目前場景時間
@@ -443,8 +444,9 @@ export class CharacterActionController {
     const move = meleeMove(segment);
     const aim = c.aimAngle;
     const swing: SwingHits = { comboCounted: false, rewardCounted: false };
+    const animSpeed = GameConfig.playerSpine.speeds.attack ?? 1;
     moveHitPoints(move).forEach((point, index) => {
-      afterHitDelay(c, point.timeMs, time, (hitTime) => {
+      afterHitDelay(c, point.timeMs / animSpeed, time, (hitTime) => {
         if (!c.alive || c.isHurtStunned(hitTime)) return;
         c.aimAngle = aim;
         this.resolveMeleeHit(c, move, index, point, swing, hitTime);
