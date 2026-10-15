@@ -48,6 +48,7 @@
 | 連段獎勵 | 連段達 5/10/20/50/100 HIT 記下獎勵，中斷時發彩票 | `controllers/ComboRewardController.ts` › `ComboRewardController`；`controllers/PayoutController.ts` › `payCombo` | `comboReward`、`payout.shares.combo` |
 | 木樁模式 | 場上只有一隻打不死大怪的訓練模式 | `scenes/TitleScene.ts` › `TitleMode` `'training'`；`scenes/GameScene.ts` › `keepTrainingReady` | `training` |
 | 範圍編輯器 | 木樁模式內調整攻擊範圍的開發工具 | `systems/attackTuningParams.ts` › `attackRange`；`objects/AttackTuningEditor.ts` | `training.tuningEditorKey` |
+| 頓點 | 攻擊命中時攻擊者動作停頓的毫秒數，0~300ms範圍，增強打擊感與節奏保護 | 範圍編輯器 › 頓點欄位 | `hitPauseMs` |
 | 免費模式 | 除錯用：攻擊不扣 CREDIT（X 鍵） | `controllers/CreditController.ts` › `toggleFreePlay` | — |
 
 ## 操作與鎖定
