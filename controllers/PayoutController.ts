@@ -2,14 +2,14 @@ import { GameConfig } from '../config';
 import type { Character } from '../objects/Character';
 
 /** 各 P 位自己的 buffer：個人打到的獎項 */
-export type SeatPrize = 'secondForm' | 'combo' | 'crate' | 'lowChest' | 'highChest';
+export type SeatPrize = 'secondForm' | 'combo' | 'crate' | 'treasure' | 'lowChest' | 'highChest';
 /** 4 個 P 位共用的 buffer：全隊一起的獎項 */
 export type SharedPrize = 'boss' | 'treasureRoom';
 /** 全部獎項 */
 export type PayoutPrize = SeatPrize | SharedPrize;
 
 /** 各 P 位 buffer 的獎項（顯示 / 走訪順序） */
-export const SEAT_PRIZES: ReadonlyArray<SeatPrize> = ['secondForm', 'combo', 'crate', 'lowChest', 'highChest'];
+export const SEAT_PRIZES: ReadonlyArray<SeatPrize> = ['secondForm', 'combo', 'crate', 'treasure', 'lowChest', 'highChest'];
 /** 共用 buffer 的獎項（顯示 / 走訪順序） */
 export const SHARED_PRIZES: ReadonlyArray<SharedPrize> = ['boss', 'treasureRoom'];
 
@@ -173,6 +173,26 @@ export class PayoutController {
    */
   payCrate(c: Character): number {
     return this.takeSeat(c, 'crate', 1);
+  }
+
+  /**
+   * 打中關卡中的寶箱怪：發出命中者寶箱怪 buffer 的 payout.treasure.hitShare（整數部分）
+   *
+   * @param c 命中的角色
+   * @returns 發出的張數（0 = 這份不到 1 張）
+   */
+  payTreasureHit(c: Character): number {
+    return this.takeSeat(c, 'treasure', GameConfig.payout.treasure.hitShare);
+  }
+
+  /**
+   * 打倒關卡中的寶箱怪：發出打倒者寶箱怪 buffer 的 payout.treasure.killShare（整數部分），其餘留到下一隻
+   *
+   * @param c 打倒的角色
+   * @returns 發出的張數
+   */
+  payTreasureKill(c: Character): number {
+    return this.takeSeat(c, 'treasure', GameConfig.payout.treasure.killShare);
   }
 
   /**
@@ -391,7 +411,7 @@ export class PayoutController {
   private seatOf(c: Character): Record<SeatPrize, number> {
     let seat = this.seats.get(c);
     if (!seat) {
-      seat = { secondForm: 0, combo: 0, crate: 0, lowChest: 0, highChest: 0 };
+      seat = { secondForm: 0, combo: 0, crate: 0, treasure: 0, lowChest: 0, highChest: 0 };
       this.seats.set(c, seat);
     }
     return seat;

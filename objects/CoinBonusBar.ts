@@ -47,9 +47,13 @@ const COIN_BAR_CONFIG = {
   /** 亮起時格子從 POP_SCALE 彈回原尺寸 */
   POP_SCALE: 1.35,
   POP_MS: 260,
-  /** 投滿最後一格：整條閃 FLASH_TIMES 次（每次單程 FLASH_MS）後清空 */
-  FLASH_TIMES: 3,
-  FLASH_MS: 110
+  /** 投滿最後一格：等最後一格彈完，整條蓋上白光（GLOW_ALPHA，費時 GLOW_MS），再 BURST_FADE_MS 淡出並清空（化成飛光由呼叫端處理） */
+  GLOW_COLOR: 0xfff3b0,
+  GLOW_ALPHA: 0.9,
+  GLOW_MS: 250,
+  BURST_FADE_MS: 200,
+  /** 顯示 / 隱藏的淡入淡出時間 */
+  FADE_MS: 200
 } as const;
 
 /** 一格的顯示物件 */
@@ -69,15 +73,21 @@ interface CoinCell {
  * 下方面板的多投多送膠囊量條：最左側一枚硬幣，後面一格代表一次投幣，每格標示劍圖示 + 這次投幣得到的 CREDIT。
  *
  * - 容器位置 = 膠囊左下角（對齊面板的 COMBO 錨點）
- * - setLit 直接設定亮了幾格；lightCell 亮起一格並彈跳；flashAndClear 投滿時閃爍後清空
- * - cellCenter 取得某格中心的螢幕座標（投幣光效的起點）
+ * - setShown 淡入 / 淡出；setLit 直接設定亮了幾格；lightCell 亮起一格並彈跳；completeRound 投滿時整條發光後化成飛光消失
+ * - cellCenter / center 取得某格 / 整條中心的螢幕座標（投幣光效的起點）
  */
 export class CoinBonusBar extends Phaser.GameObjects.Container {
   private readonly cells: CoinCell[] = [];
+  /** 投滿時整條蓋上的白光（平時透明） */
+  private readonly glow: Phaser.GameObjects.Graphics;
+  /** 膠囊寬度 */
+  private readonly capsuleWidth: number;
   /** 目前亮了幾格 */
   private litCount = 0;
-  /** 投滿閃爍中（閃完才清空，期間不接受 setLit） */
-  private flashing = false;
+  /** 投滿演出中（演出完才清空並隱藏，期間不接受 setLit / setShown） */
+  private completing = false;
+  /** setShown 最後要求的狀態（避免每幀重開淡入淡出） */
+  private shown = false;
 
   /**
    * @param scene 場景
@@ -88,8 +98,11 @@ export class CoinBonusBar extends Phaser.GameObjects.Container {
     super(scene, 0, 0);
     const cfg = COIN_BAR_CONFIG;
     const width = cfg.CELLS_LEFT + gains.length * cfg.CELL_WIDTH + (gains.length - 1) * cfg.CELL_GAP + cfg.RIGHT_PADDING;
+    this.capsuleWidth = width;
     const midY = -cfg.HEIGHT / 2;
     this.add([this.createCapsule(width), this.createCoin(midY)]);
+    this.glow = scene.add.graphics().fillStyle(cfg.GLOW_COLOR, 1)
+      .fillRoundedRect(0, -cfg.HEIGHT, width, cfg.HEIGHT, cfg.HEIGHT / 2).setAlpha(0).setBlendMode(Phaser.BlendModes.ADD);
     const icon = (scale: number, fill?: number): Phaser.GameObjects.Graphics => {
       const g = scene.add.graphics({ x: cfg.ICON_OFFSET_X, y: 0 }).setScale(scale);
       drawIcon(g, fill);
@@ -112,6 +125,7 @@ export class CoinBonusBar extends Phaser.GameObjects.Container {
       this.add(cell.root);
       this.cells.push(cell);
     });
+    this.add(this.glow);
     this.applyLit();
     scene.add.existing(this);
   }
@@ -126,9 +140,27 @@ export class CoinBonusBar extends Phaser.GameObjects.Container {
     return COIN_BAR_CONFIG.HEIGHT;
   }
 
-  /** 亮格彈跳的時間（毫秒） */
-  get popMs(): number {
-    return COIN_BAR_CONFIG.POP_MS;
+  /** 整條中心的螢幕座標（量條不縮放、不旋轉） */
+  center(): { x: number; y: number } {
+    return { x: this.x + this.capsuleWidth / 2, y: this.y - COIN_BAR_CONFIG.HEIGHT / 2 };
+  }
+
+  /**
+   * 顯示 / 隱藏（淡入淡出；投滿演出中不處理）
+   *
+   * @param shown 是否顯示
+   */
+  setShown(shown: boolean): void {
+    if (this.completing || shown === this.shown) return;
+    this.shown = shown;
+    const fadeMs = COIN_BAR_CONFIG.FADE_MS;
+    this.scene.tweens.killTweensOf(this);
+    if (shown) {
+      if (!this.visible) this.setVisible(true).setAlpha(0);
+      this.scene.tweens.add({ targets: this, alpha: 1, duration: fadeMs });
+    } else {
+      this.scene.tweens.add({ targets: this, alpha: 0, duration: fadeMs, onComplete: () => this.setVisible(false) });
+    }
   }
 
   /**
@@ -142,12 +174,12 @@ export class CoinBonusBar extends Phaser.GameObjects.Container {
   }
 
   /**
-   * 直接設定亮了幾格（同步狀態用；投滿閃爍中不處理）
+   * 直接設定亮了幾格（同步狀態用；投滿演出中不處理）
    *
    * @param count 亮的格數
    */
   setLit(count: number): void {
-    if (this.flashing || count === this.litCount) return;
+    if (this.completing || count === this.litCount) return;
     this.litCount = Phaser.Math.Clamp(count, 0, this.cells.length);
     this.applyLit();
   }
@@ -159,9 +191,6 @@ export class CoinBonusBar extends Phaser.GameObjects.Container {
    */
   lightCell(index: number): void {
     const cfg = COIN_BAR_CONFIG;
-    this.flashing = false;
-    this.scene.tweens.killTweensOf(this);
-    this.setAlpha(1);
     this.litCount = Phaser.Math.Clamp(index + 1, 0, this.cells.length);
     this.applyLit();
     const root = this.cells[Phaser.Math.Clamp(index, 0, this.cells.length - 1)].root;
@@ -171,23 +200,26 @@ export class CoinBonusBar extends Phaser.GameObjects.Container {
   }
 
   /**
-   * 投滿：delayMs 後整條閃爍數次再清空（呼叫起就不接受 setLit，避免同步狀態先把格子清掉）
+   * 投滿一輪：等最後一格彈完，整條蓋上白光，接著呼叫 onBurst（呼叫端從整條中心放出飛光）並淡出，結束後清空格子並隱藏。
+   * 呼叫起就不接受 setLit / setShown，避免同步狀態先把格子清掉或提早隱藏
    *
-   * @param delayMs 開始閃爍前的等待（例如等最後一格彈完）
+   * @param onBurst 化成飛光的時機（傳入整條中心的螢幕座標）
    */
-  flashAndClear(delayMs = 0): void {
+  completeRound(onBurst: (center: { x: number; y: number }) => void): void {
     const cfg = COIN_BAR_CONFIG;
-    this.flashing = true;
-    this.scene.tweens.add({
-      targets: this,
-      delay: delayMs,
-      alpha: 0.2,
-      duration: cfg.FLASH_MS,
-      yoyo: true,
-      repeat: cfg.FLASH_TIMES - 1,
+    this.completing = true;
+    this.scene.tweens.killTweensOf(this);
+    this.setVisible(true).setAlpha(1);
+    this.scene.tweens.chain({
+      tweens: [
+        { targets: this.glow, alpha: cfg.GLOW_ALPHA, delay: cfg.POP_MS, duration: cfg.GLOW_MS, ease: 'Quad.easeIn' },
+        { targets: this, alpha: 0, duration: cfg.BURST_FADE_MS, onStart: () => onBurst(this.center()) }
+      ],
       onComplete: () => {
-        this.setAlpha(1);
-        this.flashing = false;
+        this.glow.setAlpha(0);
+        this.setVisible(false);
+        this.completing = false;
+        this.shown = false;
         this.litCount = 0;
         this.applyLit();
       }

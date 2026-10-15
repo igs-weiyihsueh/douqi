@@ -8,6 +8,7 @@ const PRIZE_LABELS: Record<PayoutPrize, string> = {
   secondForm: '二段變身獎勵',
   combo: '連段獎勵',
   crate: '木箱獎勵',
+  treasure: '寶箱怪獎勵',
   lowChest: '低階寶箱',
   highChest: '高階寶箱',
   boss: 'BOSS獎勵',

@@ -51,7 +51,8 @@ export interface CreditHost {
  *   → 倒數內投幣回到遊玩中；逾時離場回到尚未進場
  * - 不在遊玩中的角色以 Character.leavePlay 離開戰局（alive = false）：不能操作、無敵、敵人不鎖定、不影響出怪與鏡頭
  * - 扣點：每次出手（openAttackWindow）後 attackWindowMs 內第一次命中敵人或木箱扣 1 點，一招最多扣 1 點；空揮不扣
- * - 多投多送：每次投幣依 coinCycle 循環給點（逾時離場才回到第一檔），下方面板量條亮一格並飛出光效（host.onCoinInserted）
+ * - 多投多送：每次投幣依 coinCycle 循環給點，下方面板量條亮一格並飛出光效（host.onCoinInserted）；
+ *   最後一次投幣後 coinWindowMs 內沒再投就回到第一檔（鼓勵一次投滿一輪），投滿一輪或逾時離場也回到第一檔
  * - BOT：加入時自動投幣，用完自動再投
  * - 免費模式（X 鍵切換）：開啟時攻擊不扣 CREDIT
  * - 等待中的角色頭上顯示「投幣續關」與倒數；未進場的提示在下方面板（UIScene）
@@ -63,8 +64,10 @@ export class CreditController {
   private readonly continueDeadline = new Map<Character, number>();
   /** CREDIT 剛用完、待下一幀進入等待的角色（不在攻擊結算途中切換狀態） */
   private readonly pendingPause = new Set<Character>();
-  /** 多投多送：各角色下一次投幣在 coinCycle 中的位置（投幣續關逾時離場時歸零） */
+  /** 多投多送：各角色下一次投幣在 coinCycle 中的位置（投幣窗口結束、投幣續關逾時離場時歸零） */
   private readonly coinStep = new Map<Character, number>();
+  /** 多投多送：各角色投幣窗口的結束時間（最後一次投幣 + coinWindowMs；投滿一輪時結束） */
+  private readonly coinWindowUntil = new Map<Character, number>();
   /** 免費模式：開啟時攻擊不扣 CREDIT（X 鍵切換） */
   private freePlay = false;
 
@@ -74,6 +77,7 @@ export class CreditController {
       this.pendingPause.clear();
       this.continueDeadline.clear();
       this.coinStep.clear();
+      this.coinWindowUntil.clear();
     });
   }
 
@@ -121,16 +125,30 @@ export class CreditController {
   }
 
   /**
+   * 多投多送：角色是否在投幣窗口中（最後一次投幣後 coinWindowMs 內、還沒投滿一輪；下方面板量條顯示中）
+   *
+   * @param c 角色
+   */
+  isCoinWindowOpen(c: Character): boolean {
+    return this.coinWindowUntil.has(c);
+  }
+
+  /**
    * 投幣：依多投多送的檔位加 CREDIT 並推進到下一檔（通知場景播量條光效）；未進場或等待中的角色立刻回到戰局（短暫無敵）
    *
    * @param c 投幣的角色
    */
   insertCoin(c: Character): void {
     if (!this.enabled) return;
-    const cycle = GameConfig.credit.coinCycle;
+    const cfgCredit = GameConfig.credit;
+    const cycle = cfgCredit.coinCycle;
     const step = this.coinStep.get(c) ?? 0;
     const gain = cycle[step % cycle.length];
-    this.coinStep.set(c, (step + 1) % cycle.length);
+    const next = (step + 1) % cycle.length;
+    this.coinStep.set(c, next);
+    // 投滿一輪（回到第一檔）就關閉窗口，否則重新計時
+    if (next === 0) this.coinWindowUntil.delete(c);
+    else this.coinWindowUntil.set(c, this.host.scene.time.now + cfgCredit.coinWindowMs);
     c.credit += gain;
     this.pendingPause.delete(c);
     this.continueDeadline.delete(c);
@@ -181,10 +199,16 @@ export class CreditController {
     this.host.onCreditChanged();
   }
 
-  /** 每幀：CREDIT 用完的角色進入等待（開始倒數）；倒數結束還沒投幣的離場；更新頭上投幣提示 */
+  /** 每幀：投幣窗口結束的角色回到多投多送第一檔；CREDIT 用完的角色進入等待（開始倒數）；倒數結束還沒投幣的離場；更新頭上投幣提示 */
   update(): void {
     if (!this.enabled) return;
     const now = this.host.scene.time.now;
+    for (const [c, until] of this.coinWindowUntil) {
+      if (now < until) continue;
+      this.coinWindowUntil.delete(c);
+      this.coinStep.delete(c);
+      this.host.onCreditChanged();
+    }
     for (const c of this.pendingPause) {
       if (c.credit > 0 || c.creditState !== 'playing') continue;
       c.creditState = 'waiting';
@@ -198,6 +222,7 @@ export class CreditController {
       // 逾時：離場，回到未進場（下方面板改顯示投幣加入遊戲），多投多送回到第一檔，二段變身等戰鬥狀態清掉
       this.continueDeadline.delete(c);
       this.coinStep.delete(c);
+      this.coinWindowUntil.delete(c);
       c.creditState = 'absent';
       c.resetProgress();
       this.host.setCharacterVisible(c, false);

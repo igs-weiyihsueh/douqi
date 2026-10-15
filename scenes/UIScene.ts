@@ -53,6 +53,8 @@ interface CharStat {
   creditState: 'absent' | 'playing' | 'waiting';
   /** 多投多送：這一輪已投幾次（量條亮的格數） */
   coinStep: number;
+  /** 多投多送：投幣窗口中（最後一次投幣後 credit.coinWindowMs 內，量條顯示中） */
+  coinWindowOpen: boolean;
   // 階段三：COMBO獎勵系統狀態
   combo: ComboState;
 }
@@ -1973,8 +1975,8 @@ export class UIScene extends Phaser.Scene {
   }
 
   /**
-   * 投幣（GameScene 的 coin-inserted 事件）：量條亮起這一格並彈跳（投滿最後一格時閃爍後清空）；
-   * 並從這一格飛出一道光沿弧線飛到角色頭頂（追著角色目前位置），到達時在角色身上爆一圈光
+   * 投幣（GameScene 的 coin-inserted 事件）：打開量條、亮起這一格並彈跳，從這一格飛出光效；
+   * 投滿最後一格時改成整條發光、化成一道大飛光飛到角色身上後消失
    *
    * @param e.index 角色索引
    * @param e.cycleIndex 這次投幣在 coinCycle 中的位置
@@ -1982,18 +1984,32 @@ export class UIScene extends Phaser.Scene {
   private playCoinInserted(e: { index: number; cycleIndex: number }): void {
     const bar = this.panelCoinBars[e.index];
     if (!bar) return;
+    // 投幣當下就打開量條（stats 下一幀才會帶到投幣窗口），光效才有起點
+    bar.setShown(true);
     bar.lightCell(e.cycleIndex);
-    if (e.cycleIndex >= bar.cellCount - 1) bar.flashAndClear(bar.popMs);
-    if (!bar.visible) return;
+    if (e.cycleIndex >= bar.cellCount - 1) {
+      bar.completeRound((center) => this.flyCoinOrb(e.index, center, GameConfig.credit.coinBar.roundOrbScale));
+      return;
+    }
+    this.flyCoinOrb(e.index, bar.cellCenter(e.cycleIndex), 1);
+  }
+
+  /**
+   * 投幣光效：從 start 飛出一道光沿弧線飛到角色頭頂（追著角色目前位置），到達時在角色身上爆一圈光
+   *
+   * @param index 角色索引
+   * @param start 起點（畫面座標）
+   * @param scale 光球與爆光圈的放大倍率（投滿一輪時整條化成的大飛光）
+   */
+  private flyCoinOrb(index: number, start: { x: number; y: number }, scale: number): void {
     const cfg = GameConfig.credit.coinBar;
-    const start = bar.cellCenter(e.cycleIndex);
     const target = (): { x: number; y: number } => {
-      const c = this.lastChars[e.index];
+      const c = this.lastChars[index];
       const gcam = (this.scene.get('GameScene') as Phaser.Scene | null)?.cameras?.main;
       if (!c) return start;
       return { x: c.x - (gcam?.scrollX ?? 0), y: c.y + cfg.targetOffsetY - (gcam?.scrollY ?? 0) };
     };
-    const orb = this.add.circle(start.x, start.y, cfg.orbRadius, cfg.orbColor).setDepth(cfg.depth)
+    const orb = this.add.circle(start.x, start.y, cfg.orbRadius * scale, cfg.orbColor).setDepth(cfg.depth)
       .setBlendMode(Phaser.BlendModes.ADD);
     let lastTrailAt = 0;
     this.tweens.addCounter({
@@ -2007,7 +2023,7 @@ export class UIScene extends Phaser.Scene {
         orb.setPosition(u * u * start.x + 2 * u * t * cx + t * t * end.x, u * u * start.y + 2 * u * t * cy + t * t * end.y);
         if (this.time.now - lastTrailAt >= cfg.trailEveryMs) {
           lastTrailAt = this.time.now;
-          const dot = this.add.circle(orb.x, orb.y, cfg.orbRadius * 0.7, cfg.orbColor, 0.8).setDepth(cfg.depth - 1)
+          const dot = this.add.circle(orb.x, orb.y, cfg.orbRadius * scale * 0.7, cfg.orbColor, 0.8).setDepth(cfg.depth - 1)
             .setBlendMode(Phaser.BlendModes.ADD);
           this.tweens.add({ targets: dot, alpha: 0, scale: 0.2, duration: cfg.trailMs, onComplete: () => dot.destroy() });
         }
@@ -2015,7 +2031,7 @@ export class UIScene extends Phaser.Scene {
       onComplete: () => {
         orb.destroy();
         const end = target();
-        const ring = this.add.circle(end.x, end.y, cfg.burstRadius, cfg.orbColor, 0.5).setDepth(cfg.depth)
+        const ring = this.add.circle(end.x, end.y, cfg.burstRadius * scale, cfg.orbColor, 0.5).setDepth(cfg.depth)
           .setBlendMode(Phaser.BlendModes.ADD).setScale(0.2);
         this.tweens.add({ targets: ring, scale: 1, alpha: 0, duration: cfg.burstMs, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
       }
@@ -2025,7 +2041,8 @@ export class UIScene extends Phaser.Scene {
   /**
    * 更新下方面板的 COMBO 顯示：HIT 連擊圖（連擊數改變時彈跳、連擊快斷時閃爍淡出），連擊為 0、角色未加入或陣亡時隱藏
    * （CREDIT 等待續關時照常顯示，連擊停在當下）；
-   * CREDIT 未進場時改在同一位置輪流顯示 joinTexts（每 joinRotateMs 換一句，文字不閃）；多投多送量條在已加入的角色（showWhenAbsent 時含未進場）下方顯示
+   * CREDIT 未進場時改在同一位置輪流顯示 joinTexts（每 joinRotateMs 換一句，文字不閃）；
+   * 多投多送量條在 HIT 顯示下方，只在投幣窗口內（投幣後 credit.coinWindowMs）、續關中、未進場（showWhenAbsent）時顯示，遊玩中平時隱藏
    *
    * @param index 角色索引（對應 rows / panelHitCounters / panelJoinTexts / panelCoinBars）
    * @param character 角色數據（未加入時為 undefined）
@@ -2043,7 +2060,9 @@ export class UIScene extends Phaser.Scene {
       const line = credit.joinTexts[Math.floor(this.time.now / credit.joinRotateMs) % credit.joinTexts.length];
       if (joinText.text !== line) joinText.setText(line);
     }
-    bar.setVisible(credit.enabled && !!character && (!absent || credit.coinBar.showWhenAbsent));
+    const barShown = credit.enabled && !!character
+      && (absent ? credit.coinBar.showWhenAbsent : character.creditState === 'waiting' || character.coinWindowOpen);
+    bar.setShown(barShown);
     if (character) bar.setLit(character.coinStep);
     const shown = character?.alive || character?.creditState === 'waiting';
     const combo = shown ? character?.combo : undefined;

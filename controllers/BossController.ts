@@ -4,6 +4,7 @@ import type { Character } from '../objects/Character';
 import type { BossSkillKind, Enemy } from '../objects/Enemy';
 import type { TelegraphFx } from '../systems/telegraphFx';
 import { distanceToSegment } from '../systems/geometry';
+import { popTicketReward } from '../systems/ticketFx';
 import type { PayoutController } from './PayoutController';
 
 /**
@@ -79,6 +80,8 @@ const BANNER_STYLE: Phaser.Types.GameObjects.Text.TextStyle = {
   fontFamily: 'monospace', fontSize: '46px', color: '#ff3355', stroke: '#000000', strokeThickness: 7, fontStyle: 'bold'
 };
 /** BOSS 頭上小字（彩票、屍體提示、變身倒數）樣式 */
+/** BOSS 頭上彩票獲得提示的深度 */
+const BOSS_TICKET_DEPTH = 40;
 const OVERHEAD_STYLE: Phaser.Types.GameObjects.Text.TextStyle = {
   fontFamily: 'monospace', fontSize: '26px', color: '#ffd166', stroke: '#000000', strokeThickness: 5, fontStyle: 'bold'
 };
@@ -378,17 +381,13 @@ export class BossController {
   }
 
   /**
-   * 亂入 BOSS 被命中時，從這次的彩票預算發打中獎給命中的角色（BOSS 頭上飄出「+N 🎫」；預算發完就不再給）
+   * 亂入 BOSS 被命中時，從這次的彩票預算發打中獎給命中的角色（BOSS 頭上顯示彩票圖示 + 張數；預算發完就不再給）
    *
    * @param actor 命中的角色
    * @param boss 被命中的 BOSS
    */
   private payHitTicket(actor: Character, boss: Enemy): void {
-    const tickets = this.host.payout.payBossHit(actor);
-    if (tickets <= 0) return;
-    const txt = this.scene.add.text(boss.x, boss.y - boss.getBodyRadius(), `+${tickets} 🎫`, OVERHEAD_STYLE)
-      .setOrigin(0.5).setDepth(40);
-    this.scene.tweens.add({ targets: txt, y: txt.y - 60, alpha: 0, duration: 800, onComplete: () => txt.destroy() });
+    popTicketReward(this.scene, boss.x, boss.y - boss.getBodyRadius(), this.host.payout.payBossHit(actor), { depth: BOSS_TICKET_DEPTH });
   }
 
   /**

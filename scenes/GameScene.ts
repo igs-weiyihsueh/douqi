@@ -25,6 +25,7 @@ import { ComboSkillController, type ComboSkillHost } from '../controllers/ComboS
 import { SpawnController, type SpawnHost } from '../controllers/SpawnController';
 import { CombatFx } from '../controllers/CombatFx';
 import { HitReactionFx } from '../controllers/HitReactionFx';
+import { TicketPopBatcher } from '../systems/ticketFx';
 import { DashFx } from '../controllers/DashFx';
 import { EnemyAttackController, type EnemyAttackHost } from '../controllers/EnemyAttackController';
 import { SlotWorldController, type AreaTransition, type SlotWorldHost } from '../controllers/SlotWorldController';
@@ -49,6 +50,10 @@ import { visibleBottomOffset, warmFeetMetrics, type EdgeMargins } from '../syste
 import { drawFootDisc, FOOT_DISC_DEPTH, type VacuumDisk } from '../systems/footDisc';
 import { standingDepth } from '../systems/standingDepth';
 import { facingRightFrom } from '../systems/facing';
+
+/** 敵人上方彩票獲得提示的深度與離敵人中心的高度（樣式見 GameConfig.ticketFx；不受特效節流，獎勵一定要看得到） */
+const TICKET_POP_DEPTH = 51;
+const TICKET_POP_OFFSET_Y = 40;
 
 /**
  * GameScene：
@@ -94,6 +99,8 @@ export class GameScene extends Phaser.Scene {
   private payout!: PayoutController;
   /** 命中火花與敵人受擊反應（純視覺） */
   private hitFx!: HitReactionFx;
+  /** 敵人身上的彩票獲得提示（同一角色短時間內的多筆合成一次表演） */
+  private ticketPops!: TicketPopBatcher;
   /** 敵人的攻擊（近戰、投彈），每次 create() 重建 */
   private enemyAttacks!: EnemyAttackController;
   /** 道具定時保底掉落計時 */
@@ -231,6 +238,7 @@ export class GameScene extends Phaser.Scene {
     });
     new PayoutDebugPanel(this, this.payout, () => this.characters); // 除錯：回饋帳本面板（自行註冊熱鍵與場景關閉時的清理）
     this.hitFx = new HitReactionFx(this);
+    this.ticketPops = new TicketPopBatcher(this, TICKET_POP_DEPTH);
     // 衝刺殘影、拉長與撞擊壓扁（純視覺；自行掛在場景事件上，場景關閉時解除）
     new DashFx(this, {
       characters: () => this.characters,
@@ -1555,7 +1563,8 @@ export class GameScene extends Phaser.Scene {
       spawnDamageText: (x, y, amount) => this.fx.damageText(x, y, amount),
       spawnExpandingRing: (x, y, radius, color, ms) => this.fx.expandingRing(x, y, radius, color, ms),
       shakeOnce: (duration, intensity) => this.fx.shake(duration, intensity),
-      payRoomTickets: (actor, kill) => (kill ? this.payout.payRoomKill(actor) : this.payout.payRoomHit(actor))
+      payRoomTickets: (actor, kill) => (kill ? this.payout.payRoomKill(actor) : this.payout.payRoomHit(actor)),
+      payTreasureTickets: (actor, kill) => (kill ? this.payout.payTreasureKill(actor) : this.payout.payTreasureHit(actor))
     };
   }
 
@@ -2394,7 +2403,7 @@ export class GameScene extends Phaser.Scene {
     if (enemy.dead || !enemy.active) return;
     this.creditCtl.onAttackHit(actor, time); // 這一招第一次命中扣 1 點 CREDIT
     if (enemy.enemyType === 'treasure') { this.treasures.hit(enemy, actor); return; }
-    this.popTickets(enemy.x, enemy.y, this.payout.paySecondFormHit(actor, time)); // 二段變身期間打怪才給票
+    this.popTickets(actor, enemy.x, enemy.y, this.payout.paySecondFormHit(actor, time)); // 二段變身期間打怪才給票
     const dmg = Math.max(1, Math.round(damage));
     enemy.aggroActive = true;
     const dead = enemy.takeDamage(dmg);
@@ -2419,7 +2428,7 @@ export class GameScene extends Phaser.Scene {
     if (wasBoss) {
       actor.kills++;
       actor.stageStats.kills++;
-      this.popTickets(dx, dy, this.payout.payBossKill(actor)); // 亂入 BOSS 的打倒獎（波次 BOSS 沒有預算，不給）
+      this.popTickets(actor, dx, dy, this.payout.payBossKill(actor)); // 亂入 BOSS 的打倒獎（波次 BOSS 沒有預算，不給）
       this.bossCtl.onBossKilled(dx, dy); // 大爆炸 + 掉落（波次 BOSS 再回呼 onWaveBossDefeated）
     } else if (etype === 'tower') {
       this.fx.expandingRing(dx, dy, 120, 0xff8844, 400);
@@ -2429,21 +2438,23 @@ export class GameScene extends Phaser.Scene {
       actor.stageStats.kills++;
       if (countsTowardQuota) this.onWaveKill(); // 即時補怪不推進關卡進度
       this.fx.deathBurst(dx, dy);
-      if (actor === this.player && this.bossCtl.isTransformed) this.popTickets(dx, dy, this.payout.payBossFormKill(actor)); // 變身 BOSS 期間打怪給票
+      if (actor === this.player && this.bossCtl.isTransformed) this.popTickets(actor, dx, dy, this.payout.payBossFormKill(actor)); // 變身 BOSS 期間打怪給票
       if (this.controlMode === 'slow') this.comboSkills.grantKillEnergy(actor, etype); // 能量給打倒的人（與擊殺數同一歸屬）
       if (Math.random() < GameConfig.items.dropChance) this.dropItemAt(dx, dy, time);
     }
   }
 
   /**
-   * 敵人位置的彩票獲得提示（彩票圖示 + 張數；二段變身、亂入 BOSS、變身 BOSS 的彩票；0 張時不顯示）
+   * 敵人上方的彩票獲得提示（彩票圖示 + 張數；二段變身、亂入 BOSS、變身 BOSS 的彩票；0 張時不顯示）。
+   * 同一角色短時間內的多筆（一刀打中多隻）由 TicketPopBatcher 合成一次爆開 + 總張數
    *
+   * @param actor 領獎的角色
    * @param x 敵人 x
    * @param y 敵人 y
    * @param tickets 彩票張數
    */
-  private popTickets(x: number, y: number, tickets: number): void {
-    if (tickets > 0) this.fx.ticketText(x, y, tickets);
+  private popTickets(actor: Character, x: number, y: number, tickets: number): void {
+    this.ticketPops.add(actor, x, y - TICKET_POP_OFFSET_Y, tickets);
   }
 
   // ---------------------------------------------------------------------------
@@ -2621,6 +2632,7 @@ export class GameScene extends Phaser.Scene {
         tickets: c.tickets,
         creditState: c.creditState,
         coinStep: this.creditCtl.coinCycleStep(c),
+        coinWindowOpen: this.creditCtl.isCoinWindowOpen(c),
         // 階段三：COMBO獎勵系統狀態
         combo: { ...c.comboState }  // 淺拷貝避免引用問題
       })),

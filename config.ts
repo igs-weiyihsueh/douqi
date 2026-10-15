@@ -230,13 +230,19 @@ export const GameConfig = {
    * 每一招命中至少一隻敵人扣 1 點（空揮不扣、一招打中多隻也只扣 1；變身 BOSS 的攻擊不扣）。
    * 用完時角色停在原地、無敵、怪不理他，頭上顯示 continueText 與倒數，continueSeconds 秒內投幣恢復，逾時離場（回到未進場）。
    * 未進場時下方面板（HIT 數的位置）每 joinRotateMs 輪流顯示一句 joinTexts。BOT 用完自動投幣。
-   * 下方面板的多投多送膠囊量條（HIT 數下方）：每格是一次投幣，標示這次得到的 CREDIT；投幣時亮一格並飛出一道光到角色身上
+   * 下方面板的多投多送膠囊量條（HIT 數下方）：每格是一次投幣，標示這次得到的 CREDIT；投幣時亮一格並飛出一道光到角色身上，
+   * 投滿一輪時整條發光後化成大飛光消失。遊玩中平時隱藏，只在投幣窗口（coinWindowMs）、續關中與未進場時顯示
    * 啟用時角色沒有血量（被打不扣血、不會陣亡）；enabled = false 回到舊行為
    */
   credit: {
     enabled: true,
     /** 多投多送：第 1、2、3… 次投幣分別得到的 CREDIT，循環使用（量條一格一次） */
     coinCycle: [10, 5, 15, 5, 15] as ReadonlyArray<number>,
+    /**
+     * 多投多送的投幣窗口（毫秒）：每次投幣後重新計時，這段時間內沒再投就回到第一檔，量條隱藏（遊玩中平時不顯示量條）。
+     * 沒投滿一輪時平均每幣 CREDIT 不超過一輪的平均（10 / 7.5 / 10 / 8.75），回饋不會超過 RTP 上限
+     */
+    coinWindowMs: 5000,
     /**
      * 多投多送量條：showWhenAbsent = 未進場的玩家也顯示（全暗）；投幣光效從亮起的那一格飛到角色頭頂（離角色中心 targetOffsetY），
      * 費時 flyMs、弧線拱起 arcHeight，拖尾粒子每 trailEveryMs 一顆；到達時在角色身上爆一圈光（burstRadius / burstMs）
@@ -251,6 +257,8 @@ export const GameConfig = {
       trailEveryMs: 30,
       trailMs: 260,
       burstRadius: 70,
+      /** 投滿一輪時整條化成的大飛光：光球與爆光圈的放大倍率 */
+      roundOrbScale: 2.2,
       burstMs: 380,
       depth: 1600
     },
@@ -272,11 +280,12 @@ export const GameConfig = {
    * 回饋（RTP）：彩票機每投 1 幣長期平均回饋 coinTickets × rtpCap 張（rtpCap 為整台 4 個 P 位合計的上限）。
    * 平均 1 幣 CREDIT = credit.coinCycle 一輪的平均，每 CREDIT 平均回饋 = coinTickets × rtpCap ÷ 平均 1 幣 CREDIT。
    * 每扣 1 CREDIT 依 shares（以 RTP 計，合計 = rtpCap）存進各獎項的 buffer，獎項觸發時從 buffer 發：
-   * - 各 P 位：secondForm 二段變身期間打怪 / combo HIT 連擊報獎 / crate 木箱 / lowChest、highChest 通關寶箱
+   * - 各 P 位：secondForm 二段變身期間打怪 / combo HIT 連擊報獎 / crate 木箱 / treasure 關卡中的寶箱怪 / lowChest、highChest 通關寶箱
    * - 共用：boss 亂入 BOSS（打中 + 打倒 + 變身 BOSS 期間打怪）/ treasureRoom 寶藏密室加碼
    * 細節：
    * - comboTierShares：連擊達到第 i 個里程碑（comboReward.MILESTONES）時發出連擊 buffer 的比例
    * - secondFormExpectedHits：二段變身每打中一下發 buffer ÷ 此值（發完為止）
+   * - treasure：關卡中的寶箱怪每打中一下發命中者 buffer 的 hitShare、打倒時發打倒者 buffer 的 killShare（只發整數，其餘留到下一隻）
    * - boss：共用 buffer 存到 minBudget 才亂入；登場時鎖定整個 buffer，hitShare 給打中（每下 ÷ expectedHits）、killShare 給打倒、
    *   其餘給變身 BOSS 期間打倒的怪（每隻 ÷ formExpectedKills）；沒發完的退回
    * - treasureRoom：共用 buffer 存到 budget 才開密室入口；進去時鎖定 budget，killShare 給打倒（每隻 ÷ expectedKills）、
@@ -286,9 +295,10 @@ export const GameConfig = {
   payout: {
     coinTickets: 30,
     rtpCap: 1.3,
-    shares: { secondForm: 0.2, combo: 0.25, crate: 0.1, lowChest: 0.17, highChest: 0.28, boss: 0.17, treasureRoom: 0.13 },
+    shares: { secondForm: 0.2, combo: 0.22, crate: 0.08, treasure: 0.05, lowChest: 0.17, highChest: 0.28, boss: 0.17, treasureRoom: 0.13 },
     comboTierShares: [0.1, 0.2, 0.35, 0.6, 1] as ReadonlyArray<number>,
     secondFormExpectedHits: 15,
+    treasure: { hitShare: 0.05, killShare: 0.6 },
     boss: { minBudget: 600, hitShare: 0.3, killShare: 0.3, expectedHits: 25, formExpectedKills: 20 },
     treasureRoom: { budget: 300, killShare: 0.5, expectedKills: 8 },
     debugKey: 'F8',
@@ -545,8 +555,15 @@ export const GameConfig = {
    *   圖示縮放、圖示與數字間距、字型；從 popFromScale 彈到原尺寸（popMs）、停 holdMs，再往上飄 riseY 並淡出（fadeMs）
    * - fountain：彩票噴泉（打倒寶箱怪、結算寶箱打開）：最多 maxIcons 張，往上 ± spreadDeg/2 噴出，初速 speedMin~Max（px/s）、
    *   重力 gravity（px/s²）、存活 lifeMs（± lifeJitter 比例）、最後 fadeMs 淡出、自轉最多 spinDeg 度/秒
+   * - combine：同一角色 windowMs 內的多筆彩票（二段變身一刀打中多隻、BOSS / 變身 BOSS 打怪）合成一次：
+   *   在各筆中心爆開噴泉，只顯示一組放大 scale 倍、往上 offsetY 的圖示 + 總張數
    */
   ticketFx: {
+    combine: {
+      windowMs: 150,
+      scale: 1.4,
+      offsetY: 40
+    },
     popup: {
       iconScale: 1.1,
       gap: 6,
@@ -837,10 +854,6 @@ export const GameConfig = {
       moveSpeed: 620,
       /** 出現後多久沒打死→跑走消失(毫秒)——用戶調長 18s 更多時間打 */
       lifetimeMs: 18000,
-      /** 每被命中一下噴的金幣特效數(少量) */
-      coinsPerHit: 4,
-      /** 打死噴的大量金幣特效數(華麗) */
-      coinsOnDeath: 40,
       /** 寶箱怪出現提示橫幅:文字 + 停留時間(毫秒)。 */
       bannerText: '💰 寶箱怪出現!擊破有獎勵!',
       bannerHoldMs: 1500

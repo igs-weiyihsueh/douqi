@@ -133,3 +133,65 @@ export function ticketFountain(scene: Phaser.Scene, x: number, y: number, count:
     });
   }
 }
+
+/** 合併中的一筆彩票：位置與張數 */
+interface PendingTicket {
+  x: number;
+  y: number;
+  tickets: number;
+}
+
+/**
+ * 彩票提示合併器（GameConfig.ticketFx.combine）：同一個角色在 windowMs 內得到的多筆彩票（例如一刀打中多隻怪）合成一次表演——
+ * 只有一筆時照常顯示彩票圖示 + 張數；多筆時在各筆位置的中心爆開彩票噴泉，並只顯示一組放大的圖示 + 總張數
+ */
+export class TicketPopBatcher {
+  /** 各領獎者合併窗口內的彩票 */
+  private readonly pending = new Map<unknown, PendingTicket[]>();
+
+  /**
+   * @param scene 場景
+   * @param depth 提示與噴泉的深度
+   */
+  constructor(private readonly scene: Phaser.Scene, private readonly depth: number) {}
+
+  /**
+   * 加入一筆彩票（0 張忽略）；這個角色的第一筆開始計時，windowMs 後一起表演
+   *
+   * @param owner 領獎者（同一位領獎者的彩票才合併）
+   * @param x 位置 x
+   * @param y 位置 y
+   * @param tickets 張數
+   */
+  add(owner: unknown, x: number, y: number, tickets: number): void {
+    if (tickets <= 0) return;
+    const entries = this.pending.get(owner);
+    if (entries) {
+      entries.push({ x, y, tickets });
+      return;
+    }
+    this.pending.set(owner, [{ x, y, tickets }]);
+    this.scene.time.delayedCall(GameConfig.ticketFx.combine.windowMs, () => this.flush(owner));
+  }
+
+  /**
+   * 表演並清掉一位領獎者的合併結果
+   *
+   * @param owner 領獎者
+   */
+  private flush(owner: unknown): void {
+    const entries = this.pending.get(owner);
+    this.pending.delete(owner);
+    if (!entries) return;
+    if (entries.length === 1) {
+      popTicketReward(this.scene, entries[0].x, entries[0].y, entries[0].tickets, { depth: this.depth });
+      return;
+    }
+    const cfg = GameConfig.ticketFx.combine;
+    const total = entries.reduce((sum, e) => sum + e.tickets, 0);
+    const cx = entries.reduce((sum, e) => sum + e.x, 0) / entries.length;
+    const cy = entries.reduce((sum, e) => sum + e.y, 0) / entries.length;
+    ticketFountain(this.scene, cx, cy, total, { depth: this.depth });
+    popTicketReward(this.scene, cx, cy - cfg.offsetY, total, { depth: this.depth + 1, scale: cfg.scale });
+  }
+}

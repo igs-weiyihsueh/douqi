@@ -30,6 +30,14 @@ export interface TreasureEnemyHost {
    * @returns 發出的張數（預算發完時為 0）
    */
   payRoomTickets(actor: Character, kill: boolean): number;
+  /**
+   * 關卡中的寶箱怪被打中 / 打倒：從命中者的寶箱怪獎勵 buffer 發彩票
+   *
+   * @param actor 命中的角色
+   * @param kill true = 打倒獎、false = 打中獎
+   * @returns 發出的張數（buffer 不到 1 張時為 0）
+   */
+  payTreasureTickets(actor: Character, kill: boolean): number;
 }
 
 /** 出生點 / 跑點目標離移動區邊緣的距離 */
@@ -70,6 +78,8 @@ const BANNER_DEPTH = 31;
 /** 彩票獲得提示與噴泉的深度（樣式見 GameConfig.ticketFx）；打倒時的提示放大倍率 */
 const TICKET_TEXT_DEPTH = 40;
 const TICKET_KILL_SCALE = 1.5;
+/** 打倒獎提示離寶箱怪中心的高度 */
+const TICKET_KILL_OFFSET_Y = 70;
 /** 金幣噴散深度 */
 const COIN_DEPTH = 21;
 
@@ -78,7 +88,7 @@ const COIN_DEPTH = 21;
  * - 關卡中：打破木箱時依機率從木箱位置跳出（每個小關卡最多一隻，限時事件期間不出；機率與時機由 BreakableController / 場景決定），出現時顯示提示橫幅並加上金光與粒子；
  *   在場內跑點（衝到隨機點 → 停頓 → 再衝），限時沒打死就朝最近的牆跑走。換區前直接逃走、換區時清掉
  * - 獎勵關：從密室外圍的財寶堆跳進正方形內（可多隻、不限時），每次命中與打倒給命中者彩票，時間到全部跳回財寶堆消失
- * - 命中只計次數不扣血（每下噴金幣、顯示剩餘次數），達到命中數就打倒並噴大量金幣
+ * - 命中只計次數不扣血（每下發彩票、顯示剩餘次數），達到命中數就打倒並噴彩票噴泉
  */
 export class TreasureEnemyController {
   /** 關卡中的寶箱怪（場上最多一隻） */
@@ -298,8 +308,9 @@ export class TreasureEnemyController {
   }
 
   /**
-   * 命中寶箱怪：計一下並噴少量金幣、顯示剩餘次數，達到命中數就打倒並噴大量金幣。
-   * 獎勵關的寶箱怪改用 treasureRoom.hitsToKill，每次命中與打倒從密室的加碼預算發彩票給命中者（預算發完就不再給）
+   * 命中寶箱怪：計一下、顯示剩餘次數並發彩票給命中者（彩票圖示 + 張數），達到命中數就打倒，噴彩票噴泉並放大顯示打倒獎。
+   * 關卡中的寶箱怪從命中者的寶箱怪獎勵 buffer 發（跑走途中被打到算打倒）；獎勵關的寶箱怪改用 treasureRoom.hitsToKill，
+   * 從密室的加碼預算發（預算發完就不再給）
    *
    * @param enemy 寶箱怪
    * @param actor 命中的角色
@@ -309,38 +320,39 @@ export class TreasureEnemyController {
     if (enemy.enemyType !== 'treasure' || enemy.dead || !enemy.active) return false;
     const inRoom = this.roomTreasures.has(enemy);
     if (enemy.treasureFleeing) {
-      // 關卡中的寶箱怪跑走途中被打到算打到（直接消失）；獎勵關時間到後跑走的不再給獎勵
-      if (!inRoom) { enemy.kill(); if (this.treasure === enemy) this.treasure = null; }
+      // 關卡中的寶箱怪跑走途中被打到算打倒（直接消失、發打倒獎）；獎勵關時間到後跑走的不再給獎勵
+      if (!inRoom) this.killTreasure(enemy, actor, false);
       return true;
     }
-    const cfg = GameConfig.enemy.treasure;
-    const room = GameConfig.stage.treasureRoom;
-    const hitsToKill = inRoom ? room.hitsToKill : cfg.hitsToKill;
+    const hitsToKill = inRoom ? GameConfig.stage.treasureRoom.hitsToKill : GameConfig.enemy.treasure.hitsToKill;
     enemy.treasureHits++;
     this.host.flashEnemy(enemy);
-    this.spawnCoins(enemy.x, enemy.y, cfg.coinsPerHit, false);
     this.host.spawnDamageText(enemy.x, enemy.y - 10, hitsToKill - enemy.treasureHits);
-    if (inRoom) {
-      const tickets = this.host.payRoomTickets(actor, false);
-      popTicketReward(this.scene, enemy.x, enemy.y - 40, tickets, { depth: TICKET_TEXT_DEPTH });
-    }
-    if (enemy.treasureHits >= hitsToKill) {
-      const dx = enemy.x, dy = enemy.y;
-      enemy.kill();
-      if (inRoom) {
-        this.roomTreasures.delete(enemy);
-        const tickets = this.host.payRoomTickets(actor, true);
-        if (tickets > 0) {
-          ticketFountain(this.scene, dx, dy, tickets, { depth: TICKET_TEXT_DEPTH });
-          popTicketReward(this.scene, dx, dy - 70, tickets, { depth: TICKET_TEXT_DEPTH + 1, scale: TICKET_KILL_SCALE });
-        }
-      }
-      if (this.treasure === enemy) { this.treasure = null; this.clearFx(); }
-      this.spawnCoins(dx, dy, cfg.coinsOnDeath, true);
-      this.host.spawnExpandingRing(dx, dy, DEATH_RING_RADIUS, DEATH_RING_COLOR, DEATH_RING_MS);
-      this.host.shakeOnce(120, 0.006);
-    }
+    const tickets = inRoom ? this.host.payRoomTickets(actor, false) : this.host.payTreasureTickets(actor, false);
+    popTicketReward(this.scene, enemy.x, enemy.y - 40, tickets, { depth: TICKET_TEXT_DEPTH });
+    if (enemy.treasureHits >= hitsToKill) this.killTreasure(enemy, actor, inRoom);
     return true;
+  }
+
+  /**
+   * 打倒寶箱怪：移除、發打倒獎（彩票噴泉 + 放大的彩票圖示與張數）、金光圈與震動
+   *
+   * @param enemy 寶箱怪
+   * @param actor 打倒的角色
+   * @param inRoom 是否為獎勵關的寶箱怪（決定從哪裡發彩票）
+   */
+  private killTreasure(enemy: Enemy, actor: Character, inRoom: boolean): void {
+    const dx = enemy.x, dy = enemy.y;
+    enemy.kill();
+    if (inRoom) this.roomTreasures.delete(enemy);
+    if (this.treasure === enemy) { this.treasure = null; this.clearFx(); }
+    const tickets = inRoom ? this.host.payRoomTickets(actor, true) : this.host.payTreasureTickets(actor, true);
+    if (tickets > 0) {
+      ticketFountain(this.scene, dx, dy, tickets, { depth: TICKET_TEXT_DEPTH });
+      popTicketReward(this.scene, dx, dy - TICKET_KILL_OFFSET_Y, tickets, { depth: TICKET_TEXT_DEPTH + 1, scale: TICKET_KILL_SCALE });
+    }
+    this.host.spawnExpandingRing(dx, dy, DEATH_RING_RADIUS, DEATH_RING_COLOR, DEATH_RING_MS);
+    this.host.shakeOnce(120, 0.006);
   }
 
   /** 進入左右轉場那刻：關卡中的寶箱怪立即朝最近的牆逃走並淡出（不跟到下一區） */
@@ -497,9 +509,9 @@ export class TreasureEnemyController {
   }
 
   /**
-   * 金幣噴散（純視覺）：往上拋出、散開後落下淡出
+   * 金幣噴散（純視覺，獎勵關寶箱怪跳進 / 跳回財寶堆時）：往上拋出、散開後落下淡出
    *
-   * @param big true = 打倒時的大量金幣（拋得更高更遠）
+   * @param big true = 大量金幣（拋得更高更遠）
    */
   private spawnCoins(x: number, y: number, count: number, big: boolean): void {
     for (let i = 0; i < count; i++) {
