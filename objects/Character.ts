@@ -546,6 +546,18 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
+   * 清掉這一局累積的戰鬥狀態，回到剛進場的樣子（續關逾時變待機時呼叫，重新投幣從基礎形態開始）：
+   * 解除二段變身（含快速模式的限時強化）、二段變身能量與蓄力歸零
+   */
+  resetProgress(): void {
+    this.empowered = false;
+    this.empowerUntil = 0;
+    this.empowerAoeHits = 0;
+    this.energy = 0;
+    this.spirit = 0;
+  }
+
+  /**
    * 回到戰局（復活、投幣續關、投幣進場共用）：還原 leavePlay / die() 的狀態與外觀，恢復物理與可操控（血量、鬥氣不動）
    */
   resumePlay(): void {

@@ -195,10 +195,11 @@ export class CreditController {
     this.pendingPause.clear();
     for (const [c, deadline] of this.continueDeadline) {
       if (now < deadline) continue;
-      // 逾時：離場，回到未進場（下方面板改顯示投幣加入遊戲），多投多送回到第一檔
+      // 逾時：離場，回到未進場（下方面板改顯示投幣加入遊戲），多投多送回到第一檔，二段變身等戰鬥狀態清掉
       this.continueDeadline.delete(c);
       this.coinStep.delete(c);
       c.creditState = 'absent';
+      c.resetProgress();
       this.host.setCharacterVisible(c, false);
       this.host.onCreditChanged();
     }
