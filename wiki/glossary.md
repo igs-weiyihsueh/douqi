@@ -48,7 +48,11 @@
 | 連段獎勵 | 連段達 5/10/20/50/100 HIT 記下獎勵，中斷時發彩票 | `controllers/ComboRewardController.ts` › `ComboRewardController`；`controllers/PayoutController.ts` › `payCombo` | `comboReward`、`payout.shares.combo` |
 | 木樁模式 | 場上只有一隻打不死大怪的訓練模式 | `scenes/TitleScene.ts` › `TitleMode` `'training'`；`scenes/GameScene.ts` › `keepTrainingReady` | `training` |
 | 範圍編輯器 | 木樁模式內調整攻擊範圍的開發工具 | `systems/attackTuningParams.ts` › `attackRange`；`objects/AttackTuningEditor.ts` | `training.tuningEditorKey` |
-| 頓點 | 攻擊命中時攻擊者動作停頓的毫秒數，0~300ms範圍，增強打擊感與節奏保護 | 範圍編輯器 › 頓點欄位 | `attackerHitPauseMs` |
+| 頓點 | 攻擊命中時攻擊者動作停頓的毫秒數，0~300ms範圍，增強打擊感與節奏保護 | 範圍編輯器 › 頓點欄位 | `attackDefaults.moveTimelines` |
+| 招式編輯器 | 主選單攻擊招式編輯入口，獨立編輯畫面 | 主選單 › 招式編輯器 | — |
+| 怪物頁 | 一般兵/大怪/遠程幽靈攻擊參數編輯頁面 | 招式編輯器 › 怪物頁 | — |
+| A/B比較 | 兩組設定數值對比+一鍵切換功能 | 招式編輯器 › A/B比較 | — |
+| 循環出招 | 選中招式自動重複施放測試功能 | 招式編輯器 › 循環出招 | — |
 | 免費模式 | 除錯用：攻擊不扣 CREDIT（X 鍵） | `controllers/CreditController.ts` › `toggleFreePlay` | — |
 
 ## 操作與鎖定
@@ -65,7 +69,7 @@
 | 近戰攻擊 | 目標很近時原地揮扇形 | `controllers/CharacterActionController.ts` | `melee` |
 | 強化衝刺 | 二段強化期間的穿透衝刺，第一次撞到炸AOE | `controllers/CharacterActionController.ts` | `slow.dashSpeed` |
 | 衝刺 | 沒有目標時朝面向衝一段 | `controllers/CharacterActionController.ts` › `startDirectionDash` | `slow.dashDistance` |
-| 一般衝刺 | 穿透式衝刺攻擊，路徑上每隻怪各打一次，可設傷害%+頓點 | 範圍編輯器 › 一般衝刺分頁 | `attackerHitPauseMs.pierce` |
+| 一般衝刺 | 穿透式衝刺攻擊，路徑上每隻怪各打一次，可設傷害%+頓點 | 範圍編輯器 › 一般衝刺分頁 | `attackDefaults.moveTimelines.pierce` |
 | 真空圈 | 角色腳下怪進不來的橢圓地盤 | `scenes/GameScene.ts` | `slow.vacuumRadius`、`slow.vacuumFlatten` |
 
 ## 二段變身
