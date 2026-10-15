@@ -118,6 +118,7 @@ export class CharacterActionController {
   updateBot(bot: Character, time: number): void {
     if (!bot.alive) return;
     if (bot.isDashing || bot.isBursting) return;
+    if (bot.isHurtStunned(time)) { bot.stopMoving(); return; }
     const target = this.targeting.pickBotTarget(bot);
     bot.lockedTarget = target as unknown as (Phaser.GameObjects.GameObject & { x: number; y: number }) | null;
     if (target) {
@@ -139,14 +140,14 @@ export class CharacterActionController {
   }
 
   /**
-   * 出手（P1 按攻擊、BOT 到出手時間）：衝刺 / 爆發 / 定身 / 冷卻中不行動
+   * 出手（P1 按攻擊、BOT 到出手時間）：衝刺 / 爆發 / 定身 / 受擊硬直 / 冷卻中不行動
    *
    * @param c 出手的角色
    * @param time 目前場景時間
    */
   tryAct(c: Character, time: number): void {
     if (c.isBursting || c.isDashing) return;
-    if (c.isRooted(time)) return;
+    if (c.isRooted(time) || c.isHurtStunned(time)) return;
     if (time < c.nextAttackAllowedAt) return;
     this.host.onAttackStart(c, time);
     const player = this.host.player();
@@ -404,6 +405,7 @@ export class CharacterActionController {
     if (hitCount > 0 || breakableHits > 0) this.host.triggerComboHit(c);
     this.host.flashWhite(c);
     this.host.spawnMeleeArcEffect(c.x, c.y, c.aimAngle);
+    c.markAction('attack');
   }
 
   /**
@@ -418,7 +420,7 @@ export class CharacterActionController {
     const body = p.body as Phaser.Physics.Arcade.Body;
     if (this.host.isFrozenByTimestop(p)) { body.setVelocity(0, 0); return; }
     if (p.isDashing || p.isSkillLocked(time) || p.isBursting) return;
-    if (p.isRooted(time)) { body.setVelocity(0, 0); return; }
+    if (p.isRooted(time) || p.isHurtStunned(time)) { body.setVelocity(0, 0); return; }
     const k = this.host.slowKeys();
     let dx = 0, dy = 0;
     if (k.left.isDown || k.a.isDown) dx -= 1;

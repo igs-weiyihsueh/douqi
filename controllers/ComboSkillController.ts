@@ -204,6 +204,7 @@ export class ComboSkillController {
    * @param time 目前場景時間
    */
   empowerStrike(c: Character, tx: number, ty: number, time: number): void {
+    c.markAction('attack');
     this.empowerAoeBurst(c, tx, ty, time);
   }
 
@@ -240,6 +241,7 @@ export class ComboSkillController {
 
   /** 連段技：圓形斬——以角色為中心的圓形 AOE 與擴張環，順手秒碎範圍內的物件，進入表演時間 */
   private comboCircle(c: Character, time: number): void {
+    c.markAction('comboCircle');
     const cfg = GameConfig.combo.circle;
     const radius = cfg.radius;
     const dmg = cfg.damage * (c.isEmpowered(time) ? GameConfig.combo.empower.damageMult : 1);
@@ -261,6 +263,7 @@ export class ComboSkillController {
 
   /** 連段技：直線氣波——朝 aimAngle 的貫穿矩形，順手秒碎範圍內的物件，進入表演時間 */
   private comboLine(c: Character, time: number): void {
+    c.markAction('comboLine');
     const cfg = GameConfig.combo.line;
     const length = cfg.length;
     const width = cfg.width;
@@ -300,6 +303,7 @@ export class ComboSkillController {
     } else {
       c.empowerUntil = time + GameConfig.combo.empower.durationMs;
     }
+    c.markAction('unique');
     this.host.shakeOnce(GameConfig.juice.burstShakeDuration, GameConfig.juice.burstShakeIntensity);
     this.host.spawnExpandingRing(c.x, c.y, EMPOWER_RING_RADIUS, EMPOWER_RING_COLOR, EMPOWER_RING_MS);
     this.host.onEmpower(c);
@@ -330,6 +334,7 @@ export class ComboSkillController {
    * 表演時間延長定身無敵；保底計時確保一定會結束
    */
   private triggerBurst(c: Character, time: number): void {
+    c.markAction('unique');
     const cfg = GameConfig.burst;
     c.isBursting = true;
     if (cfg.invuln) c.invulnUntil = time + cfg.hits * cfg.intervalMs + BURST_INVULN_EXTRA_MS;

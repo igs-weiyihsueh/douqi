@@ -147,12 +147,17 @@ export class ArtStyleController {
     img.setFlipX(TEXTURES_FACING_LEFT.has(img.texture.key) === facingRight);
   }
 
-  /** P1 皮膚疊在 P1 本體正上方、面向與 P1 相同（P1 的深度與面向每幀更新後呼叫） */
+  /** P1 皮膚疊在 P1 本體正上方、面向與 P1 相同、受擊閃爍跟著 P1（P1 的深度與面向每幀更新後呼叫） */
   syncSkinToPlayer(): void {
     if (!this.skin) return;
     const p = this.host.player();
-    this.skin.setDepth(p.depth + OVERLAY_DEPTH_STEP);
+    this.skin.setDepth(p.depth + OVERLAY_DEPTH_STEP).setAlpha(p.hurtBlinkAlpha(this.scene.time.now));
     this.applyFacing(this.skin, p.facingRight);
+  }
+
+  /** P1 新美術皮膚圖（顯示中才回傳；P1 Spine 外觀以它為位置、腳底與深度基準） */
+  shownPlayerSkin(): Phaser.GameObjects.Image | null {
+    return this.skin && this.skin.visible ? this.skin : null;
   }
 
   /**

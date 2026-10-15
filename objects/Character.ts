@@ -1,6 +1,9 @@
 import Phaser from 'phaser';
 import { GameConfig } from '../config';
 
+/** 出招種類（P1 Spine 外觀對應的動作）：普攻 / 連段技圈 / 連段技線 / 二段變身與爆發 */
+export type CharacterActionKind = 'attack' | 'comboCircle' | 'comboLine' | 'unique';
+
 /**
  * 角色（P1 玩家 + BOT 共用）：
  * 差別只在「輸入來源」——P1 由玩家滑鼠/按鍵、BOT 由 AI 決定 aimAngle 與何時出手。
@@ -47,6 +50,13 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
 
   // 衝刺（純方向，遇第一個敵人停下）
   isDashing = false;
+  /** 受擊硬直結束 / 受擊閃爍結束的時間（見 startHurt） */
+  hurtStunUntil = 0;
+  hurtBlinkUntil = 0;
+  /** 上一幀是否在受擊閃爍（閃爍結束時恢復不透明一次） */
+  private hurtBlinking = false;
+  /** 最近一次出招：種類與流水號（流水號遞增，同種連續出招也分得出來） */
+  lastAction: { kind: CharacterActionKind | 'none'; seq: number } = { kind: 'none', seq: 0 };
   dashDestX = 0;
   dashDestY = 0;
   /** 本次衝刺是否為「衝去撿道具」（途中不因撞到敵人而中止，確保撿得到） */
@@ -227,12 +237,57 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
     if (this.noHpLoss) {
       // slow：不扣血、不死；被命中→能量 -1(夾≥0)。
       this.energy = Math.max(0, this.energy - 1);
-      this.invulnUntil = time + GameConfig.player.invulnMs;
+      this.startHurt(time);
       return true;
     }
     this.hp = Math.max(0, this.hp - amount);
-    this.invulnUntil = time + GameConfig.player.invulnMs;
+    this.startHurt(time);
     return true;
+  }
+
+  /**
+   * 受擊：硬直 player.hurt.stunMs（不能移動 / 攻擊）後閃爍 blinkMs，兩段期間都無敵
+   *
+   * @param time 目前場景時間
+   */
+  private startHurt(time: number): void {
+    const hurt = GameConfig.player.hurt;
+    this.hurtStunUntil = time + hurt.stunMs;
+    this.hurtBlinkUntil = this.hurtStunUntil + hurt.blinkMs;
+    this.invulnUntil = Math.max(this.invulnUntil, this.hurtBlinkUntil);
+  }
+
+  /** 受擊硬直中（播受擊動作，不能移動 / 攻擊） */
+  isHurtStunned(time: number): boolean {
+    return time < this.hurtStunUntil;
+  }
+
+  /**
+   * 受擊閃爍的透明度：硬直結束後的閃爍期間在 1 與 player.hurt.blinkAlpha 之間切換，其餘時間為 1
+   *
+   * @param time 目前場景時間
+   */
+  hurtBlinkAlpha(time: number): number {
+    if (time < this.hurtStunUntil || time >= this.hurtBlinkUntil) return 1;
+    const hurt = GameConfig.player.hurt;
+    return Math.floor((time - this.hurtStunUntil) / hurt.blinkIntervalMs) % 2 === 0 ? hurt.blinkAlpha : 1;
+  }
+
+  /** 受擊閃爍：閃爍期間每幀套用透明度，閃爍結束那一幀恢復不透明 */
+  private applyHurtBlink(): void {
+    const alpha = this.hurtBlinkAlpha(this.scene.time.now);
+    if (alpha === 1 && !this.hurtBlinking) return;
+    this.setAlpha(alpha);
+    this.hurtBlinking = alpha !== 1;
+  }
+
+  /**
+   * 記下一次出招（P1 Spine 外觀依此播對應動作）
+   *
+   * @param kind 出招種類
+   */
+  markAction(kind: CharacterActionKind): void {
+    this.lastAction = { kind, seq: this.lastAction.seq + 1 };
   }
 
   /** 顯示/隱藏衝刺護盾光環 */
@@ -300,6 +355,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
       this.hideLegacyUi();
       return;
     }
+    this.applyHurtBlink();
     this.label.setPosition(this.x, this.y - GameConfig.player.radius - 12);
     if (this.shieldAura.visible) this.shieldAura.setPosition(this.x, this.y);
 

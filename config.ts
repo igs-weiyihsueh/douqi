@@ -190,6 +190,36 @@ export const GameConfig = {
   },
 
   /**
+   * P1 Spine 動畫（新美術時取代 P1 皮膚圖；判定與手感不變，只換外觀）：CH02 孫悟空（public/assets/spine/）。
+   * - 腳底對齊 P1 皮膚圖的腳底再加 offsetY；scale 為顯示縮放；facesRight = 原始動畫面向右
+   * - 動畫：idle 待機 / move 走路（實際位移速度超過 moveSpeedThreshold）/ attack 普攻（兩段輪流）/ comboCircle、comboLine 連段技 /
+   *   unique 二段變身與爆發 / sprint 衝刺中（重複）→ sprintEnd 衝刺結束 / hit 受擊；speeds 為各段播放速度；切換混合 mixMs 毫秒
+   */
+  playerSpine: {
+    dataKey: 'spine-ch02-data',
+    atlasKey: 'spine-ch02-atlas',
+    jsonUrl: 'assets/spine/CH02_Sun_Wukong.json',
+    atlasUrl: 'assets/spine/CH02_Sun_Wukong.atlas',
+    scale: 0.57,
+    offsetY: 0,
+    facesRight: true,
+    anims: {
+      idle: ['idle'],
+      move: ['Move'],
+      attack: ['Attack01', 'Attack02'],
+      comboCircle: ['Combo01'],
+      comboLine: ['Combo02'],
+      unique: ['Unique_skill'],
+      sprint: ['Sprint'],
+      sprintEnd: ['Sprint2'],
+      hit: ['hit']
+    } as Record<string, ReadonlyArray<string>>,
+    speeds: { idle: 1, move: 1, attack: 1, comboCircle: 1, comboLine: 1, unique: 1, sprint: 1, sprintEnd: 1, hit: 1 } as Record<string, number>,
+    moveSpeedThreshold: 30,
+    mixMs: 80
+  },
+
+  /**
    * 怪物 Spine 動畫（新美術時取代該怪種的美術圖；碰撞、腳底佔位、AI 不變，只換外觀）：
    * - tank：大怪 = EN01 骷髏兵（public/assets/spine/）。skins 依序疊加成一套外觀；scale 為顯示縮放；
    *   腳底對齊原美術圖的腳底再加 offsetY；facesRight = 原始動畫面向右
@@ -424,8 +454,11 @@ export const GameConfig = {
     knockback: 380,
     /** 攻擊後短暫無法再輸入的冷卻（毫秒）用戶指定:160→300(攻速 0.3秒1下=每秒~3.3下) */
     attackCooldownMs: 300,
-    /** 受擊後的無敵時間（毫秒） */
-    invulnMs: 600,
+    /**
+     * 受擊：被打中後先硬直 stunMs（播受擊動畫，不能移動 / 攻擊），接著閃爍 blinkMs（可以行動）；兩段期間都無敵。
+     * 閃爍時每 blinkIntervalMs 在不透明與 blinkAlpha 之間切換
+     */
+    hurt: { stunMs: 300, blinkMs: 1500, blinkIntervalMs: 80, blinkAlpha: 0.25 },
     /** 攻擊命中判定的額外半徑（普攻掃擊範圍） */
     attackHitRadius: 42,
     /** 遠距衝撞衝刺期間的護盾（無敵）；近戰扇形不給 */
@@ -444,8 +477,8 @@ export const GameConfig = {
     dashDistance: 250,
     /** 慢速專屬「衝刺速度」預設(用戶定案700)；fast 用 GameConfig.player.dashSpeed 不受影響 */
     dashSpeed: 700,
-    /** 慢速模式普攻間隔（毫秒；角色編輯器的預設值，快速模式仍用 player.attackCooldownMs） */
-    attackCooldownMs: 200,
+    /** 慢速模式普攻間隔（毫秒；角色編輯器的預設值，快速模式仍用 player.attackCooldownMs）：配合 P1 Spine 普攻動畫長度 0.5 秒 */
+    attackCooldownMs: 500,
     /**
      * 真空圈（腳下地盤 = 敵人進不來的範圍，P1 與 BOT 都有）：左右半徑 vacuumRadius，上下 = vacuumRadius × vacuumFlatten。
      * 大小 / 扁度 / 偏移為預設值，實際值取自角色編輯器（systems/characterParams）。

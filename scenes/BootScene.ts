@@ -3,6 +3,7 @@ import { GameConfig } from '../config';
 import { HIT_COUNTER_TEXTURES } from '../objects/HitCounter';
 import { BARREL_TEXTURE, CRATE_TEXTURE } from '../objects/Breakable';
 import { EnemySpineController } from '../controllers/EnemySpineController';
+import { PlayerSpineController } from '../controllers/PlayerSpineController';
 import { JACKPOT_BANNER_TEXTURE } from './UIScene';
 
 /**
@@ -99,7 +100,8 @@ export class BootScene extends Phaser.Scene {
     this.load.image('enemy-skeleton-b', 'assets/Skeleton_B.png');
     this.load.image('enemy-ticket', 'assets/Ticket.png');
 
-    // 怪物 Spine 動畫素材（大怪）
+    // Spine 動畫素材：P1 孫悟空、怪物（大怪）
+    PlayerSpineController.preload(this.load);
     EnemySpineController.preload(this.load);
 
     // 可打破物件：木箱美術圖
