@@ -7,16 +7,17 @@ import { createParamStore, type ParamDef } from './paramStore';
  * 每一招的打擊點（木樁模式的「範圍 / 判定編輯器」可調整，所有模式都套用）。
  *
  * - 招式：普攻第 1 / 2 段、招式1（Combo01，原圓形斬）、招式2（Combo02，原直線氣波）、爆發（Unique_skill，二段變身中的連打）、
- *   衝刺攻擊（二段變身衝刺撞到敵人時以撞擊點為基準的範圍），以及所有普攻共用的近戰觸發距離
+ *   衝刺攻擊（二段變身衝刺撞到敵人時以撞擊點為基準的範圍）、一般衝刺（穿透途中碰到的怪），以及所有普攻共用的近戰觸發距離
  * - 每招有一到多個打擊點（MAX_HIT_POINTS 以內），每個打擊點有自己的判定時間（出招後幾毫秒）、傷害百分比與判定範圍
  *   （形狀扇形 / 圓形 / 長方形、判定中心往前 / 往上下偏移、尺寸，見 systems/hitShapes）：一招可以打好幾下，每下各自判定
- * - 爆發依自己的連打節奏、衝刺攻擊在撞到時判定，只用第一個打擊點的範圍（沒有時間軸）
+ * - 爆發依自己的連打節奏、衝刺攻擊在撞到時判定，只用第一個打擊點的範圍（沒有時間軸）；
+ *   一般衝刺以衝刺判定半徑碰撞（不用判定範圍），只用第一個打擊點的傷害 % 與頓點
  * - 預設每招一個打擊點，重現原本的範圍與判定時間點（melee.hitDelayMs / combo.*.hitDelayMs），傷害 100%
  * - 打擊點存成 JSON（只存跟預設不同的招式），近戰觸發距離用參數存檔；每局開始（GameScene.resetState）重新讀取
  */
 
-/** 招式：普攻第 1 段 / 第 2 段 / 招式1 / 招式2 / 爆發 / 衝刺攻擊（判定事件與編輯器分頁用） */
-export type AttackMove = 'attack1' | 'attack2' | 'circle' | 'line' | 'burst' | 'dash';
+/** 招式：普攻第 1 段 / 第 2 段 / 招式1 / 招式2 / 爆發 / 衝刺攻擊 / 一般衝刺（判定事件與編輯器分頁用） */
+export type AttackMove = 'attack1' | 'attack2' | 'circle' | 'line' | 'burst' | 'dash' | 'pierce';
 
 /** 有時間軸（打擊點依時間判定）的招式（爆發依自己的連打節奏、衝刺攻擊在撞到時判定） */
 export type TimedAttackMove = 'attack1' | 'attack2' | 'circle' | 'line';
@@ -28,8 +29,18 @@ export const ATTACK_MOVES: ReadonlyArray<{ move: AttackMove; label: string }> = 
   { move: 'circle', label: '招式1' },
   { move: 'line', label: '招式2' },
   { move: 'burst', label: '爆發' },
-  { move: 'dash', label: '衝刺攻擊' }
+  { move: 'dash', label: '衝刺攻擊' },
+  { move: 'pierce', label: '一般衝刺' }
 ];
+
+/**
+ * 招式是否有判定範圍可調（一般衝刺以衝刺判定半徑碰撞，沒有）
+ *
+ * @param move 招式
+ */
+export function hasHitShape(move: AttackMove): boolean {
+  return move !== 'pierce';
+}
 
 /**
  * 招式是否有時間軸
@@ -95,7 +106,9 @@ const DEFAULT_SHAPES: Readonly<Record<AttackMove, HitShape>> = {
   circle: { kind: 'circle', offsetForward: 0, offsetSide: 0, radius: combo.circle.radius, arcDeg: 360, length: combo.circle.radius * 2, width: combo.circle.radius },
   line: { kind: 'rect', offsetForward: 0, offsetSide: 0, radius: combo.line.width, arcDeg: 90, length: combo.line.length, width: combo.line.width },
   burst: { kind: 'circle', offsetForward: 0, offsetSide: 0, radius: GameConfig.burst.radius, arcDeg: 360, length: GameConfig.burst.radius * 2, width: GameConfig.burst.radius },
-  dash: { kind: 'circle', offsetForward: 0, offsetSide: 0, radius: combo.empower.aoe.radius, arcDeg: 360, length: combo.empower.aoe.radius * 2, width: combo.empower.aoe.radius }
+  dash: { kind: 'circle', offsetForward: 0, offsetSide: 0, radius: combo.empower.aoe.radius, arcDeg: 360, length: combo.empower.aoe.radius * 2, width: combo.empower.aoe.radius },
+  // 一般衝刺不用判定範圍（hasHitShape），只為資料格式一致
+  pierce: { kind: 'circle', offsetForward: 0, offsetSide: 0, radius: GameConfig.aim.dashHitRadius, arcDeg: 360, length: GameConfig.aim.dashHitRadius * 2, width: GameConfig.aim.dashHitRadius }
 };
 
 /** 有時間軸招式的預設判定時間點 */
@@ -114,7 +127,8 @@ const DEFAULT_PAUSE_MS: Readonly<Record<AttackMove, number>> = {
   circle: HIT_PAUSE.combo,
   line: HIT_PAUSE.combo,
   burst: HIT_PAUSE.burst,
-  dash: HIT_PAUSE.dash
+  dash: HIT_PAUSE.dash,
+  pierce: HIT_PAUSE.pierce
 };
 
 /**

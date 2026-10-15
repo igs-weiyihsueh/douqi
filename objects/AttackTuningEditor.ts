@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import type { PlayerAnimKey, PlayerPosePreview } from '../controllers/PlayerSpineController';
 import {
   ATTACK_HIT_EVENT, ATTACK_MOVES, HIT_POINT_FIELDS, MAX_HIT_POINTS, MELEE_ENEMY_RANGE_DEF, attackTuning, clampHitPointField,
-  isTimedMove, moveHitPoints, resetAllAttackTuning, resetMoveHitPoints, setMeleeEnemyRange, setMoveHitPoints,
+  hasHitShape, isTimedMove, moveHitPoints, resetAllAttackTuning, resetMoveHitPoints, setMeleeEnemyRange, setMoveHitPoints,
   type AttackMove, type HitPoint, type HitPointField, type TimedAttackMove
 } from '../systems/attackTuningParams';
 import { HIT_SHAPE_KINDS, HIT_SHAPE_LABELS, drawHitShape, placeHitShape, type HitShapeKind } from '../systems/hitShapes';
@@ -67,7 +67,8 @@ const OVERLAY = {
     circle: 0xfb923c,
     line: 0xc084fc,
     burst: 0xf472b6,
-    dash: 0xfde047
+    dash: 0xfde047,
+    pierce: 0xf87171
   } as Readonly<Record<AttackMove, number>>,
   /** 時間軸目前這一格判定的打擊點 / 其他打擊點（淡）的填色與線框透明度 */
   ACTIVE_FILL: 0.25,
@@ -132,13 +133,14 @@ export interface AttackTuningEditorHost {
 /**
  * 木樁模式的範圍 / 判定編輯器（GameConfig.training.tuningEditorKey 開關）。畫面左側面板：
  *
- * - 上方招式分頁（普攻 1、普攻 2、招式1、招式2、爆發、衝刺攻擊）
+ * - 上方招式分頁（普攻 1、普攻 2、招式1、招式2、爆發、衝刺攻擊、一般衝刺）
  * - 有時間軸的招式（普攻、招式1 / 2）：時間軸長度 = 該動作長度，點或拖動時間軸、按 ◀ ▶ 一格一格（1/30 秒）前後看，
  *   P1 定格在那一格的 Spine 姿勢；軸上的色塊是各打擊點的判定段（開始 ~ 結束，這段期間每幀判定、同一個目標每段只打一次），
  *   可在目前這一格「加打擊點」、刪除，把選中打擊點的判定段「設為開始 / 設為結束」，或直接拖動色塊的兩端。
  *   加 / 刪打擊點時，各打擊點的傷害自動平均分配（之後可個別調）
  * - 選中打擊點的參數：形狀（扇形 / 圓形 / 長方形）、判定中心往前 / 往上下偏移、該形狀的尺寸、傷害 %、頓點（打中怪時出招者停住多久）
- *   （systems/attackTuningParams，每次調整即時套用並存在瀏覽器）；爆發、衝刺攻擊只有一個打擊點、沒有時間軸
+ *   （systems/attackTuningParams，每次調整即時套用並存在瀏覽器）；爆發、衝刺攻擊、一般衝刺只有一個打擊點、沒有時間軸，
+ *   一般衝刺只有傷害 % 與頓點（以衝刺判定半徑碰撞，沒有判定範圍）
  * - 最下面是普攻共用的近戰觸發距離與恢復預設、關閉
  *
  * 角色身上畫選中招式的打擊點：時間軸目前這一格判定的打擊點畫深色、其他畫淡色、選中的打擊點線框加粗；
@@ -198,7 +200,8 @@ export class AttackTuningEditor {
     const color = OVERLAY.MOVES[this.selected];
     const anchor = this.anchorOf(this.selected, p);
     const timed = isTimedMove(this.selected);
-    moveHitPoints(this.selected).forEach((point, index) => {
+    // 一般衝刺沒有判定範圍可畫（以衝刺判定半徑碰撞）
+    if (hasHitShape(this.selected)) moveHitPoints(this.selected).forEach((point, index) => {
       const flashing = now < (this.flashUntil.get(`${this.selected}:${index}`) ?? 0);
       const active = !timed || (this.playheadMs >= point.timeMs - FRAME_MS / 2 && this.playheadMs <= point.timeMs + point.durationMs + FRAME_MS / 2);
       const fill = flashing ? OVERLAY.FLASH_FILL : active ? OVERLAY.ACTIVE_FILL : OVERLAY.IDLE_FILL;
@@ -501,13 +504,16 @@ export class AttackTuningEditor {
   }
 
   /**
-   * 選中打擊點要顯示的欄位：形狀、往前 / 往上下偏移、該形狀的尺寸、傷害 %（有時間軸的招式；判定時間由時間軸上的位置決定）、頓點
+   * 選中打擊點要顯示的欄位：形狀、往前 / 往上下偏移、該形狀的尺寸（一般衝刺沒有）、傷害 %（有時間軸的招式與一般衝刺；
+   * 判定時間由時間軸上的位置決定）、頓點
    *
    * @param point 打擊點
    */
   private pointFields(point: HitPoint): HitPointField[] {
-    const fields: HitPointField[] = ['shape', 'offsetForward', 'offsetSide', ...SHAPE_SIZE_FIELDS[point.shape.kind]];
-    if (isTimedMove(this.selected)) fields.push('damagePct');
+    const fields: HitPointField[] = hasHitShape(this.selected)
+      ? ['shape', 'offsetForward', 'offsetSide', ...SHAPE_SIZE_FIELDS[point.shape.kind]]
+      : [];
+    if (isTimedMove(this.selected) || this.selected === 'pierce') fields.push('damagePct');
     fields.push('pauseMs');
     return fields;
   }

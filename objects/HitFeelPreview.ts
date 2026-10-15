@@ -4,6 +4,7 @@ import { SKIN_TEXTURE } from '../controllers/ArtStyleController';
 import { CombatFx } from '../controllers/CombatFx';
 import { HitSparks, hitPoseAt } from '../controllers/HitReactionFx';
 import { dashStretchMult, impactSquashAt } from '../controllers/DashFx';
+import { moveHitPoints } from '../systems/attackTuningParams';
 import { hitFeel } from '../systems/hitFeelParams';
 
 /** 示範用的敵人圖（新美術一般兵骷髏；原圖面向右） */
@@ -146,7 +147,7 @@ export class HitFeelPreview {
     const contactX = enemyX - LAYOUT.CONTACT_GAP;
     const hitAt = TIMING.IDLE_MS + ((contactX - startX) / TIMING.DASH_SPEED) * 1000;
     const cutInMs = p.cutInEnabled === 1 ? p.cutInMs : 0;
-    const pauseMs = cutInMs > 0 ? p.impactPauseMs : 0; // 撞擊停頓只在有切入時發生（同遊戲）
+    const pauseMs = moveHitPoints('pierce')[0].pauseMs; // 撞到時的停頓 = 一般衝刺的頓點（範圍 / 判定編輯器，同遊戲）
     const freezeMs = p.hitstopEnabled === 1 ? Math.min(p.freezeMs, p.maxFreezeMs) : 0;
     const knockbackAt = hitAt + freezeMs;
     const cycleEnd = Math.max(hitAt + pauseMs + cutInMs, hitAt + p.impactSquashMs, knockbackAt + TIMING.KNOCKBACK_MS, hitAt + p.reactionMs) + TIMING.HOLD_MS;
@@ -155,7 +156,7 @@ export class HitFeelPreview {
       return;
     }
 
-    // 角色：停頓 → 全速衝刺（拉長、殘影）→ 撞到：撞擊停頓 → 以切入速度陷入 cutInMs → 停（撞擊壓扁回彈）
+    // 角色：停頓 → 全速衝刺（拉長、殘影）→ 撞到：頓點 → 以切入速度陷入 cutInMs → 停（撞擊壓扁回彈）
     let ax = startX;
     const dashing = t >= TIMING.IDLE_MS && t < hitAt;
     if (t >= TIMING.IDLE_MS) {
