@@ -326,7 +326,7 @@ export const GameConfig = {
    * - comboMinTickets：連擊報獎保底張數——按比例算出的張數不到這個數（含沒達到第一個里程碑的保底報獎）時改發這個數，
    *   buffer 不夠時發 buffer 的整數部分（不超過已存的量，RTP 不變）
    * - secondFormExpectedHits：二段變身每打中一下發 buffer ÷ 此值（發完為止）
-   * - treasure：打破木箱的玩家寶箱怪 buffer 存到 prize 張，木箱才可能跳出寶箱怪（breakable.crate.treasureChance）；出現時從他的 buffer
+   * - treasure：打破木箱的玩家寶箱怪 buffer 存到 prize 張，打破木箱時就跳出寶箱怪（breakable.crate.treasureChance，目前 1 = 必定）；出現時從他的 buffer
    *   扣下 prize 張鎖定成這隻寶箱怪的獎金，誰打都從這筆發：每打中一下有 hitChance 機率發 hitTickets 張（要留得下 killReserve 張給打倒才發），
    *   打倒時剩下的全部發給打倒者；沒打倒就離場時退回原本的玩家
    * - boss：共用 buffer 存到 minBudget 才亂入；登場時鎖定整個 buffer，hitShare 給打中（每下 ÷ expectedHits）、killShare 給打倒、
@@ -342,7 +342,7 @@ export const GameConfig = {
     comboTierShares: [0.1, 0.2, 0.35, 0.6, 1] as ReadonlyArray<number>,
     comboMinTickets: 1,
     secondFormExpectedHits: 15,
-    treasure: { prize: 30, hitChance: 0.3, hitTickets: 1, killReserve: 1 },
+    treasure: { prize: 50, hitChance: 0.3, hitTickets: 1, killReserve: 1 },
     boss: { minBudget: 600, hitShare: 0.3, killShare: 0.3, expectedHits: 25, formExpectedKills: 20 },
     treasureRoom: { budget: 300, killShare: 0.5, expectedKills: 8 },
     debugKey: 'F8',
@@ -1897,10 +1897,10 @@ export const GameConfig = {
       bodyScale: 1,
       /**
        * 打破木箱的獎勵：ticketChance 機率中獎，發出打破者的木箱 buffer（payout；下方面板播 HIT 報獎特效，木箱位置爆出金光與彩票圖示 + 張數）；
-       * treasureChance 機率從木箱位置跳出寶箱怪（每個小關卡最多一隻，最後一波打完後不出）
+       * 打破者的寶箱怪獎金存夠（payout.treasure.prize）時，treasureChance 機率從木箱位置跳出寶箱怪（1 = 存夠就必定出；每個小關卡最多一隻，最後一波打完後不出）
        */
       ticketChance: 0.2,
-      treasureChance: 0.08,
+      treasureChance: 1,
       /** 木箱位置的彩票提示：金光圈半徑 / 顏色 / 時間，彩票獲得提示（ticketFx.popup）的深度 */
       ticketFx: {
         ringRadius: 90,
