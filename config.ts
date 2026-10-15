@@ -229,8 +229,8 @@ export const GameConfig = {
     speeds: { idle: 1, move: 1, attack: 1, comboCircle: 1, comboLine: 1, unique: 1, sprint: 1, hit: 1 } as Record<string, number>,
     moveSpeedThreshold: 30,
     mixMs: 80,
-    /** 原檔動作本身朝背後出招的動作鍵（Combo02 的氣波往角色背後打）：播放時左右翻轉，讓招式朝面向打出去 */
-    mirroredAnims: ['comboLine'] as ReadonlyArray<string>
+    /** 原檔動作本身朝背後出招的動作鍵：播放時左右翻轉，讓招式朝面向打出去（目前的動作都朝面向，沒有需要翻轉的） */
+    mirroredAnims: [] as ReadonlyArray<string>
   },
 
   /**
@@ -567,8 +567,8 @@ export const GameConfig = {
     },
     /** 直線範圍技（朝 aimAngle，瞬發貫穿） */
     line: {
-      /** 判定時間點：放出（開始播 Combo02）後幾毫秒才判定命中（預設取自氣波（龍）特效出現的那一格） */
-      hitDelayMs: 500,
+      /** 判定時間點：放出（開始播 Combo02）後幾毫秒才判定命中（預設取自跳起後棍子砸到地面的那一格） */
+      hitDelayMs: 1000,
       length: 420,
       width: 90,
       damage: 70,
