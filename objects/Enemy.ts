@@ -26,7 +26,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   dead = false;
   /** 打不死（木樁模式的木樁）：每次 spawn 重設為 false，由生成端設定 */
   immortal = false;
-  /** 不會被擊退（木樁模式的木樁）：每次 spawn 重設為 false，由生成端設定 */
+  /** 不會被擊退也不會被角色推動（木樁模式的木樁；角色反而被它擋住）：每次 spawn 重設為 false，由生成端設定 */
   anchored = false;
   private maxHp = 0;
   private moveSpeed = 0;

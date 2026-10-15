@@ -294,7 +294,7 @@ export function pushEnemyOutOfStructures(e: Enemy, enemies: Phaser.Physics.Arcad
 }
 
 /**
- * 角色不可穿過 BOSS / 塔本體（衝刺中也擋）：重疊時把角色推回結構外緣，結構不動
+ * 角色不可穿過 BOSS / 塔本體與不會被推動的怪（Enemy.anchored，木樁）（衝刺中也擋）：重疊時把角色推回它的外緣，它不動
  *
  * @param c 角色
  * @param enemies 敵人物件池
@@ -303,7 +303,7 @@ export function pushCharacterOutOfStructures(c: Character, enemies: Phaser.Physi
   const pr = GameConfig.player.radius;
   for (const child of enemies.getChildren()) {
     const e = child as Enemy;
-    if (!e.active || e.dead || e.telegraphing || !isStructureEnemy(e)) continue;
+    if (!e.active || e.dead || e.telegraphing || !(isStructureEnemy(e) || e.anchored)) continue;
     const minDist = pr + e.getBodyRadius();
     const { nx, ny, d } = normalBetween(e.x, e.y, c.x, c.y); // 結構 → 角色
     if (d < minDist) c.setPosition(c.x + nx * (minDist - d), c.y + ny * (minDist - d));
@@ -391,7 +391,7 @@ export function vacuumGap(c: Character, e: Enemy, zone: VacuumZone): { gap: numb
 /**
  * 角色與一般怪不重疊：把重疊的怪推離角色（全額），角色位置不動、保留玩家走位手感。
  * 傳入 vacuum（慢速模式）時改用真空圈：以腳底為準，把踩進圈內的怪沿「圈中心 → 怪腳底」推回圈邊（見 vacuumGap）。
- * 固定目標跳過（各有站外緣 / 穿越邏輯）；呼叫端在衝刺中不套用，保留衝刺穿怪的打擊感
+ * 固定目標與不會被推動的怪（Enemy.anchored，木樁）跳過（各有站外緣 / 穿越邏輯）；呼叫端在衝刺中不套用，保留衝刺穿怪的打擊感
  *
  * @param c 角色
  * @param enemies 敵人物件池
@@ -402,7 +402,7 @@ export function pushEnemiesAwayFromCharacter(c: Character, enemies: Phaser.Physi
   const pr = GameConfig.player.radius;
   for (const child of enemies.getChildren()) {
     const e = child as Enemy;
-    if (!e.active || e.dead || isFixedEnemy(e)) continue;
+    if (!e.active || e.dead || isFixedEnemy(e) || e.anchored) continue;
     const er = e.getBodyRadius();
     let nx: number, ny: number, push: number;
     if (vacuum) {
