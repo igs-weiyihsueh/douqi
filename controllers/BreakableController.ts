@@ -349,13 +349,15 @@ export class BreakableController {
    * @param actor 攻擊的角色
    * @param shape 放好的判定範圍
    * @param time 目前場景時間
+   * @param exclude 不再打的物件（打擊點判定段已打過的）；打中的物件會加進來
    * @returns 命中的物件數
    */
-  hitInShape(actor: Character, shape: PlacedHitShape, time: number): number {
+  hitInShape(actor: Character, shape: PlacedHitShape, time: number, exclude?: Set<object>): number {
     return this.hitWhere(actor, (bk) => {
+      if (exclude?.has(bk)) return false;
       const body = bk.getBody();
       return hitShapeContains(shape, body.centerX, body.centerY);
-    }, time);
+    }, time, exclude);
   }
 
   /**
@@ -417,7 +419,7 @@ export class BreakableController {
    * @param hitSet 有給時把命中的物件加進去
    * @returns 命中的物件數
    */
-  private hitWhere(actor: Character, inRange: (bk: Breakable) => boolean, time: number, hitSet?: Set<Breakable>): number {
+  private hitWhere(actor: Character, inRange: (bk: Breakable) => boolean, time: number, hitSet?: Set<object>): number {
     let hits = 0;
     let drops = 0;
     for (const child of this.host.group().getChildren()) {

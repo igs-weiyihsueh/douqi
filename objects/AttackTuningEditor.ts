@@ -25,6 +25,10 @@ const LAYOUT = {
   BAR_MARKER_WIDTH: 6,
   PLAYHEAD_WIDTH: 2,
   PLAYHEAD_OVERHANG: 4,
+  /** 按在選中判定段的開始 / 結束這個距離內（像素）就是拖動那一端，否則是拖動時間軸 */
+  EDGE_GRAB_PX: 10,
+  /** 判定段色塊的透明度（選中的打擊點兩端另畫實心把手） */
+  SEGMENT_ALPHA: 0.55,
   TIMELINE_BUTTON_HEIGHT: 30,
   TIMELINE_BUTTON_GAP: 6,
   ROW_HEIGHT: 38,
@@ -83,6 +87,18 @@ const OVERLAY = {
 /** 時間軸一格的長度（毫秒；每秒 30 格） */
 const FRAME_MS = 1000 / 30;
 
+/** 打擊點本身（不在判定範圍 shape 裡）的數值欄位 */
+type PointLevelField = 'timeMs' | 'durationMs' | 'damagePct' | 'pauseMs';
+
+/**
+ * 欄位是否為打擊點本身的數值（否則是判定範圍 shape 的欄位）
+ *
+ * @param field 欄位
+ */
+function isPointLevelField(field: HitPointField): field is PointLevelField {
+  return field === 'timeMs' || field === 'durationMs' || field === 'damagePct' || field === 'pauseMs';
+}
+
 /** 各形狀要顯示的尺寸欄位 */
 const SHAPE_SIZE_FIELDS: Readonly<Record<HitShapeKind, ReadonlyArray<'radius' | 'arcDeg' | 'length' | 'width'>>> = {
   arc: ['radius', 'arcDeg'],
@@ -118,8 +134,8 @@ export interface AttackTuningEditorHost {
  *
  * - 上方招式分頁（普攻 1、普攻 2、招式1、招式2、爆發、衝刺攻擊）
  * - 有時間軸的招式（普攻、招式1 / 2）：時間軸長度 = 該動作長度，點或拖動時間軸、按 ◀ ▶ 一格一格（1/30 秒）前後看，
- *   P1 定格在那一格的 Spine 姿勢；軸上標出各打擊點，打擊點在軸上的位置就是它判定的時間，可在目前這一格「加打擊點」、刪除、
- *   把選中的打擊點「移到這一格」。
+ *   P1 定格在那一格的 Spine 姿勢；軸上的色塊是各打擊點的判定段（開始 ~ 結束，這段期間每幀判定、同一個目標每段只打一次），
+ *   可在目前這一格「加打擊點」、刪除，把選中打擊點的判定段「設為開始 / 設為結束」，或直接拖動色塊的兩端。
  *   加 / 刪打擊點時，各打擊點的傷害自動平均分配（之後可個別調）
  * - 選中打擊點的參數：形狀（扇形 / 圓形 / 長方形）、判定中心往前 / 往上下偏移、該形狀的尺寸、傷害 %、頓點（打中怪時出招者停住多久）
  *   （systems/attackTuningParams，每次調整即時套用並存在瀏覽器）；爆發、衝刺攻擊只有一個打擊點、沒有時間軸
@@ -138,8 +154,8 @@ export class AttackTuningEditor {
   private selected: AttackMove = 'attack1';
   private selectedPoint = 0;
   private playheadMs = 0;
-  /** 正在拖動時間軸 */
-  private dragging = false;
+  /** 拖動中的東西：時間軸 / 選中判定段的開始 / 結束（none = 沒在拖動） */
+  private dragMode: 'none' | 'scrub' | 'start' | 'end' = 'none';
   /** 各招打擊點閃亮到何時（場景時間；鍵 = 招式:索引） */
   private readonly flashUntil = new Map<string, number>();
   /** UIScene 上的拖動監聽（開啟時註冊、關閉時移除） */
@@ -184,7 +200,7 @@ export class AttackTuningEditor {
     const timed = isTimedMove(this.selected);
     moveHitPoints(this.selected).forEach((point, index) => {
       const flashing = now < (this.flashUntil.get(`${this.selected}:${index}`) ?? 0);
-      const active = !timed || Math.abs(point.timeMs - this.playheadMs) <= FRAME_MS / 2;
+      const active = !timed || (this.playheadMs >= point.timeMs - FRAME_MS / 2 && this.playheadMs <= point.timeMs + point.durationMs + FRAME_MS / 2);
       const fill = flashing ? OVERLAY.FLASH_FILL : active ? OVERLAY.ACTIVE_FILL : OVERLAY.IDLE_FILL;
       const lineWidth = index === this.selectedPoint ? OVERLAY.SELECTED_LINE_WIDTH : OVERLAY.LINE_WIDTH;
       g.fillStyle(color, fill).lineStyle(lineWidth, color, active || flashing ? OVERLAY.ACTIVE_LINE : OVERLAY.IDLE_LINE);
@@ -210,8 +226,8 @@ export class AttackTuningEditor {
   /** 開啟面板、範圍顯示與定格預覽，並在 UIScene 註冊時間軸拖動 */
   private open(): void {
     const ui = this.scene.scene.get('UIScene');
-    const move = (pointer: Phaser.Input.Pointer): void => { if (this.dragging) this.scrubTo(pointer.x); };
-    const up = (): void => { this.dragging = false; };
+    const move = (pointer: Phaser.Input.Pointer): void => { if (this.dragMode !== 'none') this.dragTo(pointer.x); };
+    const up = (): void => { this.dragMode = 'none'; };
     ui.input.on(Phaser.Input.Events.POINTER_MOVE, move);
     ui.input.on(Phaser.Input.Events.POINTER_UP, up);
     this.uiInput = { scene: ui, move, up };
@@ -226,7 +242,7 @@ export class AttackTuningEditor {
       this.uiInput.scene.input.off(Phaser.Input.Events.POINTER_UP, this.uiInput.up);
       this.uiInput = null;
     }
-    this.dragging = false;
+    this.dragMode = 'none';
     this.panel?.destroy();
     this.panel = null;
     this.timeline = null;
@@ -247,7 +263,7 @@ export class AttackTuningEditor {
   }
 
   /**
-   * 選中一個打擊點：時間軸跳到它的判定時間，重建面板
+   * 選中一個打擊點：時間軸跳到它判定段的開始，重建面板
    *
    * @param index 打擊點索引
    */
@@ -289,14 +305,70 @@ export class AttackTuningEditor {
   }
 
   /**
-   * 拖動 / 點擊時間軸：依畫面 x 換算時間
+   * 按下時間軸：按在選中判定段的開始 / 結束附近就拖動那一端（兩端重疊時，按在右邊拖結束、左邊拖開始），否則拖動時間軸
    *
    * @param screenX 指標的畫面 x
    */
-  private scrubTo(screenX: number): void {
+  private beginDrag(screenX: number): void {
+    if (!this.timeline) return;
+    const point = moveHitPoints(this.selected)[this.selectedPoint];
+    const x = screenX - LAYOUT.X;
+    const startX = this.timeToBarX(point.timeMs), endX = this.timeToBarX(point.timeMs + point.durationMs);
+    const nearStart = Math.abs(x - startX) <= LAYOUT.EDGE_GRAB_PX, nearEnd = Math.abs(x - endX) <= LAYOUT.EDGE_GRAB_PX;
+    if (nearStart && nearEnd) this.dragMode = x >= endX ? 'end' : 'start';
+    else this.dragMode = nearEnd ? 'end' : nearStart ? 'start' : 'scrub';
+    this.dragTo(screenX);
+  }
+
+  /**
+   * 拖動中：時間軸移到指標的位置；拖動判定段一端時，那一端跟著移到這一格
+   *
+   * @param screenX 指標的畫面 x
+   */
+  private dragTo(screenX: number): void {
     if (!this.timeline) return;
     const ratio = Phaser.Math.Clamp((screenX - LAYOUT.X - this.timeline.barX) / this.timeline.barWidth, 0, 1);
     this.setPlayhead(ratio * this.durationMs());
+    if (this.dragMode === 'start') this.setSelectedEdge('start', this.playheadMs);
+    else if (this.dragMode === 'end') this.setSelectedEdge('end', this.playheadMs);
+  }
+
+  /**
+   * 時間在時間軸上的 x（相對面板）
+   *
+   * @param ms 時間（毫秒）
+   */
+  private timeToBarX(ms: number): number {
+    if (!this.timeline) return 0;
+    const duration = this.durationMs();
+    return this.timeline.barX + (duration > 0 ? Phaser.Math.Clamp(ms / duration, 0, 1) : 0) * this.timeline.barWidth;
+  }
+
+  /**
+   * 設定選中打擊點判定段的開始或結束（另一端不動；開始拉過結束時判定段縮成一格，結束拉到開始之前時開始跟著移過去），
+   * 立即套用、存檔；重新排序後仍保持選中，只更新數值與時間軸（拖動中不重建面板）
+   *
+   * @param edge 開始 / 結束
+   * @param ms 時間（毫秒）
+   */
+  private setSelectedEdge(edge: 'start' | 'end', ms: number): void {
+    const points = moveHitPoints(this.selected).map((p) => ({ ...p, shape: { ...p.shape } }));
+    const point = points[this.selectedPoint];
+    const end = point.timeMs + point.durationMs;
+    if (edge === 'start') {
+      point.timeMs = clampHitPointField('timeMs', ms, point.timeMs);
+      point.durationMs = clampHitPointField('durationMs', end - point.timeMs, 0);
+    } else if (ms < point.timeMs) {
+      point.timeMs = clampHitPointField('timeMs', ms, point.timeMs);
+      point.durationMs = 0;
+    } else {
+      point.durationMs = clampHitPointField('durationMs', ms - point.timeMs, point.durationMs);
+    }
+    const sorted = setMoveHitPoints(this.selected, points);
+    // 排序後找回同一個打擊點（JSON 比對整筆資料）
+    const key = JSON.stringify(point);
+    this.selectedPoint = Math.max(0, sorted.findIndex((p) => JSON.stringify(p) === key));
+    this.refreshValues();
   }
 
   /** （重新）建立面板：招式分頁、時間軸、選中打擊點的參數、近戰觸發距離與底部按鈕；建在 UIScene */
@@ -378,10 +450,8 @@ export class AttackTuningEditor {
     panel.add(label);
     y += LAYOUT.TIMELINE_LABEL_HEIGHT;
     const barTop = y;
-    panel.add(this.blockClicks(ui.add.rectangle(barX, barTop, barWidth, LAYOUT.BAR_HEIGHT, LAYOUT.BAR_COLOR).setOrigin(0, 0), (pointer) => {
-      this.dragging = true;
-      this.scrubTo(pointer.x);
-    }));
+    panel.add(this.blockClicks(ui.add.rectangle(barX, barTop, barWidth, LAYOUT.BAR_HEIGHT, LAYOUT.BAR_COLOR).setOrigin(0, 0),
+      (pointer) => this.beginDrag(pointer.x)));
     const markers = ui.add.graphics();
     panel.add(markers);
     this.timeline = { label, markers, barX, barTop, barWidth };
@@ -391,7 +461,8 @@ export class AttackTuningEditor {
       { label: '格 ▶', onClick: () => this.setPlayhead(this.playheadMs + FRAME_MS) },
       { label: '加打擊點', onClick: () => this.addPoint() },
       { label: '刪除', onClick: () => this.removePoint() },
-      { label: '移到這一格', onClick: () => this.stepPoint('timeMs', 0, this.playheadMs) }
+      { label: '設為開始', onClick: () => this.setSelectedEdge('start', this.playheadMs) },
+      { label: '設為結束', onClick: () => this.setSelectedEdge('end', this.playheadMs) }
     ];
     const bw = (barWidth - LAYOUT.TIMELINE_BUTTON_GAP * (buttons.length - 1)) / buttons.length;
     buttons.forEach((b, i) => {
@@ -404,19 +475,26 @@ export class AttackTuningEditor {
     return y + LAYOUT.ROW_HEIGHT;
   }
 
-  /** 更新時間軸：時間說明、打擊點標記（選中的較亮）與目前時間的直線 */
+  /** 更新時間軸：時間說明、各打擊點的判定段色塊（選中的較亮、兩端畫把手）與目前時間的直線 */
   private refreshTimeline(): void {
     if (!this.timeline) return;
-    const { label, markers, barX, barTop, barWidth } = this.timeline;
+    const { label, markers, barTop } = this.timeline;
     const duration = this.durationMs();
     const frames = Math.max(1, Math.round(duration / FRAME_MS));
     const frame = Math.round(this.playheadMs / FRAME_MS);
     label.setText(`時間軸 ${(this.playheadMs / 1000).toFixed(2)}s / ${(duration / 1000).toFixed(2)}s　第 ${frame} / ${frames} 格（點或拖動）`);
-    const toX = (ms: number): number => barX + (duration > 0 ? Phaser.Math.Clamp(ms / duration, 0, 1) : 0) * barWidth;
+    const toX = (ms: number): number => this.timeToBarX(ms);
+    const handle = LAYOUT.BAR_MARKER_WIDTH;
     markers.clear();
     moveHitPoints(this.selected).forEach((point, index) => {
-      markers.fillStyle(index === this.selectedPoint ? LAYOUT.MARKER_SELECTED_COLOR : LAYOUT.MARKER_COLOR, 1)
-        .fillRect(toX(point.timeMs) - LAYOUT.BAR_MARKER_WIDTH / 2, barTop, LAYOUT.BAR_MARKER_WIDTH, LAYOUT.BAR_HEIGHT);
+      const selected = index === this.selectedPoint;
+      const color = selected ? LAYOUT.MARKER_SELECTED_COLOR : LAYOUT.MARKER_COLOR;
+      const startX = toX(point.timeMs), endX = toX(point.timeMs + point.durationMs);
+      // 判定段色塊（一格時至少一個把手寬）
+      markers.fillStyle(color, LAYOUT.SEGMENT_ALPHA).fillRect(startX - handle / 2, barTop, Math.max(endX - startX, 0) + handle, LAYOUT.BAR_HEIGHT);
+      if (!selected) return;
+      markers.fillStyle(color, 1).fillRect(startX - handle / 2, barTop, handle, LAYOUT.BAR_HEIGHT)
+        .fillRect(endX - handle / 2, barTop, handle, LAYOUT.BAR_HEIGHT);
     });
     markers.fillStyle(LAYOUT.PLAYHEAD_COLOR, 1).fillRect(toX(this.playheadMs) - LAYOUT.PLAYHEAD_WIDTH / 2, barTop - LAYOUT.PLAYHEAD_OVERHANG,
       LAYOUT.PLAYHEAD_WIDTH, LAYOUT.BAR_HEIGHT + LAYOUT.PLAYHEAD_OVERHANG * 2);
@@ -434,10 +512,13 @@ export class AttackTuningEditor {
     return fields;
   }
 
-  /** 打擊點選擇列的文字：第幾個 / 共幾個，以及它在時間軸上的時間 */
+  /** 打擊點選擇列的文字：第幾個 / 共幾個，以及它判定段的時間（一格時只顯示開始） */
   private pointSelectorText(): string {
     const points = moveHitPoints(this.selected);
-    return `${this.selectedPoint + 1} / ${points.length}（${(points[this.selectedPoint].timeMs / 1000).toFixed(2)}s）`;
+    const point = points[this.selectedPoint];
+    const sec = (ms: number): string => (ms / 1000).toFixed(2);
+    const range = point.durationMs > 0 ? `${sec(point.timeMs)}~${sec(point.timeMs + point.durationMs)}s` : `${sec(point.timeMs)}s`;
+    return `${this.selectedPoint + 1} / ${points.length}（${range}）`;
   }
 
   /**
@@ -448,46 +529,39 @@ export class AttackTuningEditor {
   private pointValueText(field: HitPointField): string {
     const point = moveHitPoints(this.selected)[this.selectedPoint];
     if (field === 'shape') return HIT_SHAPE_LABELS[point.shape.kind];
-    const value = field === 'timeMs' || field === 'damagePct' || field === 'pauseMs' ? point[field] : point.shape[field];
+    const value = isPointLevelField(field) ? point[field] : point.shape[field];
     return `${value}${HIT_POINT_FIELDS[field].unit}`;
   }
 
   /**
-   * 調整選中打擊點的一個欄位並立即套用、存檔：形狀循環切換、其他欄位一格；傳入 exact 時直接設成該值。
-   * 移到別格（改判定時間）的打擊點重新排序後仍保持選中；換形狀或時間後重建面板
+   * 調整選中打擊點的一個欄位一格並立即套用、存檔：形狀循環切換、其他欄位加減一格；換形狀後重建面板
+   * （判定段的時間由時間軸設定，見 setSelectedEdge）
    *
    * @param field 欄位
-   * @param dir −1 / +1（exact 有值時不用）
-   * @param exact 直接設定的值
+   * @param dir −1 / +1
    */
-  private stepPoint(field: HitPointField, dir: -1 | 0 | 1, exact?: number): void {
+  private stepPoint(field: HitPointField, dir: -1 | 1): void {
     const points = moveHitPoints(this.selected).map((p) => ({ ...p, shape: { ...p.shape } }));
     const point = points[this.selectedPoint];
     if (field === 'shape') {
       const count = HIT_SHAPE_KINDS.length;
       point.shape.kind = HIT_SHAPE_KINDS[(HIT_SHAPE_KINDS.indexOf(point.shape.kind) + dir + count) % count];
-    } else if (field === 'timeMs' || field === 'damagePct' || field === 'pauseMs') {
-      point[field] = clampHitPointField(field, exact ?? point[field] + dir * HIT_POINT_FIELDS[field].step, point[field]);
+    } else if (isPointLevelField(field)) {
+      point[field] = clampHitPointField(field, point[field] + dir * HIT_POINT_FIELDS[field].step, point[field]);
     } else {
       point.shape[field] = clampHitPointField(field, point.shape[field] + dir * HIT_POINT_FIELDS[field].step, point.shape[field]);
     }
-    const sorted = setMoveHitPoints(this.selected, points);
-    if (field === 'shape' || field === 'timeMs') {
-      // 排序後找回同一個打擊點（JSON 比對整筆資料）
-      const key = JSON.stringify(point);
-      this.selectedPoint = Math.max(0, sorted.findIndex((p) => JSON.stringify(p) === key));
-      if (field === 'timeMs') this.playheadMs = sorted[this.selectedPoint].timeMs;
-      this.render();
-      this.applyPreview();
-    }
+    // 只依時間排序，改這些欄位不會換位置
+    setMoveHitPoints(this.selected, points);
+    if (field === 'shape') this.render();
   }
 
-  /** 在時間軸目前這一格加一個打擊點（複製選中打擊點的範圍），傷害平均分配，選中新打擊點 */
+  /** 在時間軸目前這一格加一個打擊點（複製選中打擊點的範圍與判定段長度），傷害平均分配，選中新打擊點 */
   private addPoint(): void {
     const points = moveHitPoints(this.selected);
     if (points.length >= MAX_HIT_POINTS) return;
     const source = points[this.selectedPoint];
-    const list = this.splitDamage([...points, { timeMs: this.playheadMs, damagePct: source.damagePct, pauseMs: source.pauseMs, shape: { ...source.shape } }]);
+    const list = this.splitDamage([...points, { timeMs: this.playheadMs, durationMs: source.durationMs, damagePct: source.damagePct, pauseMs: source.pauseMs, shape: { ...source.shape } }]);
     const added = list[list.length - 1];
     const sorted = setMoveHitPoints(this.selected, list);
     const key = JSON.stringify(added);

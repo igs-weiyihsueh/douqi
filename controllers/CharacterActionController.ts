@@ -10,7 +10,8 @@ import { isStructureEnemy } from '../systems/enemyKinds';
 import type { EdgeMargins } from '../systems/spriteFeet';
 import type { LockTarget, TargetingController } from './TargetingController';
 import {
-  ATTACK_HIT_EVENT, afterHitDelay, attackTuning, meleeMove, moveHitPoints, moveReach, type AttackMove, type HitPoint
+  ATTACK_HIT_EVENT, attackTuning, createHitWindowState, meleeMove, moveHitPoints, moveReach, runHitWindow, type AttackMove, type HitPoint,
+  type HitWindowState
 } from '../systems/attackTuningParams';
 import { hitShapeContains, placeHitShape, type PlacedHitShape } from '../systems/hitShapes';
 
@@ -80,8 +81,8 @@ export interface CharacterActionHost {
   flashWhite(c: Character): void;
   /** 普攻劍氣特效（形狀 = 這一段的判定範圍；只在顯示範圍特效的模式畫出） */
   spawnMeleeShapeEffect(shape: PlacedHitShape): void;
-  /** 判定範圍內打可破壞物件（以物件中心判定），回傳命中數 */
-  hitBreakablesInShape(c: Character, shape: PlacedHitShape, time: number): number;
+  /** 判定範圍內打可破壞物件（以物件中心判定；exclude 內的不打、打中的加進去），回傳命中數 */
+  hitBreakablesInShape(c: Character, shape: PlacedHitShape, time: number, exclude?: Set<object>): number;
   /** 衝刺切入的刀光（穿過被砍的怪、沿衝刺方向的斬痕；大小依怪的顯示尺寸） */
   spawnSlashStreak(target: Enemy, angle: number, empowered: boolean): void;
 }
@@ -430,8 +431,8 @@ export class CharacterActionController {
 
   /**
    * 普攻出手：記下這一下是第幾段（兩段輪流，P1 Spine 依此播 Attack01 / Attack02）並開始播動作，
-   * 該段的每個打擊點（moveHitPoints）到了自己的判定時間各判定一次；判定前角色倒下或進入受擊硬直，之後的打擊點都取消。
-   * 打擊點的時間是動作時間（編輯器時間軸上的格），依普攻動作的播放速度（playerSpine.speeds.attack）換算成實際時間，判定才會對上畫面
+   * 該段的每個打擊點（moveHitPoints）在自己的判定段內每幀判定（runHitWindow，同一個目標每段只打一次）；角色倒下或進入受擊硬直時，
+   * 進行中與之後的判定段都取消。打擊點的時間是動作時間（編輯器時間軸上的格），依普攻動作的播放速度（playerSpine.speeds.attack）換算成實際時間，判定才會對上畫面
    *
    * @param c 攻擊的角色
    * @param time 目前場景時間
@@ -446,38 +447,49 @@ export class CharacterActionController {
     const swing: SwingHits = { comboCounted: false, rewardCounted: false };
     const animSpeed = GameConfig.playerSpine.speeds.attack ?? 1;
     moveHitPoints(move).forEach((point, index) => {
-      afterHitDelay(c, point.timeMs / animSpeed, time, (hitTime) => {
-        if (!c.alive || c.isHurtStunned(hitTime)) return;
+      const hitWindow = createHitWindowState();
+      runHitWindow(c, point.timeMs / animSpeed, point.durationMs / animSpeed, time, (hitTime, first) => {
+        if (!c.alive || c.isHurtStunned(hitTime)) return false;
         c.aimAngle = aim;
-        this.resolveMeleeHit(c, move, index, point, swing, hitTime);
+        this.resolveMeleeHit(c, move, index, point, swing, hitWindow, first, hitTime);
+        return true;
       });
     });
   }
 
   /**
-   * 普攻一個打擊點的判定：以它的判定範圍（朝 aimAngle；二段變身時尺寸放大）劈出，範圍內敵人受「普攻傷害 × 傷害 %」與擊退、
-   * 順手打可破壞物件；打中敵人時出招者頓點 pauseMs；同一下普攻的多個打擊點只在第一次打中時累積連段與 HIT
+   * 普攻一個打擊點判定段的一次判定：以它的判定範圍（朝 aimAngle；二段變身時尺寸放大）劈出，範圍內這一段還沒打過的敵人受
+   * 「普攻傷害 × 傷害 %」與擊退、順手打可破壞物件；這一段第一次打中敵人時出招者頓點 pauseMs；
+   * 同一下普攻的多個打擊點只在第一次打中時累積連段與 HIT；閃白、劍氣特效與判定事件只在這一段的第一次判定
    *
    * @param c 攻擊的角色
    * @param move 普攻段（attack1 / attack2）
    * @param index 打擊點索引
    * @param point 打擊點
    * @param swing 這一下普攻的計數狀態
+   * @param hitWindow 這個打擊點判定段的狀態
+   * @param first 是否為這一段的第一次判定
    * @param time 目前場景時間
    */
-  private resolveMeleeHit(c: Character, move: AttackMove, index: number, point: HitPoint, swing: SwingHits, time: number): void {
+  private resolveMeleeHit(
+    c: Character, move: AttackMove, index: number, point: HitPoint, swing: SwingHits, hitWindow: HitWindowState, first: boolean, time: number
+  ): void {
     const emp = c.isEmpowered(time);
     const shape = placeHitShape(point.shape, c.x, c.y, c.aimAngle, emp ? GameConfig.combo.empower.rangeMult : 1);
     const atk = this.host.attackDamage() * (emp ? GameConfig.combo.empower.damageMult : 1) * point.damagePct / 100;
     let hitCount = 0;
     for (const child of this.host.enemies().getChildren()) {
       const enemy = child as Enemy;
-      if (!enemy.isVulnerable() || !hitShapeContains(shape, enemy.x, enemy.y)) continue;
+      if (hitWindow.targets.has(enemy) || !enemy.isVulnerable() || !hitShapeContains(shape, enemy.x, enemy.y)) continue;
+      hitWindow.targets.add(enemy);
       this.host.damageEnemy(c, enemy, atk, GameConfig.player.knockback, time);
       hitCount++;
     }
-    const breakableHits = this.host.hitBreakablesInShape(c, shape, time);
-    if (hitCount > 0) c.applyHitPause(point.pauseMs, time);
+    const breakableHits = this.host.hitBreakablesInShape(c, shape, time, hitWindow.targets);
+    if (hitCount > 0 && !hitWindow.paused) {
+      hitWindow.paused = true;
+      c.applyHitPause(point.pauseMs, time);
+    }
     if (hitCount > 0 && !swing.comboCounted) {
       swing.comboCounted = true;
       this.host.onComboHit(c, time);
@@ -486,6 +498,7 @@ export class CharacterActionController {
       swing.rewardCounted = true;
       this.host.triggerComboHit(c);
     }
+    if (!first) return;
     this.host.flashWhite(c);
     this.host.spawnMeleeShapeEffect(shape);
     c.scene.events.emit(ATTACK_HIT_EVENT, c, move, index);

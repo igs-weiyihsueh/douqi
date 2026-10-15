@@ -3,7 +3,9 @@ import { GameConfig } from '../config';
 import type { Character, ReadyCombo } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
 import type { TargetingController } from './TargetingController';
-import { ATTACK_HIT_EVENT, afterHitDelay, lastHitMs, moveHitPoints, type HitPoint } from '../systems/attackTuningParams';
+import {
+  ATTACK_HIT_EVENT, createHitWindowState, lastHitMs, moveHitPoints, runHitWindow, type HitPoint, type HitWindowState
+} from '../systems/attackTuningParams';
 import { drawHitShape, hitShapeContains, placeHitShape, type PlacedHitShape } from '../systems/hitShapes';
 
 /**
@@ -27,8 +29,8 @@ export interface ComboSkillHost {
   damageEnemyFrom(actor: Character, enemy: Enemy, damage: number, knockback: number, fromX: number, fromY: number, time: number): void;
   /** 角色對敵人造成傷害（以角色位置為來源） */
   damageEnemy(actor: Character, enemy: Enemy, damage: number, knockback: number, time: number): void;
-  /** 判定範圍內的可破壞物件各扣 1 耐久（以物件中心判定），回傳命中數 */
-  hitBreakablesInShape(actor: Character, shape: PlacedHitShape, time: number): number;
+  /** 判定範圍內的可破壞物件各扣 1 耐久（以物件中心判定；exclude 內的不打、打中的加進去），回傳命中數 */
+  hitBreakablesInShape(actor: Character, shape: PlacedHitShape, time: number, exclude?: Set<object>): number;
   /** COMBO 連擊 +1（一招命中至少一隻敵人或一個可破壞物件算一下） */
   comboRewardHit(c: Character): void;
   /** P1 普攻命中次數 +1（結算統計） */
@@ -170,8 +172,8 @@ export class ComboSkillController {
   }
 
   /**
-   * 施放連段技：立即開始播動作並進入表演時間（無敵、不能操作，涵蓋到最後一個打擊點 + performanceTime），
-   * 每個打擊點（moveHitPoints）到了自己的判定時間各判定一次；判定範圍的方向在放出時決定
+   * 施放連段技：立即開始播動作並進入表演時間（無敵、不能操作，涵蓋到最後一段判定結束 + performanceTime），
+   * 每個打擊點（moveHitPoints）在自己的判定段內每幀判定（runHitWindow，同一個目標每段只打一次）；判定範圍的方向在放出時決定
    *
    * @param c 角色
    * @param kind 連段技
@@ -184,8 +186,11 @@ export class ComboSkillController {
     const dir = c.aimAngle;
     const cast: ComboCast = { kind, dir, rewardCounted: false };
     moveHitPoints(kind).forEach((point, index) => {
-      afterHitDelay(c, point.timeMs, time, (hitTime) => {
-        if (c.alive) this.resolveComboHit(c, cast, index, point, hitTime);
+      const hitWindow = createHitWindowState();
+      runHitWindow(c, point.timeMs, point.durationMs, time, (hitTime, first) => {
+        if (!c.alive) return false;
+        this.resolveComboHit(c, cast, index, point, hitWindow, first, hitTime);
+        return true;
       });
     });
   }
@@ -300,31 +305,41 @@ export class ComboSkillController {
   }
 
   /**
-   * 連段技一個打擊點的判定：以它的判定範圍（朝放出時的方向）判定，範圍內敵人受「招式傷害 × 傷害 %」並從判定中心往外擊退，
-   * 順手打範圍內的物件；招式1 的圓形範圍播擴張環、其他形狀畫範圍特效（只在顯示範圍特效的模式）。
+   * 連段技一個打擊點判定段的一次判定：以它的判定範圍（朝放出時的方向）判定，範圍內這一段還沒打過的敵人受「招式傷害 × 傷害 %」
+   * 並從判定中心往外擊退，順手打範圍內的物件；這一段第一次打中敵人時出招者頓點 pauseMs。
+   * 這一段的第一次判定才播特效（招式1 的圓形範圍播擴張環、其他形狀畫範圍特效，只在顯示範圍特效的模式）、震動與判定事件。
    * 同一次施放的多個打擊點只在第一次打中時算 COMBO 連擊
    *
    * @param c 施放的角色
    * @param cast 這次施放的狀態
    * @param index 打擊點索引
    * @param point 打擊點
+   * @param hitWindow 這個打擊點判定段的狀態
+   * @param first 是否為這一段的第一次判定
    * @param time 目前場景時間
    */
-  private resolveComboHit(c: Character, cast: ComboCast, index: number, point: HitPoint, time: number): void {
+  private resolveComboHit(
+    c: Character, cast: ComboCast, index: number, point: HitPoint, hitWindow: HitWindowState, first: boolean, time: number
+  ): void {
     const cfg = cast.kind === 'circle' ? GameConfig.combo.circle : GameConfig.combo.line;
     const shape = placeHitShape(point.shape, c.x, c.y, cast.dir);
     const dmg = cfg.damage * (c.isEmpowered(time) ? GameConfig.combo.empower.damageMult : 1) * point.damagePct / 100;
-    if (cast.kind === 'circle' && shape.kind === 'circle') this.showRing(shape, CIRCLE_RING_COLOR, CIRCLE_RING_MS);
-    else if (cast.kind === 'circle') this.showShape(shape, CIRCLE_RING_COLOR, CIRCLE_RING_COLOR, CIRCLE_RING_MS);
-    else this.showShape(shape, LINE_BAND_COLOR, LINE_BAND_STROKE, LINE_BAND_FADE_MS);
-    const hits = this.hitInShape(c, shape, dmg, cfg.knockback, time);
-    if (hits.enemies > 0) c.applyHitPause(point.pauseMs, time);
+    if (first) {
+      if (cast.kind === 'circle' && shape.kind === 'circle') this.showRing(shape, CIRCLE_RING_COLOR, CIRCLE_RING_MS);
+      else if (cast.kind === 'circle') this.showShape(shape, CIRCLE_RING_COLOR, CIRCLE_RING_COLOR, CIRCLE_RING_MS);
+      else this.showShape(shape, LINE_BAND_COLOR, LINE_BAND_STROKE, LINE_BAND_FADE_MS);
+      this.host.shakeOnce(SKILL_SHAKE_MS, SKILL_SHAKE_INTENSITY);
+      c.scene.events.emit(ATTACK_HIT_EVENT, c, cast.kind, index);
+    }
+    const hits = this.hitInShape(c, shape, dmg, cfg.knockback, time, hitWindow.targets);
+    if (hits.enemies > 0 && !hitWindow.paused) {
+      hitWindow.paused = true;
+      c.applyHitPause(point.pauseMs, time);
+    }
     if (hits.enemies + hits.breakables > 0 && !cast.rewardCounted) {
       cast.rewardCounted = true;
       this.host.comboRewardHit(c);
     }
-    this.host.shakeOnce(SKILL_SHAKE_MS, SKILL_SHAKE_INTENSITY);
-    c.scene.events.emit(ATTACK_HIT_EVENT, c, cast.kind, index);
   }
 
 
@@ -336,17 +351,21 @@ export class ComboSkillController {
    * @param damage 每隻敵人的傷害
    * @param knockback 擊退力道
    * @param time 目前場景時間
+   * @param exclude 不再打的目標（打擊點判定段已打過的敵人與物件）；打中的會加進來
    * @returns 打中的敵人數與物件數（打中敵人才頓點；敵人或物件都算 COMBO）
    */
-  private hitInShape(c: Character, shape: PlacedHitShape, damage: number, knockback: number, time: number): { enemies: number; breakables: number } {
+  private hitInShape(
+    c: Character, shape: PlacedHitShape, damage: number, knockback: number, time: number, exclude?: Set<object>
+  ): { enemies: number; breakables: number } {
     let enemies = 0;
     for (const child of this.host.enemies().getChildren()) {
       const enemy = child as Enemy;
-      if (!enemy.isVulnerable() || !hitShapeContains(shape, enemy.x, enemy.y)) continue;
+      if (exclude?.has(enemy) || !enemy.isVulnerable() || !hitShapeContains(shape, enemy.x, enemy.y)) continue;
+      exclude?.add(enemy);
       this.host.damageEnemyFrom(c, enemy, damage, knockback, shape.x, shape.y, time);
       enemies++;
     }
-    return { enemies, breakables: this.host.hitBreakablesInShape(c, shape, time) };
+    return { enemies, breakables: this.host.hitBreakablesInShape(c, shape, time, exclude) };
   }
 
   /**

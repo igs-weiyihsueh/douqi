@@ -1437,7 +1437,7 @@ export class GameScene extends Phaser.Scene {
       targeting: () => this.targeting,
       damageEnemyFrom: (actor, enemy, damage, knockback, fromX, fromY, time) => this.damageEnemyFrom(actor, enemy, damage, knockback, fromX, fromY, time),
       damageEnemy: (actor, enemy, damage, knockback, time) => this.damageEnemy(actor, enemy, damage, knockback, time),
-      hitBreakablesInShape: (actor, shape, time) => this.breakableCtl.hitInShape(actor, shape, time),
+      hitBreakablesInShape: (actor, shape, time, exclude) => this.breakableCtl.hitInShape(actor, shape, time, exclude),
       comboRewardHit: (c) => this.comboReward.hit(c),
       countP1AttackHit: () => { this.p1AttackHits++; },
       spawnExpandingRing: (x, y, radius, color, ms) => this.fx.expandingRing(x, y, radius, color, ms),
@@ -1715,7 +1715,7 @@ export class GameScene extends Phaser.Scene {
       empowerStrike: (c, x, y, time) => this.comboSkills.empowerStrike(c, x, y, time),
       flashWhite: (c) => this.fx.flashWhite(c),
       spawnMeleeShapeEffect: (shape) => { if (this.training) this.fx.meleeShape(shape); },
-      hitBreakablesInShape: (c, shape, time) => this.breakableCtl.hitInShape(c, shape, time),
+      hitBreakablesInShape: (c, shape, time, exclude) => this.breakableCtl.hitInShape(c, shape, time, exclude),
       spawnSlashStreak: (target, angle, empowered) =>
         this.fx.slashStreak(target.x, target.y, angle, empowered, undefined, this.hitFxScale(target))
     };
