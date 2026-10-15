@@ -564,8 +564,8 @@ export const GameConfig = {
     },
     /** 直線範圍技（朝 aimAngle，瞬發貫穿） */
     line: {
-      /** 判定時間點：放出（開始播 Combo02）後幾毫秒才判定命中（預設取自棍子揮最快的那一格） */
-      hitDelayMs: 340,
+      /** 判定時間點：放出（開始播 Combo02）後幾毫秒才判定命中（預設取自氣波（龍）特效出現的那一格） */
+      hitDelayMs: 500,
       length: 420,
       width: 90,
       damage: 70,
