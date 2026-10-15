@@ -4,6 +4,7 @@ import type { Character, ReadyCombo } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
 import { pointInOrientedRect } from '../systems/geometry';
 import type { TargetingController } from './TargetingController';
+import { attackRange } from '../systems/attackRangeParams';
 
 /**
  * ComboSkillController 需要場景提供的能力。由 GameScene 建立並傳入；控制器不直接存取場景私有成員。
@@ -283,7 +284,7 @@ export class ComboSkillController {
   private comboCircle(c: Character, time: number): void {
     c.markAction('comboCircle');
     const cfg = GameConfig.combo.circle;
-    const radius = cfg.radius;
+    const radius = attackRange().circleRadius;
     const dmg = cfg.damage * (c.isEmpowered(time) ? GameConfig.combo.empower.damageMult : 1);
     this.host.spawnExpandingRing(c.x, c.y, radius, CIRCLE_RING_COLOR, CIRCLE_RING_MS);
     let hitAny = false;
@@ -305,8 +306,7 @@ export class ComboSkillController {
   private comboLine(c: Character, time: number): void {
     c.markAction('comboLine');
     const cfg = GameConfig.combo.line;
-    const length = cfg.length;
-    const width = cfg.width;
+    const { lineLength: length, lineWidth: width } = attackRange();
     const dmg = cfg.damage * (c.isEmpowered(time) ? GameConfig.combo.empower.damageMult : 1);
     const dir = c.aimAngle;
     const ox = c.x, oy = c.y;

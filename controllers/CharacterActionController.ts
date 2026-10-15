@@ -9,6 +9,7 @@ import { standCharacterOutside } from '../systems/bodySeparation';
 import { isStructureEnemy } from '../systems/enemyKinds';
 import type { EdgeMargins } from '../systems/spriteFeet';
 import type { LockTarget, TargetingController } from './TargetingController';
+import { attackRange } from '../systems/attackRangeParams';
 
 /** 慢速模式八方向移動鍵（方向鍵 + WASD） */
 export interface SlowMoveKeys {
@@ -85,6 +86,8 @@ const STANDOFF_MARGIN = 6;
 const DASH_ARRIVE_MIN = 12;
 /** 衝刺到點距離 = 速度 × 此秒數（約兩幀），避免高速衝刺越過終點後反向、在牆邊來回震盪 */
 const DASH_ARRIVE_LOOKAHEAD_SEC = 0.032;
+/** 近戰往前踏停的距離最多是扇形半徑的這個比例（確保扇形打得到鎖定的敵人） */
+const SWING_STOP_RATIO = 0.7;
 
 /**
  * 角色行動（P1 與 BOT 共用）：
@@ -196,7 +199,10 @@ export class CharacterActionController {
     c.aimAngle = Phaser.Math.Angle.Between(c.x, c.y, target!.x, target!.y);
     const dist = Phaser.Math.Distance.Between(c.x, c.y, target!.x, target!.y);
     // 近戰門檻看到目標身體邊緣的距離：怪被真空圈推到圈邊時中心距離常超過門檻，用中心距離會一直變成衝刺
-    if (dist - (target as Enemy).getBodyRadius() <= GameConfig.melee.enemyRange) this.stepInAndSwing(c, dist, time, GameConfig.melee.swingDistance);
+    // 往前踏停的距離不超過扇形半徑的 SWING_STOP_RATIO，範圍編輯器把扇形調小時仍打得到
+    const range = attackRange();
+    const stopAt = Math.min(GameConfig.melee.swingDistance, range.meleeRadius * SWING_STOP_RATIO);
+    if (dist - (target as Enemy).getBodyRadius() <= range.meleeEnemyRange) this.stepInAndSwing(c, dist, time, stopAt);
     else this.dashAtEnemy(c, target as Enemy, dist, time);
   }
 
@@ -271,7 +277,7 @@ export class CharacterActionController {
     const target = this.attackDashTargets.get(c);
     this.attackDashTargets.delete(c);
     if (!target || !target.active || !target.isVulnerable()) return;
-    if (Phaser.Math.Distance.Between(c.x, c.y, target.x, target.y) > GameConfig.melee.radius) return;
+    if (Phaser.Math.Distance.Between(c.x, c.y, target.x, target.y) > attackRange().meleeRadius) return;
     c.aimAngle = Phaser.Math.Angle.Between(c.x, c.y, target.x, target.y);
     this.performMeleeArc(c, time);
   }
@@ -408,10 +414,10 @@ export class CharacterActionController {
 
   /** 扇形劍氣：朝 aimAngle 劈出扇形，範圍內敵人受普攻傷害與擊退、順手打可破壞物件；命中至少一隻敵人才累積連段，敵人或物件命中算一下 HIT */
   private performMeleeArc(c: Character, time: number): void {
-    const cfg = GameConfig.melee;
     const emp = c.isEmpowered(time);
-    const radius = cfg.radius * (emp ? GameConfig.combo.empower.rangeMult : 1);
-    const half = Phaser.Math.DegToRad(cfg.arcDeg) / 2;
+    const range = attackRange();
+    const radius = range.meleeRadius * (emp ? GameConfig.combo.empower.rangeMult : 1);
+    const half = Phaser.Math.DegToRad(range.meleeArcDeg) / 2;
     const atk = this.host.attackDamage() * (emp ? GameConfig.combo.empower.damageMult : 1);
     // 先記普攻：這一刀觸發連段技時，連段技在後面記下，P1 Spine 播連段技動作而不是普攻
     c.markAction('attack');

@@ -3,6 +3,7 @@ import { GameConfig } from '../config';
 import type { Character } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
 import { hitFeel } from '../systems/hitFeelParams';
+import { attackRange } from '../systems/attackRangeParams';
 
 /** 擴張環：初始半徑、深度、透明度、邊框粗細 */
 const RING_START_RADIUS = 10;
@@ -88,14 +89,15 @@ export class CombatFx {
   /** 原地扇形劍氣：朝 angle 畫一個帶亮邊的淡出扇形 */
   meleeArc(x: number, y: number, angle: number): void {
     const cfg = GameConfig.melee;
-    const half = Phaser.Math.DegToRad(cfg.arcDeg) / 2;
+    const range = attackRange();
+    const half = Phaser.Math.DegToRad(range.meleeArcDeg) / 2;
     const g = this.scene.add.graphics().setDepth(ARC_DEPTH);
     g.fillStyle(cfg.arcColor, cfg.arcAlpha);
-    g.slice(x, y, cfg.radius, angle - half, angle + half, false);
+    g.slice(x, y, range.meleeRadius, angle - half, angle + half, false);
     g.fillPath();
     g.lineStyle(3, cfg.arcColor, Math.min(1, cfg.arcAlpha + 0.4));
     g.beginPath();
-    g.arc(x, y, cfg.radius, angle - half, angle + half);
+    g.arc(x, y, range.meleeRadius, angle - half, angle + half);
     g.strokePath();
     this.scene.tweens.add({ targets: g, alpha: 0, duration: cfg.arcFadeMs, onComplete: () => g.destroy() });
   }
