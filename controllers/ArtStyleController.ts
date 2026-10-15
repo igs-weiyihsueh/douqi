@@ -58,8 +58,9 @@ const UI_RETRY_MS = 100;
 
 /**
  * 新舊美術切換（開局預設依 GameConfig.artStyle.newArtByDefault）：
- * - 新美術：顯示 Scene.png 背景、P1 皮膚與頭上覆蓋圖、怪物改用美術圖（一般兵骷髏 / 肉怪骷髏戰士 / 遠程票券幽靈），並隱藏原 P1 頭頂 UI、改用 1P.png 底部面板
- * - 舊美術：還原程式繪製場景與原 UI
+ * - 新美術：顯示 Scene.png 背景、P1 頭上覆蓋圖、怪物改用美術圖（一般兵骷髏 / 肉怪骷髏戰士 / 遠程票券幽靈），並隱藏原 P1 頭頂 UI、改用 1P.png 底部面板
+ * - 舊美術：還原程式繪製場景、怪物與原 UI
+ * - P1 皮膚（Spine）新舊美術都顯示，P1 不會變回程式繪製的外觀；BOT 維持程式繪製
  *
  * 熱鍵：GameConfig.artStyle.toggleKey（V）= 全部切換、F6 = 只切背景、F2 = 強制重載 Scene.png
  */
@@ -95,14 +96,18 @@ export class ArtStyleController {
     keyboard?.on('keydown-F2', () => this.reloadBackground());
   }
 
-  /** 建立 P1 皮膚與頭上覆蓋圖（預設隱藏；P1 建立後呼叫） */
+  /**
+   * 建立 P1 皮膚與頭上覆蓋圖（P1 建立後呼叫）。P1 皮膚（與疊在上面的 Spine）不論新舊美術都顯示，P1 不再變回程式繪製的外觀，
+   * 舊美術的名稱標籤 / 腳下條 / 「爆」標記一律隱藏；頭上覆蓋圖預設隱藏，只在新美術時顯示
+   */
   createPlayerOverlays(): void {
     const p = this.host.player();
     const textures = this.scene.textures;
     // 新美術圖的腳底 / 腳寬開局就先量好，美術切換與二段變身時不必當場量
     warmFeetMetrics(textures, [SKIN_TEXTURE, SKIN_EMPOWERED_TEXTURE, ...ENEMY_ART_TEXTURES]);
     if (textures.exists(SKIN_TEXTURE)) {
-      this.skin = this.scene.add.image(p.x, p.y, SKIN_TEXTURE).setDepth(p.depth + OVERLAY_DEPTH_STEP).setVisible(false);
+      this.skin = this.scene.add.image(p.x, p.y, SKIN_TEXTURE).setDepth(p.depth + OVERLAY_DEPTH_STEP).setVisible(this.playerShown);
+      p.setLegacyUiHidden(true);
     } else {
       console.warn(`⚠️ 皮膚資源不存在：${SKIN_TEXTURE}`);
     }
@@ -276,7 +281,7 @@ export class ArtStyleController {
       .map((rect) => createCoverImage(this.scene, SCENE_BG_TEXTURE_KEY, rect, SCENE_BG_DEPTH, this.active && !this.backgroundSuppressed));
   }
 
-  /** 切換新舊背景與 P1 覆蓋 UI（美術切換 / F6） */
+  /** 切換新舊背景與 P1 覆蓋 UI（美術切換 / F6；P1 皮膚不受影響） */
   private toggleBackground(): void {
     if (this.backgrounds.length === 0) this.buildBackgrounds(); // 紋理晚到時補建
     if (this.backgrounds.length === 0) {
@@ -285,10 +290,7 @@ export class ArtStyleController {
     }
     this.active = !this.active;
     this.applyBackgroundVisibility();
-    this.skin?.setVisible(this.active && this.playerShown);
     this.uiOverlay?.setVisible(this.active && this.playerShown);
-    // P1 改顯示新美術皮膚時，隱藏舊美術的名稱標籤 / 腳下條 / 「爆」標記（原本被舊的固定深度皮膚蓋住）
-    this.host.player().setLegacyUiHidden(this.active && this.skin !== null);
     // 新美術改用覆蓋圖 UI → 隱藏原 P1 頭頂 UI、啟用底部面板替換；舊美術反之
     this.callUiWhenReady('setP1HeadUIVisible', (ui) => !!ui.overheadUIs?.has(0), !this.active);
     this.callUiWhenReady('setBottomPanelOverlay', (ui) => (ui.rows?.length ?? 0) > 0, this.active);
@@ -310,13 +312,13 @@ export class ArtStyleController {
   }
 
   /**
-   * P1 是否在場上顯示：新美術時一併切換皮膚與頭上覆蓋圖（尚未投幣進場時隱藏）
+   * P1 是否在場上顯示：一併切換皮膚（新舊美術都顯示）與頭上覆蓋圖（新美術才顯示）；尚未投幣進場時隱藏
    *
    * @param shown 是否顯示
    */
   setPlayerShown(shown: boolean): void {
     this.playerShown = shown;
-    this.skin?.setVisible(this.active && shown);
+    this.skin?.setVisible(shown);
     this.uiOverlay?.setVisible(this.active && shown);
   }
 
