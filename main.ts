@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { SpinePlugin } from '@esotericsoftware/spine-phaser';
 import { BootScene } from './scenes/BootScene';
 import { TitleScene } from './scenes/TitleScene';
 import { GameScene } from './scenes/GameScene';
@@ -22,6 +23,10 @@ const config: Phaser.Types.Core.GameConfig = {
     autoCenter: Phaser.Scale.CENTER_BOTH,
     width: GameConfig.width,
     height: GameConfig.height
+  },
+  // Spine 動畫（怪物骨架動畫，見 EnemySpineController）
+  plugins: {
+    scene: [{ key: 'spine.SpinePlugin', plugin: SpinePlugin, mapping: 'spine' }]
   },
   physics: {
     default: 'arcade',

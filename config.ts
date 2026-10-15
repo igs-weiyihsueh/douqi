@@ -182,6 +182,38 @@ export const GameConfig = {
   },
 
   /**
+   * 怪物 Spine 動畫（F4 新美術時取代該怪種的美術圖；碰撞、腳底佔位、AI 不變，只換外觀）：
+   * - tank：大怪 = EN01 骷髏兵（public/assets/spine/）。skins 依序疊加成一套外觀；scale 為顯示縮放；
+   *   腳底對齊原美術圖的腳底再加 offsetY；facesRight = 原始動畫面向右
+   * - 動畫：idle 待機 / move 走路（移動速度超過 moveSpeedThreshold）/ hit 被打 / die 死亡（播完 dieFadeMs 淡出）/
+   *   chargeIn → chargeLoop 蓄力（蓄力中重複）/ attack 出手；動畫切換混合 mixMs 毫秒；時停時動畫暫停
+   */
+  enemySpine: {
+    tank: {
+      dataKey: 'spine-en01-data',
+      atlasKey: 'spine-en01-atlas',
+      jsonUrl: 'assets/spine/EN01_Skeleton_Soldier.json',
+      atlasUrl: 'assets/spine/EN01.atlas',
+      skins: ['Armor', 'Weapon'] as ReadonlyArray<string>,
+      scale: 0.18,
+      offsetY: 0,
+      facesRight: false
+    },
+    anims: {
+      idle: 'idle',
+      move: 'move',
+      hit: 'hit',
+      die: 'die',
+      chargeIn: 'close_attack_in',
+      chargeLoop: 'close_attack_loop',
+      attack: 'close_attack_at'
+    },
+    moveSpeedThreshold: 15,
+    mixMs: 100,
+    dieFadeMs: 250
+  },
+
+  /**
    * 敵人↔敵人碰撞分離（讓怪不再完全重疊擠成團）——照異靈藍圖：軟分離 steering(主力) + 硬 de-overlap(補刀)。
    * 純幾何、不走 Phaser collider，config 可調手感。舊美術純俯視無縱深壓縮→圓形判定；F4 新美術改用腳底佔位橢圓（footprintFlatten / footprintSteerScale）。
    */

@@ -237,6 +237,11 @@ export class ArtStyleController {
     };
   }
 
+  /** 怪物目前是否用新美術外觀（F4；Spine 動畫只在新美術時顯示） */
+  enemyLookIsArt(): boolean {
+    return this.artEnemies;
+  }
+
   /**
    * 怪生成時應使用的外觀（Enemy.spawn 透過 GameScene 查詢）：一般兵 / 肉怪 / 遠程怪依 F4 用新美術圖或舊版圓形；
    * 其他怪種（BOSS、塔等）回傳 null，沿用 enemy-{type}

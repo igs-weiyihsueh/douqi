@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { GameConfig } from '../config';
 import { HIT_COUNTER_TEXTURES } from '../objects/HitCounter';
 import { BARREL_TEXTURE, CRATE_TEXTURE } from '../objects/Breakable';
+import { EnemySpineController } from '../controllers/EnemySpineController';
 import { JACKPOT_BANNER_TEXTURE } from './UIScene';
 
 /**
@@ -97,6 +98,9 @@ export class BootScene extends Phaser.Scene {
     this.load.image('skeleton-warrior', 'assets/skeleton-warrior.png');
     this.load.image('enemy-skeleton-b', 'assets/Skeleton_B.png');
     this.load.image('enemy-ticket', 'assets/Ticket.png');
+
+    // 怪物 Spine 動畫素材（大怪）
+    EnemySpineController.preload(this.load);
 
     // 可打破物件：木箱美術圖
     this.load.image(CRATE_TEXTURE, 'assets/WoodenBox.png');

@@ -50,6 +50,7 @@ import { visibleBottomOffset, warmFeetMetrics, type EdgeMargins } from '../syste
 import { drawFootDisc, FOOT_DISC_DEPTH, type VacuumDisk } from '../systems/footDisc';
 import { standingDepth } from '../systems/standingDepth';
 import { facingRightFrom } from '../systems/facing';
+import { EnemySpineController } from '../controllers/EnemySpineController';
 
 /** 敵人上方彩票獲得提示的深度與離敵人中心的高度（樣式見 GameConfig.ticketFx；不受特效節流，獎勵一定要看得到） */
 const TICKET_POP_DEPTH = 51;
@@ -87,6 +88,8 @@ export class GameScene extends Phaser.Scene {
 
   /** F4 新舊美術切換（背景圖、P1 皮膚與覆蓋 UI、一般怪外觀），每次 create() 重建 */
   private artStyle!: ArtStyleController;
+  /** 怪物 Spine 外觀（F4 新美術時的大怪骨架動畫） */
+  private enemySpine!: EnemySpineController;
 
   private survivalMs = 0;
   private gameOver = false;
@@ -281,6 +284,10 @@ export class GameScene extends Phaser.Scene {
     }
 
     // F4 新舊美術切換：需在 slot 佈局建立後，背景圖才能對齊各 slot
+    this.enemySpine = new EnemySpineController(this, {
+      artEnemies: () => this.artStyle.enemyLookIsArt(),
+      isTimeStopped: () => this.timeStopped
+    });
     this.artStyle = new ArtStyleController({
       scene: this,
       enemies: () => this.enemies, // 敵人群在之後才建立，用時才取
@@ -859,6 +866,7 @@ export class GameScene extends Phaser.Scene {
    * 站立物件的畫面同步（只改畫面，不影響任何判定）：
    * - Y-sorting：角色、P1 皮膚、一般怪、可破壞物件依腳底 y 設定深度（越前面畫在越上層）
    * - 左右面向：角色依 aimAngle、一般怪依 facing 鏡像翻轉（P1 皮膚跟著 P1）
+   * - 怪物 Spine 外觀跟著怪的位置、深度與面向（見 EnemySpineController）
    * 固定目標（塔 / BOSS / NPC）與寶箱怪維持各自的固定深度與原圖面向
    */
   private syncStandingVisuals(): void {
@@ -875,6 +883,7 @@ export class GameScene extends Phaser.Scene {
       e.facingRight = facingRightFrom(e.facing, e.facingRight);
       this.artStyle.applyFacing(e, e.facingRight);
     }
+    this.enemySpine.sync(this.enemies, this.time.now);
     for (const child of this.breakables.getChildren()) {
       const b = child as Breakable;
       if (!b.active) continue;
