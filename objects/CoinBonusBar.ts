@@ -59,11 +59,11 @@ interface CoinStage {
 }
 
 /**
- * 下方面板的多投多送量條（精簡版）：硬幣 + 這一段的投幣點 + 投滿送的 CREDIT（劍圖示與 CREDIT 欄相同）。
+ * 多投多送量條（精簡版，投幣後短暫顯示在角色面板上方）：硬幣 + 這一段的投幣點 + 投滿送的 CREDIT（劍圖示與 CREDIT 欄相同）。
  *
  * 一段 = 到下一次加贈為止的投幣次數（coinCycle 5,10,5,15,5,20 → 每段 2 次，送 +5 / +10 / +15），一次只顯示目前這一段：
  * - 投幣時亮一顆點並彈跳；投滿時獎勵放大閃爍，停留一下後換成下一段（最後一段之後回到第一段）
- * - 容器位置 = 膠囊左下角（對齊面板的 COMBO 錨點）
+ * - 容器位置 = 膠囊左下角
  * - setLit 依目前在 coinCycle 的位置同步顯示；rewardCenter 取得獎勵的螢幕座標（加贈光效的起點）
  */
 export class CoinBonusBar extends Phaser.GameObjects.Container {
@@ -73,6 +73,8 @@ export class CoinBonusBar extends Phaser.GameObjects.Container {
   private readonly rewardText: Phaser.GameObjects.Text;
   /** coinCycle 長度 */
   private readonly cycleLength: number;
+  /** 膠囊寬度（像素） */
+  private readonly capsuleWidth: number;
   /** 這一輪已投幾次（0 ~ cycleLength） */
   private litCount = 0;
   /** 剛投滿一段、停留展示中（期間顯示投滿的那一段，不接受 setLit） */
@@ -98,8 +100,8 @@ export class CoinBonusBar extends Phaser.GameObjects.Container {
     const midY = -cfg.HEIGHT / 2;
     const rewardLeft = cfg.DOTS_LEFT + (maxDots - 1) * cfg.DOT_SPACING + cfg.DOT_RADIUS + cfg.REWARD_GAP;
     const iconHalf = cfg.ICON_HALF_WIDTH;
-    const width = rewardLeft + iconHalf * 2 + cfg.ICON_TEXT_GAP + longestLabel * cfg.CHAR_WIDTH + cfg.RIGHT_PADDING;
-    this.add([this.createCapsule(width), this.createCoin(midY)]);
+    this.capsuleWidth = rewardLeft + iconHalf * 2 + cfg.ICON_TEXT_GAP + longestLabel * cfg.CHAR_WIDTH + cfg.RIGHT_PADDING;
+    this.add([this.createCapsule(this.capsuleWidth), this.createCoin(midY)]);
     for (let i = 0; i < maxDots; i++) {
       const dot = scene.add.graphics({ x: cfg.DOTS_LEFT + i * cfg.DOT_SPACING, y: midY });
       this.dots.push(dot);
@@ -118,9 +120,9 @@ export class CoinBonusBar extends Phaser.GameObjects.Container {
     scene.add.existing(this);
   }
 
-  /** 量條高度（像素） */
-  get barHeight(): number {
-    return COIN_BAR_CONFIG.HEIGHT;
+  /** 量條寬度（像素） */
+  get barWidth(): number {
+    return this.capsuleWidth;
   }
 
   /**
