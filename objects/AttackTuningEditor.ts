@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
+import type { PlayerAnimKey, PlayerPosePreview } from '../controllers/PlayerSpineController';
 import {
-  ATTACK_HIT_EVENT, ATTACK_MOVES, ATTACK_TUNING_PARAM_DEFS, applyAttackTuning, attackTuning, attackTuningStore,
-  isTimedMove, moveShape, type AttackMove, type AttackTuningKey
+  ATTACK_HIT_EVENT, ATTACK_MOVES, HIT_POINT_FIELDS, MAX_HIT_POINTS, MELEE_ENEMY_RANGE_DEF, attackTuning, clampHitPointField,
+  isTimedMove, moveHitPoints, resetAllAttackTuning, resetMoveHitPoints, setMeleeEnemyRange, setMoveHitPoints,
+  type AttackMove, type HitPoint, type HitPointField, type TimedAttackMove
 } from '../systems/attackTuningParams';
 import { HIT_SHAPE_KINDS, HIT_SHAPE_LABELS, drawHitShape, placeHitShape, type HitShapeKind } from '../systems/hitShapes';
 import type { Character } from './Character';
@@ -9,23 +11,36 @@ import type { Character } from './Character';
 /** 面板版面與配色（畫面座標，固定在畫面左側，不擋住中央的角色與木樁） */
 const LAYOUT = {
   X: 20,
-  Y: 110,
+  Y: 100,
   WIDTH: 470,
   PADDING: 16,
-  TITLE_HEIGHT: 56,
+  TITLE_HEIGHT: 50,
   /** 招式分頁：每列 TABS_PER_ROW 個 */
-  TAB_HEIGHT: 36,
+  TAB_HEIGHT: 34,
   TABS_PER_ROW: 3,
   TAB_GAP: 6,
-  ROW_HEIGHT: 40,
-  SECTION_GAP: 12,
-  BUTTON_HEIGHT: 40,
+  /** 時間軸：說明列、軸、按鈕列 */
+  TIMELINE_LABEL_HEIGHT: 24,
+  BAR_HEIGHT: 22,
+  BAR_MARKER_WIDTH: 6,
+  PLAYHEAD_WIDTH: 2,
+  PLAYHEAD_OVERHANG: 4,
+  TIMELINE_BUTTON_HEIGHT: 30,
+  TIMELINE_BUTTON_GAP: 6,
+  ROW_HEIGHT: 38,
+  SECTION_GAP: 10,
+  BUTTON_HEIGHT: 38,
   DEPTH: 3000,
   BG_COLOR: 0x111827,
   BG_ALPHA: 0.92,
   BORDER_COLOR: 0x60a5fa,
   TAB_COLOR: 0x1f2937,
   TAB_SELECTED_COLOR: 0x1e3a8a,
+  BAR_COLOR: 0x374151,
+  MARKER_COLOR: 0xf59e0b,
+  MARKER_SELECTED_COLOR: 0xfef08a,
+  PLAYHEAD_COLOR: 0xffffff,
+  TIMELINE_BUTTON_COLOR: 0x334155,
   /** 每列：名稱、數值、−、+ 的 x（相對面板左緣） */
   LABEL_X: 24,
   VALUE_X: 300,
@@ -39,25 +54,34 @@ const LAYOUT = {
   }
 } as const;
 
-/** 角色身上的範圍顯示（顏色、填色透明度、線框透明度）；招式分頁的色票同色 */
+/** 角色身上的範圍顯示；招式分頁的色票同色 */
 const OVERLAY = {
   DEPTH: 5,
   MOVES: {
-    attack1: { color: 0x38bdf8, fill: 0.18, line: 0.9 },
-    attack2: { color: 0x34d399, fill: 0.18, line: 0.9 },
-    circle: { color: 0xfb923c, fill: 0.12, line: 0.9 },
-    line: { color: 0xc084fc, fill: 0.14, line: 0.9 },
-    burst: { color: 0xf472b6, fill: 0.12, line: 0.9 },
-    dash: { color: 0xfde047, fill: 0.12, line: 0.9 }
-  } as Readonly<Record<AttackMove, { color: number; fill: number; line: number }>>,
-  TRIGGER: { color: 0xfacc15, line: 0.6 },
+    attack1: 0x38bdf8,
+    attack2: 0x34d399,
+    circle: 0xfb923c,
+    line: 0xc084fc,
+    burst: 0xf472b6,
+    dash: 0xfde047
+  } as Readonly<Record<AttackMove, number>>,
+  /** 時間軸目前這一格判定的打擊點 / 其他打擊點（淡）的填色與線框透明度 */
+  ACTIVE_FILL: 0.25,
+  ACTIVE_LINE: 0.95,
+  IDLE_FILL: 0.05,
+  IDLE_LINE: 0.35,
   LINE_WIDTH: 2,
+  SELECTED_LINE_WIDTH: 4,
+  TRIGGER: { color: 0xfacc15, line: 0.6 },
   /** 沒有木樁時，衝刺攻擊的範圍畫在角色前方這個距離（衝刺攻擊以撞擊點為基準） */
   DASH_PREVIEW_DISTANCE: 150,
-  /** 判定那一刻該招範圍閃亮：填色透明度改成 FLASH_FILL，持續 FLASH_MS（不是正在調的招式也會暫時畫出來） */
+  /** 判定那一刻該打擊點閃亮：填色透明度改成 FLASH_FILL，持續 FLASH_MS */
   FLASH_FILL: 0.5,
   FLASH_MS: 200
 } as const;
+
+/** 時間軸一格的長度（毫秒；每秒 30 格） */
+const FRAME_MS = 1000 / 30;
 
 /** 各形狀要顯示的尺寸欄位 */
 const SHAPE_SIZE_FIELDS: Readonly<Record<HitShapeKind, ReadonlyArray<'radius' | 'arcDeg' | 'length' | 'width'>>> = {
@@ -66,8 +90,16 @@ const SHAPE_SIZE_FIELDS: Readonly<Record<HitShapeKind, ReadonlyArray<'radius' | 
   rect: ['length', 'width']
 };
 
+/** 有時間軸的招式對應的 P1 Spine 動作（動作鍵與同一鍵的第幾個） */
+const MOVE_ANIMATIONS: Readonly<Record<TimedAttackMove, { key: PlayerAnimKey; index: number }>> = {
+  attack1: { key: 'attack', index: 0 },
+  attack2: { key: 'attack', index: 1 },
+  circle: { key: 'comboCircle', index: 0 },
+  line: { key: 'comboLine', index: 0 }
+};
+
 /** 招式判定事件的處理函式 */
-type HitHandler = (c: Character, move: AttackMove) => void;
+type HitHandler = (c: Character, move: AttackMove, index: number) => void;
 
 /** 編輯器需要的場景資訊 */
 export interface AttackTuningEditorHost {
@@ -75,37 +107,52 @@ export interface AttackTuningEditorHost {
   player(): Character;
   /** 木樁（近戰觸發圈加上它的半徑；衝刺攻擊的範圍畫在它身上）；沒有時為 null */
   dummy(): { x: number; y: number; radius: number } | null;
+  /** P1 定格預覽（null = 結束預覽） */
+  previewPose(preview: PlayerPosePreview | null): void;
+  /** P1 某個動作的長度（毫秒） */
+  animationMs(key: PlayerAnimKey, index: number): number;
 }
 
 /**
- * 木樁模式的範圍 / 判定編輯器（GameConfig.training.tuningEditorKey 開關）：畫面左側面板上方是招式分頁
- * （普攻 1、普攻 2、招式1、招式2、爆發、衝刺攻擊），選一招後用滑鼠調整它的形狀（扇形 / 圓形 / 長方形）、
- * 判定中心往前 / 往上下偏移、該形狀的尺寸與判定時間點（systems/attackTuningParams，每次調整即時套用並存在瀏覽器）；
- * 最下面是普攻共用的近戰觸發距離。
+ * 木樁模式的範圍 / 判定編輯器（GameConfig.training.tuningEditorKey 開關）。畫面左側面板：
  *
- * - 面板建在 UIScene：UIScene 疊在遊戲場景上面且有「點畫面任何地方 = 攻擊」，面板放在遊戲場景會收不到點擊；
- *   面板上的點擊都會攔下來（stopPropagation），不會觸發攻擊
- * - 角色身上只畫選中招式的範圍（衝刺攻擊以撞擊點為基準，畫在木樁身上）與黃色的近戰觸發圈；
- *   P1 任何一招判定的那一刻，該招範圍閃亮一下，方便對照動作調整判定時間點
+ * - 上方招式分頁（普攻 1、普攻 2、招式1、招式2、爆發、衝刺攻擊）
+ * - 有時間軸的招式（普攻、招式1 / 2）：時間軸長度 = 該動作長度，點或拖動時間軸、按 ◀ ▶ 一格一格（1/30 秒）前後看，
+ *   P1 定格在那一格的 Spine 姿勢；軸上標出各打擊點，可在目前這一格「加打擊點」、刪除、把選中的打擊點「移到這一格」。
+ *   加 / 刪打擊點時，各打擊點的傷害自動平均分配（之後可個別調）
+ * - 選中打擊點的參數：形狀（扇形 / 圓形 / 長方形）、判定中心往前 / 往上下偏移、該形狀的尺寸、傷害 %、判定時間
+ *   （systems/attackTuningParams，每次調整即時套用並存在瀏覽器）；爆發、衝刺攻擊只有一個打擊點、沒有時間軸
+ * - 最下面是普攻共用的近戰觸發距離與恢復預設、關閉
+ *
+ * 角色身上畫選中招式的打擊點：時間軸目前這一格判定的打擊點畫深色、其他畫淡色、選中的打擊點線框加粗；
+ * P1 出招判定的那一刻，該打擊點閃亮一下。面板建在 UIScene（UIScene 疊在上面且有「點畫面 = 攻擊」），面板上的點擊都會攔下來
  */
 export class AttackTuningEditor {
   private panel: Phaser.GameObjects.Container | null = null;
   private overlay: Phaser.GameObjects.Graphics | null = null;
-  private readonly valueTexts = new Map<AttackTuningKey, Phaser.GameObjects.Text>();
-  /** 選中的招式（面板顯示它的參數，角色身上畫它的範圍） */
+  private readonly valueTexts = new Map<string, Phaser.GameObjects.Text>();
+  /** 時間軸的動態元件（拖動時只更新它們，不重建面板） */
+  private timeline: { label: Phaser.GameObjects.Text; markers: Phaser.GameObjects.Graphics; barX: number; barTop: number; barWidth: number } | null = null;
+  /** 選中的招式、打擊點與時間軸目前時間（毫秒） */
   private selected: AttackMove = 'attack1';
-  /** 各招範圍閃亮到何時（場景時間） */
-  private readonly flashUntil: Record<AttackMove, number> = { attack1: 0, attack2: 0, circle: 0, line: 0, burst: 0, dash: 0 };
+  private selectedPoint = 0;
+  private playheadMs = 0;
+  /** 正在拖動時間軸 */
+  private dragging = false;
+  /** 各招打擊點閃亮到何時（場景時間；鍵 = 招式:索引） */
+  private readonly flashUntil = new Map<string, number>();
+  /** UIScene 上的拖動監聽（開啟時註冊、關閉時移除） */
+  private uiInput: { scene: Phaser.Scene; move: (p: Phaser.Input.Pointer) => void; up: () => void } | null = null;
 
   /**
-   * 建立編輯器並監聽招式判定事件（P1 判定時閃亮該招範圍；場景關閉時取消監聽並收掉面板）
+   * 建立編輯器並監聽招式判定事件（P1 判定時閃亮該打擊點；場景關閉時取消監聽並收掉面板）
    *
    * @param scene 遊戲場景（範圍畫在這裡）
    * @param host 場景資訊
    */
   constructor(private readonly scene: Phaser.Scene, private readonly host: AttackTuningEditorHost) {
-    const onHit: HitHandler = (c, move) => {
-      if (c === host.player()) this.flashUntil[move] = scene.time.now + OVERLAY.FLASH_MS;
+    const onHit: HitHandler = (c, move, index) => {
+      if (c === host.player()) this.flashUntil.set(`${move}:${index}`, scene.time.now + OVERLAY.FLASH_MS);
     };
     scene.events.on(ATTACK_HIT_EVENT, onHit);
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -119,26 +166,29 @@ export class AttackTuningEditor {
     return this.panel !== null;
   }
 
-  /** 開 / 關面板（範圍顯示跟著面板） */
+  /** 開 / 關面板（範圍顯示、定格預覽跟著面板） */
   toggle(): void {
     if (this.panel) this.close();
     else this.open();
   }
 
-  /** 每幀：面板開啟時重畫範圍（選中的招式 + 正在閃亮的招式 + 近戰觸發圈） */
+  /** 每幀：面板開啟時重畫選中招式的打擊點與近戰觸發圈 */
   update(): void {
     if (!this.overlay) return;
     const p = this.host.player();
     const g = this.overlay.clear();
     const now = this.scene.time.now;
-    for (const { move } of ATTACK_MOVES) {
-      const flashing = now < this.flashUntil[move];
-      if (move !== this.selected && !flashing) continue;
-      const style = OVERLAY.MOVES[move];
-      const anchor = this.anchorOf(move, p);
-      g.fillStyle(style.color, flashing ? OVERLAY.FLASH_FILL : style.fill).lineStyle(OVERLAY.LINE_WIDTH, style.color, style.line);
-      drawHitShape(g, placeHitShape(moveShape(move), anchor.x, anchor.y, p.aimAngle));
-    }
+    const color = OVERLAY.MOVES[this.selected];
+    const anchor = this.anchorOf(this.selected, p);
+    const timed = isTimedMove(this.selected);
+    moveHitPoints(this.selected).forEach((point, index) => {
+      const flashing = now < (this.flashUntil.get(`${this.selected}:${index}`) ?? 0);
+      const active = !timed || Math.abs(point.timeMs - this.playheadMs) <= FRAME_MS / 2;
+      const fill = flashing ? OVERLAY.FLASH_FILL : active ? OVERLAY.ACTIVE_FILL : OVERLAY.IDLE_FILL;
+      const lineWidth = index === this.selectedPoint ? OVERLAY.SELECTED_LINE_WIDTH : OVERLAY.LINE_WIDTH;
+      g.fillStyle(color, fill).lineStyle(lineWidth, color, active || flashing ? OVERLAY.ACTIVE_LINE : OVERLAY.IDLE_LINE);
+      drawHitShape(g, placeHitShape(point.shape, anchor.x, anchor.y, p.aimAngle));
+    });
     g.lineStyle(OVERLAY.LINE_WIDTH, OVERLAY.TRIGGER.color, OVERLAY.TRIGGER.line)
       .strokeCircle(p.x, p.y, attackTuning().meleeEnemyRange + (this.host.dummy()?.radius ?? 0));
   }
@@ -156,161 +206,343 @@ export class AttackTuningEditor {
     return { x: p.x + Math.cos(p.aimAngle) * OVERLAY.DASH_PREVIEW_DISTANCE, y: p.y + Math.sin(p.aimAngle) * OVERLAY.DASH_PREVIEW_DISTANCE };
   }
 
-  /** 開啟面板與範圍顯示 */
+  /** 開啟面板、範圍顯示與定格預覽，並在 UIScene 註冊時間軸拖動 */
   private open(): void {
+    const ui = this.scene.scene.get('UIScene');
+    const move = (pointer: Phaser.Input.Pointer): void => { if (this.dragging) this.scrubTo(pointer.x); };
+    const up = (): void => { this.dragging = false; };
+    ui.input.on(Phaser.Input.Events.POINTER_MOVE, move);
+    ui.input.on(Phaser.Input.Events.POINTER_UP, up);
+    this.uiInput = { scene: ui, move, up };
     this.overlay = this.scene.add.graphics().setDepth(OVERLAY.DEPTH);
-    this.render();
-    this.update();
+    this.selectMove(this.selected);
   }
 
-  /** 關閉面板與範圍顯示 */
+  /** 關閉面板、範圍顯示與定格預覽 */
   private close(): void {
+    if (this.uiInput) {
+      this.uiInput.scene.input.off(Phaser.Input.Events.POINTER_MOVE, this.uiInput.move);
+      this.uiInput.scene.input.off(Phaser.Input.Events.POINTER_UP, this.uiInput.up);
+      this.uiInput = null;
+    }
+    this.dragging = false;
     this.panel?.destroy();
     this.panel = null;
+    this.timeline = null;
     this.overlay?.destroy();
     this.overlay = null;
     this.valueTexts.clear();
+    this.host.previewPose(null);
   }
 
-  /** （重新）建立面板：招式分頁 + 選中招式的參數（依它目前的形狀）+ 近戰觸發距離 + 底部按鈕；建在 UIScene */
+  /**
+   * 選中一招：選第一個打擊點、時間軸跳到它的時間，重建面板
+   *
+   * @param move 招式
+   */
+  private selectMove(move: AttackMove): void {
+    this.selected = move;
+    this.selectPoint(0);
+  }
+
+  /**
+   * 選中一個打擊點：時間軸跳到它的判定時間，重建面板
+   *
+   * @param index 打擊點索引
+   */
+  private selectPoint(index: number): void {
+    const points = moveHitPoints(this.selected);
+    this.selectedPoint = Phaser.Math.Clamp(index, 0, points.length - 1);
+    this.playheadMs = points[this.selectedPoint].timeMs;
+    this.render();
+    this.applyPreview();
+  }
+
+  /** 依時間軸更新 P1 定格預覽（沒有時間軸的招式結束預覽） */
+  private applyPreview(): void {
+    if (!isTimedMove(this.selected)) {
+      this.host.previewPose(null);
+      return;
+    }
+    const anim = MOVE_ANIMATIONS[this.selected];
+    this.host.previewPose({ key: anim.key, index: anim.index, timeMs: this.playheadMs });
+  }
+
+  /** 選中招式的動作長度（毫秒；沒有時間軸的招式為 0） */
+  private durationMs(): number {
+    if (!isTimedMove(this.selected)) return 0;
+    const anim = MOVE_ANIMATIONS[this.selected];
+    return this.host.animationMs(anim.key, anim.index);
+  }
+
+  /**
+   * 時間軸移到指定時間（夾在動作長度內、對齊到格），更新預覽與軸上的顯示
+   *
+   * @param ms 時間（毫秒）
+   */
+  private setPlayhead(ms: number): void {
+    const frame = Math.round(Phaser.Math.Clamp(ms, 0, this.durationMs()) / FRAME_MS);
+    this.playheadMs = Math.round(frame * FRAME_MS);
+    this.applyPreview();
+    this.refreshTimeline();
+  }
+
+  /**
+   * 拖動 / 點擊時間軸：依畫面 x 換算時間
+   *
+   * @param screenX 指標的畫面 x
+   */
+  private scrubTo(screenX: number): void {
+    if (!this.timeline) return;
+    const ratio = Phaser.Math.Clamp((screenX - LAYOUT.X - this.timeline.barX) / this.timeline.barWidth, 0, 1);
+    this.setPlayhead(ratio * this.durationMs());
+  }
+
+  /** （重新）建立面板：招式分頁、時間軸、選中打擊點的參數、近戰觸發距離與底部按鈕；建在 UIScene */
   private render(): void {
     this.panel?.destroy();
     this.valueTexts.clear();
+    this.timeline = null;
     const ui = this.scene.scene.get('UIScene');
-    const keys = this.moveKeys(this.selected, moveShape(this.selected).kind);
-    const tabRows = Math.ceil(ATTACK_MOVES.length / LAYOUT.TABS_PER_ROW);
-    const height = LAYOUT.TITLE_HEIGHT + tabRows * (LAYOUT.TAB_HEIGHT + LAYOUT.TAB_GAP) + LAYOUT.SECTION_GAP
-      + (keys.length + 1) * LAYOUT.ROW_HEIGHT + LAYOUT.SECTION_GAP * 2 + LAYOUT.BUTTON_HEIGHT + LAYOUT.PADDING * 2;
     const panel = ui.add.container(LAYOUT.X, LAYOUT.Y).setDepth(LAYOUT.DEPTH);
-    panel.add(this.blockClicks(ui.add.rectangle(0, 0, LAYOUT.WIDTH, height, LAYOUT.BG_COLOR, LAYOUT.BG_ALPHA)
-      .setOrigin(0, 0).setStrokeStyle(2, LAYOUT.BORDER_COLOR)));
+    const background = ui.add.rectangle(0, 0, LAYOUT.WIDTH, 1, LAYOUT.BG_COLOR, LAYOUT.BG_ALPHA).setOrigin(0, 0).setStrokeStyle(2, LAYOUT.BORDER_COLOR);
+    panel.add(background);
     panel.add(this.text(ui, LAYOUT.PADDING, LAYOUT.PADDING, '範圍 / 判定編輯器（P 開關）', LAYOUT.COLORS.TITLE, '20px'));
-    panel.add(this.text(ui, LAYOUT.PADDING, LAYOUT.PADDING + 26, '選一招，調它的形狀、位置與判定時間', LAYOUT.COLORS.HINT, '13px'));
-    // 招式分頁
     let y = LAYOUT.TITLE_HEIGHT;
+    y = this.renderTabs(ui, panel, y) + LAYOUT.SECTION_GAP;
+    if (isTimedMove(this.selected)) y = this.renderTimeline(ui, panel, y) + LAYOUT.SECTION_GAP;
+    const point = moveHitPoints(this.selected)[this.selectedPoint];
+    for (const field of this.pointFields(point)) {
+      this.addRow(ui, panel, y, field, () => this.pointValueText(field), (dir) => this.stepPoint(field, dir));
+      y += LAYOUT.ROW_HEIGHT;
+    }
+    y += LAYOUT.SECTION_GAP;
+    const def = MELEE_ENEMY_RANGE_DEF;
+    this.addRow(ui, panel, y, 'meleeEnemyRange', () => `${attackTuning().meleeEnemyRange}${def.unit}`,
+      (dir) => setMeleeEnemyRange(attackTuning().meleeEnemyRange + dir * def.step), def.label, def.hint);
+    y += LAYOUT.ROW_HEIGHT + LAYOUT.SECTION_GAP;
+    const buttonY = y + LAYOUT.BUTTON_HEIGHT / 2;
+    const third = LAYOUT.WIDTH / 3;
+    const bw = third - LAYOUT.PADDING;
+    panel.add(this.button(ui, third / 2, buttonY, bw, LAYOUT.BUTTON_HEIGHT, '這招恢復預設', LAYOUT.COLORS.MOVE_RESET, () => {
+      resetMoveHitPoints(this.selected);
+      this.selectPoint(0);
+    }));
+    panel.add(this.button(ui, third * 1.5, buttonY, bw, LAYOUT.BUTTON_HEIGHT, '全部恢復預設', LAYOUT.COLORS.RESET, () => {
+      resetAllAttackTuning();
+      this.selectPoint(0);
+    }));
+    panel.add(this.button(ui, third * 2.5, buttonY, bw, LAYOUT.BUTTON_HEIGHT, '關閉', LAYOUT.COLORS.CLOSE, () => this.close()));
+    // 背景高度依內容決定，再設成可點（攔下面板上的點擊）
+    background.setSize(LAYOUT.WIDTH, y + LAYOUT.BUTTON_HEIGHT + LAYOUT.PADDING);
+    this.blockClicks(background);
+    this.panel = panel;
+    this.refreshValues();
+  }
+
+  /**
+   * 招式分頁
+   *
+   * @param ui 面板所在場景
+   * @param panel 面板
+   * @param y 上緣（相對面板）
+   * @returns 下緣
+   */
+  private renderTabs(ui: Phaser.Scene, panel: Phaser.GameObjects.Container, y: number): number {
     const tabWidth = (LAYOUT.WIDTH - LAYOUT.PADDING * 2 - LAYOUT.TAB_GAP * (LAYOUT.TABS_PER_ROW - 1)) / LAYOUT.TABS_PER_ROW;
     ATTACK_MOVES.forEach(({ move, label }, i) => {
       const col = i % LAYOUT.TABS_PER_ROW, row = Math.floor(i / LAYOUT.TABS_PER_ROW);
       const tx = LAYOUT.PADDING + col * (tabWidth + LAYOUT.TAB_GAP), ty = y + row * (LAYOUT.TAB_HEIGHT + LAYOUT.TAB_GAP);
       const color = move === this.selected ? LAYOUT.TAB_SELECTED_COLOR : LAYOUT.TAB_COLOR;
       panel.add(this.blockClicks(ui.add.rectangle(tx, ty, tabWidth, LAYOUT.TAB_HEIGHT, color).setOrigin(0, 0)
-        .setStrokeStyle(1, OVERLAY.MOVES[move].color), () => this.select(move)));
-      panel.add(ui.add.rectangle(tx + 14, ty + LAYOUT.TAB_HEIGHT / 2, LAYOUT.SWATCH_SIZE, LAYOUT.SWATCH_SIZE, OVERLAY.MOVES[move].color));
+        .setStrokeStyle(1, OVERLAY.MOVES[move]), () => this.selectMove(move)));
+      panel.add(ui.add.rectangle(tx + 14, ty + LAYOUT.TAB_HEIGHT / 2, LAYOUT.SWATCH_SIZE, LAYOUT.SWATCH_SIZE, OVERLAY.MOVES[move]));
       panel.add(this.text(ui, tx + 28, ty + LAYOUT.TAB_HEIGHT / 2, label, LAYOUT.COLORS.TEXT, '15px').setOrigin(0, 0.5));
     });
-    y += tabRows * (LAYOUT.TAB_HEIGHT + LAYOUT.TAB_GAP) + LAYOUT.SECTION_GAP;
-    // 選中招式的參數
-    for (const key of keys) {
-      this.addRow(ui, panel, key, y);
-      y += LAYOUT.ROW_HEIGHT;
-    }
-    y += LAYOUT.SECTION_GAP;
-    this.addRow(ui, panel, 'meleeEnemyRange', y);
-    y += LAYOUT.ROW_HEIGHT + LAYOUT.SECTION_GAP;
-    // 底部按鈕
-    const buttonY = y + LAYOUT.BUTTON_HEIGHT / 2;
-    const third = LAYOUT.WIDTH / 3;
-    panel.add(this.button(ui, third / 2, buttonY, '這招恢復預設', LAYOUT.COLORS.MOVE_RESET, () => this.resetMove()));
-    panel.add(this.button(ui, third * 1.5, buttonY, '全部恢復預設', LAYOUT.COLORS.RESET, () => this.resetAll()));
-    panel.add(this.button(ui, third * 2.5, buttonY, '關閉', LAYOUT.COLORS.CLOSE, () => this.close()));
-    this.panel = panel;
-    this.refreshValues();
+    const rows = Math.ceil(ATTACK_MOVES.length / LAYOUT.TABS_PER_ROW);
+    return y + rows * (LAYOUT.TAB_HEIGHT + LAYOUT.TAB_GAP);
   }
 
   /**
-   * 一招在目前形狀下要顯示的參數：形狀、往前 / 往上下偏移、該形狀的尺寸、判定時間（有的話）
-   *
-   * @param move 招式
-   * @param kind 目前形狀
-   */
-  private moveKeys(move: AttackMove, kind: HitShapeKind): AttackTuningKey[] {
-    const keys: AttackTuningKey[] = [`${move}.shape`, `${move}.offsetForward`, `${move}.offsetSide`];
-    for (const field of SHAPE_SIZE_FIELDS[kind]) keys.push(`${move}.${field}`);
-    if (isTimedMove(move)) keys.push(`${move}.hitMs`);
-    return keys;
-  }
-
-  /**
-   * 加一列參數：名稱、說明、數值與 − / +（形狀那一列的數值顯示形狀名稱，◀ / ▶ 循環切換）
+   * 時間軸：時間說明、可點 / 拖動的軸（標出打擊點與目前時間）、逐格與打擊點按鈕、打擊點選擇
    *
    * @param ui 面板所在場景
    * @param panel 面板
-   * @param key 參數
-   * @param y 列的上緣（相對面板）
+   * @param y 上緣（相對面板）
+   * @returns 下緣
    */
-  private addRow(ui: Phaser.Scene, panel: Phaser.GameObjects.Container, key: AttackTuningKey, y: number): void {
-    const def = ATTACK_TUNING_PARAM_DEFS.find((d) => d.key === key)!;
-    const rowY = y + LAYOUT.ROW_HEIGHT / 2;
-    panel.add(this.text(ui, LAYOUT.LABEL_X, rowY - 10, def.label, LAYOUT.COLORS.TEXT, '15px'));
-    if (def.hint) panel.add(this.text(ui, LAYOUT.LABEL_X, rowY + 8, def.hint, LAYOUT.COLORS.HINT, '11px'));
-    const value = this.text(ui, LAYOUT.VALUE_X, rowY, '', LAYOUT.COLORS.VALUE, '16px').setOrigin(0.5);
-    this.valueTexts.set(key, value);
-    panel.add(value);
-    const isShape = key.endsWith('.shape');
-    panel.add(this.stepButton(ui, LAYOUT.MINUS_X, rowY, isShape ? '◀' : '−', () => this.step(key, -1)));
-    panel.add(this.stepButton(ui, LAYOUT.PLUS_X, rowY, isShape ? '▶' : '+', () => this.step(key, 1)));
+  private renderTimeline(ui: Phaser.Scene, panel: Phaser.GameObjects.Container, y: number): number {
+    const barX = LAYOUT.PADDING, barWidth = LAYOUT.WIDTH - LAYOUT.PADDING * 2;
+    const label = this.text(ui, barX, y, '', LAYOUT.COLORS.TEXT, '14px');
+    panel.add(label);
+    y += LAYOUT.TIMELINE_LABEL_HEIGHT;
+    const barTop = y;
+    panel.add(this.blockClicks(ui.add.rectangle(barX, barTop, barWidth, LAYOUT.BAR_HEIGHT, LAYOUT.BAR_COLOR).setOrigin(0, 0), (pointer) => {
+      this.dragging = true;
+      this.scrubTo(pointer.x);
+    }));
+    const markers = ui.add.graphics();
+    panel.add(markers);
+    this.timeline = { label, markers, barX, barTop, barWidth };
+    y += LAYOUT.BAR_HEIGHT + LAYOUT.TIMELINE_BUTTON_GAP;
+    const buttons: Array<{ label: string; onClick: () => void }> = [
+      { label: '◀ 格', onClick: () => this.setPlayhead(this.playheadMs - FRAME_MS) },
+      { label: '格 ▶', onClick: () => this.setPlayhead(this.playheadMs + FRAME_MS) },
+      { label: '加打擊點', onClick: () => this.addPoint() },
+      { label: '刪除', onClick: () => this.removePoint() },
+      { label: '移到這一格', onClick: () => this.stepPoint('timeMs', 0, this.playheadMs) }
+    ];
+    const bw = (barWidth - LAYOUT.TIMELINE_BUTTON_GAP * (buttons.length - 1)) / buttons.length;
+    buttons.forEach((b, i) => {
+      const cx = barX + i * (bw + LAYOUT.TIMELINE_BUTTON_GAP) + bw / 2;
+      panel.add(this.button(ui, cx, y + LAYOUT.TIMELINE_BUTTON_HEIGHT / 2, bw, LAYOUT.TIMELINE_BUTTON_HEIGHT, b.label, LAYOUT.TIMELINE_BUTTON_COLOR, b.onClick));
+    });
+    y += LAYOUT.TIMELINE_BUTTON_HEIGHT + LAYOUT.TIMELINE_BUTTON_GAP;
+    this.addRow(ui, panel, y, 'point', () => `${this.selectedPoint + 1} / ${moveHitPoints(this.selected).length}`,
+      (dir) => this.selectPoint(this.selectedPoint + dir), '打擊點', '◀ ▶ 切換要調的打擊點');
+    return y + LAYOUT.ROW_HEIGHT;
+  }
+
+  /** 更新時間軸：時間說明、打擊點標記（選中的較亮）與目前時間的直線 */
+  private refreshTimeline(): void {
+    if (!this.timeline) return;
+    const { label, markers, barX, barTop, barWidth } = this.timeline;
+    const duration = this.durationMs();
+    const frames = Math.max(1, Math.round(duration / FRAME_MS));
+    const frame = Math.round(this.playheadMs / FRAME_MS);
+    label.setText(`時間軸 ${(this.playheadMs / 1000).toFixed(2)}s / ${(duration / 1000).toFixed(2)}s　第 ${frame} / ${frames} 格（點或拖動）`);
+    const toX = (ms: number): number => barX + (duration > 0 ? Phaser.Math.Clamp(ms / duration, 0, 1) : 0) * barWidth;
+    markers.clear();
+    moveHitPoints(this.selected).forEach((point, index) => {
+      markers.fillStyle(index === this.selectedPoint ? LAYOUT.MARKER_SELECTED_COLOR : LAYOUT.MARKER_COLOR, 1)
+        .fillRect(toX(point.timeMs) - LAYOUT.BAR_MARKER_WIDTH / 2, barTop, LAYOUT.BAR_MARKER_WIDTH, LAYOUT.BAR_HEIGHT);
+    });
+    markers.fillStyle(LAYOUT.PLAYHEAD_COLOR, 1).fillRect(toX(this.playheadMs) - LAYOUT.PLAYHEAD_WIDTH / 2, barTop - LAYOUT.PLAYHEAD_OVERHANG,
+      LAYOUT.PLAYHEAD_WIDTH, LAYOUT.BAR_HEIGHT + LAYOUT.PLAYHEAD_OVERHANG * 2);
   }
 
   /**
-   * 選中一招：面板改顯示它的參數，角色身上改畫它的範圍
+   * 選中打擊點要顯示的欄位：形狀、往前 / 往上下偏移、該形狀的尺寸、傷害 %、判定時間（有時間軸的招式）
    *
-   * @param move 招式
+   * @param point 打擊點
    */
-  private select(move: AttackMove): void {
-    this.selected = move;
-    this.render();
+  private pointFields(point: HitPoint): HitPointField[] {
+    const fields: HitPointField[] = ['shape', 'offsetForward', 'offsetSide', ...SHAPE_SIZE_FIELDS[point.shape.kind]];
+    if (isTimedMove(this.selected)) fields.push('damagePct', 'timeMs');
+    return fields;
   }
 
   /**
-   * 調整一項參數一格並立即套用、存檔；形狀循環切換（換形狀後重建面板，顯示該形狀的尺寸欄位）
+   * 選中打擊點某欄位的顯示文字
    *
-   * @param key 參數
-   * @param dir −1 / +1
+   * @param field 欄位
    */
-  private step(key: AttackTuningKey, dir: -1 | 1): void {
-    const def = ATTACK_TUNING_PARAM_DEFS.find((d) => d.key === key)!;
-    const values = { ...attackTuning() };
-    const isShape = key.endsWith('.shape');
-    if (isShape) {
+  private pointValueText(field: HitPointField): string {
+    const point = moveHitPoints(this.selected)[this.selectedPoint];
+    if (field === 'shape') return HIT_SHAPE_LABELS[point.shape.kind];
+    const value = field === 'timeMs' || field === 'damagePct' ? point[field] : point.shape[field];
+    return `${value}${HIT_POINT_FIELDS[field].unit}`;
+  }
+
+  /**
+   * 調整選中打擊點的一個欄位並立即套用、存檔：形狀循環切換、其他欄位一格；傳入 exact 時直接設成該值。
+   * 改了判定時間的打擊點重新排序後仍保持選中；換形狀或時間後重建面板
+   *
+   * @param field 欄位
+   * @param dir −1 / +1（exact 有值時不用）
+   * @param exact 直接設定的值
+   */
+  private stepPoint(field: HitPointField, dir: -1 | 0 | 1, exact?: number): void {
+    const points = moveHitPoints(this.selected).map((p) => ({ ...p, shape: { ...p.shape } }));
+    const point = points[this.selectedPoint];
+    if (field === 'shape') {
       const count = HIT_SHAPE_KINDS.length;
-      values[key] = (values[key] + dir + count) % count;
+      point.shape.kind = HIT_SHAPE_KINDS[(HIT_SHAPE_KINDS.indexOf(point.shape.kind) + dir + count) % count];
+    } else if (field === 'timeMs' || field === 'damagePct') {
+      point[field] = clampHitPointField(field, exact ?? point[field] + dir * HIT_POINT_FIELDS[field].step, point[field]);
     } else {
-      values[key] = attackTuningStore.clamp(def, values[key] + dir * def.step);
+      point.shape[field] = clampHitPointField(field, point.shape[field] + dir * HIT_POINT_FIELDS[field].step, point.shape[field]);
     }
-    applyAttackTuning(values);
-    if (isShape) this.render();
-    else this.refreshValues();
-  }
-
-  /** 選中的招式恢復預設（其他招式不動） */
-  private resetMove(): void {
-    const defaults = attackTuningStore.defaults();
-    const values = { ...attackTuning() };
-    const prefix = `${this.selected}.`;
-    for (const def of ATTACK_TUNING_PARAM_DEFS) {
-      if (def.key.startsWith(prefix)) values[def.key] = defaults[def.key];
+    const sorted = setMoveHitPoints(this.selected, points);
+    if (field === 'shape' || field === 'timeMs') {
+      // 排序後找回同一個打擊點（JSON 比對整筆資料）
+      const key = JSON.stringify(point);
+      this.selectedPoint = Math.max(0, sorted.findIndex((p) => JSON.stringify(p) === key));
+      if (field === 'timeMs') this.playheadMs = sorted[this.selectedPoint].timeMs;
+      this.render();
+      this.applyPreview();
     }
-    applyAttackTuning(values);
-    this.render();
   }
 
-  /** 全部招式恢復預設 */
-  private resetAll(): void {
-    applyAttackTuning(attackTuningStore.defaults());
+  /** 在時間軸目前這一格加一個打擊點（複製選中打擊點的範圍），傷害平均分配，選中新打擊點 */
+  private addPoint(): void {
+    const points = moveHitPoints(this.selected);
+    if (points.length >= MAX_HIT_POINTS) return;
+    const source = points[this.selectedPoint];
+    const list = this.splitDamage([...points, { timeMs: this.playheadMs, damagePct: source.damagePct, shape: { ...source.shape } }]);
+    const added = list[list.length - 1];
+    const sorted = setMoveHitPoints(this.selected, list);
+    const key = JSON.stringify(added);
+    this.selectedPoint = Math.max(0, sorted.findIndex((p) => JSON.stringify(p) === key));
     this.render();
+    this.applyPreview();
   }
 
-  /** 更新面板上的數值（形狀顯示名稱） */
+  /** 刪除選中的打擊點（至少留一個），剩下的傷害平均分配 */
+  private removePoint(): void {
+    const points = moveHitPoints(this.selected);
+    if (points.length <= 1) return;
+    setMoveHitPoints(this.selected, this.splitDamage(points.filter((_, i) => i !== this.selectedPoint)));
+    this.selectPoint(Math.min(this.selectedPoint, points.length - 2));
+  }
+
+  /**
+   * 傷害平均分配（合計約 100%，例：3 個打擊點各 33%）
+   *
+   * @param points 打擊點
+   */
+  private splitDamage(points: ReadonlyArray<HitPoint>): HitPoint[] {
+    const pct = Math.round(100 / points.length);
+    return points.map((p) => ({ ...p, damagePct: pct, shape: { ...p.shape } }));
+  }
+
+  /**
+   * 加一列參數：名稱、說明、數值與 − / +（形狀與打擊點選擇用 ◀ / ▶）；按下後重新整理所有數值
+   *
+   * @param ui 面板所在場景
+   * @param panel 面板
+   * @param y 列的上緣（相對面板）
+   * @param id 列的識別（打擊點欄位用欄位名）
+   * @param valueText 取得數值文字
+   * @param onStep 按 − / + 時呼叫（−1 / +1）
+   * @param label 名稱（打擊點欄位省略時取 HIT_POINT_FIELDS）
+   * @param hint 說明（同上）
+   */
+  private addRow(
+    ui: Phaser.Scene, panel: Phaser.GameObjects.Container, y: number, id: string,
+    valueText: () => string, onStep: (dir: -1 | 1) => void, label?: string, hint?: string
+  ): void {
+    const fieldDef = id in HIT_POINT_FIELDS ? HIT_POINT_FIELDS[id as HitPointField] : null;
+    const rowY = y + LAYOUT.ROW_HEIGHT / 2;
+    panel.add(this.text(ui, LAYOUT.LABEL_X, rowY - 9, label ?? fieldDef?.label ?? id, LAYOUT.COLORS.TEXT, '15px'));
+    const rowHint = hint ?? fieldDef?.hint ?? '';
+    if (rowHint) panel.add(this.text(ui, LAYOUT.LABEL_X, rowY + 8, rowHint, LAYOUT.COLORS.HINT, '11px'));
+    const value = this.text(ui, LAYOUT.VALUE_X, rowY, valueText(), LAYOUT.COLORS.VALUE, '16px').setOrigin(0.5);
+    value.setData('valueText', valueText);
+    this.valueTexts.set(id, value);
+    panel.add(value);
+    const arrows = id === 'shape' || id === 'point';
+    panel.add(this.stepButton(ui, LAYOUT.MINUS_X, rowY, arrows ? '◀' : '−', () => { onStep(-1); this.refreshValues(); }));
+    panel.add(this.stepButton(ui, LAYOUT.PLUS_X, rowY, arrows ? '▶' : '+', () => { onStep(1); this.refreshValues(); }));
+  }
+
+  /** 更新面板上的數值與時間軸 */
   private refreshValues(): void {
-    const values = attackTuning();
-    for (const [key, text] of this.valueTexts) {
-      if (key.endsWith('.shape')) {
-        text.setText(HIT_SHAPE_LABELS[HIT_SHAPE_KINDS[values[key]]]);
-      } else {
-        const def = ATTACK_TUNING_PARAM_DEFS.find((d) => d.key === key)!;
-        text.setText(`${values[key]}${def.unit}`);
-      }
+    for (const text of this.valueTexts.values()) {
+      const valueText = text.getData('valueText') as (() => string) | undefined;
+      if (valueText && text.active) text.setText(valueText());
     }
+    this.refreshTimeline();
   }
 
   /**
@@ -319,10 +551,10 @@ export class AttackTuningEditor {
    * @param obj 物件
    * @param onClick 點擊時呼叫（可省略：只攔點擊）
    */
-  private blockClicks<T extends Phaser.GameObjects.GameObject>(obj: T, onClick?: () => void): T {
-    obj.setInteractive().on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
+  private blockClicks<T extends Phaser.GameObjects.GameObject>(obj: T, onClick?: (pointer: Phaser.Input.Pointer) => void): T {
+    obj.setInteractive().on('pointerdown', (pointer: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
       ev.stopPropagation();
-      onClick?.();
+      onClick?.(pointer);
     });
     return obj;
   }
@@ -358,19 +590,22 @@ export class AttackTuningEditor {
   }
 
   /**
-   * 底部按鈕（底色方塊 + 文字）
+   * 按鈕（底色方塊 + 文字）
    *
    * @param ui 面板所在場景
    * @param x 中心 x（相對面板）
    * @param y 中心 y（相對面板）
+   * @param width 寬
+   * @param height 高
    * @param label 文字
    * @param color 底色
    * @param onClick 點擊時呼叫
    */
-  private button(ui: Phaser.Scene, x: number, y: number, label: string, color: number, onClick: () => void): Phaser.GameObjects.Container {
-    const width = LAYOUT.WIDTH / 3 - LAYOUT.PADDING;
-    const bg = this.blockClicks(ui.add.rectangle(0, 0, width, LAYOUT.BUTTON_HEIGHT, color), onClick);
-    const caption = this.text(ui, 0, 0, label, LAYOUT.COLORS.TEXT, '14px').setOrigin(0.5);
+  private button(
+    ui: Phaser.Scene, x: number, y: number, width: number, height: number, label: string, color: number, onClick: () => void
+  ): Phaser.GameObjects.Container {
+    const bg = this.blockClicks(ui.add.rectangle(0, 0, width, height, color), onClick);
+    const caption = this.text(ui, 0, 0, label, LAYOUT.COLORS.TEXT, '13px').setOrigin(0.5);
     return ui.add.container(x, y, [bg, caption]);
   }
 }

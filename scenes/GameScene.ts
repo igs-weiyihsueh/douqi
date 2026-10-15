@@ -515,7 +515,9 @@ export class GameScene extends Phaser.Scene {
         dummy: () => {
           const d = this.trainingDummy;
           return d?.active && !d.dead ? { x: d.x, y: d.y, radius: d.getBodyRadius() } : null;
-        }
+        },
+        previewPose: (preview) => this.playerSpine.setPreview(preview),
+        animationMs: (key, index) => this.playerSpine.animationDurationMs(key, index)
       });
       this.input.keyboard!.on(`keydown-${GameConfig.training.tuningEditorKey}`, () => this.tuningEditor?.toggle());
     } else {

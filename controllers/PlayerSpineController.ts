@@ -4,8 +4,15 @@ import { GameConfig } from '../config';
 import type { Character, CharacterActionKind } from '../objects/Character';
 import { visibleBottomOffset } from '../systems/spriteFeet';
 
+/** 定格預覽：動作鍵、同一鍵的第幾個動作（普攻兩段輪流）與時間 */
+export interface PlayerPosePreview {
+  key: PlayerAnimKey;
+  index: number;
+  timeMs: number;
+}
+
 /** 動畫鍵（GameConfig.playerSpine.anims / speeds 的鍵） */
-type PlayerAnimKey = 'idle' | 'move' | 'attack' | 'comboCircle' | 'comboLine' | 'unique' | 'sprint' | 'hit';
+export type PlayerAnimKey = 'idle' | 'move' | 'attack' | 'comboCircle' | 'comboLine' | 'unique' | 'sprint' | 'hit';
 
 /** 控制器需要的場景資訊 */
 export interface PlayerSpineHost {
@@ -31,6 +38,8 @@ export class PlayerSpineController {
   private oneShotUntil = 0;
   /** 已處理到的出招流水號 */
   private actionSeq = 0;
+  /** 定格預覽中（範圍 / 判定編輯器的時間軸；null = 平常依狀態切換動作） */
+  private preview: PlayerPosePreview | null = null;
   /** P1 本體是否被 Spine 外觀藏起來（不顯示 Spine 時恢復） */
   private baseHidden = false;
   /** 上一幀是否在受擊硬直 */
@@ -80,15 +89,63 @@ export class PlayerSpineController {
     spine.setVisible(true).setPosition(skin.x, footY).setDepth(skin.depth).setAlpha(skin.alpha);
     // Spine 物件本身的 alpha 不會套用到繪製，受擊閃爍要寫進骨架顏色
     spine.skeleton.color.a = skin.alpha;
-    spine.animationState.timeScale = this.host.isPlayerFrozen() ? 0 : 1;
     skin.setAlpha(0);
     // P1 本體（程式繪製的圓形）藏起來：揮擊時本體會閃白（flashWhite），Spine 的姿勢露出空隙時會隱約看到
     p.setAlpha(0);
     this.baseHidden = true;
-    this.updateAnimation(p, time);
+    if (this.preview) {
+      this.applyPreview(spine, this.preview);
+    } else {
+      spine.animationState.timeScale = this.host.isPlayerFrozen() ? 0 : 1;
+      this.updateAnimation(p, time);
+    }
     // 原檔朝背後出招的動作（mirroredAnims）播放時再翻一次，招式才會朝面向打出去
     const mirrored = this.current !== null && cfg.mirroredAnims.includes(this.current);
     spine.skeleton.scaleX = (p.facingRight === cfg.facesRight) !== mirrored ? 1 : -1;
+  }
+
+  /**
+   * 定格預覽（範圍 / 判定編輯器的時間軸用）：P1 停在某個動作的某個時間點，不再依狀態切換動作；null = 結束預覽、回到平常的動作
+   *
+   * @param preview 動作鍵、同一鍵的第幾個動作（普攻兩段）與時間（毫秒）
+   */
+  setPreview(preview: PlayerPosePreview | null): void {
+    if (!preview && this.preview && this.spine) {
+      // 結束預覽：回到待機，接著由平常的狀態切換接手
+      this.spine.animationState.timeScale = 1;
+      this.play('idle', true);
+    }
+    this.preview = preview;
+  }
+
+  /**
+   * 某個動作的長度（毫秒；動作不存在或 Spine 還沒建立時為 0）
+   *
+   * @param key 動作鍵
+   * @param index 同一鍵的第幾個動作
+   */
+  animationDurationMs(key: PlayerAnimKey, index = 0): number {
+    const names = GameConfig.playerSpine.anims[key];
+    const anim = this.spine?.skeleton.data.findAnimation(names[index % names.length]);
+    return anim ? anim.duration * 1000 : 0;
+  }
+
+  /**
+   * 套用定格預覽：切到指定動作並停在指定時間
+   *
+   * @param spine Spine 物件
+   * @param preview 預覽設定
+   */
+  private applyPreview(spine: SpineGameObject, preview: PlayerPosePreview): void {
+    const names = GameConfig.playerSpine.anims[preview.key];
+    const name = names[preview.index % names.length];
+    const state = spine.animationState;
+    let entry = state.getCurrent(0);
+    if (!entry || entry.animation?.name !== name) entry = state.setAnimation(0, name, false);
+    entry.mixDuration = 0;
+    entry.trackTime = preview.timeMs / 1000;
+    state.timeScale = 0;
+    this.current = preview.key;
   }
 
   /**

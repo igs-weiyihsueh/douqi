@@ -3,7 +3,7 @@ import { GameConfig } from '../config';
 import type { Character, ReadyCombo } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
 import type { TargetingController } from './TargetingController';
-import { ATTACK_HIT_EVENT, afterHitDelay, moveHitMs, moveShape } from '../systems/attackTuningParams';
+import { ATTACK_HIT_EVENT, afterHitDelay, lastHitMs, moveHitPoints, type HitPoint } from '../systems/attackTuningParams';
 import { drawHitShape, hitShapeContains, placeHitShape, type PlacedHitShape } from '../systems/hitShapes';
 
 /**
@@ -42,6 +42,13 @@ export interface ComboSkillHost {
   emitStats(): void;
   /** 角色剛進入強化（二段變身）：場景依關卡怪物配置做即時補怪 */
   onEmpower(c: Character): void;
+}
+
+/** 一次連段技施放（多個打擊點）的狀態：連段技、放出時的方向、COMBO 連擊是否已算過（每次施放只算一次） */
+interface ComboCast {
+  kind: ReadyCombo;
+  dir: number;
+  rewardCounted: boolean;
 }
 
 /** 連段技與強化的震動 */
@@ -163,26 +170,26 @@ export class ComboSkillController {
   }
 
   /**
-   * 施放連段技：立即開始播動作並進入表演時間（無敵、不能操作，涵蓋判定前的蓄勢），
-   * 等判定時間點（moveHitMs）才判定命中；判定範圍的方向在放出時決定
+   * 施放連段技：立即開始播動作並進入表演時間（無敵、不能操作，涵蓋到最後一個打擊點 + performanceTime），
+   * 每個打擊點（moveHitPoints）到了自己的判定時間各判定一次；判定範圍的方向在放出時決定
    *
    * @param c 角色
    * @param kind 連段技
    * @param time 目前場景時間
    */
   private performCombo(c: Character, kind: ReadyCombo, time: number): void {
-    const circle = kind === 'circle';
-    const delay = moveHitMs(kind);
     const perf = GameConfig.performanceTime;
-    c.markAction(circle ? 'comboCircle' : 'comboLine');
-    this.enterPerformance(c, delay + (circle ? perf.circle : perf.line), time);
+    c.markAction(kind === 'circle' ? 'comboCircle' : 'comboLine');
+    this.enterPerformance(c, lastHitMs(kind) + (kind === 'circle' ? perf.circle : perf.line), time);
     const dir = c.aimAngle;
-    afterHitDelay(c, delay, time, (hitTime) => {
-      if (!c.alive) return;
-      if (circle) this.comboCircle(c, dir, hitTime);
-      else this.comboLine(c, dir, hitTime);
+    const cast: ComboCast = { kind, dir, rewardCounted: false };
+    moveHitPoints(kind).forEach((point, index) => {
+      afterHitDelay(c, point.timeMs, time, (hitTime) => {
+        if (c.alive) this.resolveComboHit(c, cast, index, point, hitTime);
+      });
     });
   }
+
 
   /**
    * 能量增加（夾在 0 ~ max；強化期間只消退不增加）
@@ -265,7 +272,7 @@ export class ComboSkillController {
 
   private empowerAoeBurst(c: Character, tx: number, ty: number, time: number): void {
     const cfg = GameConfig.combo.empower.aoe;
-    const shape = placeHitShape(moveShape('dash'), tx, ty, c.aimAngle);
+    const shape = placeHitShape(moveHitPoints('dash')[0].shape, tx, ty, c.aimAngle);
     const dmg = cfg.damage * GameConfig.combo.empower.damageMult;
     if (shape.kind === 'circle') {
       this.showRing(shape, cfg.color, cfg.ringMs);
@@ -274,7 +281,7 @@ export class ComboSkillController {
       this.showShape(shape, cfg.color, AOE_INNER_RING_COLOR, cfg.ringMs);
     }
     this.host.shakeOnce(GameConfig.juice.burstShakeDuration, GameConfig.juice.burstShakeIntensity * 0.5);
-    c.scene.events.emit(ATTACK_HIT_EVENT, c, 'dash');
+    c.scene.events.emit(ATTACK_HIT_EVENT, c, 'dash', 0);
     if (this.hitInShape(c, shape, dmg, cfg.knockback, time)) {
       this.host.comboRewardHit(c);
       this.registerEmpowerAoeHit(c, time);
@@ -291,41 +298,31 @@ export class ComboSkillController {
   }
 
   /**
-   * 連段技判定：圓形斬——圓形斬的判定範圍（預設以角色為中心的圓）內受傷，圓形時播擴張環，順手秒碎範圍內的物件
-   * （表演時間在放出時已進入，見 performCombo）
+   * 連段技一個打擊點的判定：以它的判定範圍（朝放出時的方向）判定，範圍內敵人受「招式傷害 × 傷害 %」並從判定中心往外擊退，
+   * 順手打範圍內的物件；招式1 的圓形範圍播擴張環、其他形狀畫範圍特效（只在顯示範圍特效的模式）。
+   * 同一次施放的多個打擊點只在第一次打中時算 COMBO 連擊
    *
    * @param c 施放的角色
-   * @param dir 方向（放出時的面向）
+   * @param cast 這次施放的狀態
+   * @param index 打擊點索引
+   * @param point 打擊點
    * @param time 目前場景時間
    */
-  private comboCircle(c: Character, dir: number, time: number): void {
-    const cfg = GameConfig.combo.circle;
-    const shape = placeHitShape(moveShape('circle'), c.x, c.y, dir);
-    const dmg = cfg.damage * (c.isEmpowered(time) ? GameConfig.combo.empower.damageMult : 1);
-    if (shape.kind === 'circle') this.showRing(shape, CIRCLE_RING_COLOR, CIRCLE_RING_MS);
-    else this.showShape(shape, CIRCLE_RING_COLOR, CIRCLE_RING_COLOR, CIRCLE_RING_MS);
-    if (this.hitInShape(c, shape, dmg, cfg.knockback, time)) this.host.comboRewardHit(c);
+  private resolveComboHit(c: Character, cast: ComboCast, index: number, point: HitPoint, time: number): void {
+    const cfg = cast.kind === 'circle' ? GameConfig.combo.circle : GameConfig.combo.line;
+    const shape = placeHitShape(point.shape, c.x, c.y, cast.dir);
+    const dmg = cfg.damage * (c.isEmpowered(time) ? GameConfig.combo.empower.damageMult : 1) * point.damagePct / 100;
+    if (cast.kind === 'circle' && shape.kind === 'circle') this.showRing(shape, CIRCLE_RING_COLOR, CIRCLE_RING_MS);
+    else if (cast.kind === 'circle') this.showShape(shape, CIRCLE_RING_COLOR, CIRCLE_RING_COLOR, CIRCLE_RING_MS);
+    else this.showShape(shape, LINE_BAND_COLOR, LINE_BAND_STROKE, LINE_BAND_FADE_MS);
+    if (this.hitInShape(c, shape, dmg, cfg.knockback, time) && !cast.rewardCounted) {
+      cast.rewardCounted = true;
+      this.host.comboRewardHit(c);
+    }
     this.host.shakeOnce(SKILL_SHAKE_MS, SKILL_SHAKE_INTENSITY);
-    c.scene.events.emit(ATTACK_HIT_EVENT, c, 'circle');
+    c.scene.events.emit(ATTACK_HIT_EVENT, c, cast.kind, index);
   }
 
-
-  /**
-   * 連段技判定：直線氣波——朝 dir 的貫穿矩形，順手秒碎範圍內的物件（表演時間在放出時已進入，見 performCombo）
-   *
-   * @param c 施放的角色
-   * @param dir 方向（放出時的面向）
-   * @param time 目前場景時間
-   */
-  private comboLine(c: Character, dir: number, time: number): void {
-    const cfg = GameConfig.combo.line;
-    const shape = placeHitShape(moveShape('line'), c.x, c.y, dir);
-    const dmg = cfg.damage * (c.isEmpowered(time) ? GameConfig.combo.empower.damageMult : 1);
-    this.showShape(shape, LINE_BAND_COLOR, LINE_BAND_STROKE, LINE_BAND_FADE_MS);
-    if (this.hitInShape(c, shape, dmg, cfg.knockback, time)) this.host.comboRewardHit(c);
-    this.host.shakeOnce(SKILL_SHAKE_MS, SKILL_SHAKE_INTENSITY);
-    c.scene.events.emit(ATTACK_HIT_EVENT, c, 'line');
-  }
 
   /**
    * 判定範圍命中：範圍內的敵人受傷並從判定中心往外擊退，順手打範圍內的物件
@@ -459,7 +456,7 @@ export class ComboSkillController {
     if (this.host.isGameOver() || !c.alive) return false;
     const cfg = GameConfig.burst;
     const time = this.scene.time.now;
-    const shape = placeHitShape(moveShape('burst'), c.x, c.y, c.aimAngle);
+    const shape = placeHitShape(moveHitPoints('burst')[0].shape, c.x, c.y, c.aimAngle);
     let hitAny = false;
     for (const child of this.host.enemies().getChildren()) {
       const enemy = child as Enemy;
@@ -475,7 +472,7 @@ export class ComboSkillController {
     // 斬擊特效散在判定中心附近
     const spread = (shape.kind === 'rect' ? shape.width : shape.radius) / 2;
     this.host.spawnSlashEffect(shape.x + Phaser.Math.Between(-spread, spread), shape.y + Phaser.Math.Between(-spread, spread));
-    c.scene.events.emit(ATTACK_HIT_EVENT, c, 'burst');
+    c.scene.events.emit(ATTACK_HIT_EVENT, c, 'burst', 0);
     return hitAny;
   }
 
