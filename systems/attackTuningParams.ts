@@ -8,7 +8,7 @@ import { createParamStore, type ParamDef, type ParamValues } from './paramStore'
  *
  * - 招式：普攻第 1 / 2 段、圓形斬（Combo01）、直線氣波（Combo02）、爆發（Unique_skill，二段變身中的連打）、
  *   衝刺攻擊（二段變身衝刺撞到敵人時以撞擊點為基準的範圍），以及所有普攻共用的近戰觸發距離
- * - 每招：形狀（扇形 / 圓形 / 長方形，見 systems/hitShapes）、判定中心沿面向往前 / 往側邊偏移、扇形半徑與角度、
+ * - 每招：形狀（扇形 / 圓形 / 長方形，見 systems/hitShapes）、判定中心沿面向往前 / 往上下偏移（左右轉身鏡像）、扇形半徑與角度、
  *   長方形長寬；普攻與連段技另有判定時間點（出招後多少毫秒才判定，預設取自 melee.hitDelayMs / combo.*.hitDelayMs）
  * - 預設值重現原本的範圍（普攻扇形、圓形斬圓形、直線氣波長方形、爆發與衝刺攻擊圓形，偏移 0）
  * - 遊戲中透過 moveShape() / moveHitMs() / attackTuning() 讀取目前值；每局開始（GameScene.resetState）重新讀取存檔，
@@ -76,7 +76,7 @@ function moveDefs(move: AttackMove): Array<ParamDef<AttackTuningKey>> {
   const defs: Array<ParamDef<AttackTuningKey>> = [
     { key: `${move}.shape`, label: '形狀', unit: '', hint: '', min: 0, max: HIT_SHAPE_KINDS.length - 1, step: 1, defaultValue: HIT_SHAPE_KINDS.indexOf(d.kind) },
     { key: `${move}.offsetForward`, label: '往前偏移', unit: 'px', hint: '判定中心往面向前方（負 = 往後）', min: -300, max: 400, step: 10, defaultValue: d.offsetForward },
-    { key: `${move}.offsetSide`, label: '往側邊偏移', unit: 'px', hint: '正 = 面向右側、負 = 左側', min: -300, max: 300, step: 10, defaultValue: d.offsetSide },
+    { key: `${move}.offsetSide`, label: '往上下偏移', unit: 'px', hint: '正 = 往下、負 = 往上（左右轉身同一邊）', min: -300, max: 300, step: 10, defaultValue: d.offsetSide },
     { key: `${move}.radius`, label: '半徑', unit: 'px', hint: '', min: 20, max: 500, step: 10, defaultValue: d.radius },
     { key: `${move}.arcDeg`, label: '扇形角度', unit: '°', hint: '', min: 10, max: 360, step: 10, defaultValue: d.arcDeg },
     { key: `${move}.length`, label: '長度', unit: 'px', hint: '沿面向', min: 20, max: 900, step: 10, defaultValue: d.length },

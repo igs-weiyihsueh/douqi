@@ -80,7 +80,7 @@ export interface AttackTuningEditorHost {
 /**
  * 木樁模式的範圍 / 判定編輯器（GameConfig.training.tuningEditorKey 開關）：畫面左側面板上方是招式分頁
  * （普攻 1、普攻 2、圓形斬、直線氣波、爆發、衝刺攻擊），選一招後用滑鼠調整它的形狀（扇形 / 圓形 / 長方形）、
- * 判定中心往前 / 往側邊偏移、該形狀的尺寸與判定時間點（systems/attackTuningParams，每次調整即時套用並存在瀏覽器）；
+ * 判定中心往前 / 往上下偏移、該形狀的尺寸與判定時間點（systems/attackTuningParams，每次調整即時套用並存在瀏覽器）；
  * 最下面是普攻共用的近戰觸發距離。
  *
  * - 面板建在 UIScene：UIScene 疊在遊戲場景上面且有「點畫面任何地方 = 攻擊」，面板放在遊戲場景會收不到點擊；
@@ -218,7 +218,7 @@ export class AttackTuningEditor {
   }
 
   /**
-   * 一招在目前形狀下要顯示的參數：形狀、往前 / 往側邊偏移、該形狀的尺寸、判定時間（有的話）
+   * 一招在目前形狀下要顯示的參數：形狀、往前 / 往上下偏移、該形狀的尺寸、判定時間（有的話）
    *
    * @param move 招式
    * @param kind 目前形狀

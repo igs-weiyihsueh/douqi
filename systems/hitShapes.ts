@@ -2,7 +2,8 @@ import Phaser from 'phaser';
 
 /**
  * 攻擊判定形狀（純幾何）：每一招的判定範圍是扇形 / 圓形 / 長方形其中一種，判定中心可從基準點（角色或撞擊點）
- * 沿面向往前、往側邊偏移。遊戲判定與範圍編輯器的顯示共用這裡的計算，畫出來的就是實際打得到的範圍。
+ * 沿面向往前、往側邊偏移。側邊偏移以「面向右」為準設定，面向左時左右鏡像（例：設定往下 50，左右轉身都在腳邊下方），
+ * 角色只有左右兩種畫面面向，鏡像後轉身時範圍不會上下跳。遊戲判定與範圍編輯器的顯示共用這裡的計算，畫出來的就是實際打得到的範圍。
  *
  * - 扇形：以判定中心為圓心、朝面向張開 arcDeg 度、半徑 radius
  * - 圓形：以判定中心為圓心、半徑 radius
@@ -23,7 +24,7 @@ export interface HitShape {
   kind: HitShapeKind;
   /** 判定中心沿面向往前（正）/ 往後（負）偏移 */
   offsetForward: number;
-  /** 判定中心往面向右側（正）/ 左側（負）偏移 */
+  /** 判定中心的側邊偏移：以面向右為準，正 = 畫面下方、負 = 畫面上方（面向左時鏡像，仍是同一邊） */
   offsetSide: number;
   /** 扇形 / 圓形的半徑 */
   radius: number;
@@ -50,7 +51,8 @@ export interface PlacedHitShape {
 }
 
 /**
- * 把判定形狀放到世界座標：判定中心 = 基準點 + 沿面向的偏移；sizeMult 只放大尺寸（不放大偏移）
+ * 把判定形狀放到世界座標：判定中心 = 基準點 + 沿面向的偏移；側邊偏移在面向偏左（cos < 0）時鏡像，
+ * 讓左右轉身時側邊偏移維持在畫面同一側；sizeMult 只放大尺寸（不放大偏移）
  *
  * @param shape 形狀設定
  * @param ax 基準點 x（角色 / 撞擊點）
@@ -60,10 +62,11 @@ export interface PlacedHitShape {
  */
 export function placeHitShape(shape: HitShape, ax: number, ay: number, dir: number, sizeMult = 1): PlacedHitShape {
   const cos = Math.cos(dir), sin = Math.sin(dir);
+  const side = cos < 0 ? -shape.offsetSide : shape.offsetSide;
   return {
     kind: shape.kind,
-    x: ax + cos * shape.offsetForward - sin * shape.offsetSide,
-    y: ay + sin * shape.offsetForward + cos * shape.offsetSide,
+    x: ax + cos * shape.offsetForward - sin * side,
+    y: ay + sin * shape.offsetForward + cos * side,
     dir,
     radius: shape.radius * sizeMult,
     half: Phaser.Math.DegToRad(shape.arcDeg) / 2,
