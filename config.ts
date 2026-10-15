@@ -205,7 +205,7 @@ export const GameConfig = {
    * P1 Spine 動畫（新美術時取代 P1 皮膚圖；判定與手感不變，只換外觀）：CH02 孫悟空（public/assets/spine/）。
    * - 腳底對齊 P1 皮膚圖的腳底再加 offsetY；scale 為顯示縮放；facesRight = 原始動畫面向右
    * - 動畫：idle 待機 / move 走路（實際位移速度超過 moveSpeedThreshold）/ attack 普攻（兩段輪流）/ comboCircle、comboLine 連段技 /
-   *   unique 二段變身與爆發 / sprint 衝刺中（重複）→ sprintEnd 衝刺結束 / hit 受擊；speeds 為各段播放速度；切換混合 mixMs 毫秒
+   *   unique 二段變身與爆發 / sprint 衝刺中（重複，衝刺結束直接接待機 / 走路）/ hit 受擊；speeds 為各段播放速度；切換混合 mixMs 毫秒
    */
   playerSpine: {
     dataKey: 'spine-ch02-data',
@@ -223,10 +223,9 @@ export const GameConfig = {
       comboLine: ['Combo02'],
       unique: ['Unique_skill'],
       sprint: ['Sprint'],
-      sprintEnd: ['Sprint2'],
       hit: ['hit']
     } as Record<string, ReadonlyArray<string>>,
-    speeds: { idle: 1, move: 1, attack: 1, comboCircle: 1, comboLine: 1, unique: 1, sprint: 1, sprintEnd: 1, hit: 1 } as Record<string, number>,
+    speeds: { idle: 1, move: 1, attack: 1, comboCircle: 1, comboLine: 1, unique: 1, sprint: 1, hit: 1 } as Record<string, number>,
     moveSpeedThreshold: 30,
     mixMs: 80
   },
@@ -558,7 +557,7 @@ export const GameConfig = {
     /** 圓形範圍技（瞬發，不鎖角色） */
     circle: {
       /** 判定時間點：放出（開始播 Combo01）後幾毫秒才判定命中（預設取自劍光出現的那一格） */
-      hitDelayMs: 330,
+      hitDelayMs: 570,
       radius: 160,
       damage: 40,
       knockback: 200
@@ -566,7 +565,7 @@ export const GameConfig = {
     /** 直線範圍技（朝 aimAngle，瞬發貫穿） */
     line: {
       /** 判定時間點：放出（開始播 Combo02）後幾毫秒才判定命中（預設取自棍子揮最快的那一格） */
-      hitDelayMs: 250,
+      hitDelayMs: 340,
       length: 420,
       width: 90,
       damage: 70,

@@ -5,7 +5,7 @@ import type { Character, CharacterActionKind } from '../objects/Character';
 import { visibleBottomOffset } from '../systems/spriteFeet';
 
 /** 動畫鍵（GameConfig.playerSpine.anims / speeds 的鍵） */
-type PlayerAnimKey = 'idle' | 'move' | 'attack' | 'comboCircle' | 'comboLine' | 'unique' | 'sprint' | 'sprintEnd' | 'hit';
+type PlayerAnimKey = 'idle' | 'move' | 'attack' | 'comboCircle' | 'comboLine' | 'unique' | 'sprint' | 'hit';
 
 /** 控制器需要的場景資訊 */
 export interface PlayerSpineHost {
@@ -20,7 +20,7 @@ export interface PlayerSpineHost {
 /**
  * P1 Spine 外觀（GameConfig.playerSpine）：皮膚圖顯示時把皮膚圖與 P1 本體都改成透明（皮膚圖仍留著給頭頂 UI、腳底量測用），
  * 改由 Spine 動畫物件跟著皮膚圖的位置、腳底、深度、面向與受擊閃爍顯示，並依 P1 狀態切換動畫：
- * 受擊硬直播 hit → 新出招（普攻兩段輪流 / 連段技 / 二段變身與爆發）播對應動作 → 衝刺中 sprint、衝刺結束 sprintEnd →
+ * 受擊硬直播 hit → 新出招（普攻兩段輪流 / 連段技 / 二段變身與爆發）播對應動作 → 衝刺中 sprint →
  * 單次動作播完前保持 → 移動中 move、其餘 idle。判定與手感不變，這裡只管畫面
  */
 export class PlayerSpineController {
@@ -33,8 +33,7 @@ export class PlayerSpineController {
   private actionSeq = 0;
   /** P1 本體是否被 Spine 外觀藏起來（不顯示 Spine 時恢復） */
   private baseHidden = false;
-  /** 上一幀是否在衝刺、是否在受擊硬直 */
-  private wasDashing = false;
+  /** 上一幀是否在受擊硬直 */
   private wasHurt = false;
   /** 上一幀的位置與場景時間（用實際位移判斷有沒有在走） */
   private lastX = 0;
@@ -110,7 +109,7 @@ export class PlayerSpineController {
   }
 
   /**
-   * 依 P1 狀態切換動畫：受擊 > 新出招 > 衝刺 / 衝刺結束 > 播完前的單次動作 > 移動 / 待機
+   * 依 P1 狀態切換動畫：受擊 > 新出招 > 衝刺 > 播完前的單次動作 > 移動 / 待機（衝刺一結束就切回）
    *
    * @param p P1
    * @param time 目前場景時間
@@ -126,14 +125,11 @@ export class PlayerSpineController {
       this.playOnce(action.kind, time);
     } else if (dashing) {
       this.playLoop('sprint');
-    } else if (this.wasDashing) {
-      this.playOnce('sprintEnd', time);
-    } else if (time >= this.oneShotUntil) {
+    } else if (time >= this.oneShotUntil || this.current === 'sprint') {
       this.playLoop(moving ? 'move' : 'idle');
     }
     this.actionSeq = action.seq;
     this.wasHurt = hurt;
-    this.wasDashing = dashing;
   }
 
   /**
@@ -153,7 +149,7 @@ export class PlayerSpineController {
   }
 
   /**
-   * 播一次的動作（受擊 / 出招 / 衝刺結束）：從頭播，播完前不切回移動 / 待機；普攻依 P1 這一下的段數（Character.attackSegment）播第 1 / 2 段
+   * 播一次的動作（受擊 / 出招）：從頭播，播完前不切回移動 / 待機；普攻依 P1 這一下的段數（Character.attackSegment）播第 1 / 2 段
    *
    * @param key 動畫鍵
    * @param time 目前場景時間
