@@ -69,7 +69,7 @@ const LINE_BAND_COLOR = 0xff4d6d;
 const LINE_BAND_STROKE = 0xffccd5;
 const LINE_BAND_DEPTH = 20;
 const LINE_BAND_FADE_MS = 300;
-/** 範圍特效（連段技、非圓形的爆發 / 衝刺攻擊）的填色與邊框透明度 */
+/** 範圍特效（連段技、非圓形的爆發 / 強化衝刺）的填色與邊框透明度 */
 const SHAPE_FX_FILL_ALPHA = 0.4;
 const SHAPE_FX_STROKE_ALPHA = 0.7;
 /** 強化觸發的擴張環與持續光環 */
@@ -269,13 +269,14 @@ export class ComboSkillController {
    * @param tx 中心 x（撞到的敵人位置）
    * @param ty 中心 y
    * @param time 目前場景時間
+   * @param exclude 不再打的目標（穿透衝刺已打過的）；AOE 打中的會加進來，之後穿透時不再打
    */
-  empowerStrike(c: Character, tx: number, ty: number, time: number): void {
+  empowerStrike(c: Character, tx: number, ty: number, time: number, exclude?: Set<object>): void {
     c.markAction('attack');
-    this.empowerAoeBurst(c, tx, ty, time);
+    this.empowerAoeBurst(c, tx, ty, time, exclude);
   }
 
-  private empowerAoeBurst(c: Character, tx: number, ty: number, time: number): void {
+  private empowerAoeBurst(c: Character, tx: number, ty: number, time: number, exclude?: Set<object>): void {
     const cfg = GameConfig.combo.empower.aoe;
     const shape = placeHitShape(moveHitPoints('dash')[0].shape, tx, ty, c.aimAngle);
     const dmg = cfg.damage * GameConfig.combo.empower.damageMult;
@@ -287,7 +288,7 @@ export class ComboSkillController {
     }
     this.host.shakeOnce(GameConfig.juice.burstShakeDuration, GameConfig.juice.burstShakeIntensity * 0.5);
     c.scene.events.emit(ATTACK_HIT_EVENT, c, 'dash', 0);
-    const hits = this.hitInShape(c, shape, dmg, cfg.knockback, time);
+    const hits = this.hitInShape(c, shape, dmg, cfg.knockback, time, exclude);
     if (hits.enemies > 0) c.applyHitPause(moveHitPoints('dash')[0].pauseMs, time);
     if (hits.enemies + hits.breakables > 0) {
       this.host.comboRewardHit(c);

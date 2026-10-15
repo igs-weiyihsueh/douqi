@@ -1712,7 +1712,7 @@ export class GameScene extends Phaser.Scene {
       triggerComboHit: (c) => this.comboReward.hit(c),
       onAttackStart: (c, time) => this.creditCtl.openAttackWindow(c, time),
       pickEmpowerTarget: (c) => this.comboSkills.pickEmpowerTarget(c),
-      empowerStrike: (c, x, y, time) => this.comboSkills.empowerStrike(c, x, y, time),
+      empowerStrike: (c, x, y, time, exclude) => this.comboSkills.empowerStrike(c, x, y, time, exclude),
       flashWhite: (c) => this.fx.flashWhite(c),
       spawnMeleeShapeEffect: (shape) => { if (this.training) this.fx.meleeShape(shape); },
       hitBreakablesInShape: (c, shape, time, exclude) => this.breakableCtl.hitInShape(c, shape, time, exclude),

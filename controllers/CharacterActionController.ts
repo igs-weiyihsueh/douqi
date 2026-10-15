@@ -76,8 +76,8 @@ export interface CharacterActionHost {
   /** 慢速模式強化期間的唯一招式（目標中心圓形 AOE） */
   /** 慢速強化攻擊的目標（範圍圈內，優先鎖定的；沒有為 null） */
   pickEmpowerTarget(c: Character): Enemy | null;
-  /** 強化衝刺撞到敵人：以 (x, y) 為中心炸圓形 AOE */
-  empowerStrike(c: Character, x: number, y: number, time: number): void;
+  /** 強化衝刺撞到敵人：以 (x, y) 為中心炸圓形 AOE（exclude 內的不打、打中的加進去） */
+  empowerStrike(c: Character, x: number, y: number, time: number, exclude?: Set<object>): void;
   flashWhite(c: Character): void;
   /** 普攻劍氣特效（形狀 = 這一段的判定範圍；只在顯示範圍特效的模式畫出） */
   spawnMeleeShapeEffect(shape: PlacedHitShape): void;
@@ -122,8 +122,8 @@ export class CharacterActionController {
    * 到點後敵人仍在劍氣範圍內就補一刀（finishAttackDash）；結束衝刺時清除
    */
   private readonly attackDashTargets = new Map<Character, Enemy>();
-  /** 各角色這一次衝刺已穿透打過的敵人（一般衝刺途中碰到的每隻怪各打一次；開始衝刺時清空） */
-  private readonly dashPiercedEnemies = new Map<Character, Set<Enemy>>();
+  /** 各角色這一次衝刺已打過的敵人（穿透衝刺途中碰到的每隻怪各打一次，強化衝刺 AOE 打中的也算；開始衝刺時清空） */
+  private readonly dashPiercedEnemies = new Map<Character, Set<object>>();
 
   constructor(private readonly host: CharacterActionHost) {}
 
@@ -303,7 +303,7 @@ export class CharacterActionController {
 
   /**
    * 慢速強化攻擊：鎖著木箱時改打木箱（empoweredCrateAttack）；否則範圍圈內有敵人就朝它衝刺，沒有就朝面向衝出（揮空）；
-   * 衝刺途中撞到敵人時炸圓形 AOE（見 handleDash）。冷卻用強化 AOE 的 cooldownMs
+   * 衝刺途中第一次撞到敵人時炸圓形 AOE、之後繼續穿透（見 pierceEnemies）。冷卻用強化 AOE 的 cooldownMs
    *
    * @param c 施放的角色（慢速模式 P1）
    * @param time 目前場景時間
@@ -314,13 +314,10 @@ export class CharacterActionController {
       this.empoweredCrateAttack(c, locked, time);
       return;
     }
+    // 有目標就朝它衝（穿透：衝滿衝刺距離穿過它），沒有就朝面向衝出
     const target = this.host.pickEmpowerTarget(c);
-    if (target) {
-      c.aimAngle = Phaser.Math.Angle.Between(c.x, c.y, target.x, target.y);
-      this.beginDash(c, target.x, target.y, time, false);
-    } else {
-      this.startDirectionDash(c, time);
-    }
+    if (target) c.aimAngle = Phaser.Math.Angle.Between(c.x, c.y, target.x, target.y);
+    this.startDirectionDash(c, time);
     if (!c.isDashing) return; // 面向牆壁衝不出去時，startDirectionDash 已改為原地揮擊
     c.dashEmpowerStrike = true;
     c.nextAttackAllowedAt = time + GameConfig.combo.empower.aoe.cooldownMs;
@@ -604,8 +601,8 @@ export class CharacterActionController {
 
   /**
    * 每幀推進衝刺：P1 撞到路上的可破壞物件（每個物件一次衝刺只算一下，撞到就算一下 HIT）；
-   * 一般衝刺穿透途中碰到的敵人（每隻打一次，見 pierceEnemies），撞到 BOSS / 塔才停在外緣；
-   * 二段強化衝刺撞到第一隻敵人炸 AOE 後切入停下；否則朝固定終點前進（方向不隨滑鼠改變），到點停下
+   * 一般衝刺與二段強化衝刺都穿透途中碰到的敵人（每隻打一次；強化衝刺第一次撞到時炸 AOE，見 pierceEnemies），
+   * 撞到 BOSS / 塔才停在外緣；朝固定終點前進（方向不隨滑鼠改變），到點停下
    *
    * @param c 角色
    * @param time 目前場景時間
@@ -621,45 +618,24 @@ export class CharacterActionController {
       if (this.host.hitBreakablesInRange(c, GameConfig.aim.dashHitRadius, 0, false, time, hitSet) > 0) this.host.triggerComboHit(c);
     }
     const dashSpeed = this.currentDashSpeed(c, time);
-    const piercing = !c.dashToItem && !c.dashEmpowerStrike;
+    const piercing = !c.dashToItem;
     // 攻擊者頓點中（撞到敵人的停頓）：完全停住，切入時間已順延到頓點之後
     if (c.isHitPaused(time)) {
       (c.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
       return;
     }
-    // 切入中：以減速繼續陷入敵人（強化衝刺不再判定撞擊，避免同一次衝刺連打；穿透衝刺照樣打碰到的其他怪）
+    // 切入中：以減速繼續陷入敵人，照樣打碰到的其他怪；切入結束後繼續衝向終點
     if (c.cutInUntil > 0) {
       const target = c.cutInTarget;
       if (time < c.cutInUntil && target && target.active && !target.dead) {
         (c.body as Phaser.Physics.Arcade.Body).setVelocity(c.cutInVelocityX, c.cutInVelocityY);
-        if (piercing) this.pierceEnemies(c, dashSpeed, time);
+        this.pierceEnemies(c, dashSpeed, time);
         return;
       }
-      if (!piercing) {
-        this.endDashState(c);
-        return;
-      }
-      // 穿透衝刺：切入結束後繼續衝向終點
       c.cutInUntil = 0;
       c.cutInTarget = null;
     }
     if (piercing && this.pierceEnemies(c, dashSpeed, time)) return;
-    if (c.dashEmpowerStrike && !c.dashToItem) {
-      const hit = this.targeting.findFirstEnemyInRangeOf(c, GameConfig.aim.dashHitRadius);
-      if (hit) {
-        c.stopMoving();
-        c.dashImpactAt = time;
-        this.host.empowerStrike(c, hit.x, hit.y, time);
-        if (isStructureEnemy(hit)) {
-          standCharacterOutside(c, hit, this.host.arena());
-          this.endDashState(c);
-        } else {
-          this.spawnDashStreak(c, hit, time);
-          this.beginCutIn(c, hit, dashSpeed, time);
-        }
-        return;
-      }
-    }
     const dx = c.dashDestX - c.x;
     const dy = c.dashDestY - c.y;
     const dist = Math.hypot(dx, dy);
@@ -695,9 +671,11 @@ export class CharacterActionController {
   }
 
   /**
-   * 一般衝刺的穿透：碰到的敵人（衝刺判定半徑 + 敵人身體半徑內）這次衝刺還沒打過的，各受一下「普攻傷害 × 一般衝刺傷害 %」與擊退、
-   * 畫刀光；這次衝刺第一次打中時算一次連段與 HIT、頓點（一般衝刺的頓點）並切入（頓點 → 減速陷入 → 繼續衝刺）。
-   * 撞到 BOSS / 塔就攻擊並停在它外緣、結束衝刺；穿不過的木樁（anchored）照樣打，打完停在它外緣、結束衝刺
+   * 衝刺的穿透：碰到的敵人（衝刺判定半徑 + 敵人身體半徑內）這次衝刺還沒打過的，各受一下「普攻傷害 × 一般衝刺傷害 %」與擊退、
+   * 畫刀光；這次衝刺第一次打中時切入（頓點 → 減速陷入 → 繼續衝刺），並且：
+   * - 一般衝刺：算一次連段與 HIT、頓點用一般衝刺的頓點
+   * - 二段強化衝刺（不含衝向木箱的）：以撞到的敵人為中心炸強化 AOE（COMBO、頓點用強化衝刺的設定），AOE 打中的之後不再穿透打
+   * 撞到 BOSS / 塔就攻擊（強化衝刺炸 AOE）並停在它外緣、結束衝刺；穿不過的木樁（anchored）照樣打，打完停在它外緣、結束衝刺
    *
    * @param c 衝刺中的角色
    * @param dashSpeed 目前的衝刺速度
@@ -719,7 +697,8 @@ export class CharacterActionController {
       if (isStructureEnemy(enemy)) {
         c.stopMoving();
         c.dashImpactAt = time;
-        this.host.performAttackOn(c, enemy, time);
+        if (this.isEmpowerEnemyDash(c)) this.host.empowerStrike(c, enemy.x, enemy.y, time);
+        else this.host.performAttackOn(c, enemy, time);
         standCharacterOutside(c, enemy, this.host.arena());
         this.endDashState(c);
         return true;
@@ -729,19 +708,25 @@ export class CharacterActionController {
     }
     if (hits.length === 0) return false;
     const firstHit = pierced.size === 0;
+    const empowerStrike = firstHit && this.isEmpowerEnemyDash(c);
+    // 強化衝刺第一次撞到：炸 AOE，打中的加進已打過（下面不再穿透打）
+    if (empowerStrike) this.host.empowerStrike(c, hits[0].x, hits[0].y, time, pierced);
     const point = moveHitPoints('pierce')[0];
     const atk = this.host.attackDamage() * (c.isEmpowered(time) ? GameConfig.combo.empower.damageMult : 1) * point.damagePct / 100;
     for (const enemy of hits) {
+      this.spawnDashStreak(c, enemy, time);
+      if (pierced.has(enemy)) continue;
       pierced.add(enemy);
       this.host.damageEnemy(c, enemy, atk, GameConfig.player.knockback, time);
-      this.spawnDashStreak(c, enemy, time);
     }
     if (firstHit) {
       c.dashImpactAt = time;
-      this.host.onComboHit(c, time);
-      this.host.triggerComboHit(c);
-      this.host.flashWhite(c);
-      c.applyHitPause(point.pauseMs, time);
+      if (!empowerStrike) {
+        this.host.onComboHit(c, time);
+        this.host.triggerComboHit(c);
+        this.host.flashWhite(c);
+        c.applyHitPause(point.pauseMs, time);
+      }
       if (!blocker && c.cutInUntil === 0) this.beginCutIn(c, hits[0], dashSpeed, time);
     }
     if (blocker) {
@@ -750,6 +735,15 @@ export class CharacterActionController {
       return true;
     }
     return false;
+  }
+
+  /**
+   * 是否為二段強化衝刺（衝向敵人或朝面向衝出；衝向木箱的到點才炸 AOE，不算）
+   *
+   * @param c 衝刺中的角色
+   */
+  private isEmpowerEnemyDash(c: Character): boolean {
+    return c.dashEmpowerStrike && !this.empowerCrateTargets.has(c);
   }
 
   /**
@@ -766,8 +760,7 @@ export class CharacterActionController {
 
   /**
    * 衝刺撞到敵人：開始「切入」——撞到時的頓點（攻擊者頓點，呼叫前已套用；期間完全停住）結束後，以減速沿衝刺方向陷入一小段（刀切進肉的阻力感）。
-   * 只影響攻擊者自己，且發生在普攻冷卻內，不延遲任何輸入。強化衝刺切入完就停下（關閉切入或怪已死亡時立即停下）；
-   * 一般衝刺（穿透）切入完繼續衝向終點（關閉切入或怪已死亡時直接繼續）
+   * 只影響攻擊者自己，且發生在普攻冷卻內，不延遲任何輸入。切入完繼續衝向終點（穿透；關閉切入或怪已死亡時直接繼續）
    *
    * @param c 衝刺中的角色
    * @param hit 撞到的敵人
@@ -779,7 +772,6 @@ export class CharacterActionController {
     const angle = Math.atan2(c.dashDestY - c.y, c.dashDestX - c.x);
     // 關閉切入，或這一擊已把怪打死（沒有東西可陷入）
     if (p.cutInEnabled !== 1 || p.cutInMs <= 0 || hit.dead || !hit.active) {
-      if (c.dashEmpowerStrike) this.endDashState(c);
       return;
     }
     const speed = dashSpeed * p.cutInSpeedRatio;

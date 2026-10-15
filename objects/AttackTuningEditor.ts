@@ -78,7 +78,7 @@ const OVERLAY = {
   LINE_WIDTH: 2,
   SELECTED_LINE_WIDTH: 4,
   TRIGGER: { color: 0xfacc15, line: 0.6 },
-  /** 沒有木樁時，衝刺攻擊的範圍畫在角色前方這個距離（衝刺攻擊以撞擊點為基準） */
+  /** 沒有木樁時，強化衝刺的範圍畫在角色前方這個距離（強化衝刺以撞擊點為基準） */
   DASH_PREVIEW_DISTANCE: 150,
   /** 判定那一刻該打擊點閃亮：填色透明度改成 FLASH_FILL，持續 FLASH_MS */
   FLASH_FILL: 0.5,
@@ -122,7 +122,7 @@ type HitHandler = (c: Character, move: AttackMove, index: number) => void;
 export interface AttackTuningEditorHost {
   /** P1（範圍畫在 P1 身上，方向依 P1 面向） */
   player(): Character;
-  /** 木樁（近戰觸發圈加上它的半徑；衝刺攻擊的範圍畫在它身上）；沒有時為 null */
+  /** 木樁（近戰觸發圈加上它的半徑；強化衝刺的範圍畫在它身上）；沒有時為 null */
   dummy(): { x: number; y: number; radius: number } | null;
   /** P1 定格預覽（null = 結束預覽） */
   previewPose(preview: PlayerPosePreview | null): void;
@@ -133,13 +133,13 @@ export interface AttackTuningEditorHost {
 /**
  * 木樁模式的範圍 / 判定編輯器（GameConfig.training.tuningEditorKey 開關）。畫面左側面板：
  *
- * - 上方招式分頁（普攻 1、普攻 2、招式1、招式2、爆發、衝刺攻擊、一般衝刺）
+ * - 上方招式分頁（普攻 1、普攻 2、招式1、招式2、爆發、強化衝刺、一般衝刺）
  * - 有時間軸的招式（普攻、招式1 / 2）：時間軸長度 = 該動作長度，點或拖動時間軸、按 ◀ ▶ 一格一格（1/30 秒）前後看，
  *   P1 定格在那一格的 Spine 姿勢；軸上的色塊是各打擊點的判定段（開始 ~ 結束，這段期間每幀判定、同一個目標每段只打一次），
  *   可在目前這一格「加打擊點」、刪除，把選中打擊點的判定段「設為開始 / 設為結束」，或直接拖動色塊的兩端。
  *   加 / 刪打擊點時，各打擊點的傷害自動平均分配（之後可個別調）
  * - 選中打擊點的參數：形狀（扇形 / 圓形 / 長方形）、判定中心往前 / 往上下偏移、該形狀的尺寸、傷害 %、頓點（打中怪時出招者停住多久）
- *   （systems/attackTuningParams，每次調整即時套用並存在瀏覽器）；爆發、衝刺攻擊、一般衝刺只有一個打擊點、沒有時間軸，
+ *   （systems/attackTuningParams，每次調整即時套用並存在瀏覽器）；爆發、強化衝刺、一般衝刺只有一個打擊點、沒有時間軸，
  *   一般衝刺只有傷害 % 與頓點（以衝刺判定半徑碰撞，沒有判定範圍）
  * - 最下面是普攻共用的近戰觸發距離與恢復預設、關閉
  *
@@ -214,7 +214,7 @@ export class AttackTuningEditor {
   }
 
   /**
-   * 一招範圍的基準點：衝刺攻擊是撞擊點（畫在木樁身上；沒有木樁時畫在角色前方），其餘是角色
+   * 一招範圍的基準點：強化衝刺是撞擊點（畫在木樁身上；沒有木樁時畫在角色前方），其餘是角色
    *
    * @param move 招式
    * @param p P1
