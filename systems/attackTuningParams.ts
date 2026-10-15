@@ -46,12 +46,14 @@ export interface HitPoint {
   timeMs: number;
   /** 這一下的傷害 = 招式原本的傷害 × damagePct / 100 */
   damagePct: number;
+  /** 命中敵人時出招者停住幾毫秒（攻擊者頓點，Character.applyHitPause） */
+  pauseMs: number;
   /** 判定範圍 */
   shape: HitShape;
 }
 
 /** 打擊點的可調欄位（shape = 形狀種類，存 HIT_SHAPE_KINDS 的索引） */
-export type HitPointField = 'timeMs' | 'damagePct' | 'shape' | 'offsetForward' | 'offsetSide' | 'radius' | 'arcDeg' | 'length' | 'width';
+export type HitPointField = 'timeMs' | 'damagePct' | 'pauseMs' | 'shape' | 'offsetForward' | 'offsetSide' | 'radius' | 'arcDeg' | 'length' | 'width';
 
 /** 打擊點欄位的編輯定義（名稱、單位、範圍、每格幅度） */
 export interface HitPointFieldDef {
@@ -67,6 +69,7 @@ export interface HitPointFieldDef {
 export const HIT_POINT_FIELDS: Readonly<Record<HitPointField, HitPointFieldDef>> = {
   timeMs: { label: '判定時間', unit: 'ms', hint: '出招後幾毫秒', min: 0, max: 2000, step: 10 },
   damagePct: { label: '傷害', unit: '%', hint: '這一下 = 招式傷害 × %', min: 0, max: 300, step: 10 },
+  pauseMs: { label: '頓點', unit: 'ms', hint: '打中怪時出招者停住多久（0 = 不停）', min: 0, max: 300, step: 10 },
   shape: { label: '形狀', unit: '', hint: '', min: 0, max: HIT_SHAPE_KINDS.length - 1, step: 1 },
   offsetForward: { label: '往前偏移', unit: 'px', hint: '判定中心往面向前方（負 = 往後）', min: -300, max: 400, step: 10 },
   offsetSide: { label: '往上下偏移', unit: 'px', hint: '正 = 往下、負 = 往上（左右轉身同一邊）', min: -300, max: 300, step: 10 },
@@ -100,13 +103,24 @@ const DEFAULT_HIT_MS: Readonly<Record<TimedAttackMove, number>> = {
   line: combo.line.hitDelayMs
 };
 
+/** 各招打擊點的預設頓點（GameConfig.attackerHitPauseMs） */
+const HIT_PAUSE = GameConfig.attackerHitPauseMs;
+const DEFAULT_PAUSE_MS: Readonly<Record<AttackMove, number>> = {
+  attack1: HIT_PAUSE.attack,
+  attack2: HIT_PAUSE.attack,
+  circle: HIT_PAUSE.combo,
+  line: HIT_PAUSE.combo,
+  burst: HIT_PAUSE.burst,
+  dash: HIT_PAUSE.dash
+};
+
 /**
  * 一招的預設打擊點（一個，傷害 100%）
  *
  * @param move 招式
  */
 export function defaultHitPoints(move: AttackMove): HitPoint[] {
-  return [{ timeMs: isTimedMove(move) ? DEFAULT_HIT_MS[move] : 0, damagePct: 100, shape: { ...DEFAULT_SHAPES[move] } }];
+  return [{ timeMs: isTimedMove(move) ? DEFAULT_HIT_MS[move] : 0, damagePct: 100, pauseMs: DEFAULT_PAUSE_MS[move], shape: { ...DEFAULT_SHAPES[move] } }];
 }
 
 /**
@@ -129,13 +143,14 @@ export function clampHitPointField(field: HitPointField, value: unknown, fallbac
  * @param base 預設打擊點
  */
 function sanitizeHitPoint(raw: unknown, base: HitPoint): HitPoint {
-  const r = (raw ?? {}) as { timeMs?: unknown; damagePct?: unknown; shape?: Partial<HitShape> };
+  const r = (raw ?? {}) as { timeMs?: unknown; damagePct?: unknown; pauseMs?: unknown; shape?: Partial<HitShape> };
   const s: Partial<HitShape> = r.shape ?? {};
   const savedKind = s.kind ? HIT_SHAPE_KINDS.indexOf(s.kind) : -1;
   const kindIndex = savedKind >= 0 ? savedKind : HIT_SHAPE_KINDS.indexOf(base.shape.kind);
   return {
     timeMs: clampHitPointField('timeMs', r.timeMs, base.timeMs),
     damagePct: clampHitPointField('damagePct', r.damagePct, base.damagePct),
+    pauseMs: clampHitPointField('pauseMs', r.pauseMs, base.pauseMs),
     shape: {
       kind: HIT_SHAPE_KINDS[kindIndex],
       offsetForward: clampHitPointField('offsetForward', s.offsetForward, base.shape.offsetForward),
@@ -306,7 +321,8 @@ export function reloadAttackTuning(): void {
 export const ATTACK_HIT_EVENT = 'attack-hit';
 
 /**
- * 等到判定時間點再判定命中（0 以下立即判定）；計時用角色所在場景的時鐘
+ * 等到判定時間點再判定命中（0 以下立即判定）；計時用角色所在場景的時鐘。等待期間出招者有頓點（Character.applyHitPause）時，
+ * 判定跟著順延同樣的時間，整招節奏不變
  *
  * @param c 出招的角色
  * @param delayMs 出招後幾毫秒判定
@@ -318,5 +334,10 @@ export function afterHitDelay(c: Character, delayMs: number, time: number, resol
     resolve(time);
     return;
   }
-  c.scene.time.delayedCall(delayMs, () => resolve(c.scene.time.now));
+  const pausedAtSchedule = c.hitPauseTotalMs;
+  c.scene.time.delayedCall(delayMs, () => {
+    const paused = c.hitPauseTotalMs - pausedAtSchedule;
+    if (paused > 0) afterHitDelay(c, paused, c.scene.time.now, resolve);
+    else resolve(c.scene.time.now);
+  });
 }

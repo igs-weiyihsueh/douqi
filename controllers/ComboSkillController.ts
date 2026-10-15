@@ -282,7 +282,9 @@ export class ComboSkillController {
     }
     this.host.shakeOnce(GameConfig.juice.burstShakeDuration, GameConfig.juice.burstShakeIntensity * 0.5);
     c.scene.events.emit(ATTACK_HIT_EVENT, c, 'dash', 0);
-    if (this.hitInShape(c, shape, dmg, cfg.knockback, time)) {
+    const hits = this.hitInShape(c, shape, dmg, cfg.knockback, time);
+    if (hits.enemies > 0) c.applyHitPause(moveHitPoints('dash')[0].pauseMs, time);
+    if (hits.enemies + hits.breakables > 0) {
       this.host.comboRewardHit(c);
       this.registerEmpowerAoeHit(c, time);
     }
@@ -315,7 +317,9 @@ export class ComboSkillController {
     if (cast.kind === 'circle' && shape.kind === 'circle') this.showRing(shape, CIRCLE_RING_COLOR, CIRCLE_RING_MS);
     else if (cast.kind === 'circle') this.showShape(shape, CIRCLE_RING_COLOR, CIRCLE_RING_COLOR, CIRCLE_RING_MS);
     else this.showShape(shape, LINE_BAND_COLOR, LINE_BAND_STROKE, LINE_BAND_FADE_MS);
-    if (this.hitInShape(c, shape, dmg, cfg.knockback, time) && !cast.rewardCounted) {
+    const hits = this.hitInShape(c, shape, dmg, cfg.knockback, time);
+    if (hits.enemies > 0) c.applyHitPause(point.pauseMs, time);
+    if (hits.enemies + hits.breakables > 0 && !cast.rewardCounted) {
       cast.rewardCounted = true;
       this.host.comboRewardHit(c);
     }
@@ -332,18 +336,17 @@ export class ComboSkillController {
    * @param damage 每隻敵人的傷害
    * @param knockback 擊退力道
    * @param time 目前場景時間
-   * @returns 是否打中任何敵人或物件
+   * @returns 打中的敵人數與物件數（打中敵人才頓點；敵人或物件都算 COMBO）
    */
-  private hitInShape(c: Character, shape: PlacedHitShape, damage: number, knockback: number, time: number): boolean {
-    let hitAny = false;
+  private hitInShape(c: Character, shape: PlacedHitShape, damage: number, knockback: number, time: number): { enemies: number; breakables: number } {
+    let enemies = 0;
     for (const child of this.host.enemies().getChildren()) {
       const enemy = child as Enemy;
       if (!enemy.isVulnerable() || !hitShapeContains(shape, enemy.x, enemy.y)) continue;
       this.host.damageEnemyFrom(c, enemy, damage, knockback, shape.x, shape.y, time);
-      hitAny = true;
+      enemies++;
     }
-    if (this.host.hitBreakablesInShape(c, shape, time) > 0) hitAny = true;
-    return hitAny;
+    return { enemies, breakables: this.host.hitBreakablesInShape(c, shape, time) };
   }
 
   /**
@@ -413,8 +416,8 @@ export class ComboSkillController {
   }
 
   /**
-   * 爆發：定身無敵連打 hits 段（每 intervalMs 一段），整招命中算一次 COMBO；
-   * 表演時間延長定身無敵；保底計時確保一定會結束
+   * 爆發：定身無敵連打 hits 段（每 intervalMs 一段），整招命中算一次 COMBO；第一次打中敵人時出招者頓點一次
+   * （連打暫停、無敵與定身一起順延）；表演時間延長定身無敵；保底計時確保一定會結束
    */
   private triggerBurst(c: Character, time: number): void {
     c.markAction('unique');
@@ -425,21 +428,28 @@ export class ComboSkillController {
     c.stopMoving();
     if (c === this.host.player()) this.scene.game.events.emit('burst-start');
     this.host.shakeOnce(GameConfig.juice.burstShakeDuration, GameConfig.juice.burstShakeIntensity);
+    const pauseMs = moveHitPoints('burst')[0].pauseMs;
     let hitCount = 0;
     let comboCounted = false;
+    let paused = false;
     const burstTimer = this.scene.time.addEvent({
       delay: cfg.intervalMs,
       repeat: cfg.hits - 1,
       callback: () => {
-        if (this.burstTick(c) && !comboCounted) {
+        const hits = this.burstTick(c);
+        if (hits.enemies + hits.breakables > 0 && !comboCounted) {
           comboCounted = true;
           this.host.comboRewardHit(c);
+        }
+        if (hits.enemies > 0 && !paused && pauseMs > 0) {
+          paused = true;
+          this.pauseBurst(c, burstTimer, pauseMs);
         }
         hitCount++;
         if (hitCount >= cfg.hits) this.endBurst(c);
       }
     });
-    this.scene.time.delayedCall(cfg.hits * cfg.intervalMs + BURST_FAILSAFE_EXTRA_MS, () => {
+    this.scene.time.delayedCall(cfg.hits * cfg.intervalMs + pauseMs + BURST_FAILSAFE_EXTRA_MS, () => {
       if (c.isBursting) {
         burstTimer.remove(false);
         this.endBurst(c);
@@ -448,24 +458,39 @@ export class ComboSkillController {
   }
 
   /**
+   * 爆發的頓點：出招者停住 ms，連打計時暫停同樣的時間，無敵跟著順延（定身由 applyHitPause 順延）
+   *
+   * @param c 施放的角色
+   * @param burstTimer 爆發連打的計時
+   * @param ms 頓點長度（毫秒）
+   */
+  private pauseBurst(c: Character, burstTimer: Phaser.Time.TimerEvent, ms: number): void {
+    const time = this.scene.time.now;
+    c.applyHitPause(ms, time);
+    if (c.invulnUntil > time) c.invulnUntil += ms;
+    burstTimer.paused = true;
+    this.scene.time.delayedCall(ms, () => { burstTimer.paused = false; });
+  }
+
+  /**
    * 爆發的一段：範圍內敵人受傷、可破壞物件扣耐久；命中時閃白、小震動（被打的怪各自命中凍結，不再暫停整個物理世界）
    *
-   * @returns 這段是否命中至少一隻敵人或一個可破壞物件
+   * @returns 這段打中的敵人數與物件數
    */
-  private burstTick(c: Character): boolean {
-    if (this.host.isGameOver() || !c.alive) return false;
+  private burstTick(c: Character): { enemies: number; breakables: number } {
+    if (this.host.isGameOver() || !c.alive) return { enemies: 0, breakables: 0 };
     const cfg = GameConfig.burst;
     const time = this.scene.time.now;
     const shape = placeHitShape(moveHitPoints('burst')[0].shape, c.x, c.y, c.aimAngle);
-    let hitAny = false;
+    let enemies = 0;
     for (const child of this.host.enemies().getChildren()) {
       const enemy = child as Enemy;
       if (!enemy.isVulnerable() || !hitShapeContains(shape, enemy.x, enemy.y)) continue;
       this.host.damageEnemy(c, enemy, cfg.damagePerHit, cfg.knockback, time);
-      hitAny = true;
+      enemies++;
     }
-    if (this.host.hitBreakablesInShape(c, shape, time) > 0) hitAny = true;
-    if (hitAny) {
+    const breakables = this.host.hitBreakablesInShape(c, shape, time);
+    if (enemies + breakables > 0) {
       this.host.flashWhite(c);
       this.host.shakeOnce(BURST_TICK_SHAKE_MS, SKILL_SHAKE_INTENSITY);
     }
@@ -473,7 +498,7 @@ export class ComboSkillController {
     const spread = (shape.kind === 'rect' ? shape.width : shape.radius) / 2;
     this.host.spawnSlashEffect(shape.x + Phaser.Math.Between(-spread, spread), shape.y + Phaser.Math.Between(-spread, spread));
     c.scene.events.emit(ATTACK_HIT_EVENT, c, 'burst', 0);
-    return hitAny;
+    return { enemies, breakables };
   }
 
 

@@ -34,8 +34,10 @@ export class PlayerSpineController {
   private spine: SpineGameObject | null = null;
   /** 目前在播的動畫鍵 */
   private current: PlayerAnimKey | null = null;
-  /** 單次動作播到何時（場景時間） */
+  /** 單次動作播到何時（場景時間；動作停住期間順延） */
   private oneShotUntil = 0;
+  /** 上一次同步的場景時間（頓點期間順延單次動作用） */
+  private lastSyncTime = 0;
   /** 已處理到的出招流水號 */
   private actionSeq = 0;
   /** 定格預覽中（範圍 / 判定編輯器的時間軸；null = 平常依狀態切換動作） */
@@ -72,6 +74,8 @@ export class PlayerSpineController {
    * @param time 目前場景時間
    */
   sync(time: number): void {
+    const frameMs = this.lastSyncTime > 0 ? time - this.lastSyncTime : 0;
+    this.lastSyncTime = time;
     const skin = this.host.shownPlayerSkin();
     const p = this.host.player();
     if (!skin || !p.alive) {
@@ -96,7 +100,10 @@ export class PlayerSpineController {
     if (this.preview) {
       this.applyPreview(spine, this.preview);
     } else {
-      spine.animationState.timeScale = this.host.isPlayerFrozen() ? 0 : 1;
+      // 時停凍結或攻擊者頓點時動作停住，單次動作的結束時間跟著順延
+      const halted = this.host.isPlayerFrozen() || p.isHitPaused(time);
+      if (halted) this.oneShotUntil += Math.max(0, frameMs);
+      spine.animationState.timeScale = halted ? 0 : 1;
       this.updateAnimation(p, time);
     }
     // 原檔朝背後出招的動作（mirroredAnims）播放時再翻一次，招式才會朝面向打出去

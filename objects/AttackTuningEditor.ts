@@ -121,7 +121,7 @@ export interface AttackTuningEditorHost {
  *   P1 定格在那一格的 Spine 姿勢；軸上標出各打擊點，打擊點在軸上的位置就是它判定的時間，可在目前這一格「加打擊點」、刪除、
  *   把選中的打擊點「移到這一格」。
  *   加 / 刪打擊點時，各打擊點的傷害自動平均分配（之後可個別調）
- * - 選中打擊點的參數：形狀（扇形 / 圓形 / 長方形）、判定中心往前 / 往上下偏移、該形狀的尺寸、傷害 %
+ * - 選中打擊點的參數：形狀（扇形 / 圓形 / 長方形）、判定中心往前 / 往上下偏移、該形狀的尺寸、傷害 %、頓點（打中怪時出招者停住多久）
  *   （systems/attackTuningParams，每次調整即時套用並存在瀏覽器）；爆發、衝刺攻擊只有一個打擊點、沒有時間軸
  * - 最下面是普攻共用的近戰觸發距離與恢復預設、關閉
  *
@@ -423,13 +423,14 @@ export class AttackTuningEditor {
   }
 
   /**
-   * 選中打擊點要顯示的欄位：形狀、往前 / 往上下偏移、該形狀的尺寸、傷害 %（有時間軸的招式；判定時間由時間軸上的位置決定）
+   * 選中打擊點要顯示的欄位：形狀、往前 / 往上下偏移、該形狀的尺寸、傷害 %（有時間軸的招式；判定時間由時間軸上的位置決定）、頓點
    *
    * @param point 打擊點
    */
   private pointFields(point: HitPoint): HitPointField[] {
     const fields: HitPointField[] = ['shape', 'offsetForward', 'offsetSide', ...SHAPE_SIZE_FIELDS[point.shape.kind]];
     if (isTimedMove(this.selected)) fields.push('damagePct');
+    fields.push('pauseMs');
     return fields;
   }
 
@@ -447,7 +448,7 @@ export class AttackTuningEditor {
   private pointValueText(field: HitPointField): string {
     const point = moveHitPoints(this.selected)[this.selectedPoint];
     if (field === 'shape') return HIT_SHAPE_LABELS[point.shape.kind];
-    const value = field === 'timeMs' || field === 'damagePct' ? point[field] : point.shape[field];
+    const value = field === 'timeMs' || field === 'damagePct' || field === 'pauseMs' ? point[field] : point.shape[field];
     return `${value}${HIT_POINT_FIELDS[field].unit}`;
   }
 
@@ -465,7 +466,7 @@ export class AttackTuningEditor {
     if (field === 'shape') {
       const count = HIT_SHAPE_KINDS.length;
       point.shape.kind = HIT_SHAPE_KINDS[(HIT_SHAPE_KINDS.indexOf(point.shape.kind) + dir + count) % count];
-    } else if (field === 'timeMs' || field === 'damagePct') {
+    } else if (field === 'timeMs' || field === 'damagePct' || field === 'pauseMs') {
       point[field] = clampHitPointField(field, exact ?? point[field] + dir * HIT_POINT_FIELDS[field].step, point[field]);
     } else {
       point.shape[field] = clampHitPointField(field, point.shape[field] + dir * HIT_POINT_FIELDS[field].step, point.shape[field]);
@@ -486,7 +487,7 @@ export class AttackTuningEditor {
     const points = moveHitPoints(this.selected);
     if (points.length >= MAX_HIT_POINTS) return;
     const source = points[this.selectedPoint];
-    const list = this.splitDamage([...points, { timeMs: this.playheadMs, damagePct: source.damagePct, shape: { ...source.shape } }]);
+    const list = this.splitDamage([...points, { timeMs: this.playheadMs, damagePct: source.damagePct, pauseMs: source.pauseMs, shape: { ...source.shape } }]);
     const added = list[list.length - 1];
     const sorted = setMoveHitPoints(this.selected, list);
     const key = JSON.stringify(added);

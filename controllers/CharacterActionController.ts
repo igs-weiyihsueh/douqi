@@ -456,7 +456,7 @@ export class CharacterActionController {
 
   /**
    * 普攻一個打擊點的判定：以它的判定範圍（朝 aimAngle；二段變身時尺寸放大）劈出，範圍內敵人受「普攻傷害 × 傷害 %」與擊退、
-   * 順手打可破壞物件；同一下普攻的多個打擊點只在第一次打中時累積連段與 HIT
+   * 順手打可破壞物件；打中敵人時出招者頓點 pauseMs；同一下普攻的多個打擊點只在第一次打中時累積連段與 HIT
    *
    * @param c 攻擊的角色
    * @param move 普攻段（attack1 / attack2）
@@ -477,6 +477,7 @@ export class CharacterActionController {
       hitCount++;
     }
     const breakableHits = this.host.hitBreakablesInShape(c, shape, time);
+    if (hitCount > 0) c.applyHitPause(point.pauseMs, time);
     if (hitCount > 0 && !swing.comboCounted) {
       swing.comboCounted = true;
       this.host.onComboHit(c, time);
@@ -494,7 +495,7 @@ export class CharacterActionController {
 
   /**
    * 慢速模式：P1 鍵盤八方向持續移動（對角線正規化）並把面向設為移動方向；無輸入時停下、維持最後面向。
-   * 時停被凍結、定身時停下；衝刺、招式演出、爆發中不接管（速度由各自邏輯控制）
+   * 時停被凍結、定身、受擊硬直、攻擊者頓點時停下；衝刺、招式演出、爆發中不接管（速度由各自邏輯控制）
    *
    * @param time 目前場景時間
    */
@@ -504,7 +505,7 @@ export class CharacterActionController {
     const body = p.body as Phaser.Physics.Arcade.Body;
     if (this.host.isFrozenByTimestop(p)) { body.setVelocity(0, 0); return; }
     if (p.isDashing || p.isSkillLocked(time) || p.isBursting) return;
-    if (p.isRooted(time) || p.isHurtStunned(time)) { body.setVelocity(0, 0); return; }
+    if (p.isRooted(time) || p.isHurtStunned(time) || p.isHitPaused(time)) { body.setVelocity(0, 0); return; }
     const k = this.host.slowKeys();
     let dx = 0, dy = 0;
     if (k.left.isDown || k.a.isDown) dx -= 1;

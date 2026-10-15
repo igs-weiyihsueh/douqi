@@ -49,6 +49,10 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
   dashShielded = false;
   /** 招式演出鎖——期間無敵且玩家輸入不驅動角色（到此時間戳前鎖定） */
   skillLockUntil = 0;
+  /** 攻擊者頓點：命中時出招者的動作停住到此時間（見 applyHitPause） */
+  hitPauseUntil = 0;
+  /** 累計的頓點時間（毫秒）：排程中的判定（afterHitDelay）用它順延 */
+  hitPauseTotalMs = 0;
 
   // 衝刺（純方向，遇第一個敵人停下）
   isDashing = false;
@@ -230,6 +234,28 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
   /** 招式演出鎖定中（無敵 + 玩家不可操控） */
   isSkillLocked(time: number): boolean {
     return time < this.skillLockUntil;
+  }
+
+  /** 攻擊者頓點中（動作停住、不移動） */
+  isHitPaused(time: number): boolean {
+    return time < this.hitPauseUntil;
+  }
+
+  /**
+   * 攻擊者頓點：出招者的動作停住 ms 毫秒（重疊時只延長到較晚的結束時間），普攻冷卻與招式演出鎖跟著順延，
+   * 排程中的打擊點由 afterHitDelay 依 hitPauseTotalMs 順延，整招節奏不變、只是中間卡一下
+   *
+   * @param ms 頓點長度（毫秒；0 以下不停）
+   * @param time 目前場景時間
+   */
+  applyHitPause(ms: number, time: number): void {
+    if (ms <= 0) return;
+    const added = Math.max(0, time + ms - Math.max(time, this.hitPauseUntil));
+    if (added <= 0) return;
+    this.hitPauseUntil = Math.max(this.hitPauseUntil, time + ms);
+    this.hitPauseTotalMs += added;
+    if (this.nextAttackAllowedAt > time) this.nextAttackAllowedAt += added;
+    if (this.skillLockUntil > time) this.skillLockUntil += added;
   }
 
   /** v55(slow-A)：慢速模式 P1 無血量、不會死——被打只扣能量、不扣血。GameScene init 時設 true(只 P1+slow)。 */
@@ -578,6 +604,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
     this.isBursting = false;
     this.dashShielded = false;
     this.skillLockUntil = 0;
+    this.hitPauseUntil = 0;
     this.rootedUntil = 0; // 死亡清定身
     this.rootMark.setVisible(false);
     this.rootRing.setVisible(false).clear();
@@ -635,6 +662,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
     this.isBursting = false;
     this.dashShielded = false;
     this.skillLockUntil = 0;
+    this.hitPauseUntil = 0;
     this.lockedTarget = null;
     this.invulnUntil = 0;
     this.setAngle(0);
