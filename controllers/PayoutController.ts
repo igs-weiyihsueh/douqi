@@ -196,15 +196,18 @@ export class PayoutController {
   }
 
   /**
-   * HIT 連擊報獎：達到的階越高，發出連擊 buffer 的比例越高（payout.comboTierShares）
+   * HIT 連擊報獎：達到的階越高，發出連擊 buffer 的比例越高（payout.comboTierShares）；
+   * 按比例不到 payout.comboMinTickets 時改發保底張數，沒達到里程碑的保底報獎（tierIndex = null）只發保底張數
    *
    * @param c 領獎的角色
-   * @param tierIndex 達到的里程碑索引
-   * @returns 發出的張數
+   * @param tierIndex 達到的里程碑索引（null = 沒達到里程碑的保底報獎）
+   * @returns 發出的張數（0 = buffer 不到 1 張）
    */
-  payCombo(c: Character, tierIndex: number): number {
-    const tiers = GameConfig.payout.comboTierShares;
-    return this.takeSeat(c, 'combo', tiers[Math.min(tierIndex, tiers.length - 1)]);
+  payCombo(c: Character, tierIndex: number | null): number {
+    const cfg = GameConfig.payout;
+    const tiers = cfg.comboTierShares;
+    const fraction = tierIndex === null ? 0 : tiers[Math.min(tierIndex, tiers.length - 1)];
+    return this.takeSeat(c, 'combo', fraction, cfg.comboMinTickets);
   }
 
   /**
@@ -377,15 +380,17 @@ export class PayoutController {
   }
 
   /**
-   * 從該 P 位某獎項 buffer 發出 fraction 比例（取整數張，零頭留著）
+   * 從該 P 位某獎項 buffer 發出 fraction 比例（取整數張，零頭留著）；不到 minTickets 時改發 minTickets，
+   * 但不超過 buffer 的整數部分
    *
    * @param c 領獎的角色
    * @param prize 獎項
    * @param fraction 發出的比例（0 ~ 1）
+   * @param minTickets 保底張數（預設 0 = 沒有保底）
    */
-  private takeSeat(c: Character, prize: SeatPrize, fraction: number): number {
+  private takeSeat(c: Character, prize: SeatPrize, fraction: number, minTickets = 0): number {
     const seat = this.seatOf(c);
-    const amount = Math.floor(seat[prize] * fraction);
+    const amount = Math.min(Math.floor(seat[prize]), Math.max(Math.floor(seat[prize] * fraction), minTickets));
     if (amount <= 0) return 0;
     seat[prize] -= amount;
     return this.pay(c, amount);

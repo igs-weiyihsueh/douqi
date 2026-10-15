@@ -289,6 +289,8 @@ export const GameConfig = {
    * - 共用：boss 亂入 BOSS（打中 + 打倒 + 變身 BOSS 期間打怪）/ treasureRoom 寶藏密室加碼
    * 細節：
    * - comboTierShares：連擊達到第 i 個里程碑（comboReward.MILESTONES）時發出連擊 buffer 的比例
+   * - comboMinTickets：連擊報獎保底張數——按比例算出的張數不到這個數（含沒達到第一個里程碑的保底報獎）時改發這個數，
+   *   buffer 不夠時發 buffer 的整數部分（不超過已存的量，RTP 不變）
    * - secondFormExpectedHits：二段變身每打中一下發 buffer ÷ 此值（發完為止）
    * - treasure：關卡中的寶箱怪每打中一下發命中者 buffer 的 hitShare、打倒時發打倒者 buffer 的 killShare（只發整數，其餘留到下一隻）
    * - boss：共用 buffer 存到 minBudget 才亂入；登場時鎖定整個 buffer，hitShare 給打中（每下 ÷ expectedHits）、killShare 給打倒、
@@ -302,6 +304,7 @@ export const GameConfig = {
     rtpCap: 1.3,
     shares: { secondForm: 0.2, combo: 0.22, crate: 0.08, treasure: 0.05, lowChest: 0.17, highChest: 0.28, boss: 0.17, treasureRoom: 0.13 },
     comboTierShares: [0.1, 0.2, 0.35, 0.6, 1] as ReadonlyArray<number>,
+    comboMinTickets: 1,
     secondFormExpectedHits: 15,
     treasure: { hitShare: 0.05, killShare: 0.6 },
     boss: { minBudget: 600, hitShare: 0.3, killShare: 0.3, expectedHits: 25, formExpectedKills: 20 },
@@ -552,6 +555,8 @@ export const GameConfig = {
      * 最後一階為上限：達成時立即發獎並歸零重新累積
      */
     MILESTONES: [5, 10, 20, 50, 100] as const,
+    /** 保底報獎：連擊中斷時沒達到任何里程碑，但連擊數 ≥ MIN_REWARD_HITS，仍發保底張數（payout.comboMinTickets） */
+    MIN_REWARD_HITS: 1,
   },
 
   /**

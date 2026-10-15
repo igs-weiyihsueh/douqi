@@ -29,7 +29,8 @@ export function streakTimeoutMs(streak: number): number {
  *
  * 被敵人打中（實際受傷判定成立）時立即中斷（interrupt）。每幀依距上次命中的時間：超過中斷時間 × WARNING_START_RATIO 進入警告（HIT 圖閃爍淡出）、超過中斷時間就中斷
  * （先發待發的獎勵再歸零）；中斷時間隨連擊數線性遞減（見 streakTimeoutMs）。CREDIT 等待續關期間與波間休息時暫停倒數（連擊停在當下），
- * 續關逾時離場時結算。小關卡通關時立即結算（settleAll）。獎勵張數由回饋 buffer 決定（達到的階越高發得越多），
+ * 續關逾時離場時結算。小關卡通關時立即結算（settleAll）。沒達到任何里程碑但連擊數 ≥ MIN_REWARD_HITS 時發保底報獎。
+ * 獎勵張數由回饋 buffer 決定（達到的階越高發得越多，至少 payout.comboMinTickets），
  * 加到該角色的彩票數，並在下方面板播放彩票噴發特效
  */
 export class ComboRewardController {
@@ -40,13 +41,13 @@ export class ComboRewardController {
    * @param scene 場景
    * @param characters 全部角色
    * @param isCountdownPaused 全員暫停倒數中（波間休息）
-   * @param payReward 發連擊報獎：從角色的連擊 buffer 依達到的里程碑索引發票，回傳發出的張數
+   * @param payReward 發連擊報獎：從角色的連擊 buffer 依達到的里程碑索引發票（null = 保底報獎），回傳發出的張數
    */
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly characters: () => ReadonlyArray<Character>,
     private readonly isCountdownPaused: () => boolean,
-    private readonly payReward: (actor: Character, tierIndex: number) => number
+    private readonly payReward: (actor: Character, tierIndex: number | null) => number
   ) {}
 
   /**
@@ -117,16 +118,16 @@ export class ComboRewardController {
   }
 
   /**
-   * 發獎：依達到的里程碑從連擊 buffer 發票（加到角色的彩票數），並在下方面板播放彩票噴發（數量 / 速度隨里程碑變化）；
-   * buffer 還不到 1 張時不發、不播特效
+   * 發獎：依達到的里程碑從連擊 buffer 發票（加到角色的彩票數），並在下方面板播放彩票噴發（數量 / 速度隨里程碑變化，
+   * 保底報獎依目前連擊數）；buffer 還不到 1 張時不發、不播特效
    *
    * @param actor 獲得獎勵的角色
-   * @param tierIndex 達成的里程碑索引
+   * @param tierIndex 達成的里程碑索引（null = 沒達到里程碑的保底報獎）
    */
-  private grant(actor: Character, tierIndex: number): void {
+  private grant(actor: Character, tierIndex: number | null): void {
     const tickets = this.payReward(actor, tierIndex);
     if (tickets <= 0) return;
-    const milestone = GameConfig.comboReward.MILESTONES[tierIndex];
+    const milestone = tierIndex === null ? actor.comboState.currentStreak : GameConfig.comboReward.MILESTONES[tierIndex];
     actor.comboState.ticketsEarned += tickets;
     const ui = this.scene.scene.get('UIScene') as unknown as ComboRewardFxScene | null;
     if (ui?.playComboRewardFx) {
@@ -153,13 +154,14 @@ export class ComboRewardController {
   }
 
   /**
-   * 結算一個角色的連擊：有待發獎勵就發，再歸零
+   * 結算一個角色的連擊：有待發獎勵就發，沒達到里程碑但連擊數 ≥ MIN_REWARD_HITS 就發保底報獎，再歸零
    *
    * @param character 角色
    */
   private settle(character: Character): void {
     const combo = character.comboState;
     if (combo.pendingRewardIndex !== undefined) this.grant(character, combo.pendingRewardIndex);
+    else if (combo.currentStreak >= GameConfig.comboReward.MIN_REWARD_HITS) this.grant(character, null);
     this.reset(combo);
   }
 
