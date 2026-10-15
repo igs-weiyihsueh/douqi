@@ -46,7 +46,7 @@
 | 低階寶箱 | 一般關卡的寶箱；打完開左右出口 | `scenes/GameScene.ts` › `lastStageChest` = `'low'`；`controllers/PayoutController.ts` › `payStageChest` | `payout.shares.lowChest` |
 | 高階寶箱 | 較高價值的寶箱；打完開上方出口 | `scenes/GameScene.ts` › `lastStageChest` = `'high'`；`controllers/PayoutController.ts` › `payStageChest` | `payout.shares.highChest` |
 | 連段獎勵 | 連段達 5/10/20/50/100 HIT 記下獎勵，中斷時發彩票 | `controllers/ComboRewardController.ts` › `ComboRewardController`；`controllers/PayoutController.ts` › `payCombo` | `comboReward`、`payout.shares.combo` |
-| 木樁模式 | 場上只有一隻打不死大怪的訓練模式 | `scenes/TitleScene.ts` › `TitleMode` `'training'`；`scenes/GameScene.ts` › `keepTrainingReady` | `config.training` |
+| 木樁模式 | 場上只有一隻打不死大怪的訓練模式 | `scenes/TitleScene.ts` › `TitleMode` `'training'`；`scenes/GameScene.ts` › `keepTrainingReady` | `training` |
 | 免費模式 | 除錯用：攻擊不扣 CREDIT（X 鍵） | `controllers/CreditController.ts` › `toggleFreePlay` | — |
 
 ## 操作與鎖定
