@@ -58,10 +58,7 @@ const BANNER_STYLE: Phaser.Types.GameObjects.Text.TextStyle = {
 };
 const BANNER_Y_RATIO = 0.24;
 const BANNER_DEPTH = 31;
-/** 頭上彩票數字樣式 */
-const TICKET_TEXT_STYLE: Phaser.Types.GameObjects.Text.TextStyle = {
-  fontFamily: 'monospace', fontSize: '26px', color: '#ffd166', stroke: '#000000', strokeThickness: 5, fontStyle: 'bold'
-};
+/** 頭上彩票數字深度（字型見 GameConfig.ticketPopup） */
 const TICKET_TEXT_DEPTH = 40;
 /** 金幣噴散深度 */
 const COIN_DEPTH = 21;
@@ -446,7 +443,7 @@ export class TreasureEnemyController {
 
   /** 頭上飄出「+N 🎫」 */
   private popTicketText(x: number, y: number, tickets: number): void {
-    const txt = this.scene.add.text(x, y, `+${tickets} 🎫`, TICKET_TEXT_STYLE).setOrigin(0.5).setDepth(TICKET_TEXT_DEPTH);
+    const txt = this.scene.add.text(x, y, `+${tickets} 🎫`, { fontFamily: 'monospace', fontStyle: 'bold', ...GameConfig.ticketPopup }).setOrigin(0.5).setDepth(TICKET_TEXT_DEPTH);
     this.scene.tweens.add({ targets: txt, y: y - 60, alpha: 0, duration: 800, onComplete: () => txt.destroy() });
   }
 

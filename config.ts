@@ -504,6 +504,8 @@ export const GameConfig = {
       tank: 25,
       default: 10
     } as Record<string, number>,
+    /** 打破木箱獲得的能量（與打倒小怪相同） */
+    perCrate: 10,
     /** BOSS 命中(非擊殺)給能量的機率與量(max50下 amount 提到12)。 */
     bossHitChance: 0.15,
     bossHitAmount: 12
@@ -534,6 +536,14 @@ export const GameConfig = {
      * 最後一階為上限：達成時立即發獎並歸零重新累積
      */
     MILESTONES: [5, 10, 20, 50, 100] as const,
+  },
+
+  /** 敵人身上飄出的「+N 🎫」（二段變身、亂入 / 變身 BOSS、派對密室的彩票）的字型 */
+  ticketPopup: {
+    fontSize: '40px',
+    color: '#ffd166',
+    stroke: '#000000',
+    strokeThickness: 7
   },
 
   /**
@@ -573,16 +583,16 @@ export const GameConfig = {
     
     /** 視覺外觀參數 - 增大尺寸提高可見性 */
     VISUAL: {
-      /** 彩票寬度 (px) - 增大為更明顯 */
-      WIDTH: 30,
-      /** 彩票高度 (px) - 增大為更明顯 */
-      HEIGHT: 18,
+      /** 彩票寬度 (px) */
+      WIDTH: 45,
+      /** 彩票高度 (px) */
+      HEIGHT: 27,
       /** 金色填充色值 */
       COLOR: 0xFFD700,
       /** 白色邊框色值 */
       BORDER_COLOR: 0xFFFFFF,
-      /** 邊框寬度 (px) - 增加邊框寬度提高對比度 */
-      BORDER_WIDTH: 2,
+      /** 邊框寬度 (px) */
+      BORDER_WIDTH: 3,
       /** 顯示深度層級 - 大幅提高確保在最上層 */
       DEPTH: 200
     },
@@ -1806,16 +1816,16 @@ export const GameConfig = {
       treasureChance: 0.08,
       /** 木箱位置的彩票提示：金光圈半徑 / 時間、文字（{n} = 張數）、上飄距離 / 時間與樣式 */
       ticketFx: {
-        ringRadius: 70,
+        ringRadius: 90,
         ringColor: 0xffd700,
         ringMs: 400,
         text: '+{n} 彩票',
         riseY: 60,
         durationMs: 900,
-        fontSize: 30,
+        fontSize: 44,
         color: '#ffd166',
         stroke: '#000000',
-        strokeThickness: 6,
+        strokeThickness: 7,
         paddingY: 6,
         depth: 40
       }

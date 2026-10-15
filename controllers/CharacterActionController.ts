@@ -97,6 +97,11 @@ export class CharacterActionController {
   private readonly dashHitBreakables = new Map<Character, Set<Breakable>>();
   /** 二段強化衝刺衝向的木箱（衝到木箱外緣時以木箱為中心炸強化 AOE；結束衝刺時清除） */
   private readonly empowerCrateTargets = new Map<Character, Breakable>();
+  /**
+   * 普攻衝向的鎖定敵人：衝刺途中沒撞到（例如敵人被擠到場地邊緣、角色腳底被夾住碰不到）時，
+   * 到點後敵人仍在劍氣範圍內就補一刀（finishAttackDash）；結束衝刺時清除
+   */
+  private readonly attackDashTargets = new Map<Character, Enemy>();
 
   constructor(private readonly host: CharacterActionHost) {}
 
@@ -180,7 +185,7 @@ export class CharacterActionController {
     c.aimAngle = Phaser.Math.Angle.Between(c.x, c.y, target!.x, target!.y);
     const dist = Phaser.Math.Distance.Between(c.x, c.y, target!.x, target!.y);
     if (dist <= GameConfig.melee.range) this.stepInAndSwing(c, dist, time);
-    else this.startDirectionDash(c, time);
+    else this.dashAtEnemy(c, target as Enemy, dist, time);
   }
 
   /**
@@ -216,7 +221,35 @@ export class CharacterActionController {
       return;
     }
     if (dist <= GameConfig.melee.range) this.stepInAndSwing(c, dist, time);
-    else this.startDirectionDash(c, time);
+    else this.dashAtEnemy(c, target as Enemy, dist, time);
+  }
+
+  /**
+   * 普攻衝向鎖定的敵人：朝敵人方向衝刺，最遠只衝到敵人的距離（不越過敵人沿著牆滑走），並記下目標供到點補刀
+   *
+   * @param c 出手的角色
+   * @param target 鎖定的敵人
+   * @param dist 到敵人的距離
+   * @param time 目前場景時間
+   */
+  private dashAtEnemy(c: Character, target: Enemy, dist: number, time: number): void {
+    this.startDirectionDash(c, time, dist);
+    if (c.isDashing) this.attackDashTargets.set(c, target);
+  }
+
+  /**
+   * 普攻衝刺結束時沒撞到目標：目標仍可傷且在劍氣半徑內就面向它揮一刀（場地邊緣的敵人也打得到）
+   *
+   * @param c 結束衝刺的角色
+   * @param time 目前場景時間
+   */
+  private finishAttackDash(c: Character, time: number): void {
+    const target = this.attackDashTargets.get(c);
+    this.attackDashTargets.delete(c);
+    if (!target || !target.active || !target.isVulnerable()) return;
+    if (Phaser.Math.Distance.Between(c.x, c.y, target.x, target.y) > GameConfig.melee.radius) return;
+    c.aimAngle = Phaser.Math.Angle.Between(c.x, c.y, target.x, target.y);
+    this.performMeleeArc(c, time);
   }
 
   /**
@@ -411,11 +444,13 @@ export class CharacterActionController {
   /**
    * 朝 aimAngle 衝刺一段（強化期間更遠）。慢速模式 P1 面向牆壁、夾在場內後幾乎衝不出去時，改原地揮擊，
    * 按攻擊一定有動作
+   *
+   * @param maxDist 衝刺距離上限（衝向敵人時 = 到敵人的距離）
    */
-  private startDirectionDash(c: Character, time: number): void {
+  private startDirectionDash(c: Character, time: number, maxDist = Infinity): void {
     const slow = this.host.isSlowMode();
     const baseDist = slow ? this.host.slowTuning().dashDistance : GameConfig.aim.dashDistance;
-    const dist = baseDist * (c.isEmpowered(time) ? GameConfig.combo.empower.moveMult : 1);
+    const dist = Math.min(maxDist, baseDist * (c.isEmpowered(time) ? GameConfig.combo.empower.moveMult : 1));
     const destX = c.x + Math.cos(c.aimAngle) * dist;
     const destY = c.y + Math.sin(c.aimAngle) * dist;
     if (c === this.host.player() && slow) {
@@ -453,6 +488,7 @@ export class CharacterActionController {
   /** 結束衝刺：關閉衝刺狀態、停下、收回護盾與視覺 */
   endDashState(c: Character): void {
     this.empowerCrateTargets.delete(c);
+    this.attackDashTargets.delete(c);
     c.isDashing = false;
     c.dashToItem = false;
     c.dashEmpowerStrike = false;
@@ -535,6 +571,7 @@ export class CharacterActionController {
       const body = crate.getBody();
       this.host.empowerStrike(c, body.centerX, body.centerY, time);
     }
+    this.finishAttackDash(c, time);
     this.endDashState(c);
   }
 
@@ -573,15 +610,23 @@ export class CharacterActionController {
     (c.body as Phaser.Physics.Arcade.Body).setVelocity(paused ? 0 : c.cutInVelocityX, paused ? 0 : c.cutInVelocityY);
   }
 
-  /** 把角色夾在可活動範圍內（離各邊留 edgeMargins）；衝刺中撞牆被夾回就結束衝刺（避免牆邊來回震盪或卡在衝刺狀態） */
-  clampToArena(c: Character): void {
+  /**
+   * 把角色夾在可活動範圍內（離各邊留 edgeMargins）；衝刺中撞牆被夾回就結束衝刺（避免牆邊來回震盪或卡在衝刺狀態），
+   * 普攻衝刺沒撞到目標時照到點規則補刀
+   *
+   * @param c 角色
+   * @param time 目前場景時間
+   */
+  clampToArena(c: Character, time: number): void {
     const m = this.host.edgeMargins(c);
     const bnd = this.host.walkBounds();
     const cx = Phaser.Math.Clamp(c.x, bnd.left + m.left, bnd.right - m.right);
     const cy = Phaser.Math.Clamp(c.y, bnd.top + m.top, bnd.bottom - m.bottom);
     if (cx !== c.x || cy !== c.y) {
       c.setPosition(cx, cy);
-      if (c.isDashing) this.endDashState(c);
+      if (!c.isDashing) return;
+      this.finishAttackDash(c, time);
+      this.endDashState(c);
     }
   }
 }

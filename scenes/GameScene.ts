@@ -677,18 +677,14 @@ export class GameScene extends Phaser.Scene {
           (c.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
         }
       }
-      this.targeting.drawMarkers();
-      this.syncStandingVisuals();
-      this.emitAim();
+      this.updateFrozenFrame();
       return;
     }
 
     // 關卡制：轉場演出（平移、閃黑、自動走位）期間凍結遊戲邏輯，只重繪角色標記（角色被搬動後標記跟著走）
     if (this.levelMode && this.slotWorld.update(time, delta)) {
       this.cancelPlayerActions();
-      this.targeting.drawMarkers();
-      this.syncStandingVisuals();
-      this.emitAim();
+      this.updateFrozenFrame();
       return;
     }
 
@@ -696,9 +692,7 @@ export class GameScene extends Phaser.Scene {
     if (this.settlement.isActive) {
       this.cancelPlayerActions();
       for (const c of this.characters) if (c.alive) (c.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
-      this.targeting.drawMarkers();
-      this.syncStandingVisuals();
-      this.emitAim();
+      this.updateFrozenFrame();
       return;
     }
 
@@ -808,7 +802,7 @@ export class GameScene extends Phaser.Scene {
       // 時停期間非 owner 角色【完全凍結】(停速度、不衝刺推進),owner 不受影響。
       if (this.isFrozenByTimestop(c)) {
         (c.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
-        this.actions.clampToArena(c);
+        this.actions.clampToArena(c, time);
         c.syncLabel();
         continue;
       }
@@ -828,7 +822,7 @@ export class GameScene extends Phaser.Scene {
       if (!c.isDashing && !c.isSkillLocked(time)) pushBreakablesFromCharacter(c, this.breakables, this.arena);
       // 塔/BOSS 實體碰撞:角色不可穿過塔/BOSS 本體(含衝刺中也擋,不讓穿王/塔身)
       pushCharacterOutOfStructures(c, this.enemies);
-      this.actions.clampToArena(c);
+      this.actions.clampToArena(c, time);
       this.clampToTeamView(c);
       c.syncLabel();
     }
@@ -840,6 +834,17 @@ export class GameScene extends Phaser.Scene {
     this.emitStats();
     this.syncStandingVisuals();
     this.emitAim();
+  }
+
+  /**
+   * 遊戲邏輯凍結的一幀（事件開場演出、轉場、關卡結算）：只重繪標記與站位外觀，並送出瞄準與 stats
+   * ——角色可能被演出搬動（自動走位、轉場平移），角色面板、投幣光效等跟隨角色的 UI 要拿到最新位置
+   */
+  private updateFrozenFrame(): void {
+    this.targeting.drawMarkers();
+    this.syncStandingVisuals();
+    this.emitAim();
+    this.emitStats();
   }
 
   /**
@@ -1526,6 +1531,9 @@ export class GameScene extends Phaser.Scene {
       onBreakableHit: (actor, time) => this.creditCtl.onAttackHit(actor, time), // 打到木箱與打到怪一樣扣 CREDIT
       dropItemAt: (x, y, time) => this.dropItemAt(x, y, time),
       grantCrateTickets: (actor) => this.showTicketReward(actor, this.payout.payCrate(actor)),
+      onCrateBroken: (actor) => {
+        if (this.controlMode === 'slow') this.comboSkills.gainEnergy(actor, GameConfig.energy.perCrate);
+      },
       // 最後一波打完（出口開放）後不出，避免寶箱怪出現時已經在離開
       spawnTreasureAt: (x, y, time) => (!this.levelMode || (this.stageInProgress && !this.pendingSettlement)) && this.treasures.spawnAt(x, y, time),
       spawnExpandingRing: (x, y, radius, color, ms) => this.fx.expandingRing(x, y, radius, color, ms),

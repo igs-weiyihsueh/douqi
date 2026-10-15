@@ -55,7 +55,7 @@ const CHEST_CONFIG = {
   /** 飛出的彩票圖示：每人最多幾張、每張間隔、字型 */
   MAX_TICKET_ICONS: 5,
   TICKET_STAGGER_MS: 80,
-  TICKET_STYLE: { fontSize: '44px' }
+  TICKET_STYLE: { fontSize: '72px' }
 } as const;
 
 /** 寶箱演出用的物件 */
