@@ -2,16 +2,16 @@ import { GameConfig } from '../config';
 import type { Character } from '../objects/Character';
 
 /** 各 P 位自己的 buffer：個人打到的獎項 */
-export type SeatPrize = 'secondForm' | 'combo' | 'crate' | 'treasure' | 'lowChest' | 'highChest';
+export type SeatPrize = 'secondForm' | 'combo' | 'crate' | 'lowChest' | 'highChest';
 /** 4 個 P 位共用的 buffer：全隊一起的獎項 */
-export type SharedPrize = 'boss' | 'treasureRoom';
+export type SharedPrize = 'boss' | 'treasure' | 'treasureRoom';
 /** 全部獎項 */
 export type PayoutPrize = SeatPrize | SharedPrize;
 
 /** 各 P 位 buffer 的獎項（顯示 / 走訪順序） */
-export const SEAT_PRIZES: ReadonlyArray<SeatPrize> = ['secondForm', 'combo', 'crate', 'treasure', 'lowChest', 'highChest'];
+export const SEAT_PRIZES: ReadonlyArray<SeatPrize> = ['secondForm', 'combo', 'crate', 'lowChest', 'highChest'];
 /** 共用 buffer 的獎項（顯示 / 走訪順序） */
-export const SHARED_PRIZES: ReadonlyArray<SharedPrize> = ['boss', 'treasureRoom'];
+export const SHARED_PRIZES: ReadonlyArray<SharedPrize> = ['boss', 'treasure', 'treasureRoom'];
 
 /** 亂入 BOSS 這一次鎖定的預算（張）：打中小獎 / 打倒大獎 / 變身 BOSS 期間打怪的獎 */
 interface BossBudget {
@@ -51,13 +51,13 @@ export class PayoutController {
   /** 各 P 位的 buffer（張，含零頭） */
   private readonly seats = new Map<Character, Record<SeatPrize, number>>();
   /** 共用 buffer（張，含零頭） */
-  private readonly shared: Record<SharedPrize, number> = { boss: 0, treasureRoom: 0 };
+  private readonly shared: Record<SharedPrize, number> = { boss: 0, treasure: 0, treasureRoom: 0 };
   /** 二段變身中的角色：這次變身每打中一下給幾張（變身期間第一次打中時依 buffer 決定） */
   private readonly secondFormPerHit = new Map<Character, number>();
   private bossBudget: BossBudget | null = null;
   private roomBudget: RoomBudget | null = null;
-  /** 關卡中寶箱怪鎖定的獎金（出現時從打破木箱者的 buffer 扣下，打倒時發完、離場時退回） */
-  private treasurePrize: { owner: Character; remaining: number } | null = null;
+  /** 關卡中寶箱怪鎖定的獎金剩餘張數（出現時從共用寶箱怪 buffer 扣下，打倒時發完、離場時退回；null = 沒有鎖定中的獎金） */
+  private treasurePrize: number | null = null;
 
   /** 平均 1 幣 CREDIT（多投多送一輪的平均） */
   static averageCreditsPerCoin(): number {
@@ -177,31 +177,22 @@ export class PayoutController {
     return this.takeSeat(c, 'crate', 1);
   }
 
-  /**
-   * 這位玩家的寶箱怪 buffer 是否已存到完整獎金（payout.treasure.prize），且場上沒有鎖定中的寶箱怪獎金——存夠才能從木箱跳出寶箱怪
-   *
-   * @param c 打破木箱的角色
-   */
-  treasureFunded(c: Character): boolean {
-    return this.treasurePrize === null && this.seatBalance(c, 'treasure') >= GameConfig.payout.treasure.prize;
+  /** 共用寶箱怪 buffer 是否已存到完整獎金（payout.treasure.prize），且場上沒有鎖定中的寶箱怪獎金——存夠才能從木箱跳出寶箱怪 */
+  get treasureFunded(): boolean {
+    return this.treasurePrize === null && this.shared.treasure >= GameConfig.payout.treasure.prize;
   }
 
-  /**
-   * 寶箱怪出現：從打破木箱者的寶箱怪 buffer 扣下完整獎金，鎖定成這隻寶箱怪的獎金（誰打都從這筆發）
-   *
-   * @param c 打破木箱的角色
-   */
-  lockTreasurePrize(c: Character): void {
+  /** 寶箱怪出現：從共用寶箱怪 buffer 扣下完整獎金，鎖定成這隻寶箱怪的獎金（誰打都從這筆發） */
+  lockTreasurePrize(): void {
     const prize = GameConfig.payout.treasure.prize;
-    this.seatOf(c).treasure -= prize;
-    this.treasurePrize = { owner: c, remaining: prize };
+    this.shared.treasure -= prize;
+    this.treasurePrize = prize;
   }
 
-  /** 寶箱怪沒被打倒就離場：沒發完的獎金退回鎖定時的玩家 buffer（沒有鎖定中的獎金時不做事） */
+  /** 寶箱怪沒被打倒就離場：沒發完的獎金退回共用寶箱怪 buffer（沒有鎖定中的獎金時不做事） */
   refundTreasurePrize(): void {
-    const prize = this.treasurePrize;
-    if (!prize) return;
-    this.seatOf(prize.owner).treasure += prize.remaining;
+    if (this.treasurePrize === null) return;
+    this.shared.treasure += this.treasurePrize;
     this.treasurePrize = null;
   }
 
@@ -215,8 +206,8 @@ export class PayoutController {
   payTreasureHit(c: Character): number {
     const cfg = GameConfig.payout.treasure;
     const prize = this.treasurePrize;
-    if (!prize || Math.random() >= cfg.hitChance || prize.remaining - cfg.hitTickets < cfg.killReserve) return 0;
-    prize.remaining -= cfg.hitTickets;
+    if (prize === null || Math.random() >= cfg.hitChance || prize - cfg.hitTickets < cfg.killReserve) return 0;
+    this.treasurePrize = prize - cfg.hitTickets;
     return this.pay(c, cfg.hitTickets);
   }
 
@@ -228,9 +219,9 @@ export class PayoutController {
    */
   payTreasureKill(c: Character): number {
     const prize = this.treasurePrize;
-    if (!prize) return 0;
+    if (prize === null) return 0;
     this.treasurePrize = null;
-    return prize.remaining > 0 ? this.pay(c, prize.remaining) : 0;
+    return prize > 0 ? this.pay(c, prize) : 0;
   }
 
   /**
@@ -454,7 +445,7 @@ export class PayoutController {
   private seatOf(c: Character): Record<SeatPrize, number> {
     let seat = this.seats.get(c);
     if (!seat) {
-      seat = { secondForm: 0, combo: 0, crate: 0, treasure: 0, lowChest: 0, highChest: 0 };
+      seat = { secondForm: 0, combo: 0, crate: 0, lowChest: 0, highChest: 0 };
       this.seats.set(c, seat);
     }
     return seat;

@@ -319,16 +319,16 @@ export const GameConfig = {
    * 回饋（RTP）：彩票機每投 1 幣長期平均回饋 coinTickets × rtpCap 張（rtpCap 為整台 4 個 P 位合計的上限）。
    * 平均 1 幣 CREDIT = credit.coinCycle 一輪的平均，每 CREDIT 平均回饋 = coinTickets × rtpCap ÷ 平均 1 幣 CREDIT。
    * 每扣 1 CREDIT 依 shares（以 RTP 計，合計 = rtpCap）存進各獎項的 buffer，獎項觸發時從 buffer 發：
-   * - 各 P 位：secondForm 二段變身期間打怪 / combo HIT 連擊報獎 / crate 木箱 / treasure 關卡中的寶箱怪 / lowChest、highChest 通關寶箱
-   * - 共用：boss 亂入 BOSS（打中 + 打倒 + 變身 BOSS 期間打怪）/ treasureRoom 寶藏密室加碼
+   * - 各 P 位：secondForm 二段變身期間打怪 / combo HIT 連擊報獎 / crate 木箱 / lowChest、highChest 通關寶箱
+   * - 共用：boss 亂入 BOSS（打中 + 打倒 + 變身 BOSS 期間打怪）/ treasure 關卡中的寶箱怪 / treasureRoom 寶藏密室加碼
    * 細節：
    * - comboTierShares：連擊達到第 i 個里程碑（comboReward.MILESTONES）時發出連擊 buffer 的比例
    * - comboMinTickets：連擊報獎保底張數——按比例算出的張數不到這個數（含沒達到第一個里程碑的保底報獎）時改發這個數，
    *   buffer 不夠時發 buffer 的整數部分（不超過已存的量，RTP 不變）
    * - secondFormExpectedHits：二段變身每打中一下發 buffer ÷ 此值（發完為止）
-   * - treasure：打破木箱的玩家寶箱怪 buffer 存到 prize 張，打破木箱時就跳出寶箱怪（breakable.crate.treasureChance，目前 1 = 必定）；出現時從他的 buffer
-   *   扣下 prize 張鎖定成這隻寶箱怪的獎金，誰打都從這筆發：每打中一下有 hitChance 機率發 hitTickets 張（要留得下 killReserve 張給打倒才發），
-   *   打倒時剩下的全部發給打倒者；沒打倒就離場時退回原本的玩家
+   * - treasure：共用寶箱怪 buffer（全隊合計）存到 prize 張，任何人打破木箱時就跳出寶箱怪（breakable.crate.treasureChance，目前 1 = 必定）；
+   *   出現時從共用 buffer 扣下 prize 張鎖定成這隻寶箱怪的獎金，誰打都從這筆發：每打中一下有 hitChance 機率發 hitTickets 張
+   *   （要留得下 killReserve 張給打倒才發），打倒時剩下的全部發給打倒者；沒打倒就離場時退回共用 buffer
    * - boss：共用 buffer 存到 minBudget 才亂入；登場時鎖定整個 buffer，hitShare 給打中（每下 ÷ expectedHits）、killShare 給打倒、
    *   其餘給變身 BOSS 期間打倒的怪（每隻 ÷ formExpectedKills）；沒發完的退回
    * - treasureRoom：共用 buffer 存到 budget 才開密室入口；進去時鎖定 budget，killShare 給打倒（每隻 ÷ expectedKills）、
@@ -1897,7 +1897,7 @@ export const GameConfig = {
       bodyScale: 1,
       /**
        * 打破木箱的獎勵：ticketChance 機率中獎，發出打破者的木箱 buffer（payout；下方面板播 HIT 報獎特效，木箱位置爆出金光與彩票圖示 + 張數）；
-       * 打破者的寶箱怪獎金存夠（payout.treasure.prize）時，treasureChance 機率從木箱位置跳出寶箱怪（1 = 存夠就必定出；每個小關卡最多一隻，最後一波打完後不出）
+       * 共用寶箱怪 buffer 存夠（payout.treasure.prize）時，treasureChance 機率從木箱位置跳出寶箱怪（1 = 存夠就必定出；每個小關卡最多一隻，最後一波打完後不出）
        */
       ticketChance: 0.2,
       treasureChance: 1,

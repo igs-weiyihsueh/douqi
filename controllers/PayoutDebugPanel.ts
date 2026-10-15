@@ -80,7 +80,7 @@ export class PayoutDebugPanel {
         `${PRIZE_LABELS[prize].padEnd(6, '　')}${this.characters().map((c) => p.seatBalance(c, prize).toFixed(1).padStart(8)).join('')}`),
       '— 共用 buffer（張）—',
       ...SHARED_PRIZES.map((prize) => `${PRIZE_LABELS[prize].padEnd(6, '　')}${p.sharedBalance(prize).toFixed(1).padStart(8)}`),
-      `BOSS 門檻 ${cfg.boss.minBudget}${p.bossFunded ? '（已存夠）' : ''}  密室預算 ${cfg.treasureRoom.budget}${p.roomFunded ? '（已存夠）' : ''}`
+      `BOSS 門檻 ${cfg.boss.minBudget}${p.bossFunded ? '（已存夠）' : ''}  寶箱怪門檻 ${cfg.treasure.prize}${p.treasureFunded ? '（已存夠）' : ''}  密室預算 ${cfg.treasureRoom.budget}${p.roomFunded ? '（已存夠）' : ''}`
     ];
     this.text.setText(lines);
   }
