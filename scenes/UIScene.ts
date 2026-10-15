@@ -44,8 +44,6 @@ interface CharStat {
   y: number;
   /** 頭頂 UI 下緣的世界 Y（角色畫面上看到的圖像頂端再往上 headUi.gap） */
   headY: number;
-  /** P1 頭上覆蓋圖的高度（顯示中時疊在 headY 上方；沒有時 0） */
-  headOverlayHeight: number;
   /** CREDIT（投幣點數） */
   credit: number;
   /** 彩票數（各種獎勵累計） */
@@ -179,45 +177,18 @@ export class UIScene extends Phaser.Scene {
 
   /** 下方面板 HIT 連擊顯示（底圖 + 數字圖 + HIT 字樣），每個角色一個，索引對應 rows */
   private panelHitCounters: HitCounter[] = [];
-  /**
-   * 多投多送量條：投幣後 showMs 內（之後 fadeMs 淡出）顯示在角色面板正上方，置中對齊角色；
-   * 角色面板被 P1 頭上覆蓋圖取代時改疊在覆蓋圖上方。不在場上的角色不顯示
-   *
-   * @param index 角色索引（對應 coinBars / overheadUIs）
-   * @param character 角色數據
-   * @param overhead 該角色的角色面板容器（位置每幀跟著角色更新）
-   */
-  private updateCoinBar(index: number, character: CharStat, overhead: Phaser.GameObjects.Container): void {
-    const bar = this.coinBars[index];
-    if (!bar) return;
-    const cfg = GameConfig.credit.coinBar;
-    const remain = (this.coinBarShownUntil[index] ?? 0) + cfg.fadeMs - this.time.now;
-    const shown = GameConfig.credit.enabled && character.alive && remain > 0;
-    bar.setVisible(shown);
-    bar.setLit(character.coinStep);
-    if (!shown) return;
-    bar.setAlpha(Math.min(1, remain / cfg.fadeMs));
-    const head = this.OVERHEAD_UI_CONFIG.CREDIT;
-    // 角色面板上緣（= CREDIT 底框上緣）；面板被覆蓋圖取代時用覆蓋圖上緣（headY − 覆蓋圖高度，換成畫面座標）
-    const gcam = (this.scene.get('GameScene') as Phaser.Scene | null)?.cameras?.main;
-    const top = overhead.visible
-      ? overhead.y + head.Y - head.BG_HEIGHT / 2
-      : character.headY - character.headOverlayHeight - (gcam?.scrollY ?? 0);
-    bar.setPosition(overhead.x - bar.barWidth / 2, top - cfg.gapAboveHeadUi);
-  }
-
   /** 下方面板「投幣加入遊戲 / 投越多送越多」輪播提示（CREDIT 未進場時取代 HIT 顯示），每個角色一個，索引對應 rows */
   private panelJoinTexts: Phaser.GameObjects.Text[] = [];
-  /** 多投多送量條（投幣後短暫顯示在角色面板上方），每個角色一個，索引對應 rows */
-  private coinBars: CoinBonusBar[] = [];
-  /** 各角色多投多送量條顯示到何時（UIScene 時間；之後 fadeMs 淡出），索引對應 coinBars */
-  private coinBarShownUntil: number[] = [];
+  /** 下方面板多投多送膠囊量條（HIT 顯示下方），每個角色一個，索引對應 rows */
+  private panelCoinBars: CoinBonusBar[] = [];
   /** 最近一次 stats 的角色資料（投幣光效追蹤角色位置用） */
   private lastChars: CharStat[] = [];
   /** 下方面板 COMBO 顯示設定：HIT 顯示與投幣提示的左下角錨點，原版色塊面板與 F4 面板圖各有一組位置 */
   private readonly PANEL_COMBO_CONFIG = {
     FONT_SIZE: '36px',
     STROKE_WIDTH: 4,
+    /** 多投多送量條在錨點（左下角），HIT 顯示與投幣提示疊在量條上方，相隔 COIN_BAR_GAP */
+    COIN_BAR_GAP: 6,
     /** 原版色塊面板：相對面板左上角的偏移（貼在面板上方） */
     CLASSIC_OFFSET_X: 0,
     CLASSIC_OFFSET_Y: -2,
@@ -750,7 +721,6 @@ export class UIScene extends Phaser.Scene {
       } else if (container) {
         container.setVisible(false);
       }
-      if (container) this.updateCoinBar(charIndex, character, container);
     }
 
     // 波次進度 HUD(關卡制:節點序列 ●─●─◆);只在【純波次子區】顯示;事件/BOSS/非 levelMode 隱藏。
@@ -1420,14 +1390,15 @@ export class UIScene extends Phaser.Scene {
    *
    * @param graphics 用於繪製的Graphics對象
    * @param isFlashing 是否為閃爍狀態（Credit耗盡時顯示紅色）
+   * @param fillOverride 有給時整把劍改用這個顏色（例如多投多送量條亮格上的深色劍）
    */
-  private drawSwordIcon(graphics: Phaser.GameObjects.Graphics, isFlashing: boolean): void {
+  private drawSwordIcon(graphics: Phaser.GameObjects.Graphics, isFlashing: boolean, fillOverride?: number): void {
     const config = this.OVERHEAD_UI_CONFIG;
     const swordConfig = config.SWORD;
     const colors = config.COLORS;
     
     // 選擇顏色：正常金色或閃爍紅色
-    const fillColor = isFlashing ? colors.FLASH_RED : colors.SWORD_FILL;
+    const fillColor = fillOverride ?? (isFlashing ? colors.FLASH_RED : colors.SWORD_FILL);
     const strokeColor = isFlashing ? colors.FLASH_RED_BORDER : colors.SWORD_BORDER;
     
     graphics.clear();
@@ -1941,9 +1912,9 @@ export class UIScene extends Phaser.Scene {
       new HitCounter(this).setDepth(cfg.DEPTH).setScrollFactor(0)
     );
     const cycle = GameConfig.credit.coinCycle;
-    this.coinBars = this.rows.map(() =>
-      new CoinBonusBar(this, cycle.map((gain) => gain - cycle[0]), (g) => this.drawSwordIcon(g, false))
-        .setDepth(this.OVERHEAD_DEPTH).setScrollFactor(0).setVisible(false)
+    this.panelCoinBars = this.rows.map(() =>
+      new CoinBonusBar(this, cycle.map((gain) => gain - cycle[0]), (g, fill) => this.drawSwordIcon(g, false, fill))
+        .setDepth(cfg.DEPTH).setScrollFactor(0).setVisible(false)
     );
     this.panelJoinTexts = this.rows.map(() =>
       this.add.text(0, 0, GameConfig.credit.joinTexts[0], {
@@ -1959,7 +1930,7 @@ export class UIScene extends Phaser.Scene {
   }
 
   /**
-   * 依面板模式把 HIT 顯示與投幣提示（左下角）移到對應面板上方（F4 面板圖時在彩票欄上方）
+   * 依面板模式把多投多送量條（左下角）移到對應面板上方（F4 面板圖時在彩票欄上方），HIT 顯示與投幣提示疊在量條上方
    *
    * @param useOverlay - true = F4 面板圖；false = 原版色塊面板（該角色沒有面板圖時也退回原版位置）
    */
@@ -1980,49 +1951,42 @@ export class UIScene extends Phaser.Scene {
       } else {
         return;
       }
-      this.panelHitCounters[i]?.setPosition(x, y);
-      this.panelJoinTexts[i]?.setPosition(x, y);
+      const bar = this.panelCoinBars[i];
+      bar?.setPosition(x, y);
+      const aboveBarY = y - (bar ? bar.barHeight + cfg.COIN_BAR_GAP : 0);
+      this.panelHitCounters[i]?.setPosition(x, aboveBarY);
+      this.panelJoinTexts[i]?.setPosition(x, aboveBarY);
     });
   }
 
   /**
-   * 投幣（GameScene 的 coin-inserted 事件）：量條顯示 showMs（重新計時）並亮起這一次的投幣點（投滿一段時獎勵閃爍後換下一段）；
-   * 投滿一段有加贈時，從量條的獎勵飛出一道光沿弧線飛到角色面板的 CREDIT 欄（追著角色目前位置），到達時爆一圈光、CREDIT 數字彈跳
+   * 投幣（GameScene 的 coin-inserted 事件）：量條亮起這一格並彈跳（投滿最後一格時閃爍後清空）；
+   * 這一格有加贈時，從這一格飛出一道光沿弧線飛到角色頭頂（追著角色目前位置），到達時在角色身上爆一圈光
    *
    * @param e.index 角色索引
    * @param e.cycleIndex 這次投幣在 coinCycle 中的位置
    */
   private playCoinInserted(e: { index: number; cycleIndex: number }): void {
-    const bar = this.coinBars[e.index];
+    const bar = this.panelCoinBars[e.index];
     if (!bar) return;
-    const cfg = GameConfig.credit.coinBar;
-    this.coinBarShownUntil[e.index] = this.time.now + cfg.showMs;
     bar.lightCell(e.cycleIndex);
-    if (!bar.hasBonus(e.cycleIndex)) return;
-    // 剛投幣進場的角色要等下一次 stats 才定位量條，起點在光效第一幀才取
-    let start: { x: number; y: number } | null = null;
-    const overhead = this.overheadUIs.get(e.index);
-    const creditIcon = (overhead as any)?.swordIcon as Phaser.GameObjects.Graphics | undefined;
+    if (e.cycleIndex >= bar.cellCount - 1) bar.flashAndClear(bar.popMs);
+    if (!bar.visible || !bar.hasBonus(e.cycleIndex)) return;
+    const cfg = GameConfig.credit.coinBar;
+    const start = bar.cellCenter(e.cycleIndex);
     const target = (): { x: number; y: number } => {
-      if (overhead?.visible && creditIcon) {
-        const m = creditIcon.getWorldTransformMatrix();
-        return { x: m.tx, y: m.ty };
-      }
-      // 角色面板沒顯示時退回角色頭頂
       const c = this.lastChars[e.index];
       const gcam = (this.scene.get('GameScene') as Phaser.Scene | null)?.cameras?.main;
-      if (!c) return start ?? bar.rewardCenter();
+      if (!c) return start;
       return { x: c.x - (gcam?.scrollX ?? 0), y: c.y + cfg.targetOffsetY - (gcam?.scrollY ?? 0) };
     };
-    const orb = this.add.circle(0, 0, cfg.orbRadius, cfg.orbColor).setDepth(cfg.depth)
-      .setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
+    const orb = this.add.circle(start.x, start.y, cfg.orbRadius, cfg.orbColor).setDepth(cfg.depth)
+      .setBlendMode(Phaser.BlendModes.ADD);
     let lastTrailAt = 0;
     this.tweens.addCounter({
       from: 0, to: 1, duration: cfg.flyMs, ease: 'Sine.easeIn',
       onUpdate: (tween) => {
         const t = tween.getValue() ?? 0;
-        start ??= bar.rewardCenter();
-        orb.setVisible(true);
         const end = target();
         // 二次貝茲曲線：控制點在起終點中間往上拱 arcHeight
         const cx = (start.x + end.x) / 2, cy = Math.min(start.y, end.y) - cfg.arcHeight;
@@ -2041,11 +2005,6 @@ export class UIScene extends Phaser.Scene {
         const ring = this.add.circle(end.x, end.y, cfg.burstRadius, cfg.orbColor, 0.5).setDepth(cfg.depth)
           .setBlendMode(Phaser.BlendModes.ADD).setScale(0.2);
         this.tweens.add({ targets: ring, scale: 1, alpha: 0, duration: cfg.burstMs, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
-        const creditText = (overhead as any)?.creditText as Phaser.GameObjects.Text | undefined;
-        if (!creditText) return;
-        this.tweens.killTweensOf(creditText);
-        creditText.setScale(cfg.creditPopScale);
-        this.tweens.add({ targets: creditText, scale: 1, duration: cfg.creditPopMs, ease: 'Back.easeOut' });
       }
     });
   }
@@ -2053,15 +2012,16 @@ export class UIScene extends Phaser.Scene {
   /**
    * 更新下方面板的 COMBO 顯示：HIT 連擊圖（連擊數改變時彈跳、連擊快斷時閃爍淡出），連擊為 0、角色未加入或陣亡時隱藏
    * （CREDIT 等待續關時照常顯示，連擊停在當下）；
-   * CREDIT 未進場時改在同一位置輪流顯示 joinTexts（每 joinRotateMs 換一句，文字不閃）
+   * CREDIT 未進場時改在同一位置輪流顯示 joinTexts（每 joinRotateMs 換一句，文字不閃）；多投多送量條在已加入的角色（showWhenAbsent 時含未進場）下方顯示
    *
-   * @param index 角色索引（對應 rows / panelHitCounters / panelJoinTexts）
+   * @param index 角色索引（對應 rows / panelHitCounters / panelJoinTexts / panelCoinBars）
    * @param character 角色數據（未加入時為 undefined）
    */
   private updatePanelCombo(index: number, character: CharStat | undefined): void {
     const counter = this.panelHitCounters[index];
     const joinText = this.panelJoinTexts[index];
-    if (!counter || !joinText) return;
+    const bar = this.panelCoinBars[index];
+    if (!counter || !joinText || !bar) return;
     const credit = GameConfig.credit;
     const absent = character?.creditState === 'absent';
     joinText.setVisible(absent);
@@ -2070,6 +2030,8 @@ export class UIScene extends Phaser.Scene {
       const line = credit.joinTexts[Math.floor(this.time.now / credit.joinRotateMs) % credit.joinTexts.length];
       if (joinText.text !== line) joinText.setText(line);
     }
+    bar.setVisible(credit.enabled && !!character && (!absent || credit.coinBar.showWhenAbsent));
+    if (character) bar.setLit(character.coinStep);
     const shown = character?.alive || character?.creditState === 'waiting';
     const combo = shown ? character?.combo : undefined;
     counter.setCount(combo?.currentStreak ?? 0);

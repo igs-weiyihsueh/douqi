@@ -2608,7 +2608,6 @@ export class GameScene extends Phaser.Scene {
         x: c.x,
         y: c.y,
         headY: this.artStyle.headAnchorY(c, this.time.now),
-        headOverlayHeight: this.artStyle.headOverlayHeight(c),
         // CREDIT（投幣點數）與彩票數
         credit: c.credit,
         tickets: c.tickets,
