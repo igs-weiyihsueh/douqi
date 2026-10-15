@@ -46,8 +46,8 @@
 | 低階寶箱 | 一般關卡的寶箱；打完開左右出口 | `scenes/GameScene.ts` › `lastStageChest` = `'low'`；`controllers/PayoutController.ts` › `payStageChest` | `payout.shares.lowChest` |
 | 高階寶箱 | 較高價值的寶箱；打完開上方出口 | `scenes/GameScene.ts` › `lastStageChest` = `'high'`；`controllers/PayoutController.ts` › `payStageChest` | `payout.shares.highChest` |
 | 連段獎勵 | 連段達 5/10/20/50/100 HIT 記下獎勵，中斷時發彩票 | `controllers/ComboRewardController.ts` › `ComboRewardController`；`controllers/PayoutController.ts` › `payCombo` | `comboReward`、`payout.shares.combo` |
-| 木樁模式 | 場上只有一隻打不死大怪的訓練模式 | `scenes/TitleScene.ts` › `TitleMode` `'training'`；`scenes/GameScene.ts` › `keepTrainingReady` | `training` |
-| 範圍編輯器 | 木樁模式內調整攻擊範圍的開發工具 | `systems/attackTuningParams.ts` › `attackRange`；`objects/AttackTuningEditor.ts` | `training.tuningEditorKey` |
+| 招式編輯器的木樁 | 招式編輯器內場上只有一隻打不死大怪的測試環境 | `scenes/GameScene.ts` › `keepEditorDummyReady` | `moveEditor` |
+| 範圍編輯器 | 招式編輯器內調整攻擊範圍的開發工具面板 | `systems/attackTuningParams.ts` › `attackRange`；`objects/AttackTuningEditor.ts` | `moveEditor.panelToggleKey` |
 | 頓點 | 攻擊命中時攻擊者動作停頓的毫秒數，0~300ms範圍，增強打擊感與節奏保護 | 範圍編輯器 › 頓點欄位 | `attackDefaults.moveTimelines` |
 | 招式編輯器 | 主選單攻擊招式編輯入口，獨立編輯畫面 | 主選單 › 招式編輯器 | — |
 | 怪物頁 | 一般兵/大怪/遠程幽靈攻擊參數編輯頁面 | 招式編輯器 › 怪物頁 | — |
