@@ -3,7 +3,6 @@ import { GameConfig } from '../config';
 import type { Character } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
 import { hitFeel } from '../systems/hitFeelParams';
-import { attackTuning } from '../systems/attackTuningParams';
 
 /** 擴張環：初始半徑、深度、透明度、邊框粗細 */
 const RING_START_RADIUS = 10;
@@ -86,18 +85,25 @@ export class CombatFx {
     this.scene.tweens.add({ targets: core, alpha: 0, scale: 1.4, duration: cfg.ringMs * 0.7, onComplete: () => core.destroy() });
   }
 
-  /** 原地扇形劍氣：朝 angle 畫一個帶亮邊的淡出扇形 */
-  meleeArc(x: number, y: number, angle: number): void {
+  /**
+   * 原地扇形劍氣：朝 angle 畫一個帶亮邊的淡出扇形
+   *
+   * @param x 中心 x
+   * @param y 中心 y
+   * @param angle 朝向（弧度）
+   * @param radius 扇形半徑
+   * @param arcDeg 扇形角度（度）
+   */
+  meleeArc(x: number, y: number, angle: number, radius: number, arcDeg: number): void {
     const cfg = GameConfig.melee;
-    const range = attackTuning();
-    const half = Phaser.Math.DegToRad(range.meleeArcDeg) / 2;
+    const half = Phaser.Math.DegToRad(arcDeg) / 2;
     const g = this.scene.add.graphics().setDepth(ARC_DEPTH);
     g.fillStyle(cfg.arcColor, cfg.arcAlpha);
-    g.slice(x, y, range.meleeRadius, angle - half, angle + half, false);
+    g.slice(x, y, radius, angle - half, angle + half, false);
     g.fillPath();
     g.lineStyle(3, cfg.arcColor, Math.min(1, cfg.arcAlpha + 0.4));
     g.beginPath();
-    g.arc(x, y, range.meleeRadius, angle - half, angle + half);
+    g.arc(x, y, radius, angle - half, angle + half);
     g.strokePath();
     this.scene.tweens.add({ targets: g, alpha: 0, duration: cfg.arcFadeMs, onComplete: () => g.destroy() });
   }

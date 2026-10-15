@@ -9,7 +9,7 @@ import { standCharacterOutside } from '../systems/bodySeparation';
 import { isStructureEnemy } from '../systems/enemyKinds';
 import type { EdgeMargins } from '../systems/spriteFeet';
 import type { LockTarget, TargetingController } from './TargetingController';
-import { ATTACK_HIT_EVENT, afterHitDelay, attackTuning } from '../systems/attackTuningParams';
+import { ATTACK_HIT_EVENT, afterHitDelay, attackTuning, meleeSegment } from '../systems/attackTuningParams';
 
 /** 慢速模式八方向移動鍵（方向鍵 + WASD） */
 export interface SlowMoveKeys {
@@ -75,7 +75,8 @@ export interface CharacterActionHost {
   /** 強化衝刺撞到敵人：以 (x, y) 為中心炸圓形 AOE */
   empowerStrike(c: Character, x: number, y: number, time: number): void;
   flashWhite(c: Character): void;
-  spawnMeleeArcEffect(x: number, y: number, angle: number): void;
+  /** 普攻扇形劍氣特效（形狀 = 這一段的扇形半徑與角度） */
+  spawnMeleeArcEffect(x: number, y: number, angle: number, radius: number, arcDeg: number): void;
   /** 衝刺切入的刀光（穿過被砍的怪、沿衝刺方向的斬痕；大小依怪的顯示尺寸） */
   spawnSlashStreak(target: Enemy, angle: number, empowered: boolean): void;
 }
@@ -86,6 +87,8 @@ const STANDOFF_MARGIN = 6;
 const DASH_ARRIVE_MIN = 12;
 /** 衝刺到點距離 = 速度 × 此秒數（約兩幀），避免高速衝刺越過終點後反向、在牆邊來回震盪 */
 const DASH_ARRIVE_LOOKAHEAD_SEC = 0.032;
+/** 普攻段數（兩段輪流，對應 melee.hitDelayMs 與 P1 Spine 的 Attack01 / Attack02） */
+const MELEE_SEGMENTS = GameConfig.melee.hitDelayMs.length;
 /** 近戰往前踏停的距離最多是扇形半徑的這個比例（確保扇形打得到鎖定的敵人） */
 const SWING_STOP_RATIO = 0.7;
 
@@ -201,7 +204,7 @@ export class CharacterActionController {
     // 近戰門檻看到目標身體邊緣的距離：怪被真空圈推到圈邊時中心距離常超過門檻，用中心距離會一直變成衝刺
     // 往前踏停的距離不超過扇形半徑的 SWING_STOP_RATIO，範圍編輯器把扇形調小時仍打得到
     const range = attackTuning();
-    const stopAt = Math.min(GameConfig.melee.swingDistance, range.meleeRadius * SWING_STOP_RATIO);
+    const stopAt = Math.min(GameConfig.melee.swingDistance, meleeSegment(c.attackStep % MELEE_SEGMENTS).radius * SWING_STOP_RATIO);
     if (dist - (target as Enemy).getBodyRadius() <= range.meleeEnemyRange) this.stepInAndSwing(c, dist, time, stopAt);
     else this.dashAtEnemy(c, target as Enemy, dist, time);
   }
@@ -277,7 +280,7 @@ export class CharacterActionController {
     const target = this.attackDashTargets.get(c);
     this.attackDashTargets.delete(c);
     if (!target || !target.active || !target.isVulnerable()) return;
-    if (Phaser.Math.Distance.Between(c.x, c.y, target.x, target.y) > attackTuning().meleeRadius) return;
+    if (Phaser.Math.Distance.Between(c.x, c.y, target.x, target.y) > meleeSegment(c.attackStep % MELEE_SEGMENTS).radius) return;
     c.aimAngle = Phaser.Math.Angle.Between(c.x, c.y, target.x, target.y);
     this.performMeleeArc(c, time);
   }
@@ -414,32 +417,37 @@ export class CharacterActionController {
 
   /**
    * 普攻出手：記下這一下是第幾段（兩段輪流，P1 Spine 依此播 Attack01 / Attack02）並開始播動作，
-   * 等該段的判定時間點（attackTuning().hitMsAttack1 / 2）才判定命中；判定前角色倒下或進入受擊硬直就取消
+   * 等該段的判定時間點（meleeSegment）才以該段的扇形判定命中；判定前角色倒下或進入受擊硬直就取消
    *
    * @param c 攻擊的角色
    * @param time 目前場景時間
    */
   private performMeleeArc(c: Character, time: number): void {
-    const segment = c.attackStep % GameConfig.melee.hitDelayMs.length;
+    const segment = c.attackStep % MELEE_SEGMENTS;
     c.attackStep++;
     c.attackSegment = segment;
     c.markAction('attack');
-    const tuning = attackTuning();
-    const delay = segment === 0 ? tuning.hitMsAttack1 : tuning.hitMsAttack2;
     const aim = c.aimAngle;
-    afterHitDelay(c, delay, time, (hitTime) => {
+    afterHitDelay(c, meleeSegment(segment).hitMs, time, (hitTime) => {
       if (!c.alive || c.isHurtStunned(hitTime)) return;
       c.aimAngle = aim;
-      this.resolveMeleeArc(c, hitTime);
+      this.resolveMeleeArc(c, segment, hitTime);
     });
   }
 
-  /** 扇形劍氣判定：朝 aimAngle 劈出扇形，範圍內敵人受普攻傷害與擊退、順手打可破壞物件；命中至少一隻敵人才累積連段，敵人或物件命中算一下 HIT */
-  private resolveMeleeArc(c: Character, time: number): void {
+  /**
+   * 扇形劍氣判定：朝 aimAngle 以該段的扇形劈出，範圍內敵人受普攻傷害與擊退、順手打可破壞物件；
+   * 命中至少一隻敵人才累積連段，敵人或物件命中算一下 HIT
+   *
+   * @param c 攻擊的角色
+   * @param segment 普攻段數
+   * @param time 目前場景時間
+   */
+  private resolveMeleeArc(c: Character, segment: number, time: number): void {
     const emp = c.isEmpowered(time);
-    const range = attackTuning();
-    const radius = range.meleeRadius * (emp ? GameConfig.combo.empower.rangeMult : 1);
-    const half = Phaser.Math.DegToRad(range.meleeArcDeg) / 2;
+    const arc = meleeSegment(segment);
+    const radius = arc.radius * (emp ? GameConfig.combo.empower.rangeMult : 1);
+    const half = Phaser.Math.DegToRad(arc.arcDeg) / 2;
     const atk = this.host.attackDamage() * (emp ? GameConfig.combo.empower.damageMult : 1);
     let hitCount = 0;
     for (const child of this.host.enemies().getChildren()) {
@@ -456,8 +464,8 @@ export class CharacterActionController {
     if (hitCount > 0) this.host.onComboHit(c, time);
     if (hitCount > 0 || breakableHits > 0) this.host.triggerComboHit(c);
     this.host.flashWhite(c);
-    this.host.spawnMeleeArcEffect(c.x, c.y, c.aimAngle);
-    c.scene.events.emit(ATTACK_HIT_EVENT, c, 'melee');
+    this.host.spawnMeleeArcEffect(c.x, c.y, c.aimAngle, arc.radius, arc.arcDeg);
+    c.scene.events.emit(ATTACK_HIT_EVENT, c, segment === 0 ? 'attack1' : 'attack2');
   }
 
 

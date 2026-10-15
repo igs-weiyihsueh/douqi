@@ -1710,7 +1710,7 @@ export class GameScene extends Phaser.Scene {
       pickEmpowerTarget: (c) => this.comboSkills.pickEmpowerTarget(c),
       empowerStrike: (c, x, y, time) => this.comboSkills.empowerStrike(c, x, y, time),
       flashWhite: (c) => this.fx.flashWhite(c),
-      spawnMeleeArcEffect: (x, y, angle) => this.fx.meleeArc(x, y, angle),
+      spawnMeleeArcEffect: (x, y, angle, radius, arcDeg) => this.fx.meleeArc(x, y, angle, radius, arcDeg),
       spawnSlashStreak: (target, angle, empowered) =>
         this.fx.slashStreak(target.x, target.y, angle, empowered, undefined, this.hitFxScale(target))
     };
@@ -2172,7 +2172,7 @@ export class GameScene extends Phaser.Scene {
     this.emitStats();
   }
 
-  /** 木樁模式每幀：P1 的 CREDIT 補回 training.credit；木樁不在場上（被清掉）時在 P1 右方重新生成 */
+  /** 木樁模式每幀：P1 的 CREDIT 補回 training.credit；木樁不在場上（被清掉）時在 P1 右方重新生成（打不死、不會被擊退） */
   private keepTrainingReady(): void {
     const cfg = GameConfig.training;
     this.player.credit = Math.max(this.player.credit, cfg.credit);
@@ -2183,6 +2183,7 @@ export class GameScene extends Phaser.Scene {
     if (!e) return;
     e.spawn(x, this.player.y, this.time.now, cfg.dummyType, 1);
     e.immortal = true;
+    e.anchored = true;
     this.trainingDummy = e;
   }
 

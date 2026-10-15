@@ -26,6 +26,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   dead = false;
   /** 打不死（木樁模式的木樁）：每次 spawn 重設為 false，由生成端設定 */
   immortal = false;
+  /** 不會被擊退（木樁模式的木樁）：每次 spawn 重設為 false，由生成端設定 */
+  anchored = false;
   private maxHp = 0;
   private moveSpeed = 0;
   private bodyRadius = 0;
@@ -227,6 +229,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.hp = this.maxHp;
     this.dead = false;
     this.immortal = false;
+    this.anchored = false;
     this.knockbackUntil = 0;
     this.hitFreezeStartAt = 0;
     this.hitFreezeUntil = 0;
@@ -737,8 +740,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   applyKnockback(fromX: number, fromY: number, force: number, time: number): void {
-    // BOSS / 塔不被擊退推動（維持固定位置/自身 AI）。寶箱怪:跑點移動,不被擊退推(免干擾)。
-    if (this.isBoss || this.enemyType === 'tower' || this.enemyType === 'npc' || this.enemyType === 'treasure') return;
+    // BOSS / 塔不被擊退推動（維持固定位置/自身 AI）。寶箱怪:跑點移動,不被擊退推(免干擾)。木樁（anchored）站著讓人打，也不推。
+    if (this.isBoss || this.enemyType === 'tower' || this.enemyType === 'npc' || this.enemyType === 'treasure' || this.anchored) return;
     const scale = this.enemyType === 'tank' ? 0.5 : 1;
     const angle = Phaser.Math.Angle.Between(fromX, fromY, this.x, this.y);
     if (this.beginHitFreeze(time)) {
