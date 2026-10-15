@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { GameConfig } from '../config';
 import type { Character } from '../objects/Character';
 import { StageSettlementPanel, type SettlementColumn } from '../objects/StageSettlementPanel';
+import { ensureTicketTexture, TICKET_TEXTURE } from '../systems/ticketFx';
 
 /**
  * StageSettlementController 需要場景提供的能力。
@@ -16,7 +17,7 @@ export interface StageSettlementHost {
   panelAnchorOf(c: Character): { x: number; y: number };
   /** 依分數分配寶箱獎池（PayoutController.payStageChest），回傳各角色張數 */
   payStageChest(entries: ReadonlyArray<{ c: Character; score: number }>, tier: 'low' | 'high'): number[];
-  /** 彩票送到角色的下方面板（播放領獎特效） */
+  /** 彩票送到角色的下方面板（顯示彩票圖示 + 張數） */
   onTicketsArrived(c: Character, tickets: number): void;
   /** 結算播完：場景開出口、恢復操作 */
   onFinished(): void;
@@ -47,15 +48,32 @@ const CHEST_CONFIG = {
   GLOW_RADIUS: 120,
   GLOW_SCALE: 2.2,
   GLOW_COLOR: 0xfff3b0,
+  /**
+   * 蓄力（打開前）：寶箱左右抖動 CHARGE_SHAKE_X（每次單程 CHARGE_SHAKE_MS），金光從 0 漸亮到 CHARGE_GLOW_ALPHA、
+   * 放大到 CHARGE_GLOW_SCALE，箱身脈動放大到 CHARGE_PULSE_SCALE（每次單程 CHARGE_PULSE_MS）
+   */
+  CHARGE_SHAKE_X: 6,
+  CHARGE_SHAKE_MS: 45,
+  CHARGE_GLOW_ALPHA: 0.9,
+  CHARGE_GLOW_SCALE: 1.3,
+  CHARGE_PULSE_SCALE: 1.08,
+  CHARGE_PULSE_MS: 150,
   /** 各階級配色：箱身 / 金屬邊 */
   COLORS: {
     low: { body: 0x8d5524, trim: 0xd0d4dc },
     high: { body: 0xe0a800, trim: 0xfff3b0 }
   },
-  /** 飛出的彩票圖示：每人最多幾張、每張間隔、字型 */
+  /**
+   * 飛出的彩票圖示：每人最多幾張、每張間隔、縮放；先從寶箱往上噴到隨機點（左右 ± SPRAY_X、往上 SPRAY_Y_MIN~MAX，
+   * 佔整段飛行時間的 SPRAY_RATIO），再飛向 P位面板
+   */
   MAX_TICKET_ICONS: 5,
   TICKET_STAGGER_MS: 80,
-  TICKET_STYLE: { fontSize: '72px' }
+  TICKET_SCALE: 1.4,
+  SPRAY_X: 160,
+  SPRAY_Y_MIN: 80,
+  SPRAY_Y_MAX: 200,
+  SPRAY_RATIO: 0.3
 } as const;
 
 /** 寶箱演出用的物件 */
@@ -69,8 +87,8 @@ interface ChestFx {
  * 關卡結算（config.stageSettlement）：一般清敵關打完、場上寶箱怪 / 亂入 BOSS / 變身 BOSS 都結束後由場景呼叫 start。
  *
  * 1. 結算面板：4 個 P 位這一關的擊敗 / 傷害 / 破壞、分數與名次（StageSettlementPanel）
- * 2. 面板收起 → 寶箱從畫面上方降下 → 打開，參與玩家這一階寶箱 buffer 合成的獎池依分數比例分配
- * 3. 彩票從寶箱飛到各 P 位下方面板的彩票欄 → 通知場景結束（開出口、恢復操作）
+ * 2. 面板收起 → 寶箱從畫面上方降下 → 蓄力（抖動、金光漸亮）→ 打開，參與玩家這一階寶箱 buffer 合成的獎池依分數比例分配
+ * 3. 彩票從寶箱往上噴出、再飛到各 P 位下方面板的彩票欄（到達時顯示彩票圖示 + 張數）→ 通知場景結束（開出口、恢復操作）
  *
  * 參與者 = 開始結算時為遊玩或續關（creditState 'playing' / 'waiting'）的角色，名單在開始時定下：
  * 結算途中續關逾時變成待機的人照樣分到彩票。沒有參與者時直接結束。播放期間場景凍結角色（isActive）
@@ -136,7 +154,8 @@ export class StageSettlementController {
     let chest: ChestFx | null = null;
     schedule(t.panelOutMs, () => { chest = this.dropChest(tier, t.chestDropMs); });
     let amounts: number[] = [];
-    schedule(t.chestDropMs + t.chestOpenDelayMs, () => {
+    schedule(t.chestDropMs + t.chestOpenDelayMs, () => { if (chest) this.chargeChest(chest, t.chestChargeMs); });
+    schedule(t.chestChargeMs, () => {
       if (chest) this.openChest(chest, t.chestOpenMs);
       amounts = this.host.payStageChest(entries, tier);
     });
@@ -199,6 +218,27 @@ export class StageSettlementController {
   }
 
   /**
+   * 蓄力：寶箱左右抖動、箱身脈動，金光從無漸亮並放大（打開時接著擴散）
+   *
+   * @param chest 寶箱物件
+   * @param ms 蓄力時長
+   */
+  private chargeChest(chest: ChestFx, ms: number): void {
+    const cfg = CHEST_CONFIG;
+    const tweens = this.host.scene.tweens;
+    const x = chest.root.x;
+    tweens.add({
+      targets: chest.root, x: { from: x - cfg.CHARGE_SHAKE_X, to: x + cfg.CHARGE_SHAKE_X }, duration: cfg.CHARGE_SHAKE_MS,
+      yoyo: true, repeat: Math.max(0, Math.floor(ms / (cfg.CHARGE_SHAKE_MS * 2)) - 1), onComplete: () => chest.root.setX(x)
+    });
+    tweens.add({
+      targets: chest.root, scale: cfg.CHARGE_PULSE_SCALE, duration: cfg.CHARGE_PULSE_MS,
+      yoyo: true, repeat: Math.max(0, Math.floor(ms / (cfg.CHARGE_PULSE_MS * 2)) - 1), onComplete: () => chest.root.setScale(1)
+    });
+    tweens.add({ targets: chest.glow, alpha: { from: 0, to: cfg.CHARGE_GLOW_ALPHA }, scale: { from: 1, to: cfg.CHARGE_GLOW_SCALE }, duration: ms, ease: 'Quad.easeIn' });
+  }
+
+  /**
    * 打開寶箱：箱蓋往上掀並淡出、金光擴散
    *
    * @param chest 寶箱物件
@@ -210,11 +250,12 @@ export class StageSettlementController {
     scene.tweens.add({
       targets: chest.lid, y: chest.lid.y - cfg.LID_OPEN_RISE, angle: cfg.LID_OPEN_ANGLE, alpha: 0, duration: ms, ease: 'Quad.easeOut'
     });
-    scene.tweens.add({ targets: chest.glow, alpha: { from: 1, to: 0 }, scale: { from: 1, to: cfg.GLOW_SCALE }, duration: ms * 3 });
+    scene.tweens.killTweensOf(chest.glow);
+    scene.tweens.add({ targets: chest.glow, alpha: { from: 1, to: 0 }, scale: { from: cfg.CHARGE_GLOW_SCALE, to: cfg.GLOW_SCALE }, duration: ms * 3 });
   }
 
   /**
-   * 彩票圖示從寶箱飛到角色下方面板的彩票欄，最後一張到達時通知場景；0 張時不飛
+   * 彩票圖示從寶箱往上噴到隨機點、再飛到角色下方面板的彩票欄，最後一張到達時通知場景；0 張時不飛
    *
    * @param c 領獎的角色
    * @param tickets 張數
@@ -226,13 +267,22 @@ export class StageSettlementController {
     const layer = this.host.ticketLayer();
     const icons = Math.min(tickets, cfg.MAX_TICKET_ICONS);
     const flyMs = Math.max(1, ms - cfg.TICKET_STAGGER_MS * (icons - 1));
+    const sprayMs = flyMs * cfg.SPRAY_RATIO;
     const to = this.host.panelAnchorOf(c);
+    const fromY = cfg.TO_Y - cfg.BODY_HEIGHT / 2;
+    ensureTicketTexture(layer);
     for (let i = 0; i < icons; i++) {
-      const icon = layer.add.text(cfg.X, cfg.TO_Y - cfg.BODY_HEIGHT / 2, '🎫', cfg.TICKET_STYLE)
-        .setOrigin(0.5).setScrollFactor(0).setDepth(TICKET_DEPTH);
+      const icon = layer.add.image(cfg.X, fromY, TICKET_TEXTURE).setScale(cfg.TICKET_SCALE).setScrollFactor(0).setDepth(TICKET_DEPTH);
       const last = i === icons - 1;
-      layer.tweens.add({
-        targets: icon, x: to.x, y: to.y, delay: i * cfg.TICKET_STAGGER_MS, duration: flyMs, ease: 'Cubic.easeIn',
+      layer.tweens.chain({
+        targets: icon,
+        tweens: [
+          {
+            x: cfg.X + Phaser.Math.Between(-cfg.SPRAY_X, cfg.SPRAY_X), y: fromY - Phaser.Math.Between(cfg.SPRAY_Y_MIN, cfg.SPRAY_Y_MAX),
+            delay: i * cfg.TICKET_STAGGER_MS, duration: sprayMs, ease: 'Quad.easeOut'
+          },
+          { x: to.x, y: to.y, duration: flyMs - sprayMs, ease: 'Cubic.easeIn' }
+        ],
         onComplete: () => {
           icon.destroy();
           if (last) this.host.onTicketsArrived(c, tickets);

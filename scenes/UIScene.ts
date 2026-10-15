@@ -8,6 +8,7 @@ export const JACKPOT_BANNER_TEXTURE = 'jackpot-banner';
 import type { StageNodeKind } from '../systems/stageQueue';
 import { HitCounter } from '../objects/HitCounter';
 import { CoinBonusBar } from '../objects/CoinBonusBar';
+import { popTicketReward } from '../systems/ticketFx';
 
 /** 卷軸 HUD 節點狀態類型 */
 type StageNodeState = 'current' | 'pending' | 'done';
@@ -208,9 +209,9 @@ export class UIScene extends Phaser.Scene {
     REWARD_TEXT_FONT_SIZE: '42px',
     REWARD_TEXT_STROKE_WIDTH: 4,
     REWARD_TEXT_DEPTH: 1500,
-    REWARD_TEXT_RISE: 90,
+    REWARD_TEXT_RISE: 60,
     REWARD_TEXT_SCALE_TO: 1.3,
-    REWARD_TEXT_DURATION_MS: 2000,
+    REWARD_TEXT_DURATION_MS: 1200,
     /** 報獎閃光起始半徑（像素） */
     REWARD_FLASH_START_RADIUS: 12,
     /** 報獎閃光擴張最大半徑（像素） */
@@ -1683,6 +1684,18 @@ export class UIScene extends Phaser.Scene {
     }
     this.createFinalFlashEffect(x, y);
     this.spawnRewardText(x, y, tickets);
+  }
+
+  /**
+   * 關卡結算的彩票飛到 P位面板：在該角色 HIT 顯示的位置顯示彩票圖示 + 張數（不另外噴發彩票）
+   *
+   * @param index 角色索引（對應 panelHitCounters）
+   * @param tickets 張數（0 以下不顯示）
+   */
+  showTicketGain(index: number, tickets: number): void {
+    const counter = this.panelHitCounters[index];
+    if (!counter) return;
+    popTicketReward(this, counter.centerX, counter.centerY, tickets, { depth: this.PANEL_COMBO_CONFIG.REWARD_TEXT_DEPTH, scrollFactor: 0 });
   }
 
   /**

@@ -226,7 +226,7 @@ export class GameScene extends Phaser.Scene {
       panelAnchorOf: (c) => (this.scene.get('UIScene') as UIScene).panelTicketAnchor(c.index)
         ?? { x: c.x - this.cameras.main.scrollX, y: c.y - this.cameras.main.scrollY },
       payStageChest: (entries, tier) => this.payout.payStageChest(entries, tier),
-      onTicketsArrived: (c, tickets) => this.showTicketReward(c, tickets),
+      onTicketsArrived: (c, tickets) => (this.scene.get('UIScene') as any)?.showTicketGain?.(c.index, tickets),
       onFinished: () => this.onSubZoneComplete()
     });
     new PayoutDebugPanel(this, this.payout, () => this.characters); // 除錯：回饋帳本面板（自行註冊熱鍵與場景關閉時的清理）
@@ -1267,7 +1267,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * 彩票獎勵（小關卡寶箱、打破木箱；彩票已由回饋帳本加到角色身上）：在下方面板播放彩票特效，0 張時不播
+   * 打破木箱的彩票獎勵（彩票已由回饋帳本加到角色身上）：在下方面板播放彩票噴發特效，0 張時不播
    *
    * @param c 獲得獎勵的角色
    * @param tickets 彩票張數
@@ -2436,7 +2436,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * 敵人位置飄出「+N 🎫」（二段變身、亂入 BOSS、變身 BOSS 的彩票；0 張時不顯示）
+   * 敵人位置的彩票獲得提示（彩票圖示 + 張數；二段變身、亂入 BOSS、變身 BOSS 的彩票；0 張時不顯示）
    *
    * @param x 敵人 x
    * @param y 敵人 y

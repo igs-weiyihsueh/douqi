@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GameConfig } from '../config';
+import { popTicketReward } from '../systems/ticketFx';
 import { crateBodyBounds, distanceToBounds, type Breakable } from '../objects/Breakable';
 import type { Character } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
@@ -448,7 +449,7 @@ export class BreakableController {
   }
 
   /**
-   * 木箱位置的彩票提示：金光圈擴散 + 「+N 彩票」往上飄並淡出
+   * 木箱位置的彩票提示：金光圈擴散 + 彩票圖示與張數
    *
    * @param x 木箱中心 x
    * @param y 木箱中心 y
@@ -457,15 +458,7 @@ export class BreakableController {
   private spawnTicketFx(x: number, y: number, tickets: number): void {
     const fx = GameConfig.breakable.crate.ticketFx;
     this.host.spawnExpandingRing(x, y, fx.ringRadius, fx.ringColor, fx.ringMs);
-    // 粗體中文加描邊時字形上緣會超出量到的行高而被切掉，上下留 padding
-    const text = this.scene.add.text(x, y, fx.text.replace('{n}', String(tickets)), {
-      fontFamily: 'monospace', fontSize: `${fx.fontSize}px`, fontStyle: 'bold', color: fx.color,
-      stroke: fx.stroke, strokeThickness: fx.strokeThickness, padding: { top: fx.paddingY, bottom: fx.paddingY }
-    }).setOrigin(0.5, 1).setDepth(fx.depth);
-    this.scene.tweens.add({
-      targets: text, y: y - fx.riseY, alpha: 0, duration: fx.durationMs, ease: 'Cubic.easeOut',
-      onComplete: () => text.destroy()
-    });
+    popTicketReward(this.scene, x, y, tickets, { depth: fx.depth });
   }
 
   /**

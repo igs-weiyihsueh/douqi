@@ -3,6 +3,7 @@ import { GameConfig } from '../config';
 import type { Character } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
 import { hitFeel } from '../systems/hitFeelParams';
+import { popTicketReward } from '../systems/ticketFx';
 
 /** 擴張環：初始半徑、深度、透明度、邊框粗細 */
 const RING_START_RADIUS = 10;
@@ -20,11 +21,9 @@ const DAMAGE_TEXT_STYLE: Phaser.Types.GameObjects.Text.TextStyle = {
   fontFamily: 'monospace', fontSize: '18px', color: '#ffe66d', stroke: '#000000', strokeThickness: 3
 };
 const DAMAGE_TEXT_DEPTH = 50;
-/** 彩票數字「+N 🎫」：深度、起點離敵人中心的高度、往上飄的距離與時間（字型見 GameConfig.ticketPopup；不受節流，獎勵一定要看得到） */
+/** 彩票獲得提示：深度、離敵人中心的高度（樣式與動態見 GameConfig.ticketFx.popup；不受節流，獎勵一定要看得到） */
 const TICKET_TEXT_DEPTH = 51;
 const TICKET_TEXT_OFFSET_Y = 40;
-const TICKET_TEXT_RISE = 60;
-const TICKET_TEXT_MS = 800;
 /** 斬擊圈：起始 / 結束半徑、深度、時間 */
 const SLASH_START_RADIUS = 6;
 const SLASH_END_RADIUS = 42;
@@ -153,19 +152,14 @@ export class CombatFx {
   }
 
   /**
-   * 往上飄的彩票數字「+N 🎫」（不受節流）
+   * 敵人上方的彩票獲得提示（彩票圖示 + 張數，不受節流）
    *
    * @param x 敵人 x
    * @param y 敵人 y
    * @param tickets 彩票張數
    */
   ticketText(x: number, y: number, tickets: number): void {
-    const startY = y - TICKET_TEXT_OFFSET_Y;
-    const text = this.scene.add.text(x, startY, `+${tickets} 🎫`, { fontFamily: 'monospace', fontStyle: 'bold', ...GameConfig.ticketPopup }).setOrigin(0.5).setDepth(TICKET_TEXT_DEPTH);
-    this.scene.tweens.add({
-      targets: text, y: startY - TICKET_TEXT_RISE, alpha: 0, duration: TICKET_TEXT_MS, ease: 'Cubic.easeOut',
-      onComplete: () => text.destroy()
-    });
+    popTicketReward(this.scene, x, y - TICKET_TEXT_OFFSET_Y, tickets, { depth: TICKET_TEXT_DEPTH });
   }
 
   /** 敵人死亡的粒子爆散（受節流） */

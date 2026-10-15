@@ -315,6 +315,7 @@ export const GameConfig = {
       panelOutMs: 300,
       chestDropMs: 700,
       chestOpenDelayMs: 300,
+      chestChargeMs: 900,
       chestOpenMs: 300,
       ticketFlyMs: 900,
       endHoldMs: 900
@@ -538,12 +539,39 @@ export const GameConfig = {
     MILESTONES: [5, 10, 20, 50, 100] as const,
   },
 
-  /** 敵人身上飄出的「+N 🎫」（二段變身、亂入 / 變身 BOSS、派對密室的彩票）的字型 */
-  ticketPopup: {
-    fontSize: '40px',
-    color: '#ffd166',
-    stroke: '#000000',
-    strokeThickness: 7
+  /**
+   * 彩票特效（systems/ticketFx）：
+   * - popup：獲得彩票時的「彩票圖示 + 張數」（二段變身、BOSS、寶箱怪 / 派對密室、木箱、關卡結算到 P位面板）：
+   *   圖示縮放、圖示與數字間距、字型；從 popFromScale 彈到原尺寸（popMs）、停 holdMs，再往上飄 riseY 並淡出（fadeMs）
+   * - fountain：彩票噴泉（打倒寶箱怪、結算寶箱打開）：最多 maxIcons 張，往上 ± spreadDeg/2 噴出，初速 speedMin~Max（px/s）、
+   *   重力 gravity（px/s²）、存活 lifeMs（± lifeJitter 比例）、最後 fadeMs 淡出、自轉最多 spinDeg 度/秒
+   */
+  ticketFx: {
+    popup: {
+      iconScale: 1.1,
+      gap: 6,
+      fontSize: '40px',
+      color: '#ffd166',
+      stroke: '#000000',
+      strokeThickness: 7,
+      popFromScale: 0.4,
+      popMs: 220,
+      holdMs: 450,
+      riseY: 50,
+      fadeMs: 450
+    },
+    fountain: {
+      maxIcons: 24,
+      iconScale: 0.8,
+      spreadDeg: 110,
+      speedMin: 380,
+      speedMax: 620,
+      gravity: 1400,
+      lifeMs: 1000,
+      lifeJitter: 0.2,
+      fadeMs: 300,
+      spinDeg: 540
+    }
   },
 
   /**
@@ -555,26 +583,26 @@ export const GameConfig = {
    * **用戶視覺問題修復**：調整參數讓彩票更明顯可見
    */
   ticketEffect: {
-    /** 噴發角度參數（度數制） - 調整為更保守的可視範圍 */
+    /** 噴發角度參數（度數制，上方扇形） */
     BURST_ANGLE: {
-      /** 上方扇形左邊界角度 - 調整為更垂直 */
-      MIN: -100,
-      /** 上方扇形右邊界角度 - 調整為更垂直 */
-      MAX: -80
+      /** 上方扇形左邊界角度 */
+      MIN: -115,
+      /** 上方扇形右邊界角度 */
+      MAX: -65
     },
     
-    /** 物理引擎參數 - 降低速度，延長觀看時間 */
+    /** 物理參數：初速快、重力大 → 噴得不高（約 50~70px）、很快落下，節奏緊湊 */
     PHYSICS: {
-      /** 最小初始速度 (px/s) - 大幅降低讓彩票飛得更慢 */
-      MIN_VELOCITY: 80,
-      /** 最大初始速度 (px/s) - 大幅降低讓彩票飛得更慢 */
-      MAX_VELOCITY: 150,
-      /** 每個里程碑的最小速度加成 - 降低加成 */
-      VELOCITY_MILESTONE_BONUS: 2,
-      /** 每個里程碑的最大速度加成 - 降低加成 */
-      VELOCITY_MAX_BONUS: 3,
-      /** 重力加速度 (px/s²) - 降低重力讓彩票飛更高更久 */
-      GRAVITY: 150,
+      /** 最小初始速度 (px/s) */
+      MIN_VELOCITY: 260,
+      /** 最大初始速度 (px/s) */
+      MAX_VELOCITY: 360,
+      /** 每個里程碑的最小速度加成 */
+      VELOCITY_MILESTONE_BONUS: 0.5,
+      /** 每個里程碑的最大速度加成 */
+      VELOCITY_MAX_BONUS: 1,
+      /** 重力加速度 (px/s²) */
+      GRAVITY: 1100,
       /** 自轉速度 (圈/秒) */
       ROTATION_SPEED: 2,
       /** 物理更新間隔毫秒 (~60FPS) */
@@ -597,12 +625,12 @@ export const GameConfig = {
       DEPTH: 200
     },
     
-    /** 時間和數量參數 - 延長生命週期 */
+    /** 時間和數量參數 */
     TIMING: {
-      /** 基礎生命週期毫秒 - 延長讓用戶有更多時間看到 */
-      LIFETIME_BASE_MS: 6000,
+      /** 基礎生命週期毫秒 */
+      LIFETIME_BASE_MS: 900,
       /** 隨機延長時間毫秒 */
-      LIFETIME_RANDOM_MS: 2000,
+      LIFETIME_RANDOM_MS: 300,
       /** 基礎彩票數量 */
       TICKET_COUNT_BASE: 8,
       /** 最大彩票數量 */
@@ -1809,24 +1837,16 @@ export const GameConfig = {
       /** 碰撞 / 命中範圍 = 圖片可見外框（矩形，已乘 displayScale）以中心縮放此倍率；1 = 與看到的木箱外框一致 */
       bodyScale: 1,
       /**
-       * 打破木箱的獎勵：ticketChance 機率中獎，發出打破者的木箱 buffer（payout；下方面板播 HIT 報獎特效，木箱位置爆出金光與「+N 彩票」）；
+       * 打破木箱的獎勵：ticketChance 機率中獎，發出打破者的木箱 buffer（payout；下方面板播 HIT 報獎特效，木箱位置爆出金光與彩票圖示 + 張數）；
        * treasureChance 機率從木箱位置跳出寶箱怪（每個小關卡最多一隻，最後一波打完後不出）
        */
       ticketChance: 0.2,
       treasureChance: 0.08,
-      /** 木箱位置的彩票提示：金光圈半徑 / 時間、文字（{n} = 張數）、上飄距離 / 時間與樣式 */
+      /** 木箱位置的彩票提示：金光圈半徑 / 顏色 / 時間，彩票獲得提示（ticketFx.popup）的深度 */
       ticketFx: {
         ringRadius: 90,
         ringColor: 0xffd700,
         ringMs: 400,
-        text: '+{n} 彩票',
-        riseY: 60,
-        durationMs: 900,
-        fontSize: 44,
-        color: '#ffd166',
-        stroke: '#000000',
-        strokeThickness: 7,
-        paddingY: 6,
         depth: 40
       }
     },

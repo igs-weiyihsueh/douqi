@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GameConfig } from '../config';
+import { popTicketReward, ticketFountain } from '../systems/ticketFx';
 import type { Character } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
 
@@ -35,6 +36,14 @@ export interface TreasureEnemyHost {
 const SPAWN_EDGE_MARGIN = 20;
 /** 跑點移動：到點判定距離 */
 const MOVE_ARRIVE_PX = 16;
+/**
+ * 跑點卡住判定：衝刺中每 STUCK_CHECK_MS 檢查一次，這段時間的位移不到應有距離的 STUCK_MIN_PROGRESS 比例
+ * （被木箱擋住、在木箱間來回彈）就換一個目標點；新目標點與原本前進方向至少差 STUCK_TURN_DEG 度，最多試 STUCK_PICK_TRIES 次
+ */
+const STUCK_CHECK_MS = 300;
+const STUCK_MIN_PROGRESS = 0.35;
+const STUCK_TURN_DEG = 90;
+const STUCK_PICK_TRIES = 8;
 /** 跑走速度倍率與淡出時間：限時到自己跑走 / 換區前立即逃走 */
 const FLEE_SPEED_MULT = 1.4;
 const FLEE_FADE_MS = 700;
@@ -58,8 +67,9 @@ const BANNER_STYLE: Phaser.Types.GameObjects.Text.TextStyle = {
 };
 const BANNER_Y_RATIO = 0.24;
 const BANNER_DEPTH = 31;
-/** 頭上彩票數字深度（字型見 GameConfig.ticketPopup） */
+/** 彩票獲得提示與噴泉的深度（樣式見 GameConfig.ticketFx）；打倒時的提示放大倍率 */
 const TICKET_TEXT_DEPTH = 40;
+const TICKET_KILL_SCALE = 1.5;
 /** 金幣噴散深度 */
 const COIN_DEPTH = 21;
 
@@ -80,6 +90,8 @@ export class TreasureEnemyController {
   private readonly roomTreasures = new Set<Enemy>();
   /** 這個小關卡（舊波次制為這一波）已經出過寶箱怪 */
   private spawnedThisRound = false;
+  /** 跑點卡住判定的上一次取樣（位置與時間）；停頓或換目標時清除 */
+  private readonly moveProbes = new WeakMap<Enemy, { x: number; y: number; at: number }>();
 
   constructor(private readonly host: TreasureEnemyHost) {}
 
@@ -310,7 +322,7 @@ export class TreasureEnemyController {
     this.host.spawnDamageText(enemy.x, enemy.y - 10, hitsToKill - enemy.treasureHits);
     if (inRoom) {
       const tickets = this.host.payRoomTickets(actor, false);
-      if (tickets > 0) this.popTicketText(enemy.x, enemy.y - 40, tickets);
+      popTicketReward(this.scene, enemy.x, enemy.y - 40, tickets, { depth: TICKET_TEXT_DEPTH });
     }
     if (enemy.treasureHits >= hitsToKill) {
       const dx = enemy.x, dy = enemy.y;
@@ -318,7 +330,10 @@ export class TreasureEnemyController {
       if (inRoom) {
         this.roomTreasures.delete(enemy);
         const tickets = this.host.payRoomTickets(actor, true);
-        if (tickets > 0) this.popTicketText(dx, dy - 70, tickets);
+        if (tickets > 0) {
+          ticketFountain(this.scene, dx, dy, tickets, { depth: TICKET_TEXT_DEPTH });
+          popTicketReward(this.scene, dx, dy - 70, tickets, { depth: TICKET_TEXT_DEPTH + 1, scale: TICKET_KILL_SCALE });
+        }
       }
       if (this.treasure === enemy) { this.treasure = null; this.clearFx(); }
       this.spawnCoins(dx, dy, cfg.coinsOnDeath, true);
@@ -374,6 +389,7 @@ export class TreasureEnemyController {
     if (t.treasureFleeing) return; // 跑走中維持速度直到淡出移除
     if (time < t.treasurePauseUntil) {
       body.setVelocity(0, 0); // 停頓中（玩家追打的空檔）
+      this.moveProbes.delete(t);
       return;
     }
     const arrived = Phaser.Math.Distance.Between(t.x, t.y, t.treasureMoveTX, t.treasureMoveTY) <= MOVE_ARRIVE_PX;
@@ -386,14 +402,53 @@ export class TreasureEnemyController {
         return;
       }
       // 停頓完或靜止待命 → 挑新點衝過去
-      const a = this.host.arena(), r = GameConfig.enemy.types.treasure.radius;
-      t.treasureMoveTX = Phaser.Math.Between(a.left + r + SPAWN_EDGE_MARGIN, a.right - r - SPAWN_EDGE_MARGIN);
-      t.treasureMoveTY = Phaser.Math.Between(a.top + r + SPAWN_EDGE_MARGIN, a.bottom - r - SPAWN_EDGE_MARGIN);
+      this.pickMoveTarget(t, false);
       t.treasurePauseUntil = 0;
+    } else if (this.isStuck(t, time)) {
+      this.pickMoveTarget(t, true);
     }
     // 朝目標點衝（途中每幀修正方向，避免越過目標亂飄）
     const ang = Phaser.Math.Angle.Between(t.x, t.y, t.treasureMoveTX, t.treasureMoveTY);
     body.setVelocity(Math.cos(ang) * cfg.moveSpeed, Math.sin(ang) * cfg.moveSpeed);
+  }
+
+  /**
+   * 挑下一個跑點（移動區內的隨機點）
+   *
+   * @param t 寶箱怪
+   * @param turn true = 卡住換方向：新目標方向要與原本前進方向差 STUCK_TURN_DEG 度以上（試 STUCK_PICK_TRIES 次，都不行就用最後一次）
+   */
+  private pickMoveTarget(t: Enemy, turn: boolean): void {
+    const a = this.host.arena(), r = GameConfig.enemy.types.treasure.radius;
+    const heading = Phaser.Math.Angle.Between(t.x, t.y, t.treasureMoveTX, t.treasureMoveTY);
+    for (let i = 0; i < STUCK_PICK_TRIES; i++) {
+      t.treasureMoveTX = Phaser.Math.Between(a.left + r + SPAWN_EDGE_MARGIN, a.right - r - SPAWN_EDGE_MARGIN);
+      t.treasureMoveTY = Phaser.Math.Between(a.top + r + SPAWN_EDGE_MARGIN, a.bottom - r - SPAWN_EDGE_MARGIN);
+      if (!turn) break;
+      const next = Phaser.Math.Angle.Between(t.x, t.y, t.treasureMoveTX, t.treasureMoveTY);
+      if (Math.abs(Phaser.Math.Angle.Wrap(next - heading)) >= Phaser.Math.DegToRad(STUCK_TURN_DEG)) break;
+    }
+    this.moveProbes.delete(t);
+  }
+
+  /**
+   * 衝刺中是否卡住：每 STUCK_CHECK_MS 取樣一次位置，位移不到應有距離（moveSpeed × 經過時間）的 STUCK_MIN_PROGRESS 比例就算卡住
+   *
+   * @param t 寶箱怪
+   * @param time 目前場景時間
+   */
+  private isStuck(t: Enemy, time: number): boolean {
+    const probe = this.moveProbes.get(t);
+    if (!probe) {
+      this.moveProbes.set(t, { x: t.x, y: t.y, at: time });
+      return false;
+    }
+    const elapsed = time - probe.at;
+    if (elapsed < STUCK_CHECK_MS) return false;
+    const moved = Phaser.Math.Distance.Between(probe.x, probe.y, t.x, t.y);
+    const expected = GameConfig.enemy.treasure.moveSpeed * (elapsed / 1000);
+    this.moveProbes.set(t, { x: t.x, y: t.y, at: time });
+    return moved < expected * STUCK_MIN_PROGRESS;
   }
 
   /** 限時到或獎勵關結束：朝最近的牆跑走並淡出移除 */
@@ -439,12 +494,6 @@ export class TreasureEnemyController {
     this.scene.tweens.add({ targets: t, alpha: 1, scale: 1, duration: 260, ease: 'Back.out' });
     this.scene.tweens.add({ targets: t, alpha: 0, delay: cfg.bannerHoldMs, duration: 450,
       onComplete: () => { if (this.banner === t) this.banner = null; t.destroy(); } });
-  }
-
-  /** 頭上飄出「+N 🎫」 */
-  private popTicketText(x: number, y: number, tickets: number): void {
-    const txt = this.scene.add.text(x, y, `+${tickets} 🎫`, { fontFamily: 'monospace', fontStyle: 'bold', ...GameConfig.ticketPopup }).setOrigin(0.5).setDepth(TICKET_TEXT_DEPTH);
-    this.scene.tweens.add({ targets: txt, y: y - 60, alpha: 0, duration: 800, onComplete: () => txt.destroy() });
   }
 
   /**
