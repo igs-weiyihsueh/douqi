@@ -2,9 +2,9 @@ import Phaser from 'phaser';
 import { GameConfig } from '../config';
 import type { Character, ReadyCombo } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
-import { pointInOrientedRect } from '../systems/geometry';
 import type { TargetingController } from './TargetingController';
-import { ATTACK_HIT_EVENT, afterHitDelay, attackTuning } from '../systems/attackTuningParams';
+import { ATTACK_HIT_EVENT, afterHitDelay, moveHitMs, moveShape } from '../systems/attackTuningParams';
+import { drawHitShape, hitShapeContains, placeHitShape, type PlacedHitShape } from '../systems/hitShapes';
 
 /**
  * ComboSkillController 需要場景提供的能力。由 GameScene 建立並傳入；控制器不直接存取場景私有成員。
@@ -27,9 +27,8 @@ export interface ComboSkillHost {
   damageEnemyFrom(actor: Character, enemy: Enemy, damage: number, knockback: number, fromX: number, fromY: number, time: number): void;
   /** 角色對敵人造成傷害（以角色位置為來源） */
   damageEnemy(actor: Character, enemy: Enemy, damage: number, knockback: number, time: number): void;
-  /** 招式 AOE 命中可破壞物件（圓形 / 定向矩形，每個扣 1 耐久），回傳命中數 */
-  hitBreakablesInCircle(actor: Character, x: number, y: number, radius: number, time: number): number;
-  hitBreakablesInRect(actor: Character, ox: number, oy: number, dir: number, back: number, length: number, width: number, time: number): number;
+  /** 判定範圍內的可破壞物件各扣 1 耐久（以物件中心判定），回傳命中數 */
+  hitBreakablesInShape(actor: Character, shape: PlacedHitShape, time: number): number;
   /** COMBO 連擊 +1（一招命中至少一隻敵人或一個可破壞物件算一下） */
   comboRewardHit(c: Character): void;
   /** P1 普攻命中次數 +1（結算統計） */
@@ -59,6 +58,9 @@ const LINE_BAND_COLOR = 0xff4d6d;
 const LINE_BAND_STROKE = 0xffccd5;
 const LINE_BAND_DEPTH = 20;
 const LINE_BAND_FADE_MS = 300;
+/** 範圍特效（連段技、非圓形的爆發 / 衝刺攻擊）的填色與邊框透明度 */
+const SHAPE_FX_FILL_ALPHA = 0.4;
+const SHAPE_FX_STROKE_ALPHA = 0.7;
 /** 強化觸發的擴張環與持續光環 */
 const EMPOWER_RING_RADIUS = 120;
 const EMPOWER_RING_COLOR = 0xffd700;
@@ -160,23 +162,22 @@ export class ComboSkillController {
 
   /**
    * 施放連段技：立即開始播動作並進入表演時間（無敵、不能操作，涵蓋判定前的蓄勢），
-   * 等判定時間點（attackTuning().hitMsCircle / hitMsLine）才判定命中；直線氣波的方向在放出時決定
+   * 等判定時間點（moveHitMs）才判定命中；判定範圍的方向在放出時決定
    *
    * @param c 角色
    * @param kind 連段技
    * @param time 目前場景時間
    */
   private performCombo(c: Character, kind: ReadyCombo, time: number): void {
-    const tuning = attackTuning();
     const circle = kind === 'circle';
-    const delay = circle ? tuning.hitMsCircle : tuning.hitMsLine;
+    const delay = moveHitMs(kind);
     const perf = GameConfig.performanceTime;
     c.markAction(circle ? 'comboCircle' : 'comboLine');
     this.enterPerformance(c, delay + (circle ? perf.circle : perf.line), time);
     const dir = c.aimAngle;
     afterHitDelay(c, delay, time, (hitTime) => {
       if (!c.alive) return;
-      if (circle) this.comboCircle(c, hitTime);
+      if (circle) this.comboCircle(c, dir, hitTime);
       else this.comboLine(c, dir, hitTime);
     });
   }
@@ -262,26 +263,22 @@ export class ComboSkillController {
 
   private empowerAoeBurst(c: Character, tx: number, ty: number, time: number): void {
     const cfg = GameConfig.combo.empower.aoe;
-    const radius = cfg.radius;
+    const shape = placeHitShape(moveShape('dash'), tx, ty, c.aimAngle);
     const dmg = cfg.damage * GameConfig.combo.empower.damageMult;
-    this.host.spawnExpandingRing(tx, ty, radius, cfg.color, cfg.ringMs);
-    this.host.spawnExpandingRing(tx, ty, radius * 0.6, AOE_INNER_RING_COLOR, cfg.ringMs * 0.8);
-    this.host.shakeOnce(GameConfig.juice.burstShakeDuration, GameConfig.juice.burstShakeIntensity * 0.5);
-    let hitAny = false;
-    for (const child of this.host.enemies().getChildren()) {
-      const enemy = child as Enemy;
-      if (!enemy.isVulnerable()) continue;
-      if (Phaser.Math.Distance.Between(tx, ty, enemy.x, enemy.y) <= radius) {
-        this.host.damageEnemyFrom(c, enemy, dmg, cfg.knockback, tx, ty, time);
-        hitAny = true;
-      }
+    if (shape.kind === 'circle') {
+      this.host.spawnExpandingRing(shape.x, shape.y, shape.radius, cfg.color, cfg.ringMs);
+      this.host.spawnExpandingRing(shape.x, shape.y, shape.radius * 0.6, AOE_INNER_RING_COLOR, cfg.ringMs * 0.8);
+    } else {
+      this.showShape(shape, cfg.color, AOE_INNER_RING_COLOR, cfg.ringMs);
     }
-    if (this.host.hitBreakablesInCircle(c, tx, ty, radius, time) > 0) hitAny = true; // 範圍內的木箱各算一下
-    if (hitAny) {
+    this.host.shakeOnce(GameConfig.juice.burstShakeDuration, GameConfig.juice.burstShakeIntensity * 0.5);
+    c.scene.events.emit(ATTACK_HIT_EVENT, c, 'dash');
+    if (this.hitInShape(c, shape, dmg, cfg.knockback, time)) {
       this.host.comboRewardHit(c);
       this.registerEmpowerAoeHit(c, time);
     }
   }
+
 
   /** 慢速變身專屬爆發：每累積 burstEveryAoeHits 次 AOE 命中觸發一次爆發（爆發中不重複） */
   private registerEmpowerAoeHit(c: Character, time: number): void {
@@ -291,26 +288,25 @@ export class ComboSkillController {
     this.triggerBurst(c, time);
   }
 
-  /** 連段技判定：圓形斬——以角色為中心的圓形 AOE 與擴張環，順手秒碎範圍內的物件（表演時間在放出時已進入，見 performCombo） */
-  private comboCircle(c: Character, time: number): void {
+  /**
+   * 連段技判定：圓形斬——圓形斬的判定範圍（預設以角色為中心的圓）內受傷，圓形時播擴張環，順手秒碎範圍內的物件
+   * （表演時間在放出時已進入，見 performCombo）
+   *
+   * @param c 施放的角色
+   * @param dir 方向（放出時的面向）
+   * @param time 目前場景時間
+   */
+  private comboCircle(c: Character, dir: number, time: number): void {
     const cfg = GameConfig.combo.circle;
-    const radius = attackTuning().circleRadius;
+    const shape = placeHitShape(moveShape('circle'), c.x, c.y, dir);
     const dmg = cfg.damage * (c.isEmpowered(time) ? GameConfig.combo.empower.damageMult : 1);
-    this.host.spawnExpandingRing(c.x, c.y, radius, CIRCLE_RING_COLOR, CIRCLE_RING_MS);
-    let hitAny = false;
-    for (const child of this.host.enemies().getChildren()) {
-      const enemy = child as Enemy;
-      if (!enemy.isVulnerable()) continue;
-      if (Phaser.Math.Distance.Between(c.x, c.y, enemy.x, enemy.y) <= radius) {
-        this.host.damageEnemyFrom(c, enemy, dmg, cfg.knockback, c.x, c.y, time);
-        hitAny = true;
-      }
-    }
-    if (this.host.hitBreakablesInCircle(c, c.x, c.y, radius, time) > 0) hitAny = true;
-    if (hitAny) this.host.comboRewardHit(c);
+    if (shape.kind === 'circle') this.host.spawnExpandingRing(shape.x, shape.y, shape.radius, CIRCLE_RING_COLOR, CIRCLE_RING_MS);
+    else this.showShape(shape, CIRCLE_RING_COLOR, CIRCLE_RING_COLOR, CIRCLE_RING_MS);
+    if (this.hitInShape(c, shape, dmg, cfg.knockback, time)) this.host.comboRewardHit(c);
     this.host.shakeOnce(SKILL_SHAKE_MS, SKILL_SHAKE_INTENSITY);
     c.scene.events.emit(ATTACK_HIT_EVENT, c, 'circle');
   }
+
 
   /**
    * 連段技判定：直線氣波——朝 dir 的貫穿矩形，順手秒碎範圍內的物件（表演時間在放出時已進入，見 performCombo）
@@ -321,29 +317,51 @@ export class ComboSkillController {
    */
   private comboLine(c: Character, dir: number, time: number): void {
     const cfg = GameConfig.combo.line;
-    const { lineLength: length, lineWidth: width } = attackTuning();
+    const shape = placeHitShape(moveShape('line'), c.x, c.y, dir);
     const dmg = cfg.damage * (c.isEmpowered(time) ? GameConfig.combo.empower.damageMult : 1);
-    const ox = c.x, oy = c.y;
-    const band = this.scene.add
-      .rectangle(ox + Math.cos(dir) * length / 2, oy + Math.sin(dir) * length / 2, length, width, LINE_BAND_COLOR, 0.4)
-      .setRotation(dir)
-      .setDepth(LINE_BAND_DEPTH);
-    band.setStrokeStyle(2, LINE_BAND_STROKE, 0.7);
-    this.scene.tweens.add({ targets: band, alpha: 0, duration: LINE_BAND_FADE_MS, onComplete: () => band.destroy() });
-    let hitAny = false;
-    for (const child of this.host.enemies().getChildren()) {
-      const enemy = child as Enemy;
-      if (!enemy.isVulnerable()) continue;
-      if (pointInOrientedRect(enemy.x, enemy.y, ox, oy, dir, 0, length, width)) {
-        this.host.damageEnemyFrom(c, enemy, dmg, cfg.knockback, ox, oy, time);
-        hitAny = true;
-      }
-    }
-    if (this.host.hitBreakablesInRect(c, ox, oy, dir, 0, length, width, time) > 0) hitAny = true;
-    if (hitAny) this.host.comboRewardHit(c);
+    this.showShape(shape, LINE_BAND_COLOR, LINE_BAND_STROKE, LINE_BAND_FADE_MS);
+    if (this.hitInShape(c, shape, dmg, cfg.knockback, time)) this.host.comboRewardHit(c);
     this.host.shakeOnce(SKILL_SHAKE_MS, SKILL_SHAKE_INTENSITY);
     c.scene.events.emit(ATTACK_HIT_EVENT, c, 'line');
   }
+
+  /**
+   * 判定範圍命中：範圍內的敵人受傷並從判定中心往外擊退，順手打範圍內的物件
+   *
+   * @param c 攻擊的角色
+   * @param shape 放好的判定範圍
+   * @param damage 每隻敵人的傷害
+   * @param knockback 擊退力道
+   * @param time 目前場景時間
+   * @returns 是否打中任何敵人或物件
+   */
+  private hitInShape(c: Character, shape: PlacedHitShape, damage: number, knockback: number, time: number): boolean {
+    let hitAny = false;
+    for (const child of this.host.enemies().getChildren()) {
+      const enemy = child as Enemy;
+      if (!enemy.isVulnerable() || !hitShapeContains(shape, enemy.x, enemy.y)) continue;
+      this.host.damageEnemyFrom(c, enemy, damage, knockback, shape.x, shape.y, time);
+      hitAny = true;
+    }
+    if (this.host.hitBreakablesInShape(c, shape, time) > 0) hitAny = true;
+    return hitAny;
+  }
+
+  /**
+   * 把判定範圍畫成淡出的圖形（連段技等的範圍特效）
+   *
+   * @param shape 放好的判定範圍
+   * @param fill 填色
+   * @param stroke 邊框色
+   * @param fadeMs 淡出時間
+   */
+  private showShape(shape: PlacedHitShape, fill: number, stroke: number, fadeMs: number): void {
+    const g = this.scene.add.graphics().setDepth(LINE_BAND_DEPTH);
+    g.fillStyle(fill, SHAPE_FX_FILL_ALPHA).lineStyle(2, stroke, SHAPE_FX_STROKE_ALPHA);
+    drawHitShape(g, shape);
+    this.scene.tweens.add({ targets: g, alpha: 0, duration: fadeMs, onComplete: () => g.destroy() });
+  }
+
 
   /**
    * 進入強化：快速模式固定 durationMs；慢速模式設 empowered（能量消退到 0 才解除，重新累積變身爆發計數）。
@@ -427,26 +445,26 @@ export class ComboSkillController {
     if (this.host.isGameOver() || !c.alive) return false;
     const cfg = GameConfig.burst;
     const time = this.scene.time.now;
-    const radius = cfg.radius;
+    const shape = placeHitShape(moveShape('burst'), c.x, c.y, c.aimAngle);
     let hitAny = false;
     for (const child of this.host.enemies().getChildren()) {
       const enemy = child as Enemy;
-      if (!enemy.isVulnerable()) continue;
-      if (Phaser.Math.Distance.Between(c.x, c.y, enemy.x, enemy.y) <= radius) {
-        this.host.damageEnemy(c, enemy, cfg.damagePerHit, cfg.knockback, time);
-        hitAny = true;
-      }
+      if (!enemy.isVulnerable() || !hitShapeContains(shape, enemy.x, enemy.y)) continue;
+      this.host.damageEnemy(c, enemy, cfg.damagePerHit, cfg.knockback, time);
+      hitAny = true;
     }
-    if (this.host.hitBreakablesInCircle(c, c.x, c.y, radius, time) > 0) hitAny = true;
+    if (this.host.hitBreakablesInShape(c, shape, time) > 0) hitAny = true;
     if (hitAny) {
       this.host.flashWhite(c);
       this.host.shakeOnce(BURST_TICK_SHAKE_MS, SKILL_SHAKE_INTENSITY);
     }
-    const ox = Phaser.Math.Between(-radius / 2, radius / 2);
-    const oy = Phaser.Math.Between(-radius / 2, radius / 2);
-    this.host.spawnSlashEffect(c.x + ox, c.y + oy);
+    // 斬擊特效散在判定中心附近
+    const spread = (shape.kind === 'rect' ? shape.width : shape.radius) / 2;
+    this.host.spawnSlashEffect(shape.x + Phaser.Math.Between(-spread, spread), shape.y + Phaser.Math.Between(-spread, spread));
+    c.scene.events.emit(ATTACK_HIT_EVENT, c, 'burst');
     return hitAny;
   }
+
 
   /** 爆發結束：P1 的 COMBO 由 onComboHit 管理不清除，BOT 歸零 */
   private endBurst(c: Character): void {

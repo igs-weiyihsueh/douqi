@@ -1,72 +1,104 @@
 import { GameConfig } from '../config';
 import type { Character } from '../objects/Character';
+import { HIT_SHAPE_KINDS, type HitShape, type HitShapeKind } from './hitShapes';
 import { createParamStore, type ParamDef, type ParamValues } from './paramStore';
 
 /**
- * 每一招的攻擊範圍與判定時間點參數（木樁模式的「範圍 / 判定編輯器」可調整，所有模式都套用）。
+ * 每一招的判定範圍（形狀、判定中心偏移、尺寸）與判定時間點參數（木樁模式的「範圍 / 判定編輯器」可調整，所有模式都套用）。
  *
- * - 招式：普攻第 1 / 2 段（各自的扇形半徑、角度、判定時間點）、圓形斬（半徑、判定）、直線氣波（長度、寬度、判定），
- *   以及所有普攻共用的近戰觸發距離
- * - 範圍預設值取自 config 的 melee（普攻扇形、近戰門檻）與 combo（圓形斬、直線氣波）；
- *   判定時間點 = 出招（開始播動作）後多少毫秒才判定命中，預設取自 melee.hitDelayMs / combo.*.hitDelayMs
- * - 遊戲中透過 attackTuning() 讀取目前值；每局開始（GameScene.resetState）重新讀取存檔，編輯器每次調整即時套用並存檔
+ * - 招式：普攻第 1 / 2 段、圓形斬（Combo01）、直線氣波（Combo02）、爆發（Unique_skill，二段變身中的連打）、
+ *   衝刺攻擊（二段變身衝刺撞到敵人時以撞擊點為基準的範圍），以及所有普攻共用的近戰觸發距離
+ * - 每招：形狀（扇形 / 圓形 / 長方形，見 systems/hitShapes）、判定中心沿面向往前 / 往側邊偏移、扇形半徑與角度、
+ *   長方形長寬；普攻與連段技另有判定時間點（出招後多少毫秒才判定，預設取自 melee.hitDelayMs / combo.*.hitDelayMs）
+ * - 預設值重現原本的範圍（普攻扇形、圓形斬圓形、直線氣波長方形、爆發與衝刺攻擊圓形，偏移 0）
+ * - 遊戲中透過 moveShape() / moveHitMs() / attackTuning() 讀取目前值；每局開始（GameScene.resetState）重新讀取存檔，
+ *   編輯器每次調整即時套用並存檔
  */
 
+/** 招式：普攻第 1 段 / 第 2 段 / 圓形斬 / 直線氣波 / 爆發 / 衝刺攻擊（判定事件與編輯器分頁用） */
+export type AttackMove = 'attack1' | 'attack2' | 'circle' | 'line' | 'burst' | 'dash';
+
+/** 有判定時間點的招式（爆發依自己的連打節奏、衝刺攻擊在撞到時判定） */
+export type TimedAttackMove = 'attack1' | 'attack2' | 'circle' | 'line';
+
+/** 每招的形狀欄位（shape 存 HIT_SHAPE_KINDS 的索引） */
+type ShapeField = 'shape' | 'offsetForward' | 'offsetSide' | 'radius' | 'arcDeg' | 'length' | 'width';
+
 /** 可調整的參數鍵 */
-export type AttackTuningKey =
-  | 'attack1Radius' | 'attack1ArcDeg' | 'hitMsAttack1'
-  | 'attack2Radius' | 'attack2ArcDeg' | 'hitMsAttack2'
-  | 'circleRadius' | 'hitMsCircle'
-  | 'lineLength' | 'lineWidth' | 'hitMsLine'
-  | 'meleeEnemyRange';
+export type AttackTuningKey = `${AttackMove}.${ShapeField}` | `${TimedAttackMove}.hitMs` | 'meleeEnemyRange';
 
 /** 參數數值表 */
 export type AttackTuningParams = ParamValues<AttackTuningKey>;
 
-/** 招式：普攻第 1 段 / 第 2 段 / 圓形斬 / 直線氣波（判定事件與編輯器分組用） */
-export type AttackMove = 'attack1' | 'attack2' | 'circle' | 'line';
+/** 招式顯示順序與名稱 */
+export const ATTACK_MOVES: ReadonlyArray<{ move: AttackMove; label: string }> = [
+  { move: 'attack1', label: '普攻 1' },
+  { move: 'attack2', label: '普攻 2' },
+  { move: 'circle', label: '圓形斬' },
+  { move: 'line', label: '直線氣波' },
+  { move: 'burst', label: '爆發' },
+  { move: 'dash', label: '衝刺攻擊' }
+];
 
-/** 編輯器分組：一招一組（近戰觸發距離另成一組，move = null） */
-export interface AttackTuningGroup {
-  title: string;
-  move: AttackMove | null;
-  keys: ReadonlyArray<AttackTuningKey>;
+/** 招式是否有判定時間點 */
+export function isTimedMove(move: AttackMove): move is TimedAttackMove {
+  return move === 'attack1' || move === 'attack2' || move === 'circle' || move === 'line';
 }
 
 const melee = GameConfig.melee;
 const combo = GameConfig.combo;
 
-/** 各參數的範圍定義（顯示順序見 ATTACK_TUNING_GROUPS） */
+/** 各招預設形狀（重現原本的範圍；切換形狀時其他形狀的尺寸也有合理的初值） */
+const DEFAULT_SHAPES: Readonly<Record<AttackMove, HitShape>> = {
+  attack1: { kind: 'arc', offsetForward: 0, offsetSide: 0, radius: melee.radius, arcDeg: melee.arcDeg, length: melee.radius, width: melee.radius },
+  attack2: { kind: 'arc', offsetForward: 0, offsetSide: 0, radius: melee.radius, arcDeg: melee.arcDeg, length: melee.radius, width: melee.radius },
+  circle: { kind: 'circle', offsetForward: 0, offsetSide: 0, radius: combo.circle.radius, arcDeg: 360, length: combo.circle.radius * 2, width: combo.circle.radius },
+  line: { kind: 'rect', offsetForward: 0, offsetSide: 0, radius: combo.line.width, arcDeg: 90, length: combo.line.length, width: combo.line.width },
+  burst: { kind: 'circle', offsetForward: 0, offsetSide: 0, radius: GameConfig.burst.radius, arcDeg: 360, length: GameConfig.burst.radius * 2, width: GameConfig.burst.radius },
+  dash: { kind: 'circle', offsetForward: 0, offsetSide: 0, radius: combo.empower.aoe.radius, arcDeg: 360, length: combo.empower.aoe.radius * 2, width: combo.empower.aoe.radius }
+};
+
+/** 各招判定時間點預設值 */
+const DEFAULT_HIT_MS: Readonly<Record<TimedAttackMove, number>> = {
+  attack1: melee.hitDelayMs[0],
+  attack2: melee.hitDelayMs[1],
+  circle: combo.circle.hitDelayMs,
+  line: combo.line.hitDelayMs
+};
+
+/**
+ * 一招的參數定義（形狀與尺寸，有判定時間點的招式再加一列）
+ *
+ * @param move 招式
+ */
+function moveDefs(move: AttackMove): Array<ParamDef<AttackTuningKey>> {
+  const d = DEFAULT_SHAPES[move];
+  const defs: Array<ParamDef<AttackTuningKey>> = [
+    { key: `${move}.shape`, label: '形狀', unit: '', hint: '', min: 0, max: HIT_SHAPE_KINDS.length - 1, step: 1, defaultValue: HIT_SHAPE_KINDS.indexOf(d.kind) },
+    { key: `${move}.offsetForward`, label: '往前偏移', unit: 'px', hint: '判定中心往面向前方（負 = 往後）', min: -300, max: 400, step: 10, defaultValue: d.offsetForward },
+    { key: `${move}.offsetSide`, label: '往側邊偏移', unit: 'px', hint: '正 = 面向右側、負 = 左側', min: -300, max: 300, step: 10, defaultValue: d.offsetSide },
+    { key: `${move}.radius`, label: '半徑', unit: 'px', hint: '', min: 20, max: 500, step: 10, defaultValue: d.radius },
+    { key: `${move}.arcDeg`, label: '扇形角度', unit: '°', hint: '', min: 10, max: 360, step: 10, defaultValue: d.arcDeg },
+    { key: `${move}.length`, label: '長度', unit: 'px', hint: '沿面向', min: 20, max: 900, step: 10, defaultValue: d.length },
+    { key: `${move}.width`, label: '寬度', unit: 'px', hint: '', min: 20, max: 500, step: 10, defaultValue: d.width }
+  ];
+  if (isTimedMove(move)) {
+    defs.push({ key: `${move}.hitMs`, label: '判定時間', unit: 'ms', hint: '出招後幾毫秒才打到', min: 0, max: 1600, step: 10, defaultValue: DEFAULT_HIT_MS[move] });
+  }
+  return defs;
+}
+
+/** 所有參數的範圍定義 */
 export const ATTACK_TUNING_PARAM_DEFS: ReadonlyArray<ParamDef<AttackTuningKey>> = [
-  { key: 'attack1Radius', label: '扇形半徑', unit: 'px', hint: '打得到多遠', min: 60, max: 300, step: 10, defaultValue: melee.radius },
-  { key: 'attack1ArcDeg', label: '扇形角度', unit: '°', hint: '打得到多寬', min: 30, max: 360, step: 10, defaultValue: melee.arcDeg },
-  { key: 'hitMsAttack1', label: '判定時間', unit: 'ms', hint: '出手後幾毫秒才打到', min: 0, max: 500, step: 10, defaultValue: melee.hitDelayMs[0] },
-  { key: 'attack2Radius', label: '扇形半徑', unit: 'px', hint: '', min: 60, max: 300, step: 10, defaultValue: melee.radius },
-  { key: 'attack2ArcDeg', label: '扇形角度', unit: '°', hint: '', min: 30, max: 360, step: 10, defaultValue: melee.arcDeg },
-  { key: 'hitMsAttack2', label: '判定時間', unit: 'ms', hint: '', min: 0, max: 500, step: 10, defaultValue: melee.hitDelayMs[1] },
-  { key: 'circleRadius', label: '半徑', unit: 'px', hint: '', min: 60, max: 400, step: 10, defaultValue: combo.circle.radius },
-  { key: 'hitMsCircle', label: '判定時間', unit: 'ms', hint: '', min: 0, max: 1600, step: 10, defaultValue: combo.circle.hitDelayMs },
-  { key: 'lineLength', label: '長度', unit: 'px', hint: '', min: 100, max: 800, step: 20, defaultValue: combo.line.length },
-  { key: 'lineWidth', label: '寬度', unit: 'px', hint: '', min: 30, max: 300, step: 10, defaultValue: combo.line.width },
-  { key: 'hitMsLine', label: '判定時間', unit: 'ms', hint: '', min: 0, max: 1000, step: 10, defaultValue: combo.line.hitDelayMs },
-  { key: 'meleeEnemyRange', label: '觸發距離', unit: 'px', hint: '到怪身體邊緣，超過就衝刺', min: 40, max: 300, step: 10, defaultValue: melee.enemyRange }
+  ...ATTACK_MOVES.flatMap(({ move }) => moveDefs(move)),
+  { key: 'meleeEnemyRange', label: '近戰觸發距離', unit: 'px', hint: '到怪身體邊緣，超過就衝刺', min: 40, max: 300, step: 10, defaultValue: melee.enemyRange }
 ];
-
-/** 編輯器分組（顯示順序） */
-export const ATTACK_TUNING_GROUPS: ReadonlyArray<AttackTuningGroup> = [
-  { title: '普攻第 1 段', move: 'attack1', keys: ['attack1Radius', 'attack1ArcDeg', 'hitMsAttack1'] },
-  { title: '普攻第 2 段', move: 'attack2', keys: ['attack2Radius', 'attack2ArcDeg', 'hitMsAttack2'] },
-  { title: '圓形斬', move: 'circle', keys: ['circleRadius', 'hitMsCircle'] },
-  { title: '直線氣波', move: 'line', keys: ['lineLength', 'lineWidth', 'hitMsLine'] },
-  { title: '近戰觸發（普攻共用）', move: null, keys: ['meleeEnemyRange'] }
-];
-
 
 /** localStorage 存檔鍵（只存與預設不同的項目；結構或語意大改時升版，舊鍵讀取時清除） */
-const STORAGE_KEY = 'douqi.attackTuning.v2';
+const STORAGE_KEY = 'douqi.attackTuning.v3';
 
 /** 參數的讀寫介面（編輯器使用） */
-export const attackTuningStore = createParamStore(ATTACK_TUNING_PARAM_DEFS, STORAGE_KEY, ['douqi.attackRange.v1']);
+export const attackTuningStore = createParamStore(ATTACK_TUNING_PARAM_DEFS, STORAGE_KEY, ['douqi.attackRange.v1', 'douqi.attackTuning.v2']);
 
 /** 目前生效的參數（每局開始 / 編輯器調整時更新） */
 let current: AttackTuningParams = attackTuningStore.load();
@@ -77,15 +109,50 @@ export function attackTuning(): Readonly<AttackTuningParams> {
 }
 
 /**
- * 普攻某一段的扇形與判定時間點
+ * 一招目前的判定形狀
+ *
+ * @param move 招式
+ */
+export function moveShape(move: AttackMove): HitShape {
+  const t = current;
+  const kind: HitShapeKind = HIT_SHAPE_KINDS[t[`${move}.shape`]] ?? DEFAULT_SHAPES[move].kind;
+  return {
+    kind,
+    offsetForward: t[`${move}.offsetForward`],
+    offsetSide: t[`${move}.offsetSide`],
+    radius: t[`${move}.radius`],
+    arcDeg: t[`${move}.arcDeg`],
+    length: t[`${move}.length`],
+    width: t[`${move}.width`]
+  };
+}
+
+/**
+ * 一招目前的判定時間點（毫秒）
+ *
+ * @param move 有判定時間點的招式
+ */
+export function moveHitMs(move: TimedAttackMove): number {
+  return current[`${move}.hitMs`];
+}
+
+/**
+ * 普攻某一段對應的招式
  *
  * @param segment 段數（0 = 第 1 段、1 = 第 2 段）
  */
-export function meleeSegment(segment: number): { radius: number; arcDeg: number; hitMs: number } {
-  const t = current;
-  return segment === 0
-    ? { radius: t.attack1Radius, arcDeg: t.attack1ArcDeg, hitMs: t.hitMsAttack1 }
-    : { radius: t.attack2Radius, arcDeg: t.attack2ArcDeg, hitMs: t.hitMsAttack2 };
+export function meleeMove(segment: number): 'attack1' | 'attack2' {
+  return segment === 0 ? 'attack1' : 'attack2';
+}
+
+/**
+ * 判定形狀「伸到最遠」的距離（從基準點量；普攻往前踏時用來確保踏完打得到）
+ *
+ * @param shape 判定形狀
+ */
+export function shapeReach(shape: HitShape): number {
+  const size = shape.kind === 'rect' ? shape.length : shape.radius;
+  return Math.max(0, shape.offsetForward + size);
 }
 
 /** 重新讀取存檔，更新目前生效的參數 */

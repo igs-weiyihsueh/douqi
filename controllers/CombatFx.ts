@@ -3,6 +3,7 @@ import { GameConfig } from '../config';
 import type { Character } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
 import { hitFeel } from '../systems/hitFeelParams';
+import { drawHitShape, type PlacedHitShape } from '../systems/hitShapes';
 
 /** 擴張環：初始半徑、深度、透明度、邊框粗細 */
 const RING_START_RADIUS = 10;
@@ -86,27 +87,19 @@ export class CombatFx {
   }
 
   /**
-   * 原地扇形劍氣：朝 angle 畫一個帶亮邊的淡出扇形
+   * 普攻劍氣：把這一下的判定範圍畫成帶亮邊的淡出圖形（形狀跟實際判定一致）
    *
-   * @param x 中心 x
-   * @param y 中心 y
-   * @param angle 朝向（弧度）
-   * @param radius 扇形半徑
-   * @param arcDeg 扇形角度（度）
+   * @param shape 放好的判定範圍
    */
-  meleeArc(x: number, y: number, angle: number, radius: number, arcDeg: number): void {
+  meleeShape(shape: PlacedHitShape): void {
     const cfg = GameConfig.melee;
-    const half = Phaser.Math.DegToRad(arcDeg) / 2;
     const g = this.scene.add.graphics().setDepth(ARC_DEPTH);
     g.fillStyle(cfg.arcColor, cfg.arcAlpha);
-    g.slice(x, y, radius, angle - half, angle + half, false);
-    g.fillPath();
     g.lineStyle(3, cfg.arcColor, Math.min(1, cfg.arcAlpha + 0.4));
-    g.beginPath();
-    g.arc(x, y, radius, angle - half, angle + half);
-    g.strokePath();
+    drawHitShape(g, shape);
     this.scene.tweens.add({ targets: g, alpha: 0, duration: cfg.arcFadeMs, onComplete: () => g.destroy() });
   }
+
 
   /** 命中點的白色斬擊圈 */
   slash(x: number, y: number): void {

@@ -512,7 +512,10 @@ export class GameScene extends Phaser.Scene {
       this.keepTrainingReady();
       this.tuningEditor = new AttackTuningEditor(this, {
         player: () => this.player,
-        dummyRadius: () => (this.trainingDummy?.active ? this.trainingDummy.getBodyRadius() : 0)
+        dummy: () => {
+          const d = this.trainingDummy;
+          return d?.active && !d.dead ? { x: d.x, y: d.y, radius: d.getBodyRadius() } : null;
+        }
       });
       this.input.keyboard!.on(`keydown-${GameConfig.training.tuningEditorKey}`, () => this.tuningEditor?.toggle());
     } else {
@@ -1431,9 +1434,7 @@ export class GameScene extends Phaser.Scene {
       targeting: () => this.targeting,
       damageEnemyFrom: (actor, enemy, damage, knockback, fromX, fromY, time) => this.damageEnemyFrom(actor, enemy, damage, knockback, fromX, fromY, time),
       damageEnemy: (actor, enemy, damage, knockback, time) => this.damageEnemy(actor, enemy, damage, knockback, time),
-      hitBreakablesInCircle: (actor, x, y, radius, time) => this.breakableCtl.hitInCircle(actor, x, y, radius, time),
-      hitBreakablesInRect: (actor, ox, oy, dir, back, length, width, time) =>
-        this.breakableCtl.hitInRect(actor, ox, oy, dir, back, length, width, time),
+      hitBreakablesInShape: (actor, shape, time) => this.breakableCtl.hitInShape(actor, shape, time),
       comboRewardHit: (c) => this.comboReward.hit(c),
       countP1AttackHit: () => { this.p1AttackHits++; },
       spawnExpandingRing: (x, y, radius, color, ms) => this.fx.expandingRing(x, y, radius, color, ms),
@@ -1710,7 +1711,8 @@ export class GameScene extends Phaser.Scene {
       pickEmpowerTarget: (c) => this.comboSkills.pickEmpowerTarget(c),
       empowerStrike: (c, x, y, time) => this.comboSkills.empowerStrike(c, x, y, time),
       flashWhite: (c) => this.fx.flashWhite(c),
-      spawnMeleeArcEffect: (x, y, angle, radius, arcDeg) => this.fx.meleeArc(x, y, angle, radius, arcDeg),
+      spawnMeleeShapeEffect: (shape) => this.fx.meleeShape(shape),
+      hitBreakablesInShape: (c, shape, time) => this.breakableCtl.hitInShape(c, shape, time),
       spawnSlashStreak: (target, angle, empowered) =>
         this.fx.slashStreak(target.x, target.y, angle, empowered, undefined, this.hitFxScale(target))
     };

@@ -7,6 +7,7 @@ import type { Enemy } from '../objects/Enemy';
 import { isFixedEnemy } from '../systems/enemyKinds';
 import { orientedRectIntersectsBox, sectorIntersectsBox } from '../systems/geometry';
 import type { VisibleBounds } from '../systems/spriteFeet';
+import { hitShapeContains, type PlacedHitShape } from '../systems/hitShapes';
 
 /**
  * BreakableController 需要場景提供的能力。由 GameScene 建立並傳入；控制器不直接存取場景私有成員。
@@ -340,6 +341,21 @@ export class BreakableController {
       const bk = child as Breakable;
       if (bk.active) bk.despawn();
     }
+  }
+
+  /**
+   * 判定範圍（扇形 / 圓形 / 長方形，見 systems/hitShapes）內的物件各扣 1 耐久（以物件碰撞矩形中心判定）
+   *
+   * @param actor 攻擊的角色
+   * @param shape 放好的判定範圍
+   * @param time 目前場景時間
+   * @returns 命中的物件數
+   */
+  hitInShape(actor: Character, shape: PlacedHitShape, time: number): number {
+    return this.hitWhere(actor, (bk) => {
+      const body = bk.getBody();
+      return hitShapeContains(shape, body.centerX, body.centerY);
+    }, time);
   }
 
   /**
