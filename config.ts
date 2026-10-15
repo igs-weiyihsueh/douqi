@@ -860,15 +860,16 @@ export const GameConfig = {
   stageMonsters: {
     enabled: true,
     /**
-     * 變身 BOSS 即時補怪：變身後分批在 P1 身旁環狀補怪（依 weights 抽怪種，不乘人數），規則同二段變身補怪，但無冷卻
-     * （每打倒一隻 BOSS 才可能變身一次）；每批於變身後 delayMs 補 count 隻，變身已結束或關卡已打完的批次不補
+     * 變身 BOSS 即時補怪：變身當下在 P1 身旁環狀補 burst 隻，之後整段變身期間每 refillIntervalMs 檢查一次，
+     * 場上的額外補怪少於 keepAlive 就補回差額（每次最多 refillMaxPerTick 隻，持續湧現而不是一批批冒出）；
+     * 依 weights 抽怪種、不乘人數、無冷卻（每打倒一隻 BOSS 才可能變身一次），變身結束或關卡已打完就停止補
      */
     bossFormSurge: {
       weights: { normal: 90, tank: 10, bomber: 0 },
-      batches: [
-        { delayMs: 0, count: [12, 14] },
-        { delayMs: 5000, count: [10, 12] }
-      ]
+      burst: [24, 28] as readonly [number, number],
+      keepAlive: 24,
+      refillIntervalMs: 300,
+      refillMaxPerTick: 4
     },
     /** 波與波之間的休息（毫秒）：休息中不出怪、HIT 連擊倒數暫停，休息開始時落下下一波的木箱 */
     waveBreakMs: 6000,

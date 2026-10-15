@@ -1415,20 +1415,27 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * 變身 BOSS 即時補怪：依 stageMonsters.bossFormSurge 分批在 P1 身旁補怪（不計擊殺數、無冷卻、不乘人數）；
-   * 輪到的批次若變身已結束或關卡已打完就不補
+   * 變身 BOSS 即時補怪（stageMonsters.bossFormSurge）：變身當下在 P1 身旁補一大批，之後每 refillIntervalMs 把場上的額外補怪
+   * 補回 keepAlive 隻（每次最多 refillMaxPerTick），維持場面密度；不計擊殺數、無冷卻、不乘人數。變身結束或關卡已打完就停止
    */
   private surgeOnBossForm(): void {
     const cfg = GameConfig.stageMonsters.bossFormSurge;
     const seat = this.characters.indexOf(this.player);
-    for (const batch of cfg.batches) {
-      const spawnBatch = (): void => {
-        if (!this.monsterProfile || !this.canSurge() || !this.bossCtl.isTransformed) return;
-        this.spawner.spawnSurge(seat, { count: batch.count, weights: cfg.weights });
-      };
-      if (batch.delayMs > 0) this.time.delayedCall(batch.delayMs, spawnBatch);
-      else spawnBatch();
-    }
+    const canSpawn = (): boolean => !!this.monsterProfile && this.canSurge() && this.bossCtl.isTransformed;
+    if (!canSpawn()) return;
+    this.spawner.spawnSurge(seat, { count: cfg.burst, weights: cfg.weights });
+    const refill = this.time.addEvent({
+      delay: cfg.refillIntervalMs,
+      loop: true,
+      callback: () => {
+        if (!canSpawn()) {
+          refill.remove();
+          return;
+        }
+        const n = Math.min(cfg.keepAlive - this.spawner.countQuotaExempt(), cfg.refillMaxPerTick);
+        if (n > 0) this.spawner.spawnSurge(seat, { count: [n, n], weights: cfg.weights });
+      }
+    });
   }
 
   /**
