@@ -65,6 +65,7 @@
 | 近戰攻擊 | 目標很近時原地揮扇形 | `controllers/CharacterActionController.ts` | `melee` |
 | 衝刺攻擊 | 目標較遠時衝過去打 | `controllers/CharacterActionController.ts` | `slow.dashSpeed` |
 | 衝刺 | 沒有目標時朝面向衝一段 | `controllers/CharacterActionController.ts` › `startDirectionDash` | `slow.dashDistance` |
+| 一般衝刺 | 穿透式衝刺攻擊，路徑上每隻怪各打一次，可設傷害%+頓點 | 範圍編輯器 › 一般衝刺分頁 | `normalDash` |
 | 真空圈 | 角色腳下怪進不來的橢圓地盤 | `scenes/GameScene.ts` | `slow.vacuumRadius`、`slow.vacuumFlatten` |
 
 ## 二段變身
