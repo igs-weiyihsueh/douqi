@@ -1723,8 +1723,8 @@ export const GameConfig = {
     switchAngleDeg: 35,
     /** 黏著時，目標離開此半徑（>searchRadius 的緩衝）就視為太遠、放棄鎖定 */
     loseTargetRadius: 620,
-    /** 近敵貼身攻擊時，朝目標位移的一小段距離（貼近用） */
-    meleeStep: 46,
+    /** 近敵攻擊時朝目標往前踏的最大距離（像素；踏到離敵人中心 melee.swingDistance 為止） */
+    meleeStep: 100,
     /**
      * 鎖定框樣式：框用鎖定者的 P 位代表色（GameConfig.characters.colors）；多人鎖同一目標時框分段上色
      * （2 人左右各半、3~4 人四個角各一色，見 TargetingController.cornerOwners）
@@ -1752,8 +1752,15 @@ export const GameConfig = {
    *  - 前方無敵 → 單純衝一段
    */
   melee: {
-    /** 近戰門檻：到鎖定敵人身體邊緣的距離 ≤ 此值就原地扇形（像素；超過才衝刺過去） */
+    /** 近戰門檻（木箱 / 不可推動的大型目標）：距離 ≤ 此值就原地扇形（像素） */
     range: 90,
+    /**
+     * 鎖定敵人的近戰門檻：到敵人身體邊緣的距離 ≤ 此值就往前踏一步（最多 lock.meleeStep）再原地扇形，超過才衝刺過去（像素；
+     * Spine 骷髏拿長槍，畫面上看起來貼近時實際距離常有 130～180）
+     */
+    enemyRange: 150,
+    /** 近戰往前踏時停在離敵人中心這個距離（像素；要小於扇形半徑 radius 才打得到） */
+    swingDistance: 80,
     /** 扇形總角度（度，朝 aimAngle 左右各半） */
     arcDeg: 90,
     /** 扇形半徑（像素） */

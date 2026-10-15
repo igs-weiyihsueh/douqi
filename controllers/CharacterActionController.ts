@@ -186,7 +186,7 @@ export class CharacterActionController {
     c.aimAngle = Phaser.Math.Angle.Between(c.x, c.y, target!.x, target!.y);
     const dist = Phaser.Math.Distance.Between(c.x, c.y, target!.x, target!.y);
     // 近戰門檻看到目標身體邊緣的距離：怪被真空圈推到圈邊時中心距離常超過門檻，用中心距離會一直變成衝刺
-    if (dist - (target as Enemy).getBodyRadius() <= GameConfig.melee.range) this.stepInAndSwing(c, dist, time);
+    if (dist - (target as Enemy).getBodyRadius() <= GameConfig.melee.enemyRange) this.stepInAndSwing(c, dist, time, GameConfig.melee.swingDistance);
     else this.dashAtEnemy(c, target as Enemy, dist, time);
   }
 
@@ -317,13 +317,14 @@ export class CharacterActionController {
   }
 
   /**
-   * 近距離：朝 aimAngle 小位移貼身（不穿過目標、夾在移動區內），扇形劍氣，進入普攻冷卻
+   * 近距離：朝 aimAngle 往前踏（最多 lock.meleeStep，停在離目標 stopAt 處、不穿過目標、夾在移動區內），扇形劍氣，進入普攻冷卻
    *
    * @param dist 到目標的距離（敵人 = 中心距離；木箱 = 到碰撞矩形的距離）
+   * @param stopAt 踏到離目標這個距離為止（預設角色半徑 = 貼身）
    */
-  private stepInAndSwing(c: Character, dist: number, time: number): void {
+  private stepInAndSwing(c: Character, dist: number, time: number, stopAt: number = GameConfig.player.radius): void {
     const r = GameConfig.player.radius;
-    const step = Math.min(GameConfig.lock.meleeStep, Math.max(0, dist - r));
+    const step = Math.min(GameConfig.lock.meleeStep, Math.max(0, dist - stopAt));
     const a = this.host.arena();
     c.setPosition(
       Phaser.Math.Clamp(c.x + Math.cos(c.aimAngle) * step, a.left + r, a.right - r),
