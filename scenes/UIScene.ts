@@ -207,13 +207,8 @@ export class UIScene extends Phaser.Scene {
     OVERLAY_TICKET_FIELD_Y: 88,
     /** 高於美術版面板圖（depth 1000+i） */
     DEPTH: 1010,
-    /** 「獲得N票券！」文字樣式與動畫 */
-    REWARD_TEXT_FONT_SIZE: '42px',
-    REWARD_TEXT_STROKE_WIDTH: 4,
+    /** 獲得彩票提示（彩票圖示 + 張數）的深度 */
     REWARD_TEXT_DEPTH: 1500,
-    REWARD_TEXT_RISE: 60,
-    REWARD_TEXT_SCALE_TO: 1.3,
-    REWARD_TEXT_DURATION_MS: 1200,
     /** 報獎閃光起始半徑（像素） */
     REWARD_FLASH_START_RADIUS: 12,
     /** 報獎閃光擴張最大半徑（像素） */
@@ -1659,7 +1654,7 @@ export class UIScene extends Phaser.Scene {
   }
 
   /**
-   * 在下方面板播放 COMBO 報獎特效：彩票噴發 + 閃光 + 「獲得N票券！」文字
+   * 在下方面板播放 COMBO 報獎特效：彩票噴發 + 閃光 + 彩票圖示與張數（與關卡結算等其他給票提示同樣式）
    *
    * 位置在該角色 HIT 顯示的底圖中心（已隨面板模式定位）
    *
@@ -1685,11 +1680,11 @@ export class UIScene extends Phaser.Scene {
       this.createFinalTicketParticle(x, y, config, milestone);
     }
     this.createFinalFlashEffect(x, y);
-    this.spawnRewardText(x, y, tickets);
+    this.showTicketGain(index, tickets);
   }
 
   /**
-   * 關卡結算的彩票飛到 P位面板：在該角色 HIT 顯示的位置顯示彩票圖示 + 張數（不另外噴發彩票）
+   * 在該角色 HIT 顯示的位置顯示彩票圖示 + 張數（關卡結算的彩票飛到 P位面板、COMBO 報獎都用這個；不另外噴發彩票）
    *
    * @param index 角色索引（對應 panelHitCounters）
    * @param tickets 張數（0 以下不顯示）
@@ -1698,34 +1693,6 @@ export class UIScene extends Phaser.Scene {
     const counter = this.panelHitCounters[index];
     if (!counter) return;
     popTicketReward(this, counter.centerX, counter.centerY, tickets, { depth: this.PANEL_COMBO_CONFIG.REWARD_TEXT_DEPTH, scrollFactor: 0 });
-  }
-
-  /**
-   * 「獲得N票券！」金色文字：往上飄、放大、淡出後銷毀
-   *
-   * @param x 螢幕座標 X
-   * @param y 螢幕座標 Y
-   * @param tickets 票券數量
-   */
-  private spawnRewardText(x: number, y: number, tickets: number): void {
-    const cfg = this.PANEL_COMBO_CONFIG;
-    const rewardText = this.add.text(x, y, `獲得${tickets}票券！`, {
-      fontSize: cfg.REWARD_TEXT_FONT_SIZE,
-      fontFamily: 'Arial Black',
-      color: '#FFD700',
-      stroke: '#FFFFFF',
-      strokeThickness: cfg.REWARD_TEXT_STROKE_WIDTH,
-      shadow: { offsetX: 2, offsetY: 2, color: '#000000', blur: 4, fill: true }
-    }).setOrigin(0.5, 0.5).setDepth(cfg.REWARD_TEXT_DEPTH).setScrollFactor(0);
-    this.tweens.add({
-      targets: rewardText,
-      y: y - cfg.REWARD_TEXT_RISE,
-      scale: cfg.REWARD_TEXT_SCALE_TO,
-      alpha: 0,
-      duration: cfg.REWARD_TEXT_DURATION_MS,
-      ease: 'Power2',
-      onComplete: () => rewardText.destroy()
-    });
   }
 
   /**
