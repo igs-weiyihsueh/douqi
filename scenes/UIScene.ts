@@ -1961,7 +1961,7 @@ export class UIScene extends Phaser.Scene {
 
   /**
    * 投幣（GameScene 的 coin-inserted 事件）：量條亮起這一格並彈跳（投滿最後一格時閃爍後清空）；
-   * 這一格是重點格時，從這一格飛出一道光沿弧線飛到角色頭頂（追著角色目前位置），到達時在角色身上爆一圈光
+   * 並從這一格飛出一道光沿弧線飛到角色頭頂（追著角色目前位置），到達時在角色身上爆一圈光
    *
    * @param e.index 角色索引
    * @param e.cycleIndex 這次投幣在 coinCycle 中的位置
@@ -1971,7 +1971,7 @@ export class UIScene extends Phaser.Scene {
     if (!bar) return;
     bar.lightCell(e.cycleIndex);
     if (e.cycleIndex >= bar.cellCount - 1) bar.flashAndClear(bar.popMs);
-    if (!bar.visible || !bar.isHighlight(e.cycleIndex)) return;
+    if (!bar.visible) return;
     const cfg = GameConfig.credit.coinBar;
     const start = bar.cellCenter(e.cycleIndex);
     const target = (): { x: number; y: number } => {

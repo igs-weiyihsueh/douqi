@@ -66,17 +66,14 @@ interface CoinCell {
 }
 
 /**
- * 下方面板的多投多送膠囊量條：最左側一枚硬幣，後面一格代表一次投幣，每格標示劍圖示 + 這次投幣得到的 CREDIT；
- * 得到最少的以外都是重點格（例 10 / 5 / 15 / 5 / 15 的第 1、3、5 格）。
+ * 下方面板的多投多送膠囊量條：最左側一枚硬幣，後面一格代表一次投幣，每格標示劍圖示 + 這次投幣得到的 CREDIT。
  *
  * - 容器位置 = 膠囊左下角（對齊面板的 COMBO 錨點）
  * - setLit 直接設定亮了幾格；lightCell 亮起一格並彈跳；flashAndClear 投滿時閃爍後清空
- * - cellCenter 取得某格中心的螢幕座標（投幣光效的起點）；isHighlight 查某格是不是重點格
+ * - cellCenter 取得某格中心的螢幕座標（投幣光效的起點）
  */
 export class CoinBonusBar extends Phaser.GameObjects.Container {
   private readonly cells: CoinCell[] = [];
-  /** 各格是不是重點格（CREDIT 多於最少的那一檔） */
-  private readonly highlights: ReadonlyArray<boolean>;
   /** 目前亮了幾格 */
   private litCount = 0;
   /** 投滿閃爍中（閃完才清空，期間不接受 setLit） */
@@ -90,8 +87,6 @@ export class CoinBonusBar extends Phaser.GameObjects.Container {
   constructor(scene: Phaser.Scene, gains: ReadonlyArray<number>, drawIcon: (g: Phaser.GameObjects.Graphics, fill?: number) => void) {
     super(scene, 0, 0);
     const cfg = COIN_BAR_CONFIG;
-    const minGain = Math.min(...gains);
-    this.highlights = gains.map((gain) => gain > minGain);
     const width = cfg.CELLS_LEFT + gains.length * cfg.CELL_WIDTH + (gains.length - 1) * cfg.CELL_GAP + cfg.RIGHT_PADDING;
     const midY = -cfg.HEIGHT / 2;
     this.add([this.createCapsule(width), this.createCoin(midY)]);
@@ -134,15 +129,6 @@ export class CoinBonusBar extends Phaser.GameObjects.Container {
   /** 亮格彈跳的時間（毫秒） */
   get popMs(): number {
     return COIN_BAR_CONFIG.POP_MS;
-  }
-
-  /**
-   * 第 index 格是否為重點格（CREDIT 多於最少的那一檔）
-   *
-   * @param index 格子索引
-   */
-  isHighlight(index: number): boolean {
-    return this.highlights[index] ?? false;
   }
 
   /**

@@ -230,15 +230,15 @@ export const GameConfig = {
    * 每一招命中至少一隻敵人扣 1 點（空揮不扣、一招打中多隻也只扣 1；變身 BOSS 的攻擊不扣）。
    * 用完時角色停在原地、無敵、怪不理他，頭上顯示 continueText 與倒數，continueSeconds 秒內投幣恢復，逾時離場（回到未進場）。
    * 未進場時下方面板（HIT 數的位置）每 joinRotateMs 輪流顯示一句 joinTexts。BOT 用完自動投幣。
-   * 下方面板的多投多送膠囊量條（HIT 數下方）：每格是一次投幣，標示這次得到的 CREDIT；投幣時亮一格，重點格（第 1、3、5 格）再飛出一道光到角色身上
+   * 下方面板的多投多送膠囊量條（HIT 數下方）：每格是一次投幣，標示這次得到的 CREDIT；投幣時亮一格並飛出一道光到角色身上
    * 啟用時角色沒有血量（被打不扣血、不會陣亡）；enabled = false 回到舊行為
    */
   credit: {
     enabled: true,
-    /** 多投多送：第 1、2、3… 次投幣分別得到的 CREDIT，循環使用（量條一格一次；比最少那一檔多的是重點格） */
+    /** 多投多送：第 1、2、3… 次投幣分別得到的 CREDIT，循環使用（量條一格一次） */
     coinCycle: [10, 5, 15, 5, 15] as ReadonlyArray<number>,
     /**
-     * 多投多送量條：showWhenAbsent = 未進場的玩家也顯示（全暗）；重點格的投幣光效從亮起的那一格飛到角色頭頂（離角色中心 targetOffsetY），
+     * 多投多送量條：showWhenAbsent = 未進場的玩家也顯示（全暗）；投幣光效從亮起的那一格飛到角色頭頂（離角色中心 targetOffsetY），
      * 費時 flyMs、弧線拱起 arcHeight，拖尾粒子每 trailEveryMs 一顆；到達時在角色身上爆一圈光（burstRadius / burstMs）
      */
     coinBar: {
