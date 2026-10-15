@@ -118,9 +118,10 @@ export interface AttackTuningEditorHost {
  *
  * - 上方招式分頁（普攻 1、普攻 2、招式1、招式2、爆發、衝刺攻擊）
  * - 有時間軸的招式（普攻、招式1 / 2）：時間軸長度 = 該動作長度，點或拖動時間軸、按 ◀ ▶ 一格一格（1/30 秒）前後看，
- *   P1 定格在那一格的 Spine 姿勢；軸上標出各打擊點，可在目前這一格「加打擊點」、刪除、把選中的打擊點「移到這一格」。
+ *   P1 定格在那一格的 Spine 姿勢；軸上標出各打擊點，打擊點在軸上的位置就是它判定的時間，可在目前這一格「加打擊點」、刪除、
+ *   把選中的打擊點「移到這一格」。
  *   加 / 刪打擊點時，各打擊點的傷害自動平均分配（之後可個別調）
- * - 選中打擊點的參數：形狀（扇形 / 圓形 / 長方形）、判定中心往前 / 往上下偏移、該形狀的尺寸、傷害 %、判定時間
+ * - 選中打擊點的參數：形狀（扇形 / 圓形 / 長方形）、判定中心往前 / 往上下偏移、該形狀的尺寸、傷害 %
  *   （systems/attackTuningParams，每次調整即時套用並存在瀏覽器）；爆發、衝刺攻擊只有一個打擊點、沒有時間軸
  * - 最下面是普攻共用的近戰觸發距離與恢復預設、關閉
  *
@@ -398,7 +399,7 @@ export class AttackTuningEditor {
       panel.add(this.button(ui, cx, y + LAYOUT.TIMELINE_BUTTON_HEIGHT / 2, bw, LAYOUT.TIMELINE_BUTTON_HEIGHT, b.label, LAYOUT.TIMELINE_BUTTON_COLOR, b.onClick));
     });
     y += LAYOUT.TIMELINE_BUTTON_HEIGHT + LAYOUT.TIMELINE_BUTTON_GAP;
-    this.addRow(ui, panel, y, 'point', () => `${this.selectedPoint + 1} / ${moveHitPoints(this.selected).length}`,
+    this.addRow(ui, panel, y, 'point', () => this.pointSelectorText(),
       (dir) => this.selectPoint(this.selectedPoint + dir), '打擊點', '◀ ▶ 切換要調的打擊點');
     return y + LAYOUT.ROW_HEIGHT;
   }
@@ -422,14 +423,20 @@ export class AttackTuningEditor {
   }
 
   /**
-   * 選中打擊點要顯示的欄位：形狀、往前 / 往上下偏移、該形狀的尺寸、傷害 %、判定時間（有時間軸的招式）
+   * 選中打擊點要顯示的欄位：形狀、往前 / 往上下偏移、該形狀的尺寸、傷害 %（有時間軸的招式；判定時間由時間軸上的位置決定）
    *
    * @param point 打擊點
    */
   private pointFields(point: HitPoint): HitPointField[] {
     const fields: HitPointField[] = ['shape', 'offsetForward', 'offsetSide', ...SHAPE_SIZE_FIELDS[point.shape.kind]];
-    if (isTimedMove(this.selected)) fields.push('damagePct', 'timeMs');
+    if (isTimedMove(this.selected)) fields.push('damagePct');
     return fields;
+  }
+
+  /** 打擊點選擇列的文字：第幾個 / 共幾個，以及它在時間軸上的時間 */
+  private pointSelectorText(): string {
+    const points = moveHitPoints(this.selected);
+    return `${this.selectedPoint + 1} / ${points.length}（${(points[this.selectedPoint].timeMs / 1000).toFixed(2)}s）`;
   }
 
   /**
@@ -446,7 +453,7 @@ export class AttackTuningEditor {
 
   /**
    * 調整選中打擊點的一個欄位並立即套用、存檔：形狀循環切換、其他欄位一格；傳入 exact 時直接設成該值。
-   * 改了判定時間的打擊點重新排序後仍保持選中；換形狀或時間後重建面板
+   * 移到別格（改判定時間）的打擊點重新排序後仍保持選中；換形狀或時間後重建面板
    *
    * @param field 欄位
    * @param dir −1 / +1（exact 有值時不用）
