@@ -96,7 +96,7 @@
 | 小怪 | 基本近戰怪 | `objects/Enemy.ts` › `EnemyType` `'normal'` | `enemy.types.normal` |
 | 大怪 | 高血量、慢、體型大 | `objects/Enemy.ts` › `EnemyType` `'tank'` | `enemy.types.tank` |
 | 遠程怪 | 遠距離丟炸彈，落點有預警圈 | `objects/Enemy.ts` › `EnemyType` `'bomber'` | `enemy.types.bomber` |
-| 寶箱怪 | 跑來跑去、打中掉彩票的怪 | `controllers/TreasureEnemyController.ts`；`objects/Enemy.ts` › `EnemyType` `'treasure'`；`controllers/PayoutController.ts` › `payTreasureHit`、`payTreasureKill`、`treasureFunded`、`lockTreasurePrize`、`refundTreasurePrize`；`scenes/GameScene.ts` › `spawnTreasureFromCrate` | `enemy.treasure`、`payout.treasure` |
+| 寶箱怪 | 跑來跑去、打中掉彩票的怪，4人合力積累共用池50張門檻 | `controllers/TreasureEnemyController.ts`；`objects/Enemy.ts` › `EnemyType` `'treasure'`；`controllers/PayoutController.ts` › `payTreasureHit`、`payTreasureKill`、`treasureFunded`、`lockTreasurePrize`、`refundTreasurePrize`；`scenes/GameScene.ts` › `spawnTreasureFromCrate` | `enemy.treasure`、`payout.treasure` |
 | BOSS亂入 | 彩金池存夠時關卡中途限時出現的 BOSS，不打也能過關，時間到離開 | `controllers/BossController.ts` › `spawn(true)` | `stage.bossIntrude`、`stageMonsters.chests.*.bossIntrude` |
 | BOSS變身 | 靠近虛弱BOSS按特殊鍵，玩家變成 BOSS | `controllers/BossController.ts` › `tryTransform` | `boss` |
 | 虛弱BOSS | 打倒後留在地上的 BOSS，用來 BOSS變身 | `controllers/BossController.ts` › `corpse` | `boss` |
