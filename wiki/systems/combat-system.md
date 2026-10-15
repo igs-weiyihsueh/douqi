@@ -295,11 +295,11 @@ findFirstEnemyInRangeOf(x: number, y: number, radius: number) {
 
 ## 視覺切換系統
 
-### F4複合功能 (7975cc9更新)
+### V鍵複合功能 (更新至0e8d465)
 ```typescript
-// F4複合切換：場景背景 + 敵人外觀
-// 實際實作：F4 listener依序呼叫兩個函數
-this.input.keyboard.on('keydown-F4', () => {
+// V鍵複合切換：場景背景 + 敵人外觀  
+// 實際實作：V listener依序呼叫兩個函數
+this.input.keyboard.on('keydown-V', () => {
   this.toggleSceneBackground();        // 切換場景背景
   this.toggleNormalEnemyAppearance();  // 切換敵人外觀
 });

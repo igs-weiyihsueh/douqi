@@ -132,14 +132,14 @@ enemySeparation: {
 }
 ```
 
-### 視覺切換系統 (66e51cb更新)
+### 視覺切換系統 (更新至0e8d465)
 ```typescript
-// F4敵人外觀切換
+// V鍵敵人外觀切換
 class GameScene {
   private useSkeletonWarrior = false;  // false=紅圓形(預設), true=骷髏戰士
   
-  // F4複合功能：場景背景 + 敵人外觀同時切換
-  // 第一次按F4：背景/悟空/角色UI/底部面板/骷髏同時切到新美術
+  // V鍵複合功能：場景背景 + 敵人外觀同時切換
+  // 第一次按V鍵：背景/悟空/角色UI/底部面板/骷髏同時切到新美術
   toggleVisualMode() {
     this.isNewSceneActive = !this.isNewSceneActive;    // 背景切換
     this.useSkeletonWarrior = !this.useSkeletonWarrior; // 敵人切換

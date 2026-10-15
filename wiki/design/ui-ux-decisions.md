@@ -244,8 +244,8 @@ shortcuts: {
   zoomOut: ['MINUS', 'NUMPAD_SUBTRACT'],  // 縮小
   reset: ['R'],                           // 重置
   
-  // F4複合功能
-  toggleVisual: ['F4'],                   // 場景+敵人外觀切換
+  // V鍵複合功能  
+  toggleVisual: ['V'],                    // 場景+敵人外觀切換
   
   // 開發除錯
   debugMode: ['F12'],                     // 除錯模式

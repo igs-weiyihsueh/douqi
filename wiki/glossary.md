@@ -19,7 +19,7 @@
 | CREDIT欄 | 角色面板上的劍形圖示＋CREDIT 數字 | `scenes/UIScene.ts` › `overheadUIs` | `credit` |
 | 二段變身量條 | 角色面板上的二段變身能量條，集滿可變身 | `scenes/UIScene.ts` › `overheadUIs`；`objects/Character.ts` › `energy` | `energy` |
 | 投幣提示 | CREDIT 用完時頭上的「投幣續關」＋倒數 | `controllers/CreditController.ts` | `credit.prompt`、`credit.continueText` |
-| P位面板 | 畫面下方每位玩家一格的面板（總稱；F4 美術版不另命名） | `scenes/UIScene.ts` › `rows`、`bottomPanelOverlays` | — |
+| P位面板 | 畫面下方每位玩家一格的面板（總稱；V鍵 美術版不另命名） | `scenes/UIScene.ts` › `rows`、`bottomPanelOverlays` | — |
 | 擊殺欄 | P位面板的 💀 擊殺數（暫留，之後可能拔掉） | `scenes/UIScene.ts` › `killBox` | — |
 | 彩票欄 | P位面板的 🎫 彩票數 | `scenes/UIScene.ts` › `ticketBox` | — |
 | 連段介面 | P位面板的 HIT 連段數，快中斷時閃爍 | `scenes/UIScene.ts` › `panelHitCounters` | `comboReward.WARNING_START_RATIO` |
