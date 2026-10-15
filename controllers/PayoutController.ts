@@ -176,23 +176,32 @@ export class PayoutController {
   }
 
   /**
-   * 打中關卡中的寶箱怪：發出命中者寶箱怪 buffer 的 payout.treasure.hitShare（整數部分）
+   * 打中關卡中的寶箱怪：有 payout.treasure.hitChance 機率從命中者的寶箱怪 buffer 發 hitTickets 張；
+   * 發完後 buffer 要還留得下 killReserve 張給打倒，不夠就不發
    *
    * @param c 命中的角色
-   * @returns 發出的張數（0 = 這份不到 1 張）
+   * @returns 發出的張數（0 = 這下沒中或 buffer 不夠）
    */
   payTreasureHit(c: Character): number {
-    return this.takeSeat(c, 'treasure', GameConfig.payout.treasure.hitShare);
+    const cfg = GameConfig.payout.treasure;
+    const seat = this.seatOf(c);
+    if (Math.random() >= cfg.hitChance || Math.floor(seat.treasure) - cfg.hitTickets < cfg.killReserve) return 0;
+    seat.treasure -= cfg.hitTickets;
+    return this.pay(c, cfg.hitTickets);
   }
 
   /**
-   * 打倒關卡中的寶箱怪：發出打倒者寶箱怪 buffer 的 payout.treasure.killShare（整數部分），其餘留到下一隻
+   * 打倒關卡中的寶箱怪：發出打倒者寶箱怪 buffer 的整數部分全部，保證至少 payout.treasure.killMinTickets 張——
+   * buffer 不夠時先借（buffer 變負），之後扣 CREDIT 存進來的先還，長期 RTP 不變
    *
    * @param c 打倒的角色
    * @returns 發出的張數
    */
   payTreasureKill(c: Character): number {
-    return this.takeSeat(c, 'treasure', GameConfig.payout.treasure.killShare);
+    const seat = this.seatOf(c);
+    const amount = Math.max(Math.floor(seat.treasure), GameConfig.payout.treasure.killMinTickets);
+    seat.treasure -= amount;
+    return this.pay(c, amount);
   }
 
   /**

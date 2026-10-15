@@ -292,7 +292,8 @@ export const GameConfig = {
    * - comboMinTickets：連擊報獎保底張數——按比例算出的張數不到這個數（含沒達到第一個里程碑的保底報獎）時改發這個數，
    *   buffer 不夠時發 buffer 的整數部分（不超過已存的量，RTP 不變）
    * - secondFormExpectedHits：二段變身每打中一下發 buffer ÷ 此值（發完為止）
-   * - treasure：關卡中的寶箱怪每打中一下發命中者 buffer 的 hitShare、打倒時發打倒者 buffer 的 killShare（只發整數，其餘留到下一隻）
+   * - treasure：關卡中的寶箱怪每打中一下有 hitChance 機率發命中者 buffer 的 hitTickets 張（buffer 要留得下 killReserve 張給打倒才發）；
+   *   打倒時發打倒者 buffer 的整數部分全部，至少 killMinTickets 張（buffer 不夠時先借，之後扣 CREDIT 存進來的先還，長期 RTP 不變）
    * - boss：共用 buffer 存到 minBudget 才亂入；登場時鎖定整個 buffer，hitShare 給打中（每下 ÷ expectedHits）、killShare 給打倒、
    *   其餘給變身 BOSS 期間打倒的怪（每隻 ÷ formExpectedKills）；沒發完的退回
    * - treasureRoom：共用 buffer 存到 budget 才開密室入口；進去時鎖定 budget，killShare 給打倒（每隻 ÷ expectedKills）、
@@ -306,7 +307,7 @@ export const GameConfig = {
     comboTierShares: [0.1, 0.2, 0.35, 0.6, 1] as ReadonlyArray<number>,
     comboMinTickets: 1,
     secondFormExpectedHits: 15,
-    treasure: { hitShare: 0.05, killShare: 0.6 },
+    treasure: { hitChance: 0.3, hitTickets: 1, killReserve: 1, killMinTickets: 1 },
     boss: { minBudget: 600, hitShare: 0.3, killShare: 0.3, expectedHits: 25, formExpectedKills: 20 },
     treasureRoom: { budget: 300, killShare: 0.5, expectedKills: 8 },
     debugKey: 'F8',
@@ -855,8 +856,8 @@ export const GameConfig = {
     },
     /** 寶箱怪行為參數 */
     treasure: {
-      /** 需命中幾次才死(用戶「20下」) */
-      hitsToKill: 20,
+      /** 需命中幾次才死 */
+      hitsToKill: 15,
       /** 跑點:每次停頓時間(毫秒,隨機範圍)——用戶調長 3-5s 玩家更好追打 */
       pauseMinMs: 3000,
       pauseMaxMs: 5000,

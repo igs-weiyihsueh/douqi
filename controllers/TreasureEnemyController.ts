@@ -308,8 +308,9 @@ export class TreasureEnemyController {
   }
 
   /**
-   * 命中寶箱怪：計一下、顯示剩餘次數並發彩票給命中者（彩票圖示 + 張數），達到命中數就打倒，噴彩票噴泉並放大顯示打倒獎。
-   * 關卡中的寶箱怪從命中者的寶箱怪獎勵 buffer 發（跑走途中被打到算打倒）；獎勵關的寶箱怪改用 treasureRoom.hitsToKill，
+   * 命中寶箱怪：計一下、顯示剩餘次數並發彩票給命中者（有發才顯示彩票圖示 + 張數），達到命中數就打倒，噴彩票噴泉並放大顯示打倒獎。
+   * 關卡中的寶箱怪從命中者的寶箱怪獎勵 buffer 發（每下機率發、打倒保證有，見 PayoutController.payTreasureHit / payTreasureKill；
+   * 跑走途中被打到算打倒）；獎勵關的寶箱怪改用 treasureRoom.hitsToKill，
    * 從密室的加碼預算發（預算發完就不再給）
    *
    * @param enemy 寶箱怪
