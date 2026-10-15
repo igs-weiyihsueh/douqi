@@ -9,6 +9,7 @@ import type { StageNodeKind } from '../systems/stageQueue';
 import { HitCounter } from '../objects/HitCounter';
 import { CoinBonusBar } from '../objects/CoinBonusBar';
 import { popTicketReward } from '../systems/ticketFx';
+import { EDITOR_PANEL_DEPTH } from '../objects/AttackTuningEditor';
 
 /** 卷軸 HUD 節點狀態類型 */
 type StageNodeState = 'current' | 'pending' | 'done';
@@ -119,6 +120,18 @@ interface StatsPayload {
  * - 角色周圍：P1 的方向瞄準圓環 + 箭頭
  */
 export class UIScene extends Phaser.Scene {
+  /** 招式編輯器模式（主選單「招式編輯器」進入）：不顯示 HUD，只留範圍 / 判定編輯器的面板 */
+  private editorMode = false;
+
+  /**
+   * 場景啟動參數
+   *
+   * @param data editor = 招式編輯器模式
+   */
+  init(data?: { editor?: boolean }): void {
+    this.editorMode = data?.editor === true;
+  }
+
   private teamText!: Phaser.GameObjects.Text;
   private timeText!: Phaser.GameObjects.Text;
 
@@ -775,8 +788,28 @@ export class UIScene extends Phaser.Scene {
     }
   };
 
-  /** 每幀:波次節點序列脈動 + 線漸進填滿重繪(只在顯示時)。 */
+  /** 每幀：波次節點的進度條；招式編輯器模式隱藏 HUD */
   update(_time: number, delta: number): void {
+    this.updateStageHud(delta);
+    if (this.editorMode) this.hideHudForEditor();
+  }
+
+  /**
+   * 招式編輯器模式：把編輯面板（EDITOR_PANEL_DEPTH）以下的物件都隱藏（每幀做，HUD 之後自己顯示出來的也會再藏起來）
+   */
+  private hideHudForEditor(): void {
+    for (const obj of this.children.list) {
+      const o = obj as Phaser.GameObjects.GameObject & Phaser.GameObjects.Components.Depth & Phaser.GameObjects.Components.Visible;
+      if (o.depth < EDITOR_PANEL_DEPTH && o.visible) o.setVisible(false);
+    }
+  }
+
+  /**
+   * 波次節點序列脈動 + 線漸進填滿重繪（只在顯示時）
+   *
+   * @param delta 這一幀經過的毫秒
+   */
+  private updateStageHud(delta: number): void {
     if (!this.stageHudShow) return;
     // 量條平滑推進：每殺一隻怪目標前進一點，畫面以 lineFillMs 填滿一整段的速率逼近
     const rate = delta / Math.max(1, GameConfig.waveHud.lineFillMs);

@@ -65,6 +65,9 @@ const LAYOUT = {
   STATUS_HEIGHT: 24
 } as const;
 
+/** 編輯面板的深度（UIScene 上；招式編輯器模式只顯示這個深度以上的物件） */
+export const EDITOR_PANEL_DEPTH = LAYOUT.DEPTH;
+
 /** 匯出設定下載的檔名 */
 const EXPORT_FILE_NAME = 'douqi-attack-tuning.json';
 
@@ -261,9 +264,13 @@ export class AttackTuningEditor {
     else this.open();
   }
 
-  /** 每幀：面板開啟時重畫選中招式的打擊點與近戰觸發圈（怪物頁畫木樁的攻擊範圍） */
+  /**
+   * 每幀：面板開啟時重畫選中招式的打擊點與近戰觸發圈（怪物頁畫木樁的攻擊範圍），並更新時間軸
+   * （P1 的 Spine 第一次顯示時才建立，面板比它早打開時動作長度一開始是 0，之後才有）
+   */
   update(): void {
     if (!this.overlay) return;
+    this.refreshTimeline();
     const p = this.host.player();
     const g = this.overlay.clear();
     if (this.mode === 'monster') {

@@ -187,6 +187,8 @@ export class GameScene extends Phaser.Scene {
   private controlMode: 'fast' | 'slow' = 'fast';
   /** 木樁模式（GameConfig.training）：不開關卡、不生怪，只有一隻打不死的木樁 */
   private training = false;
+  /** 招式編輯器模式（主選單「招式編輯器」）：木樁模式 + 範圍 / 判定編輯器一開始就打開、不顯示 HUD（見 UIScene.editorMode） */
+  private editorMode = false;
   /** 木樁模式的木樁 */
   private trainingDummy: Enemy | null = null;
   /**
@@ -239,9 +241,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** 接收 TitleScene 傳入的操作模式（預設 fast，保持向後相容/直接啟動也不壞）與是否為木樁模式 */
-  init(data?: { controlMode?: 'fast' | 'slow'; training?: boolean }): void {
+  init(data?: { controlMode?: 'fast' | 'slow'; training?: boolean; editor?: boolean }): void {
     this.controlMode = data?.controlMode === 'slow' ? 'slow' : 'fast';
-    this.training = data?.training === true;
+    this.training = data?.training === true || data?.editor === true;
+    this.editorMode = data?.editor === true;
   }
 
   create(): void {
@@ -528,6 +531,7 @@ export class GameScene extends Phaser.Scene {
         setDummyType: (kind) => this.setTrainingDummy(kind ?? GameConfig.training.dummyType, kind !== null)
       });
       this.input.keyboard!.on(`keydown-${GameConfig.training.tuningEditorKey}`, () => this.tuningEditor?.toggle());
+      if (this.editorMode) this.openEditorWhenUiReady();
     } else {
       // 開場第一波灑幾個可打破物件
       this.breakableCtl.spawnForWave();
@@ -2208,6 +2212,14 @@ export class GameScene extends Phaser.Scene {
     this.trainingDummy = e;
   }
 
+  /** 招式編輯器模式：UIScene 建好後打開範圍 / 判定編輯器（面板建在 UIScene，GameScene 先建立時它可能還沒開始） */
+  private openEditorWhenUiReady(): void {
+    const ui = this.scene.get('UIScene');
+    const open = (): void => { if (!this.tuningEditor?.isOpen) this.tuningEditor?.toggle(); };
+    if (ui.sys.isActive()) open();
+    else ui.events.once(Phaser.Scenes.Events.CREATE, open);
+  }
+
   /**
    * 木樁換成另一個怪種：收掉目前的木樁，下一幀由 keepTrainingReady 以新設定重新生成（設定沒變時不動作）
    *
@@ -2228,8 +2240,9 @@ export class GameScene extends Phaser.Scene {
     this.tweens.killAll();
     this.time.removeAllEvents();
     this.scene.stop('UIScene');
-    this.scene.start('GameScene', { controlMode: this.controlMode, training: this.training }); // 重開保留當前操作模式與木樁模式
-    this.scene.launch('UIScene');
+    // 重開保留當前操作模式、木樁模式與招式編輯器模式
+    this.scene.start('GameScene', { controlMode: this.controlMode, training: this.training, editor: this.editorMode });
+    this.scene.launch('UIScene', { editor: this.editorMode });
   }
 
   /** ESC 熱鍵——返回主菜單（清理場景狀態，停止 UIScene，回到 TitleScene） */
