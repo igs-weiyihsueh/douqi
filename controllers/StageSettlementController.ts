@@ -72,7 +72,8 @@ interface ChestFx {
  * 2. 面板收起 → 寶箱從畫面上方降下 → 打開，參與玩家這一階寶箱 buffer 合成的獎池依分數比例分配
  * 3. 彩票從寶箱飛到各 P 位下方面板的彩票欄 → 通知場景結束（開出口、恢復操作）
  *
- * 參與者 = 開始結算時還在場上的角色；沒有人時直接結束。播放期間場景凍結角色（isActive）
+ * 參與者 = 開始結算時為遊玩或續關（creditState 'playing' / 'waiting'）的角色，名單在開始時定下：
+ * 結算途中續關逾時變成待機的人照樣分到彩票。沒有參與者時直接結束。播放期間場景凍結角色（isActive）
  */
 export class StageSettlementController {
   private active = false;
@@ -96,13 +97,22 @@ export class StageSettlementController {
   }
 
   /**
+   * 是否參與關卡結算：遊玩或續關中（待機的不參與）
+   *
+   * @param c 角色
+   */
+  static isParticipant(c: Character): boolean {
+    return c.creditState === 'playing' || c.creditState === 'waiting';
+  }
+
+  /**
    * 開始結算演出
    *
    * @param tier 這一關的寶箱階級
    */
   start(tier: 'low' | 'high'): void {
     const characters = this.host.characters();
-    const entries = characters.filter((c) => c.alive).map((c) => ({ c, score: StageSettlementController.scoreOf(c) }));
+    const entries = characters.filter((c) => StageSettlementController.isParticipant(c)).map((c) => ({ c, score: StageSettlementController.scoreOf(c) }));
     if (entries.length === 0) {
       this.host.onFinished();
       return;
@@ -141,7 +151,7 @@ export class StageSettlementController {
   }
 
   /**
-   * 組出面板 4 欄：參與者帶戰績、分數與名次（同分同名次），已加入但不在場上的為等待投幣，沒有人的 P 位為未加入
+   * 組出面板 4 欄：參與者帶戰績、分數與名次（同分同名次），不參與（待機中或沒有人）的 P 位為未加入
    *
    * @param characters 已加入的角色
    * @param entries 參與結算的角色與分數
@@ -153,8 +163,8 @@ export class StageSettlementController {
       const c = characters[i];
       const entry = entries.find((e) => e.c === c);
       const base = { label: `${i + 1}P`, color: colors[i % colors.length], values: [0, 0, 0], score: 0, rank: 0 };
-      if (!c || !entry) {
-        columns.push({ ...base, state: c ? 'waiting' : 'empty' });
+      if (!entry) {
+        columns.push({ ...base, state: 'empty' });
         continue;
       }
       const rank = 1 + entries.filter((e) => e.score > entry.score).length;

@@ -32,14 +32,17 @@ export interface TargetingHost {
 
 /** 鎖定標記深度 */
 const LOCK_MARKER_DEPTH = 12;
-/** 鎖定框四角短線長度 */
-const LOCK_CORNER_LEN = 6;
-/** 鎖定框四個角的 P 位圓點位置（依角色 index：1P 右上、2P 左上、3P 右下、4P 左下） */
-const SLOT_CORNERS: ReadonlyArray<{ right: boolean; top: boolean }> = [
-  { right: true, top: true },
-  { right: false, top: true },
-  { right: true, top: false },
-  { right: false, top: false }
+/** 圓框四角短線長度 */
+const LOCK_CORNER_LEN = 8;
+/**
+ * 鎖定框的四個角，依角色 index 歸屬（1P 右上、2P 左上、3P 右下、4P 左下）；
+ * arcFrom / arcTo 為圓框上該角那一段四分之一圓弧的角度（Phaser 角度：0 = 右、順時針為正）
+ */
+const SLOT_CORNERS: ReadonlyArray<{ right: boolean; top: boolean; arcFrom: number; arcTo: number }> = [
+  { right: true, top: true, arcFrom: 270, arcTo: 360 },
+  { right: false, top: true, arcFrom: 180, arcTo: 270 },
+  { right: true, top: false, arcFrom: 0, arcTo: 90 },
+  { right: false, top: false, arcFrom: 90, arcTo: 180 }
 ];
 /** 「腳下」目標的判定距離加成（角色半徑之外）：這麼近的目標方向不穩定，不當作瞄準候選 */
 const UNDERFOOT_EXTRA = 12;
@@ -377,64 +380,89 @@ export class TargetingController {
   }
 
   /**
-   * 畫所有角色的鎖定標記：同一目標只畫一個共用框（怪：圓 + 四角；木箱：四角括號），框的四個角是 P 位圓點
-   * （SLOT_CORNERS：1P 右上、2P 左上、3P 右下、4P 左下）。只畫已加入的 P 位，鎖著這個目標的填滿代表色、其餘空心
+   * 畫所有角色的鎖定標記：同一目標只畫一個共用框（怪 / 道具：圓 + 四角；木箱：四角括號），框用鎖定者的 P 位代表色，
+   * 多人鎖定時依 cornerOwners 分段上色；每段先畫深色描邊再畫彩色線，在任何地面上都看得清楚
    */
   drawMarkers(): void {
     const g = this.gfx;
     g.clear();
     const m = GameConfig.lock.marker;
-    const characters = this.host.characters();
-    // 已加入的 P 位（待機中的不畫圓點位置）
-    const joined = characters.filter((c) => c.creditState !== 'absent').map((c) => c.index);
-    // 目標 → 鎖定它的角色 index
-    const groups = new Map<LockTarget, Set<number>>();
-    for (const c of characters) {
+    const colors = GameConfig.characters.colors;
+    // 目標 → 鎖定它的角色 index（依 P 位順序）
+    const groups = new Map<LockTarget, number[]>();
+    for (const c of this.host.characters()) {
       if (!c.alive) continue;
       const t = c.lockedTarget as unknown as LockTarget | null;
       if (!this.isLockValid(t)) continue;
-      const set = groups.get(t!);
-      if (set) set.add(c.index);
-      else groups.set(t!, new Set([c.index]));
+      const list = groups.get(t!);
+      if (list) list.push(c.index);
+      else groups.set(t!, [c.index]);
     }
     for (const [t, lockers] of groups) {
-      g.lineStyle(m.thickness, m.color, 0.95);
-      // 框的左右上下緣（四個角就是 P 位圓點的位置）
-      let l: number, r: number, top: number, bot: number;
-      if (this.isBreakable(t)) {
-        // 木箱：沿碰撞矩形外擴的四角括號
-        const b = t.getBody();
-        const pad = m.cratePadding, s = m.crateCornerLen;
-        l = b.left - pad; r = b.right + pad; top = b.top - pad; bot = b.bottom + pad;
-        for (const [x, y, sx, sy] of [[l, top, 1, 1], [r, top, -1, 1], [l, bot, 1, -1], [r, bot, -1, -1]]) {
-          g.lineBetween(x, y, x + sx * s, y);
-          g.lineBetween(x, y, x, y + sy * s);
-        }
-      } else {
-        g.strokeCircle(t.x, t.y, m.radius);
-        const rad = m.radius;
-        const s = LOCK_CORNER_LEN;
-        for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-          g.lineBetween(t.x + sx * rad, t.y + sy * rad, t.x + sx * (rad - s), t.y + sy * rad);
-          g.lineBetween(t.x + sx * rad, t.y + sy * rad, t.x + sx * rad, t.y + sy * (rad - s));
-        }
-        l = t.x - rad; r = t.x + rad; top = t.y - rad; bot = t.y + rad;
-      }
-      for (const index of joined) {
-        const corner = SLOT_CORNERS[index];
-        if (!corner) continue;
-        const x = corner.right ? r : l;
-        const y = corner.top ? top : bot;
-        if (lockers.has(index)) {
-          g.fillStyle(GameConfig.characters.colors[index] ?? 0xffffff, 1);
-          g.fillCircle(x, y, m.slotRadius);
-          g.lineStyle(1, 0x000000, 0.8);
-          g.strokeCircle(x, y, m.slotRadius);
-        } else {
-          g.lineStyle(m.slotEmptyLineWidth, m.color, m.slotEmptyAlpha);
-          g.strokeCircle(x, y, m.slotRadius);
-        }
+      const owners = this.cornerOwners(lockers.sort((a, b) => a - b));
+      // 兩趟：先畫描邊（較粗、深色），再疊上各角的 P 位顏色
+      for (const outline of [true, false]) {
+        SLOT_CORNERS.forEach((corner, i) => {
+          if (outline) g.lineStyle(m.thickness + m.outlineExtra, m.outlineColor, m.outlineAlpha);
+          else g.lineStyle(m.thickness, colors[owners[i] % colors.length], 1);
+          this.strokeFrameCorner(t, corner);
+        });
       }
     }
+  }
+
+  /**
+   * 框四個角（SLOT_CORNERS 順序）各用哪個 P 位的顏色：
+   * 1 人鎖定 → 四角同色；2 人 → 編號小的佔右半、大的佔左半；3~4 人 → 每個角歸該角的 P 位，沒人鎖的角沿用同側另一角
+   *
+   * @param lockers 鎖定這個目標的角色 index（由小到大）
+   * @returns 四個角的角色 index
+   */
+  private cornerOwners(lockers: ReadonlyArray<number>): number[] {
+    if (lockers.length === 1) return SLOT_CORNERS.map(() => lockers[0]);
+    if (lockers.length === 2) return SLOT_CORNERS.map((corner) => (corner.right ? lockers[0] : lockers[1]));
+    return SLOT_CORNERS.map((corner, i) => {
+      if (lockers.includes(i)) return i;
+      const sameSide = SLOT_CORNERS.findIndex((other, j) => j !== i && other.right === corner.right);
+      return lockers.includes(sameSide) ? sameSide : lockers[0];
+    });
+  }
+
+  /**
+   * 畫框的其中一角：木箱為碰撞矩形外擴的直角括號；怪 / 道具為該角的四分之一圓弧加外接正方形的角線
+   *
+   * @param t 鎖定目標
+   * @param corner 哪一角
+   */
+  private strokeFrameCorner(t: LockTarget, corner: (typeof SLOT_CORNERS)[number]): void {
+    const g = this.gfx;
+    const m = GameConfig.lock.marker;
+    const sx = corner.right ? 1 : -1;
+    const sy = corner.top ? -1 : 1;
+    if (this.isBreakable(t)) {
+      const b = t.getBody();
+      const x = corner.right ? b.right + m.cratePadding : b.left - m.cratePadding;
+      const y = corner.top ? b.top - m.cratePadding : b.bottom + m.cratePadding;
+      g.lineBetween(x, y, x - sx * m.crateCornerLen, y);
+      g.lineBetween(x, y, x, y - sy * m.crateCornerLen);
+      return;
+    }
+    const rad = this.frameRadius(t);
+    g.beginPath();
+    g.arc(t.x, t.y, rad, Phaser.Math.DegToRad(corner.arcFrom), Phaser.Math.DegToRad(corner.arcTo));
+    g.strokePath();
+    const x = t.x + sx * rad, y = t.y + sy * rad;
+    g.lineBetween(x, y, x - sx * LOCK_CORNER_LEN, y);
+    g.lineBetween(x, y, x, y - sy * LOCK_CORNER_LEN);
+  }
+
+  /**
+   * 圓框半徑：至少 marker.radius；敵人依碰撞半徑 + enemyPadding 放大
+   *
+   * @param t 鎖定目標（怪或道具）
+   */
+  private frameRadius(t: Enemy | Item): number {
+    const m = GameConfig.lock.marker;
+    return this.isItem(t) ? m.radius : Math.max(m.radius, t.getBodyRadius() + m.enemyPadding);
   }
 }

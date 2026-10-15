@@ -1557,21 +1557,22 @@ export const GameConfig = {
     loseTargetRadius: 620,
     /** 近敵貼身攻擊時，朝目標位移的一小段距離（貼近用） */
     meleeStep: 46,
-    /** 鎖定標記樣式 */
+    /**
+     * 鎖定框樣式：框用鎖定者的 P 位代表色（GameConfig.characters.colors）；多人鎖同一目標時框分段上色
+     * （2 人左右各半、3~4 人四個角各一色，見 TargetingController.cornerOwners）
+     */
     marker: {
-      color: 0xffe66d,
-      radius: 24,
-      thickness: 2,
-      /**
-       * 框四個角的 P 位圓點（1P 右上、2P 左上、3P 右下、4P 左下）：只畫已加入的 P 位；
-       * 鎖著這個目標的 P 位填滿代表色（黑描邊），其餘為框色細線空心圓（透明度 slotEmptyAlpha）
-       */
-      slotRadius: 7,
-      slotEmptyAlpha: 0.5,
-      slotEmptyLineWidth: 1.5,
-      /** 鎖定木箱時的框：沿木箱碰撞矩形外擴 cratePadding 的四角括號（角線長 crateCornerLen），P 位圓點在四個角 */
-      cratePadding: 6,
-      crateCornerLen: 16
+      /** 敵人 / 道具的圓框：最小半徑，敵人另依碰撞半徑 + enemyPadding 放大（大怪、BOSS 框跟著變大） */
+      radius: 30,
+      enemyPadding: 10,
+      thickness: 3,
+      /** 框外圍的深色描邊（在任何地面上都看得清楚）：比框粗多少、顏色與透明度 */
+      outlineExtra: 2,
+      outlineColor: 0x000000,
+      outlineAlpha: 0.55,
+      /** 鎖定木箱時的框：沿木箱碰撞矩形外擴 cratePadding 的四角括號（角線長 crateCornerLen） */
+      cratePadding: 8,
+      crateCornerLen: 20
     }
   },
 

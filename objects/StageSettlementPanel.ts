@@ -46,7 +46,7 @@ const PANEL_CONFIG = {
   LABEL_STYLE: { fontFamily: 'monospace', fontSize: '30px', fontStyle: 'bold', color: '#c9c3e6' },
   VALUE_STYLE: { fontFamily: 'monospace', fontSize: '34px', fontStyle: 'bold', color: '#ffffff', stroke: '#000000', strokeThickness: 4 },
   SCORE_STYLE: { fontFamily: 'monospace', fontSize: '44px', fontStyle: 'bold', color: '#ffe082', stroke: '#000000', strokeThickness: 6 },
-  /** 沒在玩的欄位中央文字（等待投幣 / 未加入）與整欄透明度 */
+  /** 不參與結算的欄位中央文字（未加入）與整欄透明度 */
   IDLE_Y: 40,
   IDLE_STYLE: { fontFamily: 'monospace', fontSize: '30px', fontStyle: 'bold', color: '#8a84a8' },
   IDLE_ALPHA: 0.6,
@@ -64,8 +64,8 @@ export interface SettlementColumn {
   label: string;
   /** P 位顏色 */
   color: number;
-  /** playing = 參與結算；waiting = 已加入但等待投幣；empty = 這個 P 位沒有人 */
-  state: 'playing' | 'waiting' | 'empty';
+  /** playing = 參與結算；empty = 不參與（待機中或這個 P 位沒有人） */
+  state: 'playing' | 'empty';
   /** 三項戰績：擊敗敵人、最高連擊、破壞物件（與 STAT_LABELS 同順序） */
   values: ReadonlyArray<number>;
   score: number;
@@ -86,7 +86,7 @@ interface ColumnTexts {
  *
  * - open → revealStat（三項戰績由上而下逐列彈出最終數字）→ countScore（分數從 0 跳到總分）
  *   → revealRanks（名次彈出、第 1 名欄位亮框）→ close
- * - 沒在玩的 P 位整欄淡化，只顯示「等待投幣」或「未加入」
+ * - 不參與的 P 位整欄淡化，只顯示「未加入」
  */
 export class StageSettlementPanel extends Phaser.GameObjects.Container {
   private readonly columns: ReadonlyArray<SettlementColumn>;
@@ -207,7 +207,7 @@ export class StageSettlementPanel extends Phaser.GameObjects.Container {
     const header = scene.add.text(x, cfg.HEADER_Y, col.label, cfg.HEADER_STYLE).setOrigin(0.5);
     this.add([box, header]);
     if (col.state !== 'playing') {
-      const idle = scene.add.text(x, cfg.IDLE_Y, col.state === 'waiting' ? '等待投幣' : '未加入', cfg.IDLE_STYLE).setOrigin(0.5);
+      const idle = scene.add.text(x, cfg.IDLE_Y, '未加入', cfg.IDLE_STYLE).setOrigin(0.5);
       this.add(idle);
       for (const obj of [box, header, idle]) obj.setAlpha(cfg.IDLE_ALPHA);
       return null;
