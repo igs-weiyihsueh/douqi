@@ -23,7 +23,7 @@
 | 擊殺欄 | P位面板的 💀 擊殺數（暫留，之後可能拔掉） | `scenes/UIScene.ts` › `killBox` | — |
 | 彩票欄 | P位面板的 🎫 彩票數 | `scenes/UIScene.ts` › `ticketBox` | — |
 | 連段介面 | P位面板的 HIT 連段數，快中斷時閃爍 | `scenes/UIScene.ts` › `panelHitCounters` | `comboReward.WARNING_START_RATIO` |
-| 多投多送量條 | P位面板的膠囊形加贈進度 | `objects/CoinBonusBar.ts` › `CoinBonusBar` | `credit.coinBar` |
+| 多投多送量條 | 投幣後短暫顯示在角色面板上方的加贈進度 | `objects/CoinBonusBar.ts` › `CoinBonusBar` | `credit.coinBar` |
 | 待機提示 | 待機時 P位面板輪播「投幣加入遊戲／投越多送越多」 | `scenes/UIScene.ts` › `panelJoinTexts` | `credit.joinTexts` |
 | 鎖定框 | 被自動鎖定的目標身上的框 | `controllers/TargetingController.ts` | `lock.marker` |
 | 怪物提示 | 怪在畫面外時畫面邊緣的箭頭 | `controllers/OffscreenEnemyIndicator.ts` › `OffscreenEnemyIndicator` | `stage.offscreenIndicator` |
