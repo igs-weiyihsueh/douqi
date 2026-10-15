@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import {
-  ATTACK_RANGE_PARAM_DEFS, applyAttackRange, attackRange, attackRangeStore, type AttackRangeKey
-} from '../systems/attackRangeParams';
+  ATTACK_HIT_EVENT, ATTACK_TUNING_PARAM_DEFS, applyAttackTuning, attackTuning, attackTuningStore,
+  type AttackHitKind, type AttackTuningKey
+} from '../systems/attackTuningParams';
 import type { Character } from './Character';
 
 /** 面板版面與配色（畫面座標，固定在畫面左側，不擋住中央的角色與木樁） */
@@ -35,21 +36,28 @@ const OVERLAY = {
   TRIGGER: { color: 0xfacc15, fill: 0, line: 0.8 },
   CIRCLE: { color: 0xfb923c, fill: 0.08, line: 0.8 },
   LINE: { color: 0xc084fc, fill: 0.1, line: 0.8 },
-  LINE_WIDTH: 2
+  LINE_WIDTH: 2,
+  /** 判定那一刻該範圍閃亮：填色透明度改成 FLASH_FILL，持續 FLASH_MS */
+  FLASH_FILL: 0.5,
+  FLASH_MS: 150
 } as const;
 
 /** 各參數對應的範圍顏色（面板色票用） */
-const KEY_COLORS: Readonly<Record<AttackRangeKey, number>> = {
+const KEY_COLORS: Readonly<Record<AttackTuningKey, number>> = {
   meleeRadius: OVERLAY.MELEE.color,
   meleeArcDeg: OVERLAY.MELEE.color,
   meleeEnemyRange: OVERLAY.TRIGGER.color,
   circleRadius: OVERLAY.CIRCLE.color,
   lineLength: OVERLAY.LINE.color,
-  lineWidth: OVERLAY.LINE.color
+  lineWidth: OVERLAY.LINE.color,
+  hitMsAttack1: OVERLAY.MELEE.color,
+  hitMsAttack2: OVERLAY.MELEE.color,
+  hitMsCircle: OVERLAY.CIRCLE.color,
+  hitMsLine: OVERLAY.LINE.color
 };
 
 /** 編輯器需要的場景資訊 */
-export interface AttackRangeEditorHost {
+export interface AttackTuningEditorHost {
   /** P1（範圍畫在 P1 身上，方向依 P1 面向） */
   player(): Character;
   /** 木樁的身體半徑（近戰觸發圈 = 觸發距離 + 木樁半徑，木樁中心進圈就是近戰）；沒有木樁時為 0 */
@@ -57,20 +65,31 @@ export interface AttackRangeEditorHost {
 }
 
 /**
- * 木樁模式的範圍編輯器（GameConfig.training.rangeEditorKey 開關）：畫面左側面板用滑鼠按 − / + 調整攻擊範圍
- * （systems/attackRangeParams，每次調整即時套用並存在瀏覽器），開啟期間在 P1 身上畫出各範圍：
- * 普攻扇形（藍）、近戰觸發圈（黃，木樁中心進圈就原地揮擊，否則衝刺）、圓形斬（橘）、直線氣波（紫，朝 P1 面向）
+ * 木樁模式的範圍編輯器（GameConfig.training.tuningEditorKey 開關）：畫面左側面板用滑鼠按 − / + 調整攻擊範圍與判定時間點
+ * （systems/attackTuningParams，每次調整即時套用並存在瀏覽器），開啟期間在 P1 身上畫出各範圍：
+ * 普攻扇形（藍）、近戰觸發圈（黃，木樁中心進圈就原地揮擊，否則衝刺）、圓形斬（橘）、直線氣波（紫，朝 P1 面向）；
+ * P1 的招式判定那一刻，該範圍閃亮一下，方便對照動作調整判定時間點
  */
-export class AttackRangeEditor {
+export class AttackTuningEditor {
   private panel: Phaser.GameObjects.Container | null = null;
   private overlay: Phaser.GameObjects.Graphics | null = null;
-  private readonly valueTexts = new Map<AttackRangeKey, Phaser.GameObjects.Text>();
+  private readonly valueTexts = new Map<AttackTuningKey, Phaser.GameObjects.Text>();
+  /** 各範圍閃亮到何時（場景時間） */
+  private readonly flashUntil: Record<AttackHitKind, number> = { melee: 0, circle: 0, line: 0 };
 
   /**
+   * 建立編輯器並監聽招式判定事件（P1 判定時閃亮對應範圍；場景關閉時取消監聽）
+   *
    * @param scene 場景
    * @param host 場景資訊
    */
-  constructor(private readonly scene: Phaser.Scene, private readonly host: AttackRangeEditorHost) {}
+  constructor(private readonly scene: Phaser.Scene, private readonly host: AttackTuningEditorHost) {
+    const onHit = (c: Character, kind: AttackHitKind): void => {
+      if (c === host.player()) this.flashUntil[kind] = scene.time.now + OVERLAY.FLASH_MS;
+    };
+    scene.events.on(ATTACK_HIT_EVENT, onHit);
+    scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => scene.events.off(ATTACK_HIT_EVENT, onHit));
+  }
 
   /** 面板是否開啟中 */
   get isOpen(): boolean {
@@ -87,19 +106,21 @@ export class AttackRangeEditor {
   update(): void {
     if (!this.overlay) return;
     const p = this.host.player();
-    const range = attackRange();
+    const range = attackTuning();
     const g = this.overlay.clear();
     const angle = p.aimAngle;
     const half = Phaser.Math.DegToRad(range.meleeArcDeg) / 2;
+    const now = this.scene.time.now;
+    const fill = (kind: AttackHitKind, normal: number): number => (now < this.flashUntil[kind] ? OVERLAY.FLASH_FILL : normal);
     // 普攻扇形
-    g.fillStyle(OVERLAY.MELEE.color, OVERLAY.MELEE.fill).slice(p.x, p.y, range.meleeRadius, angle - half, angle + half, false).fillPath();
+    g.fillStyle(OVERLAY.MELEE.color, fill('melee', OVERLAY.MELEE.fill)).slice(p.x, p.y, range.meleeRadius, angle - half, angle + half, false).fillPath();
     g.lineStyle(OVERLAY.LINE_WIDTH, OVERLAY.MELEE.color, OVERLAY.MELEE.line)
       .beginPath().slice(p.x, p.y, range.meleeRadius, angle - half, angle + half, false).closePath().strokePath();
     // 近戰觸發圈
     g.lineStyle(OVERLAY.LINE_WIDTH, OVERLAY.TRIGGER.color, OVERLAY.TRIGGER.line)
       .strokeCircle(p.x, p.y, range.meleeEnemyRange + this.host.dummyRadius());
     // 圓形斬
-    g.fillStyle(OVERLAY.CIRCLE.color, OVERLAY.CIRCLE.fill).fillCircle(p.x, p.y, range.circleRadius);
+    g.fillStyle(OVERLAY.CIRCLE.color, fill('circle', OVERLAY.CIRCLE.fill)).fillCircle(p.x, p.y, range.circleRadius);
     g.lineStyle(OVERLAY.LINE_WIDTH, OVERLAY.CIRCLE.color, OVERLAY.CIRCLE.line).strokeCircle(p.x, p.y, range.circleRadius);
     // 直線氣波（從角色往面向延伸的長方形）
     const cos = Math.cos(angle), sin = Math.sin(angle);
@@ -110,18 +131,18 @@ export class AttackRangeEditor {
       new Phaser.Math.Vector2(p.x + cos * len + sin * hw, p.y + sin * len - cos * hw),
       new Phaser.Math.Vector2(p.x + cos * len - sin * hw, p.y + sin * len + cos * hw)
     ];
-    g.fillStyle(OVERLAY.LINE.color, OVERLAY.LINE.fill).fillPoints(corners, true);
+    g.fillStyle(OVERLAY.LINE.color, fill('line', OVERLAY.LINE.fill)).fillPoints(corners, true);
     g.lineStyle(OVERLAY.LINE_WIDTH, OVERLAY.LINE.color, OVERLAY.LINE.line).strokePoints(corners, true);
   }
 
   /** 開啟面板與範圍顯示 */
   private open(): void {
-    const defs = ATTACK_RANGE_PARAM_DEFS;
+    const defs = ATTACK_TUNING_PARAM_DEFS;
     const height = LAYOUT.TITLE_HEIGHT + defs.length * LAYOUT.ROW_HEIGHT + LAYOUT.BUTTON_HEIGHT + LAYOUT.PADDING * 2;
     const panel = this.scene.add.container(LAYOUT.X, LAYOUT.Y).setScrollFactor(0).setDepth(LAYOUT.DEPTH);
     panel.add(this.scene.add.rectangle(0, 0, LAYOUT.WIDTH, height, LAYOUT.BG_COLOR, LAYOUT.BG_ALPHA)
       .setOrigin(0, 0).setStrokeStyle(2, LAYOUT.BORDER_COLOR).setInteractive());
-    panel.add(this.text(LAYOUT.PADDING, LAYOUT.PADDING, '範圍編輯器（P 開關）', LAYOUT.COLORS.TITLE, '20px'));
+    panel.add(this.text(LAYOUT.PADDING, LAYOUT.PADDING, '範圍 / 判定編輯器（P 開關）', LAYOUT.COLORS.TITLE, '20px'));
     panel.add(this.text(LAYOUT.PADDING, LAYOUT.PADDING + 26, '用滑鼠按 − / +，調整立即生效並存在瀏覽器', LAYOUT.COLORS.HINT, '13px'));
     defs.forEach((def, i) => {
       const y = LAYOUT.TITLE_HEIGHT + LAYOUT.PADDING + i * LAYOUT.ROW_HEIGHT + LAYOUT.ROW_HEIGHT / 2;
@@ -158,24 +179,24 @@ export class AttackRangeEditor {
    * @param key 參數
    * @param dir −1 減少 / +1 增加
    */
-  private step(key: AttackRangeKey, dir: -1 | 1): void {
-    const def = ATTACK_RANGE_PARAM_DEFS.find((d) => d.key === key)!;
-    const values = { ...attackRange() };
-    values[key] = attackRangeStore.clamp(def, values[key] + dir * def.step);
-    applyAttackRange(values);
+  private step(key: AttackTuningKey, dir: -1 | 1): void {
+    const def = ATTACK_TUNING_PARAM_DEFS.find((d) => d.key === key)!;
+    const values = { ...attackTuning() };
+    values[key] = attackTuningStore.clamp(def, values[key] + dir * def.step);
+    applyAttackTuning(values);
     this.refreshValues();
   }
 
   /** 全部恢復預設 */
   private reset(): void {
-    applyAttackRange(attackRangeStore.defaults());
+    applyAttackTuning(attackTuningStore.defaults());
     this.refreshValues();
   }
 
   /** 更新面板上的數值 */
   private refreshValues(): void {
-    const values = attackRange();
-    for (const def of ATTACK_RANGE_PARAM_DEFS) this.valueTexts.get(def.key)?.setText(`${values[def.key]}${def.unit}`);
+    const values = attackTuning();
+    for (const def of ATTACK_TUNING_PARAM_DEFS) this.valueTexts.get(def.key)?.setText(`${values[def.key]}${def.unit}`);
   }
 
   /**

@@ -52,8 +52,8 @@ import { standingDepth } from '../systems/standingDepth';
 import { facingRightFrom } from '../systems/facing';
 import { EnemySpineController } from '../controllers/EnemySpineController';
 import { PlayerSpineController } from '../controllers/PlayerSpineController';
-import { AttackRangeEditor } from '../objects/AttackRangeEditor';
-import { reloadAttackRange } from '../systems/attackRangeParams';
+import { AttackTuningEditor } from '../objects/AttackTuningEditor';
+import { reloadAttackTuning } from '../systems/attackTuningParams';
 
 /** 敵人上方彩票獲得提示的深度與離敵人中心的高度（樣式見 GameConfig.ticketFx；不受特效節流，獎勵一定要看得到） */
 const TICKET_POP_DEPTH = 51;
@@ -189,7 +189,7 @@ export class GameScene extends Phaser.Scene {
   /** 木樁模式的木樁 */
   private trainingDummy: Enemy | null = null;
   /** 木樁模式的範圍編輯器（其他模式為 null） */
-  private rangeEditor: AttackRangeEditor | null = null;
+  private tuningEditor: AttackTuningEditor | null = null;
   /**
    * 慢速模式【即時可調參數】——遊戲中用下方調參欄位 −/+ 調整，即時生效。
    * 初值取自 config；slow 模式的鎖定範圍/衝刺距離/衝刺速度改讀這組(fast 仍讀 config 常數不受影響)。
@@ -510,11 +510,11 @@ export class GameScene extends Phaser.Scene {
       // 木樁模式：P1 直接進場，只生木樁；可開範圍編輯器
       this.creditCtl.insertCoin(this.player);
       this.keepTrainingReady();
-      this.rangeEditor = new AttackRangeEditor(this, {
+      this.tuningEditor = new AttackTuningEditor(this, {
         player: () => this.player,
         dummyRadius: () => (this.trainingDummy?.active ? this.trainingDummy.getBodyRadius() : 0)
       });
-      this.input.keyboard!.on(`keydown-${GameConfig.training.rangeEditorKey}`, () => this.rangeEditor?.toggle());
+      this.input.keyboard!.on(`keydown-${GameConfig.training.tuningEditorKey}`, () => this.tuningEditor?.toggle());
     } else {
       // 開場第一波灑幾個可打破物件
       this.breakableCtl.spawnForWave();
@@ -538,11 +538,11 @@ export class GameScene extends Phaser.Scene {
 
   private resetState(): void {
     this.trainingDummy = null;
-    this.rangeEditor = null;
+    this.tuningEditor = null;
     // 角色編輯器參數：每局重新讀取（主選單可能剛改過），衝刺距離/速度同步到慢速即時調參，鎖敵範圍跟衝刺距離同步
     this.charParams = loadCharacterParams();
     reloadHitFeel(); // 打擊感參數：每局重新讀取（主選單打擊感編輯器可能剛改過）
-    reloadAttackRange(); // 攻擊範圍參數：每局重新讀取（木樁模式的範圍編輯器可能剛改過）
+    reloadAttackTuning(); // 攻擊範圍參數：每局重新讀取（木樁模式的範圍編輯器可能剛改過）
     this.slowTuning.dashDistance = this.charParams.dashDistance;
     this.slowTuning.dashSpeed = this.charParams.dashSpeed;
     this.slowTuning.lockRadius = this.charParams.dashDistance; // 鎖敵範圍跟衝刺距離同步
@@ -911,7 +911,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.artStyle.syncSkinToPlayer();
     this.playerSpine.sync(this.time.now);
-    this.rangeEditor?.update();
+    this.tuningEditor?.update();
     for (const child of this.enemies.getChildren()) {
       const e = child as Enemy;
       if (!e.active || !isRegularEnemy(e)) continue;

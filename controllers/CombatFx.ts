@@ -3,7 +3,7 @@ import { GameConfig } from '../config';
 import type { Character } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
 import { hitFeel } from '../systems/hitFeelParams';
-import { attackRange } from '../systems/attackRangeParams';
+import { attackTuning } from '../systems/attackTuningParams';
 
 /** 擴張環：初始半徑、深度、透明度、邊框粗細 */
 const RING_START_RADIUS = 10;
@@ -89,7 +89,7 @@ export class CombatFx {
   /** 原地扇形劍氣：朝 angle 畫一個帶亮邊的淡出扇形 */
   meleeArc(x: number, y: number, angle: number): void {
     const cfg = GameConfig.melee;
-    const range = attackRange();
+    const range = attackTuning();
     const half = Phaser.Math.DegToRad(range.meleeArcDeg) / 2;
     const g = this.scene.add.graphics().setDepth(ARC_DEPTH);
     g.fillStyle(cfg.arcColor, cfg.arcAlpha);

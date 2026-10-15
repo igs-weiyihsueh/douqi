@@ -31,8 +31,6 @@ export class PlayerSpineController {
   private oneShotUntil = 0;
   /** 已處理到的出招流水號 */
   private actionSeq = 0;
-  /** 普攻下一次用第幾段（anims.attack 輪流） */
-  private attackIndex = 0;
   /** P1 本體是否被 Spine 外觀藏起來（不顯示 Spine 時恢復） */
   private baseHidden = false;
   /** 上一幀是否在衝刺、是否在受擊硬直 */
@@ -155,7 +153,7 @@ export class PlayerSpineController {
   }
 
   /**
-   * 播一次的動作（受擊 / 出招 / 衝刺結束）：從頭播，播完前不切回移動 / 待機；普攻的兩段輪流
+   * 播一次的動作（受擊 / 出招 / 衝刺結束）：從頭播，播完前不切回移動 / 待機；普攻依 P1 這一下的段數（Character.attackSegment）播第 1 / 2 段
    *
    * @param key 動畫鍵
    * @param time 目前場景時間
@@ -185,10 +183,7 @@ export class PlayerSpineController {
     const cfg = GameConfig.playerSpine;
     const names = cfg.anims[key];
     let name = names[0];
-    if (key === 'attack') {
-      name = names[this.attackIndex % names.length];
-      this.attackIndex++;
-    }
+    if (key === 'attack') name = names[this.host.player().attackSegment % names.length];
     const entry = this.spine!.animationState.setAnimation(0, name, loop);
     entry.timeScale = cfg.speeds[key] ?? 1;
     this.current = key;

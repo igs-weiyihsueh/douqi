@@ -184,13 +184,13 @@ export const GameConfig = {
   /**
    * 木樁模式（主選單，測試角色動作用）：慢速操作，不開關卡、不生怪也不灑木箱，只在 P1 右方 dummyOffsetX 生一隻打不死的 dummyType
    * （血量見底就補滿、照常攻擊）；P1 自動進場且 CREDIT 維持在 credit。
-   * rangeEditorKey 開關範圍編輯器（調整攻擊範圍並畫在 P1 身上，見 objects/AttackRangeEditor）
+   * tuningEditorKey 開關範圍編輯器（調整攻擊範圍並畫在 P1 身上，見 objects/AttackTuningEditor）
    */
   training: {
     dummyType: 'tank' as 'normal' | 'tank' | 'bomber',
     dummyOffsetX: 260,
     credit: 999,
-    rangeEditorKey: 'P'
+    tuningEditorKey: 'P'
   },
 
   /**
@@ -557,12 +557,16 @@ export const GameConfig = {
     max: 10,
     /** 圓形範圍技（瞬發，不鎖角色） */
     circle: {
+      /** 判定時間點：放出（開始播 Combo01）後幾毫秒才判定命中（預設取自劍光出現的那一格） */
+      hitDelayMs: 330,
       radius: 160,
       damage: 40,
       knockback: 200
     },
     /** 直線範圍技（朝 aimAngle，瞬發貫穿） */
     line: {
+      /** 判定時間點：放出（開始播 Combo02）後幾毫秒才判定命中（預設取自棍子揮最快的那一格） */
+      hitDelayMs: 250,
       length: 420,
       width: 90,
       damage: 70,
@@ -1766,6 +1770,11 @@ export const GameConfig = {
     enemyRange: 150,
     /** 近戰往前踏時停在離敵人中心這個距離（像素；要小於扇形半徑 radius 才打得到） */
     swingDistance: 80,
+    /**
+     * 普攻判定時間點：出手（開始播普攻動作）後幾毫秒才判定命中，[第 1 段, 第 2 段]（兩段輪流，對應 P1 Spine 的 Attack01 / Attack02；
+     * 預設取自動作裡劍光出現的那一格）；判定前進入受擊硬直就取消這一下
+     */
+    hitDelayMs: [230, 230] as ReadonlyArray<number>,
     /** 扇形總角度（度，朝 aimAngle 左右各半） */
     arcDeg: 90,
     /** 扇形半徑（像素） */

@@ -4,7 +4,7 @@ import type { Character, ReadyCombo } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
 import { pointInOrientedRect } from '../systems/geometry';
 import type { TargetingController } from './TargetingController';
-import { attackRange } from '../systems/attackRangeParams';
+import { ATTACK_HIT_EVENT, afterHitDelay, attackTuning } from '../systems/attackTuningParams';
 
 /**
  * ComboSkillController 需要場景提供的能力。由 GameScene 建立並傳入；控制器不直接存取場景私有成員。
@@ -121,8 +121,8 @@ export class ComboSkillController {
     // 快速：一條 COMBO，依序圓形斬 / 直線氣波 / 爆發，滿了強化並歸零
     c.spirit = Math.min(cfg.max, c.spirit + 1);
     const combo = c.spirit;
-    if (combo === cfg.thresholds.circle) this.comboCircle(c, time);
-    if (combo === cfg.thresholds.line) this.comboLine(c, time);
+    if (combo === cfg.thresholds.circle) this.performCombo(c, 'circle', time);
+    if (combo === cfg.thresholds.line) this.performCombo(c, 'line', time);
     if (combo === cfg.thresholds.burst) this.triggerBurst(c, time);
     if (combo >= cfg.thresholds.empower) {
       this.comboEmpower(c, time);
@@ -159,15 +159,26 @@ export class ComboSkillController {
   }
 
   /**
-   * 施放連段技
+   * 施放連段技：立即開始播動作並進入表演時間（無敵、不能操作，涵蓋判定前的蓄勢），
+   * 等判定時間點（attackTuning().hitMsCircle / hitMsLine）才判定命中；直線氣波的方向在放出時決定
    *
    * @param c 角色
    * @param kind 連段技
    * @param time 目前場景時間
    */
   private performCombo(c: Character, kind: ReadyCombo, time: number): void {
-    if (kind === 'circle') this.comboCircle(c, time);
-    else this.comboLine(c, time);
+    const tuning = attackTuning();
+    const circle = kind === 'circle';
+    const delay = circle ? tuning.hitMsCircle : tuning.hitMsLine;
+    const perf = GameConfig.performanceTime;
+    c.markAction(circle ? 'comboCircle' : 'comboLine');
+    this.enterPerformance(c, delay + (circle ? perf.circle : perf.line), time);
+    const dir = c.aimAngle;
+    afterHitDelay(c, delay, time, (hitTime) => {
+      if (!c.alive) return;
+      if (circle) this.comboCircle(c, hitTime);
+      else this.comboLine(c, dir, hitTime);
+    });
   }
 
   /**
@@ -280,11 +291,10 @@ export class ComboSkillController {
     this.triggerBurst(c, time);
   }
 
-  /** 連段技：圓形斬——以角色為中心的圓形 AOE 與擴張環，順手秒碎範圍內的物件，進入表演時間 */
+  /** 連段技判定：圓形斬——以角色為中心的圓形 AOE 與擴張環，順手秒碎範圍內的物件（表演時間在放出時已進入，見 performCombo） */
   private comboCircle(c: Character, time: number): void {
-    c.markAction('comboCircle');
     const cfg = GameConfig.combo.circle;
-    const radius = attackRange().circleRadius;
+    const radius = attackTuning().circleRadius;
     const dmg = cfg.damage * (c.isEmpowered(time) ? GameConfig.combo.empower.damageMult : 1);
     this.host.spawnExpandingRing(c.x, c.y, radius, CIRCLE_RING_COLOR, CIRCLE_RING_MS);
     let hitAny = false;
@@ -299,16 +309,20 @@ export class ComboSkillController {
     if (this.host.hitBreakablesInCircle(c, c.x, c.y, radius, time) > 0) hitAny = true;
     if (hitAny) this.host.comboRewardHit(c);
     this.host.shakeOnce(SKILL_SHAKE_MS, SKILL_SHAKE_INTENSITY);
-    this.enterPerformance(c, GameConfig.performanceTime.circle, time);
+    c.scene.events.emit(ATTACK_HIT_EVENT, c, 'circle');
   }
 
-  /** 連段技：直線氣波——朝 aimAngle 的貫穿矩形，順手秒碎範圍內的物件，進入表演時間 */
-  private comboLine(c: Character, time: number): void {
-    c.markAction('comboLine');
+  /**
+   * 連段技判定：直線氣波——朝 dir 的貫穿矩形，順手秒碎範圍內的物件（表演時間在放出時已進入，見 performCombo）
+   *
+   * @param c 施放的角色
+   * @param dir 方向（放出時的面向）
+   * @param time 目前場景時間
+   */
+  private comboLine(c: Character, dir: number, time: number): void {
     const cfg = GameConfig.combo.line;
-    const { lineLength: length, lineWidth: width } = attackRange();
+    const { lineLength: length, lineWidth: width } = attackTuning();
     const dmg = cfg.damage * (c.isEmpowered(time) ? GameConfig.combo.empower.damageMult : 1);
-    const dir = c.aimAngle;
     const ox = c.x, oy = c.y;
     const band = this.scene.add
       .rectangle(ox + Math.cos(dir) * length / 2, oy + Math.sin(dir) * length / 2, length, width, LINE_BAND_COLOR, 0.4)
@@ -328,7 +342,7 @@ export class ComboSkillController {
     if (this.host.hitBreakablesInRect(c, ox, oy, dir, 0, length, width, time) > 0) hitAny = true;
     if (hitAny) this.host.comboRewardHit(c);
     this.host.shakeOnce(SKILL_SHAKE_MS, SKILL_SHAKE_INTENSITY);
-    this.enterPerformance(c, GameConfig.performanceTime.line, time);
+    c.scene.events.emit(ATTACK_HIT_EVENT, c, 'line');
   }
 
   /**

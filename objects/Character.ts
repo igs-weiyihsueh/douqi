@@ -57,6 +57,9 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
   hurtBlinkUntil = 0;
   /** 上一幀是否在受擊閃爍（閃爍結束時恢復不透明一次） */
   private hurtBlinking = false;
+  /** 累計普攻次數（決定這一下是第幾段，兩段輪流）與最近一下普攻的段數（0 / 1；P1 Spine 依此播 Attack01 / Attack02） */
+  attackStep = 0;
+  attackSegment = 0;
   /** 準備好的連段技（慢速模式連段累積到門檻時設定，下一次按攻擊放出；null = 沒有） */
   readyCombo: ReadyCombo | null = null;
   /** 最近一次出招：種類與流水號（流水號遞增，同種連續出招也分得出來） */

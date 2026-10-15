@@ -9,7 +9,7 @@ import { standCharacterOutside } from '../systems/bodySeparation';
 import { isStructureEnemy } from '../systems/enemyKinds';
 import type { EdgeMargins } from '../systems/spriteFeet';
 import type { LockTarget, TargetingController } from './TargetingController';
-import { attackRange } from '../systems/attackRangeParams';
+import { ATTACK_HIT_EVENT, afterHitDelay, attackTuning } from '../systems/attackTuningParams';
 
 /** 慢速模式八方向移動鍵（方向鍵 + WASD） */
 export interface SlowMoveKeys {
@@ -200,7 +200,7 @@ export class CharacterActionController {
     const dist = Phaser.Math.Distance.Between(c.x, c.y, target!.x, target!.y);
     // 近戰門檻看到目標身體邊緣的距離：怪被真空圈推到圈邊時中心距離常超過門檻，用中心距離會一直變成衝刺
     // 往前踏停的距離不超過扇形半徑的 SWING_STOP_RATIO，範圍編輯器把扇形調小時仍打得到
-    const range = attackRange();
+    const range = attackTuning();
     const stopAt = Math.min(GameConfig.melee.swingDistance, range.meleeRadius * SWING_STOP_RATIO);
     if (dist - (target as Enemy).getBodyRadius() <= range.meleeEnemyRange) this.stepInAndSwing(c, dist, time, stopAt);
     else this.dashAtEnemy(c, target as Enemy, dist, time);
@@ -277,7 +277,7 @@ export class CharacterActionController {
     const target = this.attackDashTargets.get(c);
     this.attackDashTargets.delete(c);
     if (!target || !target.active || !target.isVulnerable()) return;
-    if (Phaser.Math.Distance.Between(c.x, c.y, target.x, target.y) > attackRange().meleeRadius) return;
+    if (Phaser.Math.Distance.Between(c.x, c.y, target.x, target.y) > attackTuning().meleeRadius) return;
     c.aimAngle = Phaser.Math.Angle.Between(c.x, c.y, target.x, target.y);
     this.performMeleeArc(c, time);
   }
@@ -412,15 +412,35 @@ export class CharacterActionController {
     this.beginDash(c, target.x - Math.cos(c.aimAngle) * standoff, target.y - Math.sin(c.aimAngle) * standoff, time, false);
   }
 
-  /** 扇形劍氣：朝 aimAngle 劈出扇形，範圍內敵人受普攻傷害與擊退、順手打可破壞物件；命中至少一隻敵人才累積連段，敵人或物件命中算一下 HIT */
+  /**
+   * 普攻出手：記下這一下是第幾段（兩段輪流，P1 Spine 依此播 Attack01 / Attack02）並開始播動作，
+   * 等該段的判定時間點（attackTuning().hitMsAttack1 / 2）才判定命中；判定前角色倒下或進入受擊硬直就取消
+   *
+   * @param c 攻擊的角色
+   * @param time 目前場景時間
+   */
   private performMeleeArc(c: Character, time: number): void {
+    const segment = c.attackStep % GameConfig.melee.hitDelayMs.length;
+    c.attackStep++;
+    c.attackSegment = segment;
+    c.markAction('attack');
+    const tuning = attackTuning();
+    const delay = segment === 0 ? tuning.hitMsAttack1 : tuning.hitMsAttack2;
+    const aim = c.aimAngle;
+    afterHitDelay(c, delay, time, (hitTime) => {
+      if (!c.alive || c.isHurtStunned(hitTime)) return;
+      c.aimAngle = aim;
+      this.resolveMeleeArc(c, hitTime);
+    });
+  }
+
+  /** 扇形劍氣判定：朝 aimAngle 劈出扇形，範圍內敵人受普攻傷害與擊退、順手打可破壞物件；命中至少一隻敵人才累積連段，敵人或物件命中算一下 HIT */
+  private resolveMeleeArc(c: Character, time: number): void {
     const emp = c.isEmpowered(time);
-    const range = attackRange();
+    const range = attackTuning();
     const radius = range.meleeRadius * (emp ? GameConfig.combo.empower.rangeMult : 1);
     const half = Phaser.Math.DegToRad(range.meleeArcDeg) / 2;
     const atk = this.host.attackDamage() * (emp ? GameConfig.combo.empower.damageMult : 1);
-    // 先記普攻：這一刀觸發連段技時，連段技在後面記下，P1 Spine 播連段技動作而不是普攻
-    c.markAction('attack');
     let hitCount = 0;
     for (const child of this.host.enemies().getChildren()) {
       const enemy = child as Enemy;
@@ -437,7 +457,9 @@ export class CharacterActionController {
     if (hitCount > 0 || breakableHits > 0) this.host.triggerComboHit(c);
     this.host.flashWhite(c);
     this.host.spawnMeleeArcEffect(c.x, c.y, c.aimAngle);
+    c.scene.events.emit(ATTACK_HIT_EVENT, c, 'melee');
   }
+
 
   /**
    * 慢速模式：P1 鍵盤八方向持續移動（對角線正規化）並把面向設為移動方向；無輸入時停下、維持最後面向。
