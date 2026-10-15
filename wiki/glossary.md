@@ -63,9 +63,9 @@
 | 鎖定範圍 | 自動鎖定能選到的距離（與衝刺距離同值，角色編輯器可調） | `scenes/GameScene.ts` › `slowTuning.lockRadius` | `slow.dashDistance` |
 | 面向優先 | 範圍內有多個目標時，優先選面朝方向的 | `controllers/TargetingController.ts` › `pickAimConeTarget` | `aim.aimConeDeg` |
 | 近戰攻擊 | 目標很近時原地揮扇形 | `controllers/CharacterActionController.ts` | `melee` |
-| 衝刺攻擊 | 目標較遠時衝過去打 | `controllers/CharacterActionController.ts` | `slow.dashSpeed` |
+| 強化衝刺 | 二段強化期間的穿透衝刺，第一次撞到炸AOE | `controllers/CharacterActionController.ts` | `slow.dashSpeed` |
 | 衝刺 | 沒有目標時朝面向衝一段 | `controllers/CharacterActionController.ts` › `startDirectionDash` | `slow.dashDistance` |
-| 一般衝刺 | 穿透式衝刺攻擊，路徑上每隻怪各打一次，可設傷害%+頓點 | 範圍編輯器 › 一般衝刺分頁 | `normalDash` |
+| 一般衝刺 | 穿透式衝刺攻擊，路徑上每隻怪各打一次，可設傷害%+頓點 | 範圍編輯器 › 一般衝刺分頁 | `pierce` |
 | 真空圈 | 角色腳下怪進不來的橢圓地盤 | `scenes/GameScene.ts` | `slow.vacuumRadius`、`slow.vacuumFlatten` |
 
 ## 二段變身
