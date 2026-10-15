@@ -29,7 +29,7 @@ const COIN_BAR_CONFIG = {
   CELL_LIT_FILL: 0xffc107,
   CELL_LIT_ALPHA: 1,
   /**
-   * 有加贈的格子：劍圖示在左、「+N」在右（相對格子中心）。未亮時金色劍 + 深色外框（深色劍放大 ICON_OUTLINE_SCALE 墊在後面），
+   * 每一格：劍圖示在左、這次投幣得到的 CREDIT 數字在右（相對格子中心）。未亮時金色劍 + 深色外框（深色劍放大 ICON_OUTLINE_SCALE 墊在後面），
    * 亮格（金色底）時改成深色劍
    */
   ICON_OFFSET_X: -14,
@@ -58,23 +58,25 @@ interface CoinCell {
   root: Phaser.GameObjects.Container;
   /** 格子底（圓角矩形，亮 / 暗時重畫） */
   box: Phaser.GameObjects.Graphics;
-  /** 有加贈的格子才有：未亮時的金色劍與其深色外框、亮格時的深色劍、「+N」 */
-  icon?: Phaser.GameObjects.Graphics;
-  iconOutline?: Phaser.GameObjects.Graphics;
-  iconLit?: Phaser.GameObjects.Graphics;
-  label?: Phaser.GameObjects.Text;
+  /** 未亮時的金色劍與其深色外框、亮格時的深色劍、CREDIT 數字 */
+  icon: Phaser.GameObjects.Graphics;
+  iconOutline: Phaser.GameObjects.Graphics;
+  iconLit: Phaser.GameObjects.Graphics;
+  label: Phaser.GameObjects.Text;
 }
 
 /**
- * 下方面板的多投多送膠囊量條：最左側一枚硬幣，後面一格代表一次投幣；有加贈的格子標示劍圖示 + 「+N」，沒有加贈的格子空白。
+ * 下方面板的多投多送膠囊量條：最左側一枚硬幣，後面一格代表一次投幣，每格標示劍圖示 + 這次投幣得到的 CREDIT；
+ * 得到最少的以外都是重點格（例 10 / 5 / 15 / 5 / 15 的第 1、3、5 格）。
  *
  * - 容器位置 = 膠囊左下角（對齊面板的 COMBO 錨點）
  * - setLit 直接設定亮了幾格；lightCell 亮起一格並彈跳；flashAndClear 投滿時閃爍後清空
- * - cellCenter 取得某格中心的螢幕座標（投幣光效的起點）；hasBonus 查某格有沒有加贈
+ * - cellCenter 取得某格中心的螢幕座標（投幣光效的起點）；isHighlight 查某格是不是重點格
  */
 export class CoinBonusBar extends Phaser.GameObjects.Container {
   private readonly cells: CoinCell[] = [];
-  private readonly bonuses: ReadonlyArray<number>;
+  /** 各格是不是重點格（CREDIT 多於最少的那一檔） */
+  private readonly highlights: ReadonlyArray<boolean>;
   /** 目前亮了幾格 */
   private litCount = 0;
   /** 投滿閃爍中（閃完才清空，期間不接受 setLit） */
@@ -82,37 +84,37 @@ export class CoinBonusBar extends Phaser.GameObjects.Container {
 
   /**
    * @param scene 場景
-   * @param bonuses 每格的加贈 CREDIT（格數 = 長度；0 = 該格空白）
+   * @param gains 每格（每次投幣）得到的 CREDIT（格數 = 長度）
    * @param drawIcon 在指定 Graphics 上畫劍圖示（以原點為中心）；fill 有給時整把劍用這個顏色，否則用原本的金色
    */
-  constructor(scene: Phaser.Scene, bonuses: ReadonlyArray<number>, drawIcon: (g: Phaser.GameObjects.Graphics, fill?: number) => void) {
+  constructor(scene: Phaser.Scene, gains: ReadonlyArray<number>, drawIcon: (g: Phaser.GameObjects.Graphics, fill?: number) => void) {
     super(scene, 0, 0);
     const cfg = COIN_BAR_CONFIG;
-    this.bonuses = bonuses;
-    const width = cfg.CELLS_LEFT + bonuses.length * cfg.CELL_WIDTH + (bonuses.length - 1) * cfg.CELL_GAP + cfg.RIGHT_PADDING;
+    const minGain = Math.min(...gains);
+    this.highlights = gains.map((gain) => gain > minGain);
+    const width = cfg.CELLS_LEFT + gains.length * cfg.CELL_WIDTH + (gains.length - 1) * cfg.CELL_GAP + cfg.RIGHT_PADDING;
     const midY = -cfg.HEIGHT / 2;
     this.add([this.createCapsule(width), this.createCoin(midY)]);
-    bonuses.forEach((bonus, i) => {
+    const icon = (scale: number, fill?: number): Phaser.GameObjects.Graphics => {
+      const g = scene.add.graphics({ x: cfg.ICON_OFFSET_X, y: 0 }).setScale(scale);
+      drawIcon(g, fill);
+      return g;
+    };
+    gains.forEach((gain, i) => {
       const cx = cfg.CELLS_LEFT + i * (cfg.CELL_WIDTH + cfg.CELL_GAP) + cfg.CELL_WIDTH / 2;
-      const box = scene.add.graphics();
-      const root = scene.add.container(cx, midY, [box]);
-      const cell: CoinCell = { root, box };
-      if (bonus > 0) {
-        const icon = (scale: number, fill?: number): Phaser.GameObjects.Graphics => {
-          const g = scene.add.graphics({ x: cfg.ICON_OFFSET_X, y: 0 }).setScale(scale);
-          drawIcon(g, fill);
-          return g;
-        };
-        cell.iconOutline = icon(cfg.ICON_SCALE * cfg.ICON_OUTLINE_SCALE, cfg.ICON_DARK);
-        cell.icon = icon(cfg.ICON_SCALE);
-        cell.iconLit = icon(cfg.ICON_SCALE, cfg.ICON_DARK);
-        cell.label = scene.add.text(cfg.TEXT_OFFSET_X, 0, `+${bonus}`, {
+      const cell: CoinCell = {
+        root: scene.add.container(cx, midY),
+        box: scene.add.graphics(),
+        iconOutline: icon(cfg.ICON_SCALE * cfg.ICON_OUTLINE_SCALE, cfg.ICON_DARK),
+        icon: icon(cfg.ICON_SCALE),
+        iconLit: icon(cfg.ICON_SCALE, cfg.ICON_DARK),
+        label: scene.add.text(cfg.TEXT_OFFSET_X, 0, `${gain}`, {
           fontFamily: 'monospace', fontSize: cfg.FONT_SIZE, fontStyle: 'bold', color: cfg.TEXT_COLOR,
           stroke: cfg.TEXT_STROKE, strokeThickness: cfg.TEXT_STROKE_WIDTH
-        }).setOrigin(0.5);
-        root.add([cell.iconOutline, cell.icon, cell.iconLit, cell.label]);
-      }
-      this.add(root);
+        }).setOrigin(0.5)
+      };
+      cell.root.add([cell.box, cell.iconOutline, cell.icon, cell.iconLit, cell.label]);
+      this.add(cell.root);
       this.cells.push(cell);
     });
     this.applyLit();
@@ -135,12 +137,12 @@ export class CoinBonusBar extends Phaser.GameObjects.Container {
   }
 
   /**
-   * 第 index 格是否有加贈
+   * 第 index 格是否為重點格（CREDIT 多於最少的那一檔）
    *
    * @param index 格子索引
    */
-  hasBonus(index: number): boolean {
-    return (this.bonuses[index] ?? 0) > 0;
+  isHighlight(index: number): boolean {
+    return this.highlights[index] ?? false;
   }
 
   /**
@@ -244,10 +246,10 @@ export class CoinBonusBar extends Phaser.GameObjects.Container {
       cell.box.clear()
         .fillStyle(lit ? cfg.CELL_LIT_FILL : cfg.CELL_FILL, lit ? cfg.CELL_LIT_ALPHA : cfg.CELL_FILL_ALPHA)
         .fillRoundedRect(-cfg.CELL_WIDTH / 2, -cfg.CELL_HEIGHT / 2, cfg.CELL_WIDTH, cfg.CELL_HEIGHT, cfg.CELL_RADIUS);
-      cell.label?.setColor(lit ? cfg.TEXT_LIT_COLOR : cfg.TEXT_COLOR).setAlpha(lit ? 1 : cfg.DIM_ALPHA);
-      cell.icon?.setVisible(!lit).setAlpha(cfg.DIM_ALPHA);
-      cell.iconOutline?.setVisible(!lit).setAlpha(cfg.DIM_ALPHA);
-      cell.iconLit?.setVisible(lit);
+      cell.label.setColor(lit ? cfg.TEXT_LIT_COLOR : cfg.TEXT_COLOR).setAlpha(lit ? 1 : cfg.DIM_ALPHA);
+      cell.icon.setVisible(!lit).setAlpha(cfg.DIM_ALPHA);
+      cell.iconOutline.setVisible(!lit).setAlpha(cfg.DIM_ALPHA);
+      cell.iconLit.setVisible(lit);
     });
   }
 }

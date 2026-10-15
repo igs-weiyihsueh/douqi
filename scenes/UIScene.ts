@@ -195,7 +195,7 @@ export class UIScene extends Phaser.Scene {
     /**
      * F4 面板圖：相對面板圖左上角的位置（面板圖原尺寸像素）——左緣對齊彩票欄左緣（x 91），
      * 下緣在彩票欄上緣（y 66）上方 4px；彩票欄上方是透明區，左邊的頭像在 x 98 以內，不會蓋到面板。
-     * 膠囊寬 314：右端在面板左緣 + 405，小於面板間距（267 + 150），不會蓋到下一位的面板
+     * 膠囊寬 269（5 格）：右端在面板左緣 + 360，小於面板間距（267 + 150），不會蓋到下一位的面板
      */
     OVERLAY_OFFSET_X: 91,
     OVERLAY_OFFSET_Y: 62,
@@ -1913,7 +1913,7 @@ export class UIScene extends Phaser.Scene {
     );
     const cycle = GameConfig.credit.coinCycle;
     this.panelCoinBars = this.rows.map(() =>
-      new CoinBonusBar(this, cycle.map((gain) => gain - cycle[0]), (g, fill) => this.drawSwordIcon(g, false, fill))
+      new CoinBonusBar(this, cycle, (g, fill) => this.drawSwordIcon(g, false, fill))
         .setDepth(cfg.DEPTH).setScrollFactor(0).setVisible(false)
     );
     this.panelJoinTexts = this.rows.map(() =>
@@ -1961,7 +1961,7 @@ export class UIScene extends Phaser.Scene {
 
   /**
    * 投幣（GameScene 的 coin-inserted 事件）：量條亮起這一格並彈跳（投滿最後一格時閃爍後清空）；
-   * 這一格有加贈時，從這一格飛出一道光沿弧線飛到角色頭頂（追著角色目前位置），到達時在角色身上爆一圈光
+   * 這一格是重點格時，從這一格飛出一道光沿弧線飛到角色頭頂（追著角色目前位置），到達時在角色身上爆一圈光
    *
    * @param e.index 角色索引
    * @param e.cycleIndex 這次投幣在 coinCycle 中的位置
@@ -1971,7 +1971,7 @@ export class UIScene extends Phaser.Scene {
     if (!bar) return;
     bar.lightCell(e.cycleIndex);
     if (e.cycleIndex >= bar.cellCount - 1) bar.flashAndClear(bar.popMs);
-    if (!bar.visible || !bar.hasBonus(e.cycleIndex)) return;
+    if (!bar.visible || !bar.isHighlight(e.cycleIndex)) return;
     const cfg = GameConfig.credit.coinBar;
     const start = bar.cellCenter(e.cycleIndex);
     const target = (): { x: number; y: number } => {
