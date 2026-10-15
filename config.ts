@@ -183,8 +183,9 @@ export const GameConfig = {
 
   /**
    * 木樁模式（主選單，測試角色動作用）：慢速操作，不開關卡、不生怪也不灑木箱，只在 P1 右方 dummyOffsetX 生一隻打不死的 dummyType
-   * （血量見底就補滿、不會被擊退、照常攻擊）；P1 自動進場且 CREDIT 維持在 credit。
-   * tuningEditorKey 開關範圍編輯器（調整攻擊範圍並畫在 P1 身上，見 objects/AttackTuningEditor）
+   * （血量見底就補滿、站在原地不移動、不會被擊退、玩家靠近時照常攻擊）；P1 自動進場且 CREDIT 維持在 credit。
+   * tuningEditorKey 開關範圍編輯器（調整攻擊範圍並畫在 P1 身上，見 objects/AttackTuningEditor）；
+   * 招式的判定範圍特效（普攻劍氣扇形、招式1 / 2、衝刺攻擊的範圍圖形）只在木樁模式畫出，正式的慢速模式靠動作本身的特效
    */
   training: {
     dummyType: 'tank' as 'normal' | 'tank' | 'bomber',
@@ -227,7 +228,9 @@ export const GameConfig = {
     } as Record<string, ReadonlyArray<string>>,
     speeds: { idle: 1, move: 1, attack: 1, comboCircle: 1, comboLine: 1, unique: 1, sprint: 1, hit: 1 } as Record<string, number>,
     moveSpeedThreshold: 30,
-    mixMs: 80
+    mixMs: 80,
+    /** 原檔動作本身朝背後出招的動作鍵（Combo02 的氣波往角色背後打）：播放時左右翻轉，讓招式朝面向打出去 */
+    mirroredAnims: ['comboLine'] as ReadonlyArray<string>
   },
 
   /**

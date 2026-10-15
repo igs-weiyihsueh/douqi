@@ -34,6 +34,8 @@ export interface ComboSkillHost {
   /** P1 普攻命中次數 +1（結算統計） */
   countP1AttackHit(): void;
   spawnExpandingRing(x: number, y: number, radius: number, color: number, ms?: number): void;
+  /** 是否畫出招式的判定範圍特效（木樁模式調範圍時才畫；正式模式動作有自己的特效） */
+  showsRangeFx(): boolean;
   shakeOnce(duration: number, intensity: number): void;
   flashWhite(c: Character): void;
   spawnSlashEffect(x: number, y: number): void;
@@ -266,8 +268,8 @@ export class ComboSkillController {
     const shape = placeHitShape(moveShape('dash'), tx, ty, c.aimAngle);
     const dmg = cfg.damage * GameConfig.combo.empower.damageMult;
     if (shape.kind === 'circle') {
-      this.host.spawnExpandingRing(shape.x, shape.y, shape.radius, cfg.color, cfg.ringMs);
-      this.host.spawnExpandingRing(shape.x, shape.y, shape.radius * 0.6, AOE_INNER_RING_COLOR, cfg.ringMs * 0.8);
+      this.showRing(shape, cfg.color, cfg.ringMs);
+      this.showRing({ ...shape, radius: shape.radius * 0.6 }, AOE_INNER_RING_COLOR, cfg.ringMs * 0.8);
     } else {
       this.showShape(shape, cfg.color, AOE_INNER_RING_COLOR, cfg.ringMs);
     }
@@ -300,7 +302,7 @@ export class ComboSkillController {
     const cfg = GameConfig.combo.circle;
     const shape = placeHitShape(moveShape('circle'), c.x, c.y, dir);
     const dmg = cfg.damage * (c.isEmpowered(time) ? GameConfig.combo.empower.damageMult : 1);
-    if (shape.kind === 'circle') this.host.spawnExpandingRing(shape.x, shape.y, shape.radius, CIRCLE_RING_COLOR, CIRCLE_RING_MS);
+    if (shape.kind === 'circle') this.showRing(shape, CIRCLE_RING_COLOR, CIRCLE_RING_MS);
     else this.showShape(shape, CIRCLE_RING_COLOR, CIRCLE_RING_COLOR, CIRCLE_RING_MS);
     if (this.hitInShape(c, shape, dmg, cfg.knockback, time)) this.host.comboRewardHit(c);
     this.host.shakeOnce(SKILL_SHAKE_MS, SKILL_SHAKE_INTENSITY);
@@ -348,7 +350,18 @@ export class ComboSkillController {
   }
 
   /**
-   * 把判定範圍畫成淡出的圖形（連段技等的範圍特效）
+   * 圓形判定範圍的擴張環特效（只在顯示範圍特效的模式，見 ComboSkillHost.showsRangeFx）
+   *
+   * @param shape 放好的圓形判定範圍
+   * @param color 顏色
+   * @param ms 擴張時間
+   */
+  private showRing(shape: PlacedHitShape, color: number, ms: number): void {
+    if (this.host.showsRangeFx()) this.host.spawnExpandingRing(shape.x, shape.y, shape.radius, color, ms);
+  }
+
+  /**
+   * 把判定範圍畫成淡出的圖形（連段技等的範圍特效；只在顯示範圍特效的模式，見 ComboSkillHost.showsRangeFx）
    *
    * @param shape 放好的判定範圍
    * @param fill 填色
@@ -356,6 +369,7 @@ export class ComboSkillController {
    * @param fadeMs 淡出時間
    */
   private showShape(shape: PlacedHitShape, fill: number, stroke: number, fadeMs: number): void {
+    if (!this.host.showsRangeFx()) return;
     const g = this.scene.add.graphics().setDepth(LINE_BAND_DEPTH);
     g.fillStyle(fill, SHAPE_FX_FILL_ALPHA).lineStyle(2, stroke, SHAPE_FX_STROKE_ALPHA);
     drawHitShape(g, shape);

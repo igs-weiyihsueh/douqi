@@ -6,16 +6,16 @@ import { createParamStore, type ParamDef, type ParamValues } from './paramStore'
 /**
  * 每一招的判定範圍（形狀、判定中心偏移、尺寸）與判定時間點參數（木樁模式的「範圍 / 判定編輯器」可調整，所有模式都套用）。
  *
- * - 招式：普攻第 1 / 2 段、圓形斬（Combo01）、直線氣波（Combo02）、爆發（Unique_skill，二段變身中的連打）、
+ * - 招式：普攻第 1 / 2 段、招式1（Combo01，原圓形斬）、招式2（Combo02，原直線氣波）、爆發（Unique_skill，二段變身中的連打）、
  *   衝刺攻擊（二段變身衝刺撞到敵人時以撞擊點為基準的範圍），以及所有普攻共用的近戰觸發距離
  * - 每招：形狀（扇形 / 圓形 / 長方形，見 systems/hitShapes）、判定中心沿面向往前 / 往上下偏移（左右轉身鏡像）、扇形半徑與角度、
  *   長方形長寬；普攻與連段技另有判定時間點（出招後多少毫秒才判定，預設取自 melee.hitDelayMs / combo.*.hitDelayMs）
- * - 預設值重現原本的範圍（普攻扇形、圓形斬圓形、直線氣波長方形、爆發與衝刺攻擊圓形，偏移 0）
+ * - 預設值重現原本的範圍（普攻扇形、招式1 圓形、招式2 長方形、爆發與衝刺攻擊圓形，偏移 0）
  * - 遊戲中透過 moveShape() / moveHitMs() / attackTuning() 讀取目前值；每局開始（GameScene.resetState）重新讀取存檔，
  *   編輯器每次調整即時套用並存檔
  */
 
-/** 招式：普攻第 1 段 / 第 2 段 / 圓形斬 / 直線氣波 / 爆發 / 衝刺攻擊（判定事件與編輯器分頁用） */
+/** 招式：普攻第 1 段 / 第 2 段 / 招式1 / 招式2 / 爆發 / 衝刺攻擊（判定事件與編輯器分頁用） */
 export type AttackMove = 'attack1' | 'attack2' | 'circle' | 'line' | 'burst' | 'dash';
 
 /** 有判定時間點的招式（爆發依自己的連打節奏、衝刺攻擊在撞到時判定） */
@@ -34,8 +34,8 @@ export type AttackTuningParams = ParamValues<AttackTuningKey>;
 export const ATTACK_MOVES: ReadonlyArray<{ move: AttackMove; label: string }> = [
   { move: 'attack1', label: '普攻 1' },
   { move: 'attack2', label: '普攻 2' },
-  { move: 'circle', label: '圓形斬' },
-  { move: 'line', label: '直線氣波' },
+  { move: 'circle', label: '招式1' },
+  { move: 'line', label: '招式2' },
   { move: 'burst', label: '爆發' },
   { move: 'dash', label: '衝刺攻擊' }
 ];

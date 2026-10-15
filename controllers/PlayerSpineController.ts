@@ -80,13 +80,15 @@ export class PlayerSpineController {
     spine.setVisible(true).setPosition(skin.x, footY).setDepth(skin.depth).setAlpha(skin.alpha);
     // Spine 物件本身的 alpha 不會套用到繪製，受擊閃爍要寫進骨架顏色
     spine.skeleton.color.a = skin.alpha;
-    spine.skeleton.scaleX = p.facingRight === cfg.facesRight ? 1 : -1;
     spine.animationState.timeScale = this.host.isPlayerFrozen() ? 0 : 1;
     skin.setAlpha(0);
     // P1 本體（程式繪製的圓形）藏起來：揮擊時本體會閃白（flashWhite），Spine 的姿勢露出空隙時會隱約看到
     p.setAlpha(0);
     this.baseHidden = true;
     this.updateAnimation(p, time);
+    // 原檔朝背後出招的動作（mirroredAnims）播放時再翻一次，招式才會朝面向打出去
+    const mirrored = this.current !== null && cfg.mirroredAnims.includes(this.current);
+    spine.skeleton.scaleX = (p.facingRight === cfg.facesRight) !== mirrored ? 1 : -1;
   }
 
   /**

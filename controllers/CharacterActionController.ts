@@ -76,7 +76,7 @@ export interface CharacterActionHost {
   /** 強化衝刺撞到敵人：以 (x, y) 為中心炸圓形 AOE */
   empowerStrike(c: Character, x: number, y: number, time: number): void;
   flashWhite(c: Character): void;
-  /** 普攻劍氣特效（形狀 = 這一段的判定範圍） */
+  /** 普攻劍氣特效（形狀 = 這一段的判定範圍；只在顯示範圍特效的模式畫出） */
   spawnMeleeShapeEffect(shape: PlacedHitShape): void;
   /** 判定範圍內打可破壞物件（以物件中心判定），回傳命中數 */
   hitBreakablesInShape(c: Character, shape: PlacedHitShape, time: number): number;

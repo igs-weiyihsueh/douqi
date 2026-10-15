@@ -1426,6 +1426,7 @@ export class GameScene extends Phaser.Scene {
   private createComboSkillHost(): ComboSkillHost {
     return {
       scene: this,
+      showsRangeFx: () => this.training,
       enemies: () => this.enemies,
       player: () => this.player,
       isGameOver: () => this.gameOver,
@@ -1711,7 +1712,7 @@ export class GameScene extends Phaser.Scene {
       pickEmpowerTarget: (c) => this.comboSkills.pickEmpowerTarget(c),
       empowerStrike: (c, x, y, time) => this.comboSkills.empowerStrike(c, x, y, time),
       flashWhite: (c) => this.fx.flashWhite(c),
-      spawnMeleeShapeEffect: (shape) => this.fx.meleeShape(shape),
+      spawnMeleeShapeEffect: (shape) => { if (this.training) this.fx.meleeShape(shape); },
       hitBreakablesInShape: (c, shape, time) => this.breakableCtl.hitInShape(c, shape, time),
       spawnSlashStreak: (target, angle, empowered) =>
         this.fx.slashStreak(target.x, target.y, angle, empowered, undefined, this.hitFxScale(target))
@@ -2124,6 +2125,8 @@ export class GameScene extends Phaser.Scene {
         const target: Character | { x: number; y: number } | null = this.resolveEnemyTarget(enemy, time);
         if (target) enemy.updateAI(target.x, target.y, time, this.vacuumMeleeInRange(enemy, target, GameConfig.slow.vacuumEngageMargin));
         else enemy.updateIdle(time); // 場上沒有玩家（例如都在等投幣）：巡邏、不攻擊
+        // 木樁（anchored）站在原地不移動：AI 照跑（面向、蓄力攻擊靠近的玩家），只是不走路，不會擠到玩家
+        if (enemy.anchored) (enemy.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
 
         drawEnemyChargeWarnings(this.chargeWarnGfx, enemy, time);
       }
