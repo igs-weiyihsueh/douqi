@@ -549,6 +549,8 @@ export const GameConfig = {
     thresholds: { circle: 3, line: 6, burst: 9, empower: 10 },
     /** 慢速模式各階觸發門檻：4圓/8直（爆發不在 combo 循環內，改為變身專屬） */
     slowThresholds: { circle: 4, line: 8 },
+    /** 慢速模式連段技改為手動放出：累積到門檻時只「準備好」，下一次按攻擊才放出（取代那一下普攻）；false = 到門檻立即放出 */
+    manualRelease: true,
     /** combo 上限（fast：達10歸零＝強化門檻） */
     max: 10,
     /** 圓形範圍技（瞬發，不鎖角色） */

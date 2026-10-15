@@ -62,6 +62,8 @@ export interface CharacterActionHost {
   performAttackOn(actor: Character, primary: Enemy, time: number): void;
   /** 普攻命中：連段累積 */
   onComboHit(c: Character, time: number): void;
+  /** 按攻擊時放出準備好的連段技，回傳是否有放出 */
+  releaseReadyCombo(c: Character, time: number): boolean;
   /** 普攻命中：COMBO 獎勵累積 */
   triggerComboHit(c: Character): void;
   /** 角色出手（開始一招；CREDIT 以此計算「一招」） */
@@ -140,7 +142,7 @@ export class CharacterActionController {
   }
 
   /**
-   * 出手（P1 按攻擊、BOT 到出手時間）：衝刺 / 爆發 / 定身 / 受擊硬直 / 冷卻中不行動
+   * 出手（P1 按攻擊、BOT 到出手時間）：衝刺 / 爆發 / 定身 / 受擊硬直 / 冷卻中不行動；慢速模式有準備好的連段技時改放連段技
    *
    * @param c 出手的角色
    * @param time 目前場景時間
@@ -152,6 +154,14 @@ export class CharacterActionController {
     this.host.onAttackStart(c, time);
     const player = this.host.player();
     const slow = this.host.isSlowMode();
+    // 慢速模式有準備好的連段技：這一下改放連段技（朝鎖定目標），不普攻
+    if (slow && c.readyCombo) {
+      this.aimAtLockedEnemy(c);
+      if (this.host.releaseReadyCombo(c, time)) {
+        c.nextAttackAllowedAt = time + this.attackCooldownMs();
+        return;
+      }
+    }
     // 慢速模式 P1 強化期間：衝向鎖定目標，撞到時以它為中心炸圓形 AOE（近身衝上去砍一圈）
     if (c === player && slow && c.empowered) {
       this.empoweredDash(c, time);
@@ -188,6 +198,18 @@ export class CharacterActionController {
     // 近戰門檻看到目標身體邊緣的距離：怪被真空圈推到圈邊時中心距離常超過門檻，用中心距離會一直變成衝刺
     if (dist - (target as Enemy).getBodyRadius() <= GameConfig.melee.enemyRange) this.stepInAndSwing(c, dist, time, GameConfig.melee.swingDistance);
     else this.dashAtEnemy(c, target as Enemy, dist, time);
+  }
+
+  /**
+   * 面向鎖定的敵人（P1 用範圍圈鎖定的目標、BOT 用自己選的目標；沒鎖定或鎖的不是敵人時維持原面向）
+   *
+   * @param c 角色
+   */
+  private aimAtLockedEnemy(c: Character): void {
+    const targeting = this.targeting;
+    const target: LockTarget | null = c === this.host.player() ? targeting.lockedTarget : (c.lockedTarget as unknown as LockTarget | null);
+    if (!targeting.isLockValid(target) || targeting.isItem(target) || targeting.isBreakable(target)) return;
+    c.aimAngle = Phaser.Math.Angle.Between(c.x, c.y, target!.x, target!.y);
   }
 
   /**

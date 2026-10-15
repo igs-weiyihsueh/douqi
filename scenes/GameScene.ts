@@ -1692,6 +1692,7 @@ export class GameScene extends Phaser.Scene {
       hitBreakablesInRange: (c, radius, half, useArc, time, alreadyHit) => this.breakableCtl.hitInRange(c, radius, half, useArc, time, alreadyHit),
       performAttackOn: (actor, primary, time) => this.performAttackOn(actor, primary, time),
       onComboHit: (c, time) => this.comboSkills.onComboHit(c, time),
+      releaseReadyCombo: (c, time) => this.comboSkills.releaseReadyCombo(c, time),
       triggerComboHit: (c) => this.comboReward.hit(c),
       onAttackStart: (c, time) => this.creditCtl.openAttackWindow(c, time),
       pickEmpowerTarget: (c) => this.comboSkills.pickEmpowerTarget(c),

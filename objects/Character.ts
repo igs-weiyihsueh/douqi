@@ -3,6 +3,8 @@ import { GameConfig } from '../config';
 
 /** 出招種類（P1 Spine 外觀對應的動作）：普攻 / 連段技圈 / 連段技線 / 二段變身與爆發 */
 export type CharacterActionKind = 'attack' | 'comboCircle' | 'comboLine' | 'unique';
+/** 準備好、等玩家按攻擊放出的連段技：圓形斬 / 直線氣波 */
+export type ReadyCombo = 'circle' | 'line';
 
 /**
  * 角色（P1 玩家 + BOT 共用）：
@@ -55,6 +57,8 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
   hurtBlinkUntil = 0;
   /** 上一幀是否在受擊閃爍（閃爍結束時恢復不透明一次） */
   private hurtBlinking = false;
+  /** 準備好的連段技（慢速模式連段累積到門檻時設定，下一次按攻擊放出；null = 沒有） */
+  readyCombo: ReadyCombo | null = null;
   /** 最近一次出招：種類與流水號（流水號遞增，同種連續出招也分得出來） */
   lastAction: { kind: CharacterActionKind | 'none'; seq: number } = { kind: 'none', seq: 0 };
   dashDestX = 0;
@@ -598,6 +602,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
   revive(): void {
     this.hp = GameConfig.player.maxHp;
     this.spirit = 0; // 復活鬥氣歸零（乾淨重來）
+    this.readyCombo = null;
     this.resumePlay();
   }
 
@@ -611,6 +616,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
     this.empowerAoeHits = 0;
     this.energy = 0;
     this.spirit = 0;
+    this.readyCombo = null;
   }
 
   /**

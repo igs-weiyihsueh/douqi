@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GameConfig } from '../config';
-import type { Character } from '../objects/Character';
+import type { Character, ReadyCombo } from '../objects/Character';
 import type { Enemy } from '../objects/Enemy';
 import { pointInOrientedRect } from '../systems/geometry';
 import type { TargetingController } from './TargetingController';
@@ -110,8 +110,9 @@ export class ComboSkillController {
       const cap = this.slowComboCap;
       c.spirit = Math.min(cap, c.spirit + 1);
       const combo = c.spirit;
-      if (combo === cfg.slowThresholds.circle) this.comboCircle(c, time);
-      if (combo === cfg.slowThresholds.line) this.comboLine(c, time);
+      // 累積到門檻：連段技準備好，等下一次按攻擊放出（manualRelease 關閉時沿用舊行為立即放出）
+      if (combo === cfg.slowThresholds.circle) this.readyOrRelease(c, 'circle', time);
+      if (combo === cfg.slowThresholds.line) this.readyOrRelease(c, 'line', time);
       if (combo >= cap) c.spirit = 0;
       if (isP1) this.host.emitStats();
       return;
@@ -127,6 +128,45 @@ export class ComboSkillController {
       c.spirit = 0;
     }
     if (isP1) this.host.emitStats();
+  }
+
+  /**
+   * 慢速模式連段累積到門檻：combo.manualRelease 時記成準備好的連段技（下一次按攻擊放出），否則立即放出
+   *
+   * @param c 角色
+   * @param kind 連段技
+   * @param time 目前場景時間
+   */
+  private readyOrRelease(c: Character, kind: ReadyCombo, time: number): void {
+    if (GameConfig.combo.manualRelease) c.readyCombo = kind;
+    else this.performCombo(c, kind, time);
+  }
+
+  /**
+   * 按攻擊時放出準備好的連段技（沒有就不做事）
+   *
+   * @param c 角色
+   * @param time 目前場景時間
+   * @returns 是否有放出（有的話這一下不再普攻）
+   */
+  releaseReadyCombo(c: Character, time: number): boolean {
+    const kind = c.readyCombo;
+    if (!kind) return false;
+    c.readyCombo = null;
+    this.performCombo(c, kind, time);
+    return true;
+  }
+
+  /**
+   * 施放連段技
+   *
+   * @param c 角色
+   * @param kind 連段技
+   * @param time 目前場景時間
+   */
+  private performCombo(c: Character, kind: ReadyCombo, time: number): void {
+    if (kind === 'circle') this.comboCircle(c, time);
+    else this.comboLine(c, time);
   }
 
   /**
