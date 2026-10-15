@@ -12,7 +12,7 @@ import { createParamStore, type ParamDef } from './paramStore';
  *   （形狀扇形 / 圓形 / 長方形、判定中心往前 / 往上下偏移、尺寸，見 systems/hitShapes）：一招可以打好幾下，每下各自判定
  * - 爆發依自己的連打節奏、強化衝刺在撞到時判定，只用第一個打擊點的範圍（沒有時間軸）；
  *   一般衝刺以衝刺判定半徑碰撞（不用判定範圍），只用第一個打擊點的傷害 % 與頓點
- * - 預設每招一個打擊點，重現原本的範圍與判定時間點（melee.hitDelayMs / combo.*.hitDelayMs），傷害 100%
+ * - 預設值取自 GameConfig.attackDefaults（使用者在編輯器調好後匯出的設定）
  * - 打擊點存成 JSON（只存跟預設不同的招式），近戰觸發距離用參數存檔；每局開始（GameScene.resetState）重新讀取
  */
 
@@ -96,48 +96,13 @@ export const HIT_POINT_FIELDS: Readonly<Record<HitPointField, HitPointFieldDef>>
 /** 一招最多幾個打擊點 */
 export const MAX_HIT_POINTS = 8;
 
-const melee = GameConfig.melee;
-const combo = GameConfig.combo;
-
-/** 各招預設判定範圍（重現原本的範圍；切換形狀時其他形狀的尺寸也有合理的初值） */
-const DEFAULT_SHAPES: Readonly<Record<AttackMove, HitShape>> = {
-  attack1: { kind: 'arc', offsetForward: 0, offsetSide: 0, radius: melee.radius, arcDeg: melee.arcDeg, length: melee.radius, width: melee.radius },
-  attack2: { kind: 'arc', offsetForward: 0, offsetSide: 0, radius: melee.radius, arcDeg: melee.arcDeg, length: melee.radius, width: melee.radius },
-  circle: { kind: 'circle', offsetForward: 0, offsetSide: 0, radius: combo.circle.radius, arcDeg: 360, length: combo.circle.radius * 2, width: combo.circle.radius },
-  line: { kind: 'rect', offsetForward: 0, offsetSide: 0, radius: combo.line.width, arcDeg: 90, length: combo.line.length, width: combo.line.width },
-  burst: { kind: 'circle', offsetForward: 0, offsetSide: 0, radius: GameConfig.burst.radius, arcDeg: 360, length: GameConfig.burst.radius * 2, width: GameConfig.burst.radius },
-  dash: { kind: 'circle', offsetForward: 0, offsetSide: 0, radius: combo.empower.aoe.radius, arcDeg: 360, length: combo.empower.aoe.radius * 2, width: combo.empower.aoe.radius },
-  // 一般衝刺不用判定範圍（hasHitShape），只為資料格式一致
-  pierce: { kind: 'circle', offsetForward: 0, offsetSide: 0, radius: GameConfig.aim.dashHitRadius, arcDeg: 360, length: GameConfig.aim.dashHitRadius * 2, width: GameConfig.aim.dashHitRadius }
-};
-
-/** 有時間軸招式的預設判定時間點 */
-const DEFAULT_HIT_MS: Readonly<Record<TimedAttackMove, number>> = {
-  attack1: melee.hitDelayMs[0],
-  attack2: melee.hitDelayMs[1],
-  circle: combo.circle.hitDelayMs,
-  line: combo.line.hitDelayMs
-};
-
-/** 各招打擊點的預設頓點（GameConfig.attackerHitPauseMs） */
-const HIT_PAUSE = GameConfig.attackerHitPauseMs;
-const DEFAULT_PAUSE_MS: Readonly<Record<AttackMove, number>> = {
-  attack1: HIT_PAUSE.attack,
-  attack2: HIT_PAUSE.attack,
-  circle: HIT_PAUSE.combo,
-  line: HIT_PAUSE.combo,
-  burst: HIT_PAUSE.burst,
-  dash: HIT_PAUSE.dash,
-  pierce: HIT_PAUSE.pierce
-};
-
 /**
- * 一招的預設打擊點（一個，傷害 100%）
+ * 一招的預設打擊點（GameConfig.attackDefaults.moveTimelines，複製成新物件）
  *
  * @param move 招式
  */
 export function defaultHitPoints(move: AttackMove): HitPoint[] {
-  return [{ timeMs: isTimedMove(move) ? DEFAULT_HIT_MS[move] : 0, durationMs: 0, damagePct: 100, pauseMs: DEFAULT_PAUSE_MS[move], shape: { ...DEFAULT_SHAPES[move] } }];
+  return GameConfig.attackDefaults.moveTimelines[move].map((p) => ({ ...p, shape: { ...p.shape } }));
 }
 
 /**
@@ -311,7 +276,7 @@ export function lastHitMs(move: AttackMove): number {
 
 /** 近戰觸發距離（普攻共用）的參數定義與存檔 */
 export const MELEE_ENEMY_RANGE_DEF: Readonly<ParamDef<'meleeEnemyRange'>> = {
-  key: 'meleeEnemyRange', label: '近戰觸發距離', unit: 'px', hint: '到怪身體邊緣，超過就衝刺', min: 40, max: 300, step: 10, defaultValue: melee.enemyRange
+  key: 'meleeEnemyRange', label: '近戰觸發距離', unit: 'px', hint: '到怪身體邊緣，超過就衝刺', min: 40, max: 300, step: 10, defaultValue: GameConfig.attackDefaults.meleeEnemyRange
 };
 const meleeRangeStore = createParamStore([MELEE_ENEMY_RANGE_DEF], 'douqi.meleeRange.v1');
 let meleeRange = meleeRangeStore.load();

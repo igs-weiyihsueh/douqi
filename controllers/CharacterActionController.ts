@@ -100,7 +100,7 @@ interface SwingHits {
 }
 
 /** 普攻段數（兩段輪流，對應範圍 / 判定編輯器的普攻 1 / 2 與 P1 Spine 的 Attack01 / Attack02） */
-const MELEE_SEGMENTS = GameConfig.melee.hitDelayMs.length;
+const MELEE_SEGMENTS = GameConfig.playerSpine.anims.attack.length;
 /** 近戰往前踏停的距離最多是判定範圍最遠處的這個比例（確保打得到鎖定的敵人） */
 const SWING_STOP_RATIO = 0.7;
 

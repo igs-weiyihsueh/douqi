@@ -558,18 +558,11 @@ export const GameConfig = {
     max: 10,
     /** 圓形範圍技（瞬發，不鎖角色） */
     circle: {
-      /** 判定時間點：放出（開始播 Combo01）後幾毫秒才判定命中（預設取自劍光出現的那一格） */
-      hitDelayMs: 570,
-      radius: 160,
       damage: 40,
       knockback: 200
     },
     /** 直線範圍技（朝 aimAngle，瞬發貫穿） */
     line: {
-      /** 判定時間點：放出（開始播 Combo02）後幾毫秒才判定命中（預設取自跳起後棍子砸到地面的那一格） */
-      hitDelayMs: 1000,
-      length: 420,
-      width: 90,
       damage: 70,
       knockback: 260
     },
@@ -597,7 +590,6 @@ export const GameConfig = {
       burstEveryAoeHits: 4,
       /** 階段4:強化期【唯一招】——鎖定角色周圍圓範圍內的怪→打過去→以【目標】為中心炸圓AOE。只 slow P1。 */
       aoe: {
-        radius: 160,             // 炸裂 AOE 半徑（以強化衝刺撞到的敵人為中心）
         damage: 60,              // AOE 圓內每隻敵人傷害
         knockback: 180,          // 輕擊退
         cooldownMs: 650,         // 每次放的冷卻(避免狂放)
@@ -797,8 +789,6 @@ export const GameConfig = {
     intervalMs: 55,
     /** 每段傷害 */
     damagePerHit: 22,
-    /** 每段命中的作用半徑 */
-    radius: 140,
     /** 擊退力道 */
     knockback: 0,
     /** 爆發時角色朝敵群衝刺的速度 */
@@ -1746,22 +1736,10 @@ export const GameConfig = {
     /** 近戰門檻（木箱 / 不可推動的大型目標）：距離 ≤ 此值就原地扇形（像素） */
     range: 90,
     /**
-     * 鎖定敵人的近戰門檻：到敵人身體邊緣的距離 ≤ 此值就往前踏一步（最多 lock.meleeStep）再原地扇形，超過才衝刺過去（像素；
-     * Spine 骷髏拿長槍，畫面上看起來貼近時實際距離常有 130～180）
+     * 近戰往前踏時停在離敵人中心這個距離（像素；要小於普攻範圍才打得到）。鎖定敵人時的近戰門檻（往前踏還是衝刺）是
+     * attackDefaults.meleeEnemyRange，普攻的判定時間與範圍在 attackDefaults.moveTimelines（範圍 / 判定編輯器可調）
      */
-    enemyRange: 150,
-    /** 近戰往前踏時停在離敵人中心這個距離（像素；要小於扇形半徑 radius 才打得到） */
     swingDistance: 80,
-    /**
-     * 普攻判定時間點：出手（開始播普攻動作）後幾毫秒才判定命中，[第 1 段, 第 2 段]（兩段輪流，對應 P1 Spine 的 Attack01 / Attack02；
-     * 預設取自動作裡劍光出現的那一格）；這是動作時間，實際判定在「動作時間 ÷ playerSpine.speeds.attack」毫秒，動作加快判定也跟著提早；
-     * 判定前進入受擊硬直就取消這一下
-     */
-    hitDelayMs: [230, 230] as ReadonlyArray<number>,
-    /** 扇形總角度（度，朝 aimAngle 左右各半） */
-    arcDeg: 90,
-    /** 扇形半徑（像素） */
-    radius: 110,
     /** 劍氣扇形特效顏色 / 透明度 / 淡出時間 */
     arcColor: 0xbfefff,
     arcAlpha: 0.5,
@@ -1815,11 +1793,24 @@ export const GameConfig = {
   },
 
   /**
-   * 攻擊者頓點（毫秒）：打擊點命中敵人（不含木箱等物件）時出招者的動作停住這麼久，之後的打擊點、普攻冷卻、招式演出跟著順延；
-   * 只停出招者自己，其他玩家與怪不受影響。這裡是各招打擊點的預設值，實際值在範圍 / 判定編輯器每個打擊點各自設定。
-   * 爆發一次連打、一般衝刺（pierce，穿透）一次衝刺都只在第一次命中時停一次
+   * 我方招式的預設設定（範圍 / 判定編輯器可調，實際值見 systems/attackTuningParams；2026-10-15 使用者在編輯器調好後匯出的設定）：
+   * - meleeEnemyRange：鎖定敵人的近戰門檻，到敵人身體邊緣的距離 ≤ 此值就往前踏一步（最多 lock.meleeStep）再揮擊，超過才衝刺過去
+   * - moveTimelines：每招的打擊點。timeMs / durationMs 是動作時間（普攻實際判定在「動作時間 ÷ playerSpine.speeds.attack」毫秒），
+   *   damagePct 為傷害 %，pauseMs 為攻擊者頓點（打中敵人時出招者停住；爆發一次連打、一般衝刺一次衝刺只停一次），
+   *   shape 為判定範圍（見 systems/hitShapes）。爆發 / 強化衝刺 / 一般衝刺只用第一個打擊點，一般衝刺不用範圍（以衝刺判定半徑碰撞）
    */
-  attackerHitPauseMs: { attack: 60, combo: 100, burst: 100, dash: 60, pierce: 35 },
+  attackDefaults: {
+    meleeEnemyRange: 120,
+    moveTimelines: {
+      attack1: [{ timeMs: 233, durationMs: 34, damagePct: 100, pauseMs: 140, shape: { kind: 'arc', offsetForward: 0, offsetSide: 0, radius: 110, arcDeg: 90, length: 110, width: 110 } }],
+      attack2: [{ timeMs: 267, durationMs: 33, damagePct: 100, pauseMs: 140, shape: { kind: 'arc', offsetForward: 20, offsetSide: 20, radius: 150, arcDeg: 150, length: 110, width: 110 } }],
+      circle: [{ timeMs: 600, durationMs: 100, damagePct: 100, pauseMs: 170, shape: { kind: 'rect', offsetForward: -40, offsetSide: 30, radius: 160, arcDeg: 360, length: 370, width: 170 } }],
+      line: [{ timeMs: 433, durationMs: 67, damagePct: 100, pauseMs: 200, shape: { kind: 'circle', offsetForward: 40, offsetSide: 20, radius: 150, arcDeg: 90, length: 420, width: 90 } }],
+      burst: [{ timeMs: 0, durationMs: 0, damagePct: 100, pauseMs: 100, shape: { kind: 'circle', offsetForward: 0, offsetSide: 0, radius: 140, arcDeg: 360, length: 280, width: 140 } }],
+      dash: [{ timeMs: 0, durationMs: 0, damagePct: 100, pauseMs: 130, shape: { kind: 'circle', offsetForward: 0, offsetSide: 0, radius: 160, arcDeg: 360, length: 320, width: 160 } }],
+      pierce: [{ timeMs: 0, durationMs: 0, damagePct: 100, pauseMs: 135, shape: { kind: 'circle', offsetForward: 0, offsetSide: 0, radius: 32, arcDeg: 360, length: 64, width: 32 } }]
+    }
+  },
   /**
    * 打擊點判定段（長度 > 0）內每打到新的敵人就頓點一次，同一段累計的頓點最多是「該打擊點頓點 × 此倍數」，
    * 圍毆一群怪時不會一直卡住
