@@ -329,6 +329,16 @@ export function resetAllAttackTuning(): void {
   setMeleeEnemyRange(MELEE_ENEMY_RANGE_DEF.defaultValue);
 }
 
+/**
+ * 匯出目前所有設定（每招的打擊點與近戰觸發距離，含沒改過的招式）成 JSON 文字：
+ * 給開發寫進程式成為新的預設值
+ */
+export function exportAttackTuning(): string {
+  const moveTimelines: Record<string, ReadonlyArray<HitPoint>> = {};
+  for (const { move } of ATTACK_MOVES) moveTimelines[move] = timelines[move];
+  return JSON.stringify({ moveTimelines, meleeEnemyRange: meleeRange.meleeEnemyRange }, null, 2);
+}
+
 /** 重新讀取存檔（打擊點與近戰觸發距離） */
 export function reloadAttackTuning(): void {
   timelines = loadTimelines();

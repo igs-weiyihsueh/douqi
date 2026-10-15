@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import type { PlayerAnimKey, PlayerPosePreview } from '../controllers/PlayerSpineController';
 import {
   ATTACK_HIT_EVENT, ATTACK_MOVES, HIT_POINT_FIELDS, MAX_HIT_POINTS, MELEE_ENEMY_RANGE_DEF, attackTuning, clampHitPointField,
-  hasHitShape, isTimedMove, moveHitPoints, resetAllAttackTuning, resetMoveHitPoints, setMeleeEnemyRange, setMoveHitPoints,
+  exportAttackTuning, hasHitShape, isTimedMove, moveHitPoints, resetAllAttackTuning, resetMoveHitPoints, setMeleeEnemyRange, setMoveHitPoints,
   type AttackMove, type HitPoint, type HitPointField, type TimedAttackMove
 } from '../systems/attackTuningParams';
 import { HIT_SHAPE_KINDS, HIT_SHAPE_LABELS, drawHitShape, placeHitShape, type HitShapeKind } from '../systems/hitShapes';
@@ -54,9 +54,15 @@ const LAYOUT = {
   FONT: 'monospace',
   COLORS: {
     TEXT: '#e5e7eb', HINT: '#94a3b8', TITLE: '#93c5fd', VALUE: '#fde68a', STEP: '#93c5fd',
-    MOVE_RESET: 0x7c2d12, RESET: 0x92400e, CLOSE: 0x374151
-  }
+    MOVE_RESET: 0x7c2d12, RESET: 0x92400e, EXPORT: 0x065f46, CLOSE: 0x374151
+  },
+  /** 底部按鈕一列幾個、匯出結果提示列的高度 */
+  BOTTOM_BUTTONS: 4,
+  STATUS_HEIGHT: 24
 } as const;
+
+/** 匯出設定下載的檔名 */
+const EXPORT_FILE_NAME = 'douqi-attack-tuning.json';
 
 /** 角色身上的範圍顯示；招式分頁的色票同色 */
 const OVERLAY = {
@@ -141,7 +147,7 @@ export interface AttackTuningEditorHost {
  * - 選中打擊點的參數：形狀（扇形 / 圓形 / 長方形）、判定中心往前 / 往上下偏移、該形狀的尺寸、傷害 %、頓點（打中怪時出招者停住多久）
  *   （systems/attackTuningParams，每次調整即時套用並存在瀏覽器）；爆發、強化衝刺、一般衝刺只有一個打擊點、沒有時間軸，
  *   一般衝刺只有傷害 % 與頓點（以衝刺判定半徑碰撞，沒有判定範圍）
- * - 最下面是普攻共用的近戰觸發距離與恢復預設、關閉
+ * - 最下面是普攻共用的近戰觸發距離與恢復預設、匯出設定（JSON 複製到剪貼簿並下載，交給開發寫成預設值）、關閉
  *
  * 角色身上畫選中招式的打擊點：時間軸目前這一格判定的打擊點畫深色、其他畫淡色、選中的打擊點線框加粗；
  * P1 出招判定的那一刻，該打擊點閃亮一下。面板建在 UIScene（UIScene 疊在上面且有「點畫面 = 攻擊」），面板上的點擊都會攔下來
@@ -398,22 +404,45 @@ export class AttackTuningEditor {
       (dir) => setMeleeEnemyRange(attackTuning().meleeEnemyRange + dir * def.step), def.label, def.hint);
     y += LAYOUT.ROW_HEIGHT + LAYOUT.SECTION_GAP;
     const buttonY = y + LAYOUT.BUTTON_HEIGHT / 2;
-    const third = LAYOUT.WIDTH / 3;
-    const bw = third - LAYOUT.PADDING;
-    panel.add(this.button(ui, third / 2, buttonY, bw, LAYOUT.BUTTON_HEIGHT, '這招恢復預設', LAYOUT.COLORS.MOVE_RESET, () => {
-      resetMoveHitPoints(this.selected);
-      this.selectPoint(0);
-    }));
-    panel.add(this.button(ui, third * 1.5, buttonY, bw, LAYOUT.BUTTON_HEIGHT, '全部恢復預設', LAYOUT.COLORS.RESET, () => {
-      resetAllAttackTuning();
-      this.selectPoint(0);
-    }));
-    panel.add(this.button(ui, third * 2.5, buttonY, bw, LAYOUT.BUTTON_HEIGHT, '關閉', LAYOUT.COLORS.CLOSE, () => this.close()));
+    const slot = LAYOUT.WIDTH / LAYOUT.BOTTOM_BUTTONS;
+    const bw = slot - LAYOUT.PADDING;
+    const status = this.text(ui, LAYOUT.PADDING, y + LAYOUT.BUTTON_HEIGHT + LAYOUT.SECTION_GAP, '', LAYOUT.COLORS.HINT, '12px');
+    const bottomButtons: Array<{ label: string; color: number; onClick: () => void }> = [
+      { label: '這招恢復預設', color: LAYOUT.COLORS.MOVE_RESET, onClick: () => { resetMoveHitPoints(this.selected); this.selectPoint(0); } },
+      { label: '全部恢復預設', color: LAYOUT.COLORS.RESET, onClick: () => { resetAllAttackTuning(); this.selectPoint(0); } },
+      { label: '匯出設定', color: LAYOUT.COLORS.EXPORT, onClick: () => this.exportSettings(status) },
+      { label: '關閉', color: LAYOUT.COLORS.CLOSE, onClick: () => this.close() }
+    ];
+    bottomButtons.forEach((b, i) => {
+      panel.add(this.button(ui, slot * (i + 0.5), buttonY, bw, LAYOUT.BUTTON_HEIGHT, b.label, b.color, b.onClick));
+    });
+    panel.add(status);
     // 背景高度依內容決定，再設成可點（攔下面板上的點擊）
-    background.setSize(LAYOUT.WIDTH, y + LAYOUT.BUTTON_HEIGHT + LAYOUT.PADDING);
+    background.setSize(LAYOUT.WIDTH, y + LAYOUT.BUTTON_HEIGHT + LAYOUT.SECTION_GAP + LAYOUT.STATUS_HEIGHT + LAYOUT.PADDING);
     this.blockClicks(background);
     this.panel = panel;
     this.refreshValues();
+  }
+
+  /**
+   * 匯出設定：所有招式的打擊點與近戰觸發距離存成 JSON，複製到剪貼簿並下載成檔案（剪貼簿無法使用時只下載），
+   * 交給開發寫成新的預設值；結果顯示在提示列
+   *
+   * @param status 提示列
+   */
+  private exportSettings(status: Phaser.GameObjects.Text): void {
+    const json = exportAttackTuning();
+    const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = EXPORT_FILE_NAME;
+    link.click();
+    URL.revokeObjectURL(url);
+    const done = (copied: boolean): void => {
+      if (status.active) status.setText(`${copied ? '已複製到剪貼簿並' : '已'}下載 ${EXPORT_FILE_NAME}，把內容或檔案傳給開發即可設為預設值`);
+    };
+    if (navigator.clipboard) navigator.clipboard.writeText(json).then(() => done(true), () => done(false));
+    else done(false);
   }
 
   /**
