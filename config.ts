@@ -182,6 +182,16 @@ export const GameConfig = {
   },
 
   /**
+   * 木樁模式（主選單，測試角色動作用）：慢速操作，不開關卡、不生怪也不灑木箱，只在 P1 右方 dummyOffsetX 生一隻打不死的 dummyType
+   * （血量見底就補滿、照常攻擊）；P1 自動進場且 CREDIT 維持在 credit
+   */
+  training: {
+    dummyType: 'tank' as 'normal' | 'tank' | 'bomber',
+    dummyOffsetX: 260,
+    credit: 999
+  },
+
+  /**
    * 新舊美術：newArtByDefault = 開局就用新美術（Scene.png 背景、P1 皮膚與 UI、怪物美術圖 / Spine）；toggleKey 切換新舊美術（Phaser 鍵名，例 'V'；不用 F 鍵，筆電常要按 Fn 才送得出來）
    */
   artStyle: {
@@ -202,7 +212,7 @@ export const GameConfig = {
     atlasUrl: 'assets/spine/CH02_Sun_Wukong.atlas',
     scale: 0.57,
     offsetY: 0,
-    facesRight: true,
+    facesRight: false,
     anims: {
       idle: ['idle'],
       move: ['Move'],
@@ -1742,7 +1752,7 @@ export const GameConfig = {
    *  - 前方無敵 → 單純衝一段
    */
   melee: {
-    /** 近戰門檻：最近敵人 ≤ 此距離就用原地扇形（像素） */
+    /** 近戰門檻：到鎖定敵人身體邊緣的距離 ≤ 此值就原地扇形（像素；超過才衝刺過去） */
     range: 90,
     /** 扇形總角度（度，朝 aimAngle 左右各半） */
     arcDeg: 90,

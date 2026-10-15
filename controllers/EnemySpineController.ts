@@ -69,8 +69,19 @@ class EnemySpineDisplay {
   place(x: number, footY: number, depth: number, alpha: number, faceRight: boolean, onScreen: boolean): void {
     this.object.setActive(onScreen).setVisible(onScreen);
     if (!onScreen) return;
-    this.object.setPosition(x, footY).setDepth(depth).setAlpha(alpha);
+    this.object.setPosition(x, footY).setDepth(depth);
+    this.setAlpha(alpha);
     this.object.skeleton.scaleX = faceRight === this.cfg.facesRight ? 1 : -1;
+  }
+
+  /**
+   * 透明度：Spine 物件本身的 alpha 不會套用到繪製，要寫進骨架顏色
+   *
+   * @param alpha 透明度（0 ~ 1）
+   */
+  setAlpha(alpha: number): void {
+    this.object.setAlpha(alpha);
+    this.object.skeleton.color.a = alpha;
   }
 
   /**
@@ -84,7 +95,8 @@ class EnemySpineDisplay {
 
   /** 啟用（從物件池取出時，從 idle 開始） */
   activate(): void {
-    this.object.setActive(true).setVisible(true).setAlpha(1);
+    this.object.setActive(true).setVisible(true);
+    this.setAlpha(1);
     this.object.animationState.clearTracks();
     this.object.skeleton.setToSetupPose();
     this.object.animationState.timeScale = 1;
@@ -348,8 +360,10 @@ export class EnemySpineController {
     display.setPaused(false);
     display.object.setActive(true).setVisible(true);
     const dieMs = display.play('die', false);
-    this.scene.tweens.add({
-      targets: display.object, alpha: 0, delay: dieMs, duration: GameConfig.enemySpine.dieFadeMs, onComplete: recycle
+    this.scene.tweens.addCounter({
+      from: 1, to: 0, delay: dieMs, duration: GameConfig.enemySpine.dieFadeMs,
+      onUpdate: (tween) => display.setAlpha(tween.getValue() ?? 0),
+      onComplete: recycle
     });
   }
 }

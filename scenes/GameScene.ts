@@ -182,6 +182,10 @@ export class GameScene extends Phaser.Scene {
   private itemToggleBanner: Phaser.GameObjects.Text | null = null;
   /** 操作模式——'fast'(現況:滑鼠融合瞄準+衝刺移動合一)｜'slow'(純鍵盤:八方向走+面向+範圍圈鎖定) */
   private controlMode: 'fast' | 'slow' = 'fast';
+  /** 木樁模式（GameConfig.training）：不開關卡、不生怪，只有一隻打不死的木樁 */
+  private training = false;
+  /** 木樁模式的木樁 */
+  private trainingDummy: Enemy | null = null;
   /**
    * 慢速模式【即時可調參數】——遊戲中用下方調參欄位 −/+ 調整，即時生效。
    * 初值取自 config；slow 模式的鎖定範圍/衝刺距離/衝刺速度改讀這組(fast 仍讀 config 常數不受影響)。
@@ -223,9 +227,10 @@ export class GameScene extends Phaser.Scene {
     super('GameScene');
   }
 
-  /** 接收 TitleScene 傳入的操作模式（預設 fast，保持向後相容/直接啟動也不壞） */
-  init(data?: { controlMode?: 'fast' | 'slow' }): void {
+  /** 接收 TitleScene 傳入的操作模式（預設 fast，保持向後相容/直接啟動也不壞）與是否為木樁模式 */
+  init(data?: { controlMode?: 'fast' | 'slow'; training?: boolean }): void {
     this.controlMode = data?.controlMode === 'slow' ? 'slow' : 'fast';
+    this.training = data?.training === true;
   }
 
   create(): void {
@@ -497,15 +502,21 @@ export class GameScene extends Phaser.Scene {
     // 初始同步按鈕面(依 config.items.spawnEnabled 的開/關)
     this.game.events.emit('items-state', this.itemsEnabled);
 
-    // 開場第一波灑幾個可打破物件
-    this.breakableCtl.spawnForWave();
+    if (this.training) {
+      // 木樁模式：P1 直接進場，只生木樁
+      this.creditCtl.insertCoin(this.player);
+      this.keepTrainingReady();
+    } else {
+      // 開場第一波灑幾個可打破物件
+      this.breakableCtl.spawnForWave();
 
-    // 關卡制:關卡 1-A 開場——靜態布置 A 物件 + A 子區隨機(純波次 或 事件),顯示關卡標題。
-    if (this.levelMode) {
-      this.startStage();
-      if (GameConfig.spawn.spawnOnStart) this.spawner.spawnFormation();
-    } else if (GameConfig.spawn.spawnOnStart) {
-      this.spawner.spawnFormation();
+      // 關卡制:關卡 1-A 開場——靜態布置 A 物件 + A 子區隨機(純波次 或 事件),顯示關卡標題。
+      if (this.levelMode) {
+        this.startStage();
+        if (GameConfig.spawn.spawnOnStart) this.spawner.spawnFormation();
+      } else if (GameConfig.spawn.spawnOnStart) {
+        this.spawner.spawnFormation();
+      }
     }
 
     this.emitStats();
@@ -517,6 +528,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private resetState(): void {
+    this.trainingDummy = null;
     // 角色編輯器參數：每局重新讀取（主選單可能剛改過），衝刺距離/速度同步到慢速即時調參，鎖敵範圍跟衝刺距離同步
     this.charParams = loadCharacterParams();
     reloadHitFeel(); // 打擊感參數：每局重新讀取（主選單打擊感編輯器可能剛改過）
@@ -687,6 +699,7 @@ export class GameScene extends Phaser.Scene {
     this.creditCtl.update();
     this.payout.update(time);
     if (!this.treasures.isOnField) this.payout.refundTreasurePrize();
+    if (this.training) this.keepTrainingReady();
 
     // COMBO 連擊計時（警告 / 中斷）
     this.comboReward.update();
@@ -1042,6 +1055,7 @@ export class GameScene extends Phaser.Scene {
   // 生成
   // ---------------------------------------------------------------------------
   private handleSpawning(delta: number): void {
+    if (this.training) return; // 木樁模式只有木樁，不生怪
     // 沒有人在場上（都還沒投幣 / 等待續關）時照常出怪：場上維持 1 人份的量（同時在場上限、本波怪數都以 1 人計），
     // 只出場上組、各自巡邏，讓待機畫面有怪在活動；有人投幣進場後直接開打
     // 波次制狀態機
@@ -2145,13 +2159,27 @@ export class GameScene extends Phaser.Scene {
     this.emitStats();
   }
 
+  /** 木樁模式每幀：P1 的 CREDIT 補回 training.credit；木樁不在場上（被清掉）時在 P1 右方重新生成 */
+  private keepTrainingReady(): void {
+    const cfg = GameConfig.training;
+    this.player.credit = Math.max(this.player.credit, cfg.credit);
+    const dummy = this.trainingDummy;
+    if (dummy && dummy.active && !dummy.dead) return;
+    const x = Phaser.Math.Clamp(this.player.x + cfg.dummyOffsetX, this.arena.left, this.arena.right);
+    const e = this.enemies.get(x, this.player.y) as Enemy | null;
+    if (!e) return;
+    e.spawn(x, this.player.y, this.time.now, cfg.dummyType, 1);
+    e.immortal = true;
+    this.trainingDummy = e;
+  }
+
   /** T 熱鍵——遊戲進行中直接乾淨重開一局（沿用 create 的 resetState/scene 重啟機制） */
   private restartRun(): void {
     // 清殘留 tween/timer，避免重啟後回呼觸及已銷毀物件（沿用 GameOver 的乾淨重啟做法）
     this.tweens.killAll();
     this.time.removeAllEvents();
     this.scene.stop('UIScene');
-    this.scene.start('GameScene', { controlMode: this.controlMode }); // 重開保留當前操作模式
+    this.scene.start('GameScene', { controlMode: this.controlMode, training: this.training }); // 重開保留當前操作模式與木樁模式
     this.scene.launch('UIScene');
   }
 

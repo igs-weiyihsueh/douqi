@@ -185,7 +185,8 @@ export class CharacterActionController {
     // 方向一律朝「角色 → 鎖定目標」
     c.aimAngle = Phaser.Math.Angle.Between(c.x, c.y, target!.x, target!.y);
     const dist = Phaser.Math.Distance.Between(c.x, c.y, target!.x, target!.y);
-    if (dist <= GameConfig.melee.range) this.stepInAndSwing(c, dist, time);
+    // 近戰門檻看到目標身體邊緣的距離：怪被真空圈推到圈邊時中心距離常超過門檻，用中心距離會一直變成衝刺
+    if (dist - (target as Enemy).getBodyRadius() <= GameConfig.melee.range) this.stepInAndSwing(c, dist, time);
     else this.dashAtEnemy(c, target as Enemy, dist, time);
   }
 

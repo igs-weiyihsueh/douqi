@@ -24,6 +24,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   hp = 0;
   /** 擊殺原子性旗標——第一個致命命中設 true，防止同幀多角色重複計殺/掉落/kill() 重入 */
   dead = false;
+  /** 打不死（木樁模式的木樁）：每次 spawn 重設為 false，由生成端設定 */
+  immortal = false;
   private maxHp = 0;
   private moveSpeed = 0;
   private bodyRadius = 0;
@@ -224,6 +226,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     this.hp = this.maxHp;
     this.dead = false;
+    this.immortal = false;
     this.knockbackUntil = 0;
     this.hitFreezeStartAt = 0;
     this.hitFreezeUntil = 0;
@@ -783,8 +786,14 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (kb) this.startKnockback(kb.angle, kb.force, time);
   }
 
+  /**
+   * 扣血，回傳是否致命；打不死的怪（immortal，木樁模式）血量見底時補滿、永遠不致命
+   *
+   * @param amount 傷害
+   */
   takeDamage(amount: number): boolean {
     this.hp -= amount;
+    if (this.immortal && this.hp <= 0) this.hp = this.maxHp;
     return this.hp <= 0;
   }
 

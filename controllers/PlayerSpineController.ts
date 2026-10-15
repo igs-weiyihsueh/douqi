@@ -75,6 +75,8 @@ export class PlayerSpineController {
     const cfg = GameConfig.playerSpine;
     const footY = skin.y + visibleBottomOffset(this.scene.textures, skin.texture.key) * skin.scaleY + cfg.offsetY;
     spine.setVisible(true).setPosition(skin.x, footY).setDepth(skin.depth).setAlpha(skin.alpha);
+    // Spine 物件本身的 alpha 不會套用到繪製，受擊閃爍要寫進骨架顏色
+    spine.skeleton.color.a = skin.alpha;
     spine.skeleton.scaleX = p.facingRight === cfg.facesRight ? 1 : -1;
     spine.animationState.timeScale = this.host.isPlayerFrozen() ? 0 : 1;
     skin.setAlpha(0);
