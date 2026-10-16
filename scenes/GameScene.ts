@@ -883,7 +883,7 @@ export class GameScene extends Phaser.Scene {
       // 戰鬥時角色與一般怪輕微分離（不完全重疊）；衝刺中不套用(不影響衝刺打擊貼近手感)
       if (!c.isDashing && !c.isSkillLocked(time)) pushEnemiesAwayFromCharacter(c, this.enemies, this.arena, this.controlMode === 'slow' ? this.vacuumZone(c) : null);
       // 角色推木箱（推的時候變慢；推不動時停在外緣）；衝刺中不套用（衝刺穿過）
-      if (!c.isDashing && !c.isSkillLocked(time)) pushBreakablesFromCharacter(c, this.breakables, this.arena);
+      if (!c.isDashing && !c.isSkillLocked(time)) pushBreakablesFromCharacter(c, this.breakables, this.arena, this.artStyle.groundFootOffset(c));
       // 塔/BOSS 實體碰撞:角色不可穿過塔/BOSS 本體(含衝刺中也擋,不讓穿王/塔身)
       pushCharacterOutOfStructures(c, this.enemies);
       this.actions.clampToArena(c, time);
@@ -2145,7 +2145,7 @@ export class GameScene extends Phaser.Scene {
       if (!enemy.telegraphing) bounceEnemyOffBounds(enemy, this.arena);
       // 怪推開木箱（推不動時沿邊緣繞過）、不可穿過塔 / BOSS 本體（時停中怪凍結，不套用）
       if (!this.timeStopped) {
-        pushBreakablesFromEnemy(enemy, this.breakables, this.arena);
+        pushBreakablesFromEnemy(enemy, this.breakables, this.arena, this.artStyle.enemyFootprint(enemy)?.footY ?? 0);
         pushEnemyOutOfStructures(enemy, this.enemies);
       }
     }

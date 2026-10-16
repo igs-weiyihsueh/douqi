@@ -190,6 +190,15 @@ export class ArtStyleController {
   }
 
   /**
+   * 角色在地面上的碰撞基準（推木箱用）離角色中心的垂直距離：新美術時為目前顯示圖像的腳底，舊美術為 0（以中心的圓碰撞）
+   *
+   * @param c 角色
+   */
+  groundFootOffset(c: Character): number {
+    return this.active ? this.characterFootOffset(c) : 0;
+  }
+
+  /**
    * 頭頂 UI 的下緣位置（世界座標）：角色畫面上看到的圖像可見部分的最上緣，再往上 headUi.gap（強化中用二段的間距）。
    * P1 新美術時依目前顯示的皮膚（一段 / 二段圖高度不同），其餘角色依本體圖
    *

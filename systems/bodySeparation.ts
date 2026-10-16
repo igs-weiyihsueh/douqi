@@ -580,17 +580,19 @@ function circlePushOutOfBox(x: number, y: number, radius: number, box: Phaser.Ge
 }
 
 /**
- * 一般怪碰到木箱 / 桶：依 enemyCrateShare 分擔推動（0 = 推不動），推不動的部分由怪退回並沿邊緣滑開繞過。固定目標不處理
+ * 一般怪碰到木箱 / 桶：依 enemyCrateShare 分擔推動（0 = 推不動），推不動的部分由怪退回並沿邊緣滑開繞過。固定目標不處理。
+ * 碰撞圓放在怪的腳底（footOffsetY），看起來是腳碰到物件才擋住
  *
  * @param e 敵人
  * @param breakables 可打破物件池
  * @param arena 移動區
+ * @param footOffsetY 腳底離怪中心的垂直距離（新美術外觀的怪依圖片腳底；舊美術為 0 = 中心）
  */
-export function pushBreakablesFromEnemy(e: Enemy, breakables: Phaser.GameObjects.Group, arena: Phaser.Geom.Rectangle): void {
+export function pushBreakablesFromEnemy(e: Enemy, breakables: Phaser.GameObjects.Group, arena: Phaser.Geom.Rectangle, footOffsetY: number): void {
   if (isFixedEnemy(e) || !e.active || e.dead) return;
   const cfg = GameConfig.breakable.push;
   const r = e.getBodyRadius();
-  const move = pushBreakablesFrom(e.x, e.y, r, breakables, arena, {
+  const move = pushBreakablesFrom(e.x, e.y + footOffsetY, r, breakables, arena, {
     pushSpeed: 0, // 怪推動的物件離手不滑行
     crateShare: cfg.enemyCrateShare,
     slideRatio: cfg.enemySlideRatio,
@@ -605,15 +607,17 @@ export function pushBreakablesFromEnemy(e: Enemy, breakables: Phaser.GameObjects
 }
 
 /**
- * 角色碰到木箱 / 桶時推動物件，推的時候變慢（沉重感）；物件推不動時角色停在外緣。呼叫端在衝刺中不套用（衝刺穿過）
+ * 角色碰到木箱 / 桶時推動物件，推的時候變慢（沉重感）；物件推不動時角色停在外緣。呼叫端在衝刺中不套用（衝刺穿過）。
+ * 碰撞圓放在角色的腳底（footOffsetY），用腳碰到物件就推得動
  *
  * @param c 角色
  * @param breakables 可打破物件池
  * @param arena 移動區
+ * @param footOffsetY 腳底離角色中心的垂直距離（新美術依目前顯示的圖片腳底；舊美術為 0 = 中心）
  */
-export function pushBreakablesFromCharacter(c: Character, breakables: Phaser.GameObjects.Group, arena: Phaser.Geom.Rectangle): void {
+export function pushBreakablesFromCharacter(c: Character, breakables: Phaser.GameObjects.Group, arena: Phaser.Geom.Rectangle, footOffsetY: number): void {
   const cfg = GameConfig.breakable.push;
-  const move = pushBreakablesFrom(c.x, c.y, GameConfig.player.radius, breakables, arena, {
+  const move = pushBreakablesFrom(c.x, c.y + footOffsetY, GameConfig.player.radius, breakables, arena, {
     pushSpeed: cfg.characterPushSpeed,
     crateShare: cfg.characterCrateShare,
     slideRatio: 0
