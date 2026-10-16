@@ -59,7 +59,7 @@ export interface HitPoint {
   durationMs: number;
   /** 這一下的傷害 = 招式原本的傷害 × damagePct / 100 */
   damagePct: number;
-  /** 命中敵人時出招者停住幾毫秒（攻擊者頓點，Character.applyHitPause） */
+  /** 命中敵人或木箱時出招者停住幾毫秒（攻擊者頓點，Character.applyHitPause） */
   pauseMs: number;
   /** 判定範圍 */
   shape: HitShape;
@@ -83,7 +83,7 @@ export const HIT_POINT_FIELDS: Readonly<Record<HitPointField, HitPointFieldDef>>
   timeMs: { label: '判定時間', unit: 'ms', hint: '出招後幾毫秒', min: 0, max: 2000, step: 10 },
   durationMs: { label: '判定長度', unit: 'ms', hint: '判定段持續多久（0 = 一格）', min: 0, max: 2000, step: 10 },
   damagePct: { label: '傷害', unit: '%', hint: '這一下 = 招式傷害 × %', min: 0, max: 300, step: 10 },
-  pauseMs: { label: '頓點', unit: 'ms', hint: '打中怪時出招者停住多久（0 = 不停）', min: 0, max: 300, step: 10 },
+  pauseMs: { label: '頓點', unit: 'ms', hint: '打中怪或木箱時出招者停住多久（0 = 不停）', min: 0, max: 300, step: 10 },
   shape: { label: '形狀', unit: '', hint: '', min: 0, max: HIT_SHAPE_KINDS.length - 1, step: 1 },
   offsetForward: { label: '往前偏移', unit: 'px', hint: '判定中心往面向前方（負 = 往後）', min: -300, max: 400, step: 10 },
   offsetSide: { label: '往上下偏移', unit: 'px', hint: '正 = 往下、負 = 往上（左右轉身同一邊）', min: -300, max: 300, step: 10 },
@@ -379,7 +379,7 @@ export function createHitWindowState(): HitWindowState {
 }
 
 /**
- * 判定段打到新的敵人時的頓點：每次停打擊點的頓點，同一段累計不超過「頓點 × GameConfig.attackerHitPauseWindowCapMult」
+ * 判定段打到新的敵人或木箱時的頓點：每次停打擊點的頓點，同一段累計不超過「頓點 × GameConfig.attackerHitPauseWindowCapMult」
  * （到上限後只停剩下的、之後不再停）
  *
  * @param c 出招的角色

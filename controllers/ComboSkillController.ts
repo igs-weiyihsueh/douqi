@@ -289,7 +289,7 @@ export class ComboSkillController {
     this.host.shakeOnce(GameConfig.juice.burstShakeDuration, GameConfig.juice.burstShakeIntensity * 0.5);
     c.scene.events.emit(ATTACK_HIT_EVENT, c, 'dash', 0);
     const hits = this.hitInShape(c, shape, dmg, cfg.knockback, time, exclude);
-    if (hits.enemies > 0) c.applyHitPause(moveHitPoints('dash')[0].pauseMs, time);
+    if (hits.enemies + hits.breakables > 0) c.applyHitPause(moveHitPoints('dash')[0].pauseMs, time);
     if (hits.enemies + hits.breakables > 0) {
       this.host.comboRewardHit(c);
       this.registerEmpowerAoeHit(c, time);
@@ -307,7 +307,7 @@ export class ComboSkillController {
 
   /**
    * 連段技一個打擊點判定段的一次判定：以它的判定範圍（朝放出時的方向）判定，範圍內這一段還沒打過的敵人受「招式傷害 × 傷害 %」
-   * 並從判定中心往外擊退，順手打範圍內的物件；這一段每打到新的敵人出招者就頓點（同一段累計有上限，見 applyWindowHitPause） pauseMs。
+   * 並從判定中心往外擊退，順手打範圍內的物件；這一段每打到新的敵人或木箱出招者就頓點（同一段累計有上限，見 applyWindowHitPause） pauseMs。
    * 這一段的第一次判定才播特效（招式1 的圓形範圍播擴張環、其他形狀畫範圍特效，只在顯示範圍特效的模式）、震動與判定事件。
    * 同一次施放的多個打擊點只在第一次打中時算 COMBO 連擊
    *
@@ -333,7 +333,7 @@ export class ComboSkillController {
       c.scene.events.emit(ATTACK_HIT_EVENT, c, cast.kind, index);
     }
     const hits = this.hitInShape(c, shape, dmg, cfg.knockback, time, hitWindow.targets);
-    if (hits.enemies > 0) applyWindowHitPause(c, hitWindow, point.pauseMs, time);
+    if (hits.enemies + hits.breakables > 0) applyWindowHitPause(c, hitWindow, point.pauseMs, time);
     if (hits.enemies + hits.breakables > 0 && !cast.rewardCounted) {
       cast.rewardCounted = true;
       this.host.comboRewardHit(c);
@@ -433,7 +433,7 @@ export class ComboSkillController {
   }
 
   /**
-   * 爆發：定身無敵連打 hits 段（每 intervalMs 一段），整招命中算一次 COMBO；第一次打中敵人時出招者頓點一次
+   * 爆發：定身無敵連打 hits 段（每 intervalMs 一段），整招命中算一次 COMBO；第一次打中敵人或木箱時出招者頓點一次
    * （連打暫停、無敵與定身一起順延）；表演時間延長定身無敵；保底計時確保一定會結束
    */
   private triggerBurst(c: Character, time: number): void {
@@ -458,7 +458,7 @@ export class ComboSkillController {
           comboCounted = true;
           this.host.comboRewardHit(c);
         }
-        if (hits.enemies > 0 && !paused && pauseMs > 0) {
+        if (hits.enemies + hits.breakables > 0 && !paused && pauseMs > 0) {
           paused = true;
           this.pauseBurst(c, burstTimer, pauseMs);
         }

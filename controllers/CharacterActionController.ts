@@ -482,7 +482,7 @@ export class CharacterActionController {
 
   /**
    * 普攻一個打擊點判定段的一次判定：以它的判定範圍（朝 aimAngle；二段變身時尺寸放大）劈出，範圍內這一段還沒打過的敵人受
-   * 「普攻傷害 × 傷害 %」與擊退、順手打可破壞物件；這一段每打到新的敵人出招者就頓點（同一段累計有上限，見 applyWindowHitPause） pauseMs；
+   * 「普攻傷害 × 傷害 %」與擊退、順手打可破壞物件；這一段每打到新的敵人或木箱出招者就頓點（同一段累計有上限，見 applyWindowHitPause） pauseMs；
    * 同一下普攻的多個打擊點只在第一次打中時累積連段與 HIT；閃白、劍氣特效與判定事件只在這一段的第一次判定
    *
    * @param c 攻擊的角色
@@ -509,7 +509,8 @@ export class CharacterActionController {
       hitCount++;
     }
     const breakableHits = this.host.hitBreakablesInShape(c, shape, time, hitWindow.targets);
-    if (hitCount > 0) applyWindowHitPause(c, hitWindow, point.pauseMs, time);
+    // 打到新的敵人或木箱都頓點（同一段累計有上限）
+    if (hitCount + breakableHits > 0) applyWindowHitPause(c, hitWindow, point.pauseMs, time);
     if (hitCount > 0 && !swing.comboCounted) {
       swing.comboCounted = true;
       this.host.onComboHit(c, time);
@@ -636,11 +637,17 @@ export class CharacterActionController {
         hitSet = new Set();
         this.dashHitBreakables.set(c, hitSet);
       }
-      if (this.host.hitBreakablesInRange(c, GameConfig.aim.dashHitRadius, 0, false, time, hitSet) > 0) this.host.triggerComboHit(c);
+      const firstContact = hitSet.size === 0 && (this.dashPiercedEnemies.get(c)?.size ?? 0) === 0;
+      if (this.host.hitBreakablesInRange(c, GameConfig.aim.dashHitRadius, 0, false, time, hitSet) > 0) {
+        this.host.triggerComboHit(c);
+        // 這次衝刺第一次撞到的是木箱：頓點用一般衝刺的設定（每次衝刺只停一次，之後撞到敵人不再停）；
+        // 撿道具衝刺與衝向木箱的強化攻擊（到點炸 AOE 時才頓點）不停
+        if (firstContact && !c.dashToItem && !this.empowerCrateTargets.has(c)) c.applyHitPause(moveHitPoints('pierce')[0].pauseMs, time);
+      }
     }
     const dashSpeed = this.currentDashSpeed(c, time);
     const piercing = !c.dashToItem;
-    // 攻擊者頓點中（撞到敵人的停頓）：完全停住，切入時間已順延到頓點之後
+    // 攻擊者頓點中（撞到敵人或木箱的停頓）：完全停住，切入時間已順延到頓點之後
     if (c.isHitPaused(time)) {
       (c.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
       return;
@@ -694,7 +701,7 @@ export class CharacterActionController {
   /**
    * 衝刺的穿透：碰到的敵人（衝刺判定半徑 + 敵人身體半徑內）這次衝刺還沒打過的，各受一下「普攻傷害 × 一般衝刺傷害 %」與擊退、
    * 畫刀光；這次衝刺第一次打中時切入（頓點 → 減速陷入 → 繼續衝刺），並且：
-   * - 一般衝刺：算一次連段與 HIT、頓點用一般衝刺的頓點
+   * - 一般衝刺：算一次連段與 HIT、頓點用一般衝刺的頓點（這次衝刺已撞過木箱、頓點過就不再停）
    * - 二段強化衝刺（不含衝向木箱的）：以撞到的敵人為中心炸強化 AOE（COMBO、頓點用強化衝刺的設定），AOE 打中的之後不再穿透打
    * 撞到 BOSS / 塔就攻擊（強化衝刺炸 AOE）並停在它外緣、結束衝刺；木樁（anchored）跟一般怪一樣穿過去，
    * 只有普攻衝向它（它就是這次衝刺的目標，終點在它身上）時打完停在它外緣、結束衝刺
@@ -747,7 +754,8 @@ export class CharacterActionController {
         this.host.onComboHit(c, time);
         this.host.triggerComboHit(c);
         this.host.flashWhite(c);
-        c.applyHitPause(point.pauseMs, time);
+        // 這次衝刺已經撞過木箱（已頓點過）就不再停
+        if (!this.dashHitBreakables.get(c)?.size) c.applyHitPause(point.pauseMs, time);
       }
       if (!blocker && c.cutInUntil === 0) this.beginCutIn(c, hits[0], dashSpeed, time);
     }
