@@ -2014,8 +2014,8 @@ export const GameConfig = {
     drop: {
       delayAfterMonstersMs: 1500,
       total: 10,
-      groupSize: [2, 4] as const,
-      groupSpacing: 250,
+      groupSize: [3, 5] as const,
+      groupSpacing: 150,
       groupGap: 4,
       groupIntervalMs: 300,
       maxAlive: 30,
