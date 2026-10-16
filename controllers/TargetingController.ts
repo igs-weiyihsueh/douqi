@@ -36,10 +36,18 @@ export interface TargetingHost {
 
 /** 鎖定標記深度 */
 const LOCK_MARKER_DEPTH = 12;
-/** 腳底鎖定框的深度：在腳下圓盤之上、角色與怪物之下（像影子一樣貼在地面，不蓋住腳） */
+/** 底部鎖定框的深度：在腳下圓盤之上、角色 / 怪物 / 木箱之下（像影子一樣貼在地面，不蓋住腳） */
 const LOCK_FOOT_MARKER_DEPTH = FOOT_DISC_DEPTH + 1;
 /** 腳底橢圓框的四分之一弧用幾段折線畫 */
 const FOOT_ARC_SEGMENTS = 12;
+
+/** 地面上的鎖定橢圓（外擴前）：中心與左右 / 上下半徑 */
+interface FootFrame {
+  cx: number;
+  cy: number;
+  rx: number;
+  ry: number;
+}
 /** 圓框四角短線長度 */
 const LOCK_CORNER_LEN = 8;
 /**
@@ -68,7 +76,7 @@ export class TargetingController {
   /** 滑鼠最後移動時間（判斷瞄準是否活躍） */
   private lastPointerMoveAt = -Infinity;
   private readonly gfx: Phaser.GameObjects.Graphics;
-  /** 新美術怪物的腳底鎖定框（畫在地面那一層） */
+  /** 新美術怪物與木箱的底部鎖定框（畫在地面那一層） */
   private readonly footGfx: Phaser.GameObjects.Graphics;
 
   constructor(private readonly host: TargetingHost) {
@@ -391,7 +399,7 @@ export class TargetingController {
   }
 
   /**
-   * 畫所有角色的鎖定標記：同一目標只畫一個共用框（新美術的怪：腳底扁橢圓 + 四角；舊美術的怪 / 道具：圓 + 四角；木箱：四角括號），框用鎖定者的 P 位代表色，
+   * 畫所有角色的鎖定標記：同一目標只畫一個共用框（新美術的怪與木箱：底部扁橢圓 + 四角；舊美術的怪 / 道具：圓 + 四角），框用鎖定者的 P 位代表色，
    * 多人鎖定時依 cornerOwners 分段上色；每段先畫深色描邊再畫彩色線，在任何地面上都看得清楚
    */
   drawMarkers(): void {
@@ -411,15 +419,15 @@ export class TargetingController {
     }
     for (const [t, lockers] of groups) {
       const owners = this.cornerOwners(lockers.sort((a, b) => a - b));
-      const footprint = this.footprintOf(t);
-      const g = footprint ? this.footGfx : this.gfx;
+      const foot = this.footFrameOf(t);
+      const g = foot ? this.footGfx : this.gfx;
       // 兩趟：先畫描邊（較粗、深色），再疊上各角的 P 位顏色
       for (const outline of [true, false]) {
         SLOT_CORNERS.forEach((corner, i) => {
           if (outline) g.lineStyle(m.thickness + m.outlineExtra, m.outlineColor, m.outlineAlpha);
           else g.lineStyle(m.thickness, colors[owners[i] % colors.length], 1);
-          if (footprint) this.strokeFootCorner(t, footprint, corner);
-          else this.strokeFrameCorner(t, corner);
+          if (foot) this.strokeFootCorner(foot, corner);
+          else this.strokeFrameCorner(t as Enemy | Item, corner);
         });
       }
     }
@@ -443,24 +451,15 @@ export class TargetingController {
   }
 
   /**
-   * 畫框的其中一角：木箱為碰撞矩形外擴的直角括號；怪 / 道具為該角的四分之一圓弧加外接正方形的角線
+   * 畫圓框的其中一角（舊美術的怪 / 道具）：該角的四分之一圓弧加外接正方形的角線
    *
    * @param t 鎖定目標
    * @param corner 哪一角
    */
-  private strokeFrameCorner(t: LockTarget, corner: (typeof SLOT_CORNERS)[number]): void {
+  private strokeFrameCorner(t: Enemy | Item, corner: (typeof SLOT_CORNERS)[number]): void {
     const g = this.gfx;
-    const m = GameConfig.lock.marker;
     const sx = corner.right ? 1 : -1;
     const sy = corner.top ? -1 : 1;
-    if (this.isBreakable(t)) {
-      const b = t.getBody();
-      const x = corner.right ? b.right + m.cratePadding : b.left - m.cratePadding;
-      const y = corner.top ? b.top - m.cratePadding : b.bottom + m.cratePadding;
-      g.lineBetween(x, y, x - sx * m.crateCornerLen, y);
-      g.lineBetween(x, y, x, y - sy * m.crateCornerLen);
-      return;
-    }
     const rad = this.frameRadius(t);
     g.beginPath();
     g.arc(t.x, t.y, rad, Phaser.Math.DegToRad(corner.arcFrom), Phaser.Math.DegToRad(corner.arcTo));
@@ -471,26 +470,33 @@ export class TargetingController {
   }
 
   /**
-   * 鎖定目標的地面佔位：新美術外觀的怪才有（鎖定框改畫在腳底），道具、木箱與舊美術的怪為 null
+   * 鎖定目標在地面上的橢圓：新美術外觀的怪為腳底佔位（GroundFootprint）；木箱 / 桶為碰撞矩形底邊中點、寬度同碰撞矩形、
+   * 扁度同怪的腳底佔位（enemySeparation.footprintFlatten）；道具與舊美術的怪為 null（畫圓框）
    *
    * @param t 鎖定目標
    */
-  private footprintOf(t: LockTarget): GroundFootprint | null {
-    return this.isItem(t) || this.isBreakable(t) ? null : this.host.enemyFootprint(t);
+  private footFrameOf(t: LockTarget): FootFrame | null {
+    if (this.isItem(t)) return null;
+    if (this.isBreakable(t)) {
+      const b = t.getBody();
+      const rx = b.width / 2;
+      return { cx: b.centerX, cy: b.bottom, rx, ry: rx * GameConfig.enemySeparation.footprintFlatten };
+    }
+    const fp: GroundFootprint | null = this.host.enemyFootprint(t);
+    return fp ? { cx: t.x, cy: t.y + fp.footY, rx: fp.rx, ry: fp.ry } : null;
   }
 
   /**
-   * 畫腳底橢圓框的其中一角：腳底佔位橢圓外擴 marker.footPadding（上下依同樣扁度）的四分之一弧，加外接矩形的角線
+   * 畫底部橢圓框的其中一角：地面橢圓外擴 marker.footPadding（上下依同樣扁度）的四分之一弧，加外接矩形的角線
    *
-   * @param t 鎖定的怪
-   * @param fp 怪的地面佔位
+   * @param foot 地面橢圓
    * @param corner 哪一角
    */
-  private strokeFootCorner(t: LockTarget, fp: GroundFootprint, corner: (typeof SLOT_CORNERS)[number]): void {
+  private strokeFootCorner(foot: FootFrame, corner: (typeof SLOT_CORNERS)[number]): void {
     const g = this.footGfx;
     const pad = GameConfig.lock.marker.footPadding;
-    const cx = t.x, cy = t.y + fp.footY;
-    const rx = fp.rx + pad, ry = fp.ry + pad * (fp.ry / fp.rx);
+    const { cx, cy } = foot;
+    const rx = foot.rx + pad, ry = foot.ry + pad * (foot.ry / foot.rx);
     const from = Phaser.Math.DegToRad(corner.arcFrom), to = Phaser.Math.DegToRad(corner.arcTo);
     const points: Phaser.Math.Vector2[] = [];
     for (let i = 0; i <= FOOT_ARC_SEGMENTS; i++) {

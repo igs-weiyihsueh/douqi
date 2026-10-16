@@ -1715,16 +1715,13 @@ export const GameConfig = {
       /** 敵人 / 道具的圓框：最小半徑，敵人另依碰撞半徑 + enemyPadding 放大（大怪、BOSS 框跟著變大） */
       radius: 30,
       enemyPadding: 10,
-      /** 新美術的怪：鎖定框改畫在腳底，為腳底佔位橢圓左右外擴 footPadding（上下依同樣扁度外擴）的扁橢圓 */
+      /** 新美術的怪與木箱：鎖定框畫在腳底 / 底部，為地面橢圓左右外擴 footPadding（上下依同樣扁度外擴）的扁橢圓 */
       footPadding: 12,
       thickness: 3,
       /** 框外圍的深色描邊（在任何地面上都看得清楚）：比框粗多少、顏色與透明度 */
       outlineExtra: 2,
       outlineColor: 0x000000,
-      outlineAlpha: 0.55,
-      /** 鎖定木箱時的框：沿木箱碰撞矩形外擴 cratePadding 的四角括號（角線長 crateCornerLen） */
-      cratePadding: 8,
-      crateCornerLen: 20
+      outlineAlpha: 0.55
     }
   },
 
