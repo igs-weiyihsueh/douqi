@@ -2124,7 +2124,13 @@ export const GameConfig = {
       /** 怪被物件擋住時，側向滑開的距離 = 被擋下的距離 × 此倍率（約等於以原速沿邊緣滑開） */
       enemySlideRatio: 1,
       /** 每秒速度衰減比例(摩擦阻力;越大停越快) */
-      friction: 12
+      friction: 12,
+      /**
+       * 連鎖推：推的物件撞到前方緊貼的物件時一起推走，最多帶動 chainMax 個（含直接推的那個）；
+       * 每多帶一個，推動的距離除以 1 + chainWeight × 多帶的個數（推一排更重、角色更慢）
+       */
+      chainMax: 4,
+      chainWeight: 0.5
     }
   },
 

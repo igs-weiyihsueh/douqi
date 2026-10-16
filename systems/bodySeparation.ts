@@ -469,8 +469,8 @@ const CRATE_BLOCK_EPS = 0.5;
 const SLIDE_DIR_MIN_RATIO = 0.3;
 
 /**
- * 把與圓 (x, y, radius) 重疊的物件（碰撞矩形）推出重疊：物件分擔 crateShare 的壓入距離（被牆或其他物件擋住時只移得到能移的部分），
- * 其餘由推的一方退回；退回的部分依 slideRatio 讓推的一方沿物件邊緣往較近的一端滑開。物件有移動時沿推的方向給 pushSpeed 的滑行速度
+ * 把與圓 (x, y, radius) 重疊的物件（碰撞矩形）推出重疊：物件分擔 crateShare 的壓入距離（前方緊貼的物件一起連鎖推，
+ * 每多帶一個，分擔的距離除以 1 + push.chainWeight × 多帶的個數，推起來更重；被牆擋住時只移得到能移的部分），其餘由推的一方退回；退回的部分依 slideRatio 讓推的一方沿物件邊緣往較近的一端滑開。物件有移動時沿推的方向給 pushSpeed 的滑行速度
  *
  * @returns 推的一方這一幀要移動的量
  */
@@ -486,7 +486,9 @@ function pushBreakablesFrom(
     const cx = body.centerX, cy = body.centerY;
     const push = circlePushOutOfBox(x + dx, y + dy, radius, body);
     if (!push) continue;
-    const want = push.depth * opts.crateShare;
+    const baseWant = push.depth * opts.crateShare;
+    const extra = baseWant > 0 ? crateChainSize(bk, push.nx, push.ny, baseWant, breakables) - 1 : 0;
+    const want = baseWant / (1 + GameConfig.breakable.push.chainWeight * extra);
     const moved = moveCrateBlocked(bk, push.nx * want, push.ny * want, breakables, arena);
     const movedAlong = moved.x * push.nx + moved.y * push.ny;
     // 推的一方退回：沒被物件分擔的部分
@@ -519,38 +521,82 @@ function pushBreakablesFrom(
 }
 
 /**
- * 移動物件 (dx, dy)，但不超出移動區、不推進其他物件（分 x / y 軸各自掃過，碰到就停在接觸面）
+ * 移動物件 (dx, dy)，不超出移動區；擋在前面的其他物件一起推走（連鎖推，最多 push.chainMax 個，推不動的停在接觸面）。
+ * 分 x / y 軸各自掃過：前方物件先遞迴推開需要的距離，自己再移到它讓出的位置
  *
+ * @param chain 這次連鎖已經在推的物件（含自己；遞迴時傳入，避免同一個物件被推兩次）
  * @returns 實際移動的量
  */
 function moveCrateBlocked(
   bk: Breakable, dx: number, dy: number,
-  breakables: Phaser.GameObjects.Group, arena: Phaser.Geom.Rectangle
+  breakables: Phaser.GameObjects.Group, arena: Phaser.Geom.Rectangle, chain: Set<Breakable> = new Set([bk])
 ): { x: number; y: number } {
+  const chainMax = GameConfig.breakable.push.chainMax;
   const b = bk.getBody();
   let left = b.left, right = b.right, top = b.top, bottom = b.bottom;
-  const others: Phaser.Geom.Rectangle[] = [];
-  for (const child of breakables.getChildren()) {
-    const o = child as Breakable;
-    if (o !== bk && o.active && !o.dead && !o.landing) others.push(o.getBody());
-  }
+  const others = (breakables.getChildren() as Breakable[]).filter((o) => o !== bk && o.active && !o.dead && !o.landing);
+  /** 前方物件擋住時：還能連鎖就把它推開 want - gap，回傳自己最多能走多遠（gap + 它讓出的距離） */
+  const pushAhead = (o: Breakable, gap: number, want: number, axis: 'x' | 'y'): number => {
+    if (chain.has(o) || chain.size >= chainMax) return gap;
+    chain.add(o);
+    const moved = axis === 'x'
+      ? moveCrateBlocked(o, want - gap, 0, breakables, arena, chain).x
+      : moveCrateBlocked(o, 0, want - gap, breakables, arena, chain).y;
+    return gap + moved;
+  };
   let mx = dx > 0 ? Math.min(dx, arena.right - right) : Math.max(dx, arena.left - left);
-  for (const ob of others) {
+  for (const o of others) {
+    const ob = o.getBody();
     if (ob.bottom <= top || ob.top >= bottom) continue; // y 不重疊，x 方向碰不到
-    if (mx > 0 && ob.left >= right - CRATE_BLOCK_EPS) mx = Math.min(mx, ob.left - right);
-    if (mx < 0 && ob.right <= left + CRATE_BLOCK_EPS) mx = Math.max(mx, ob.right - left);
+    if (mx > 0 && ob.left >= right - CRATE_BLOCK_EPS && mx > ob.left - right) mx = Math.min(mx, pushAhead(o, ob.left - right, mx, 'x'));
+    if (mx < 0 && ob.right <= left + CRATE_BLOCK_EPS && mx < ob.right - left) mx = Math.max(mx, pushAhead(o, ob.right - left, mx, 'x'));
   }
   mx = dx > 0 ? Math.max(0, mx) : Math.min(0, mx);
   left += mx; right += mx;
   let my = dy > 0 ? Math.min(dy, arena.bottom - bottom) : Math.max(dy, arena.top - top);
-  for (const ob of others) {
+  for (const o of others) {
+    const ob = o.getBody();
     if (ob.right <= left || ob.left >= right) continue; // x 不重疊，y 方向碰不到
-    if (my > 0 && ob.top >= bottom - CRATE_BLOCK_EPS) my = Math.min(my, ob.top - bottom);
-    if (my < 0 && ob.bottom <= top + CRATE_BLOCK_EPS) my = Math.max(my, ob.bottom - top);
+    if (my > 0 && ob.top >= bottom - CRATE_BLOCK_EPS && my > ob.top - bottom) my = Math.min(my, pushAhead(o, ob.top - bottom, my, 'y'));
+    if (my < 0 && ob.bottom <= top + CRATE_BLOCK_EPS && my < ob.bottom - top) my = Math.max(my, pushAhead(o, ob.bottom - top, my, 'y'));
   }
   my = dy > 0 ? Math.max(0, my) : Math.min(0, my);
   bk.setPosition(bk.x + mx, bk.y + my);
   return { x: mx, y: my };
+}
+
+/**
+ * 連鎖推會帶動幾個物件（含被直接推的那個，最多 push.chainMax）：沿推的方向的主軸，數出前方緊貼（間隔不超過 reach）的物件串
+ *
+ * @param bk 被直接推的物件
+ * @param nx 推的方向 x
+ * @param ny 推的方向 y
+ * @param reach 這一幀要推的距離（間隔在這之內才會被帶到）
+ * @param breakables 可打破物件池
+ */
+function crateChainSize(bk: Breakable, nx: number, ny: number, reach: number, breakables: Phaser.GameObjects.Group): number {
+  const chainMax = GameConfig.breakable.push.chainMax;
+  const alongX = Math.abs(nx) >= Math.abs(ny);
+  const dir = Math.sign(alongX ? nx : ny);
+  const others = (breakables.getChildren() as Breakable[]).filter((o) => o !== bk && o.active && !o.dead && !o.landing);
+  const chain = new Set<Breakable>([bk]);
+  const frontier = [bk];
+  while (frontier.length > 0 && chain.size < chainMax) {
+    const cur = frontier.pop()!.getBody();
+    for (const o of others) {
+      if (chain.has(o) || chain.size >= chainMax) continue;
+      const ob = o.getBody();
+      const lateral = alongX ? ob.bottom > cur.top && ob.top < cur.bottom : ob.right > cur.left && ob.left < cur.right;
+      if (!lateral) continue;
+      const gap = alongX
+        ? (dir > 0 ? ob.left - cur.right : cur.left - ob.right)
+        : (dir > 0 ? ob.top - cur.bottom : cur.top - ob.bottom);
+      if (gap < -CRATE_BLOCK_EPS || gap > reach) continue;
+      chain.add(o);
+      frontier.push(o);
+    }
+  }
+  return chain.size;
 }
 
 /**
