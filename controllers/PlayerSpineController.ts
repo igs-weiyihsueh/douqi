@@ -42,6 +42,8 @@ export class PlayerSpineController {
   private actionSeq = 0;
   /** 定格預覽中（範圍 / 判定編輯器的時間軸；null = 平常依狀態切換動作） */
   private preview: PlayerPosePreview | null = null;
+  /** 定格預覽中 P1 出招 / 衝刺 / 受擊：暫時照平常播動作（含頓點停住），播完再回到定格 */
+  private previewInterrupted = false;
   /** P1 本體是否被 Spine 外觀藏起來（不顯示 Spine 時恢復） */
   private baseHidden = false;
   /** 上一幀是否在受擊硬直 */
@@ -97,7 +99,8 @@ export class PlayerSpineController {
     // P1 本體（程式繪製的圓形）藏起來：揮擊時本體會閃白（flashWhite），Spine 的姿勢露出空隙時會隱約看到
     p.setAlpha(0);
     this.baseHidden = true;
-    if (this.preview) {
+    if (this.preview) this.updatePreviewInterruption(p, time);
+    if (this.preview && !this.previewInterrupted) {
       this.applyPreview(spine, this.preview);
     } else {
       // 時停凍結或攻擊者頓點時動作停住，單次動作的結束時間跟著順延
@@ -117,6 +120,7 @@ export class PlayerSpineController {
    * @param preview 動作鍵、同一鍵的第幾個動作（普攻兩段）與時間（毫秒）
    */
   setPreview(preview: PlayerPosePreview | null): void {
+    if (!preview) this.previewInterrupted = false;
     if (!preview && this.preview && this.spine) {
       // 結束預覽：回到待機，接著由平常的狀態切換接手
       this.spine.animationState.timeScale = 1;
@@ -135,6 +139,25 @@ export class PlayerSpineController {
     const names = GameConfig.playerSpine.anims[key];
     const anim = this.spine?.skeleton.data.findAnimation(names[index % names.length]);
     return anim ? anim.duration * 1000 : 0;
+  }
+
+  /**
+   * 定格預覽中是否暫時照平常播動作：P1 出新招、衝刺或受擊硬直時開始（在招式編輯器裡打木樁也看得到動作與頓點），
+   * 單次動作播完（時間到且動畫本身也播完）且不在衝刺 / 受擊中才回到定格
+   *
+   * @param p P1
+   * @param time 目前場景時間
+   */
+  private updatePreviewInterruption(p: Character, time: number): void {
+    const newAction = p.lastAction.seq !== this.actionSeq && p.lastAction.kind !== 'none';
+    const busy = newAction || p.isDashing || p.isHurtStunned(time);
+    if (busy) {
+      this.previewInterrupted = true;
+      return;
+    }
+    const entry = this.spine?.animationState.getCurrent(0);
+    const animationDone = !entry || entry.loop || entry.isComplete();
+    if (this.previewInterrupted && time >= this.oneShotUntil && animationDone) this.previewInterrupted = false;
   }
 
   /**
