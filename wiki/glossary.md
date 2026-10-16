@@ -64,11 +64,11 @@
 | 特殊鍵 | 進入二段變身；靠近虛弱BOSS時改為 BOSS變身 | `controllers/ComboSkillController.ts` › `tryManualEmpower`；`controllers/BossController.ts` › `tryTransform` | — |
 | 投幣 | 投幣取得 CREDIT，待機時直接加入 | `controllers/CreditController.ts` › `insertCoin` | `credit` |
 | 自動鎖定 | 自動選鎖定範圍內的目標（怪、木箱） | `controllers/TargetingController.ts` › `updateSlowLock` | `lock` |
-| 鎖定範圍 | 自動鎖定能選到的距離（與衝刺距離同值，角色編輯器可調） | `scenes/GameScene.ts` › `slowTuning.lockRadius` | `slow.dashDistance` |
+| 鎖定範圍 | 自動鎖定能選到的距離（與衝刺距離同值，招式編輯器一般衝刺頁可調） | `systems/dashParams.ts` › `dashParams().dashDistance` | `attackDefaults.moveTimelines.pierce` |
 | 面向優先 | 範圍內有多個目標時，優先選面朝方向的 | `controllers/TargetingController.ts` › `pickAimConeTarget` | `aim.aimConeDeg` |
 | 近戰攻擊 | 目標很近時原地揮扇形 | `controllers/CharacterActionController.ts` | `melee` |
-| 強化衝刺 | 二段強化期間的穿透衝刺，第一次撞到炸AOE | `controllers/CharacterActionController.ts` | `slow.dashSpeed` |
-| 衝刺 | 沒有目標時朝面向衝一段 | `controllers/CharacterActionController.ts` › `startDirectionDash` | `slow.dashDistance` |
+| 強化衝刺 | 二段強化期間的穿透衝刺，第一次撞到炸AOE（招式編輯器強化衝刺頁：距離倍率/速度倍率） | `controllers/CharacterActionController.ts` | `attackDefaults.moveTimelines` |
+| 衝刺 | 沒有目標時朝面向衝一段（招式編輯器一般衝刺頁：衝刺距離/速度） | `controllers/CharacterActionController.ts` › `startDirectionDash`；`systems/dashParams.ts` › `dashParams().dashDistance` | `attackDefaults.moveTimelines.pierce` |
 | 一般衝刺 | 穿透式衝刺攻擊，路徑上每隻怪各打一次，可設傷害%+頓點 | 範圍編輯器 › 一般衝刺分頁 | `attackDefaults.moveTimelines.pierce` |
 | 真空圈 | 角色腳下怪進不來的橢圓地盤 | `scenes/GameScene.ts` | `slow.vacuumRadius`、`slow.vacuumFlatten` |
 
