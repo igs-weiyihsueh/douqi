@@ -337,7 +337,7 @@ export const GameConfig = {
    * 用完時角色停在原地、無敵、怪不理他，頭上顯示 continueText 與倒數，continueSeconds 秒內投幣恢復，逾時離場（回到未進場）。
    * 未進場時下方面板（HIT 數的位置）每 joinRotateMs 輪流顯示一句 joinTexts。BOT 用完自動投幣。
    * 下方面板的多投多送膠囊量條（HIT 數下方）：每格是一次投幣，標示這次得到的 CREDIT；投幣時亮一格並飛出一道光到角色身上，
-   * 投滿一輪時整條發光後化成大飛光消失。遊玩中平時隱藏，只在投幣窗口（coinWindowMs）、續關中與未進場時顯示
+   * 投滿一輪時整條亮一下再清空格子（量條不消失，可以接著投下一輪）。遊玩中平時隱藏，只在投幣窗口（coinWindowMs）、續關中與未進場時顯示
    * 啟用時角色沒有血量（被打不扣血、不會陣亡）；enabled = false 回到舊行為
    */
   credit: {
@@ -368,8 +368,6 @@ export const GameConfig = {
       trailEveryMs: 30,
       trailMs: 260,
       burstRadius: 70,
-      /** 投滿一輪時整條化成的大飛光：光球與爆光圈的放大倍率 */
-      roundOrbScale: 2.2,
       burstMs: 380,
       depth: 1600
     },

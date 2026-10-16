@@ -48,11 +48,11 @@ const COIN_BAR_CONFIG = {
   /** 亮起時格子從 POP_SCALE 彈回原尺寸 */
   POP_SCALE: 1.35,
   POP_MS: 260,
-  /** 投滿最後一格：等最後一格彈完，整條蓋上白光（GLOW_ALPHA，費時 GLOW_MS），再 BURST_FADE_MS 淡出並清空（化成飛光由呼叫端處理） */
+  /** 投滿最後一格：等最後一格彈完，整條蓋上白光（GLOW_ALPHA，費時 GLOW_MS），白光再 GLOW_FADE_MS 退掉並清空格子（量條繼續顯示） */
   GLOW_COLOR: 0xfff3b0,
   GLOW_ALPHA: 0.9,
   GLOW_MS: 250,
-  BURST_FADE_MS: 200,
+  GLOW_FADE_MS: 250,
   /** 顯示 / 隱藏的淡入淡出時間 */
   FADE_MS: 200
 } as const;
@@ -74,9 +74,10 @@ interface CoinCell {
  * 下方面板的多投多送膠囊量條：最左側一枚硬幣，後面一格代表一次投幣，每格標示劍圖示 + 這次投幣得到的 CREDIT。
  *
  * - 容器位置 = 膠囊左下角（對齊面板的 COMBO 錨點）
- * - setShown 淡入 / 淡出；setLit 直接設定亮了幾格；lightCell 亮起一格並彈跳；completeRound 投滿時整條發光後化成飛光消失，
- *   演出中又投幣時 interruptRound 立刻收掉演出；setWarning 投幣窗口快結束時閃爍提醒（GameConfig.credit.coinBar.warn*）
- * - cellCenter / center 取得某格 / 整條中心的螢幕座標（投幣光效的起點）
+ * - setShown 淡入 / 淡出；setLit 直接設定亮了幾格；lightCell 亮起一格並彈跳；completeRound 投滿時整條亮一下再清空格子
+ *   （量條不隱藏，可以接著投下一輪），演出中又投幣時 interruptRound 立刻收掉演出；
+ *   setWarning 投幣窗口快結束時閃爍提醒（GameConfig.credit.coinBar.warn*）
+ * - cellCenter 取得某格中心的螢幕座標（投幣光效的起點）
  */
 export class CoinBonusBar extends Phaser.GameObjects.Container {
   private readonly cells: CoinCell[] = [];
@@ -88,13 +89,9 @@ export class CoinBonusBar extends Phaser.GameObjects.Container {
   private warning = false;
   /** 投滿演出的補間串（演出中又投幣時提前停掉） */
   private roundChain: Phaser.Tweens.TweenChain | null = null;
-  /** 投滿演出還沒放出的飛光（化成飛光後清為 null） */
-  private pendingBurst: (() => void) | null = null;
-  /** 膠囊寬度 */
-  private readonly capsuleWidth: number;
   /** 目前亮了幾格 */
   private litCount = 0;
-  /** 投滿演出中（演出完才清空並隱藏，期間不接受 setLit / setShown） */
+  /** 投滿演出中（演出完才清空格子，期間不接受 setLit / setShown / setWarning） */
   private completing = false;
   /** setShown 最後要求的狀態（避免每幀重開淡入淡出） */
   private shown = false;
@@ -108,7 +105,6 @@ export class CoinBonusBar extends Phaser.GameObjects.Container {
     super(scene, 0, 0);
     const cfg = COIN_BAR_CONFIG;
     const width = cfg.CELLS_LEFT + gains.length * cfg.CELL_WIDTH + (gains.length - 1) * cfg.CELL_GAP + cfg.RIGHT_PADDING;
-    this.capsuleWidth = width;
     const midY = -cfg.HEIGHT / 2;
     this.add([this.createCapsule(width), this.createCoin(midY)]);
     this.glow = scene.add.graphics().fillStyle(cfg.GLOW_COLOR, 1)
@@ -150,11 +146,6 @@ export class CoinBonusBar extends Phaser.GameObjects.Container {
   /** 量條高度（像素） */
   get barHeight(): number {
     return COIN_BAR_CONFIG.HEIGHT;
-  }
-
-  /** 整條中心的螢幕座標（量條不縮放、不旋轉） */
-  center(): { x: number; y: number } {
-    return { x: this.x + this.capsuleWidth / 2, y: this.y - COIN_BAR_CONFIG.HEIGHT / 2 };
   }
 
   /**
@@ -227,54 +218,39 @@ export class CoinBonusBar extends Phaser.GameObjects.Container {
   }
 
   /**
-   * 投滿一輪：等最後一格彈完，整條蓋上白光，接著呼叫 onBurst（呼叫端從整條中心放出飛光）並淡出，結束後清空格子並隱藏。
-   * 呼叫起就不接受 setLit / setShown / setWarning，避免同步狀態先把格子清掉或提早隱藏；演出中又投幣由 interruptRound 收掉
-   *
-   * @param onBurst 化成飛光的時機（傳入整條中心的螢幕座標）
+   * 投滿一輪：等最後一格彈完，整條蓋上白光再退掉，接著清空格子；量條維持顯示，可以接著投下一輪。
+   * 呼叫起就不接受 setLit / setShown / setWarning，避免同步狀態在演出中把格子清掉或隱藏；演出中又投幣由 interruptRound 收掉
    */
-  completeRound(onBurst: (center: { x: number; y: number }) => void): void {
+  completeRound(): void {
     const cfg = COIN_BAR_CONFIG;
     this.setWarning(false);
     this.completing = true;
-    this.pendingBurst = () => onBurst(this.center());
     this.scene.tweens.killTweensOf(this);
     this.setVisible(true).setAlpha(1);
+    this.shown = true;
     this.roundChain = this.scene.tweens.chain({
       tweens: [
         { targets: this.glow, alpha: cfg.GLOW_ALPHA, delay: cfg.POP_MS, duration: cfg.GLOW_MS, ease: 'Quad.easeIn' },
-        { targets: this, alpha: 0, duration: cfg.BURST_FADE_MS, onStart: () => this.releaseBurst() }
+        { targets: this.glow, alpha: 0, duration: cfg.GLOW_FADE_MS, ease: 'Quad.easeOut' }
       ],
       onComplete: () => this.endRound()
     });
   }
 
-  /**
-   * 投滿演出中又投幣：立刻收掉演出（還沒化成飛光就馬上放出），量條回到清空、隱藏的狀態，讓新的一輪從頭顯示，不和舊演出疊在一起
-   */
+  /** 投滿演出中又投幣：立刻收掉演出、清空格子，讓新的一輪從第一格亮起，不和舊演出疊在一起 */
   interruptRound(): void {
     if (!this.completing) return;
     this.roundChain?.stop();
-    this.releaseBurst();
     this.endRound();
   }
 
-  /** 放出投滿演出的飛光（只放一次） */
-  private releaseBurst(): void {
-    const burst = this.pendingBurst;
-    this.pendingBurst = null;
-    burst?.();
-  }
-
-  /** 投滿演出結束（播完或被打斷）：清掉白光與格子並隱藏 */
+  /** 投滿演出結束（播完或被打斷）：清掉白光與格子，量條維持顯示 */
   private endRound(): void {
     if (!this.completing) return;
     this.roundChain = null;
     this.scene.tweens.killTweensOf(this.glow);
-    this.scene.tweens.killTweensOf(this);
     this.glow.setAlpha(0);
-    this.setVisible(false).setAlpha(1);
     this.completing = false;
-    this.shown = false;
     this.litCount = 0;
     this.applyLit();
   }

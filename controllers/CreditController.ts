@@ -52,7 +52,8 @@ export interface CreditHost {
  * - 不在遊玩中的角色以 Character.leavePlay 離開戰局（alive = false）：不能操作、無敵、敵人不鎖定、不影響出怪與鏡頭
  * - 扣點：每次出手（openAttackWindow）後 attackWindowMs 內第一次命中敵人或木箱扣 1 點，一招最多扣 1 點；空揮不扣
  * - 多投多送：每次投幣依 coinCycle 循環給點，下方面板量條亮一格並飛出光效（host.onCoinInserted）；
- *   最後一次投幣後 coinWindowMs 內沒再投就回到第一檔（鼓勵一次投滿一輪），投滿一輪或逾時離場也回到第一檔
+ *   最後一次投幣後 coinWindowMs 內沒再投就回到第一檔（鼓勵一次投滿一輪）；投滿一輪時檔位從頭循環、窗口照樣重新計時（量條不消失，
+ *   可以接著投下一輪），逾時離場也回到第一檔
  * - BOT：加入時自動投幣，用完自動再投
  * - 免費模式（X 鍵切換）：開啟時攻擊不扣 CREDIT
  * - 等待中的角色頭上顯示「投幣續關」與倒數；未進場的提示在下方面板（UIScene）
@@ -66,7 +67,7 @@ export class CreditController {
   private readonly pendingPause = new Set<Character>();
   /** 多投多送：各角色下一次投幣在 coinCycle 中的位置（投幣窗口結束、投幣續關逾時離場時歸零） */
   private readonly coinStep = new Map<Character, number>();
-  /** 多投多送：各角色投幣窗口的結束時間（最後一次投幣 + coinWindowMs；投滿一輪時結束） */
+  /** 多投多送：各角色投幣窗口的結束時間（最後一次投幣 + coinWindowMs） */
   private readonly coinWindowUntil = new Map<Character, number>();
   /** 免費模式：開啟時攻擊不扣 CREDIT（X 鍵切換） */
   private freePlay = false;
@@ -125,7 +126,7 @@ export class CreditController {
   }
 
   /**
-   * 多投多送：角色投幣窗口的剩餘時間（毫秒；0 = 不在窗口中）。窗口 = 最後一次投幣後 coinWindowMs 內、還沒投滿一輪，下方面板量條顯示中
+   * 多投多送：角色投幣窗口的剩餘時間（毫秒；0 = 不在窗口中）。窗口 = 最後一次投幣後 coinWindowMs 內，下方面板量條顯示中
    *
    * @param c 角色
    */
@@ -147,9 +148,8 @@ export class CreditController {
     const gain = cycle[step % cycle.length];
     const next = (step + 1) % cycle.length;
     this.coinStep.set(c, next);
-    // 投滿一輪（回到第一檔）就關閉窗口，否則重新計時
-    if (next === 0) this.coinWindowUntil.delete(c);
-    else this.coinWindowUntil.set(c, this.host.scene.time.now + cfgCredit.coinWindowMs);
+    // 每次投幣（含投滿一輪、檔位回到第一檔）都重新計時窗口，量條繼續顯示
+    this.coinWindowUntil.set(c, this.host.scene.time.now + cfgCredit.coinWindowMs);
     c.credit += gain;
     this.pendingPause.delete(c);
     this.continueDeadline.delete(c);

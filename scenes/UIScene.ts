@@ -1983,7 +1983,7 @@ export class UIScene extends Phaser.Scene {
 
   /**
    * 投幣（GameScene 的 coin-inserted 事件）：打開量條、亮起這一格並彈跳，從這一格飛出光效；
-   * 投滿最後一格時改成整條發光、化成一道大飛光飛到角色身上後消失；上一輪的投滿演出還沒播完就先收掉（飛光照常放出）
+   * 投滿最後一格時整條再亮一下、清空格子，量條繼續顯示可以接著投；上一輪的投滿演出還沒播完就先收掉
    *
    * @param e.index 角色索引
    * @param e.cycleIndex 這次投幣在 coinCycle 中的位置
@@ -1995,11 +1995,8 @@ export class UIScene extends Phaser.Scene {
     // 投幣當下就打開量條（stats 下一幀才會帶到投幣窗口），光效才有起點
     bar.setShown(true);
     bar.lightCell(e.cycleIndex);
-    if (e.cycleIndex >= bar.cellCount - 1) {
-      bar.completeRound((center) => this.flyCoinOrb(e.index, center, GameConfig.credit.coinBar.roundOrbScale));
-      return;
-    }
-    this.flyCoinOrb(e.index, bar.cellCenter(e.cycleIndex), 1);
+    if (e.cycleIndex >= bar.cellCount - 1) bar.completeRound();
+    this.flyCoinOrb(e.index, bar.cellCenter(e.cycleIndex));
   }
 
   /**
@@ -2007,9 +2004,8 @@ export class UIScene extends Phaser.Scene {
    *
    * @param index 角色索引
    * @param start 起點（畫面座標）
-   * @param scale 光球與爆光圈的放大倍率（投滿一輪時整條化成的大飛光）
    */
-  private flyCoinOrb(index: number, start: { x: number; y: number }, scale: number): void {
+  private flyCoinOrb(index: number, start: { x: number; y: number }): void {
     const cfg = GameConfig.credit.coinBar;
     const target = (): { x: number; y: number } => {
       const c = this.lastChars[index];
@@ -2017,7 +2013,7 @@ export class UIScene extends Phaser.Scene {
       if (!c) return start;
       return { x: c.x - (gcam?.scrollX ?? 0), y: c.y + cfg.targetOffsetY - (gcam?.scrollY ?? 0) };
     };
-    const orb = this.add.circle(start.x, start.y, cfg.orbRadius * scale, cfg.orbColor).setDepth(cfg.depth)
+    const orb = this.add.circle(start.x, start.y, cfg.orbRadius, cfg.orbColor).setDepth(cfg.depth)
       .setBlendMode(Phaser.BlendModes.ADD);
     let lastTrailAt = 0;
     this.tweens.addCounter({
@@ -2031,7 +2027,7 @@ export class UIScene extends Phaser.Scene {
         orb.setPosition(u * u * start.x + 2 * u * t * cx + t * t * end.x, u * u * start.y + 2 * u * t * cy + t * t * end.y);
         if (this.time.now - lastTrailAt >= cfg.trailEveryMs) {
           lastTrailAt = this.time.now;
-          const dot = this.add.circle(orb.x, orb.y, cfg.orbRadius * scale * 0.7, cfg.orbColor, 0.8).setDepth(cfg.depth - 1)
+          const dot = this.add.circle(orb.x, orb.y, cfg.orbRadius * 0.7, cfg.orbColor, 0.8).setDepth(cfg.depth - 1)
             .setBlendMode(Phaser.BlendModes.ADD);
           this.tweens.add({ targets: dot, alpha: 0, scale: 0.2, duration: cfg.trailMs, onComplete: () => dot.destroy() });
         }
@@ -2039,7 +2035,7 @@ export class UIScene extends Phaser.Scene {
       onComplete: () => {
         orb.destroy();
         const end = target();
-        const ring = this.add.circle(end.x, end.y, cfg.burstRadius * scale, cfg.orbColor, 0.5).setDepth(cfg.depth)
+        const ring = this.add.circle(end.x, end.y, cfg.burstRadius, cfg.orbColor, 0.5).setDepth(cfg.depth)
           .setBlendMode(Phaser.BlendModes.ADD).setScale(0.2);
         this.tweens.add({ targets: ring, scale: 1, alpha: 0, duration: cfg.burstMs, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
       }
