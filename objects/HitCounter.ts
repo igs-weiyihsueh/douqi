@@ -69,6 +69,12 @@ export class HitCounter extends Phaser.GameObjects.Container {
     return this.y - this.bg.height / 2;
   }
 
+  /** 顯示內容上緣的螢幕座標（數字圖上緣略超出底圖，取兩者較高者；不含彈跳放大） */
+  get topY(): number {
+    const digitHeight = this.scene.textures.getFrame(HIT_COUNTER_TEXTURES.DIGITS[0]).height;
+    return Math.min(this.y - this.bg.height, this.centerY + HIT_COUNTER_CONFIG.DIGIT_CENTER_Y - digitHeight / 2);
+  }
+
   /**
    * 設定連擊數：0 隱藏；改變時重排數字並彈跳
    *

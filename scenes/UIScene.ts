@@ -222,6 +222,11 @@ export class UIScene extends Phaser.Scene {
     DEPTH: 1010,
     /** 獲得彩票提示（彩票圖示 + 張數）的深度 */
     REWARD_TEXT_DEPTH: 1500,
+    /**
+     * 獲得彩票提示的中心在 HIT 顯示上緣上方多少（提示半高約 28 + HIT 數字彈跳放大時上緣再高約 16 + 間隔 6），
+     * 報獎時連段數繼續更新、彈跳也不會碰到
+     */
+    REWARD_ABOVE_HIT: 50,
     /** 報獎閃光起始半徑（像素） */
     REWARD_FLASH_START_RADIUS: 12,
     /** 報獎閃光擴張最大半徑（像素） */
@@ -1717,7 +1722,8 @@ export class UIScene extends Phaser.Scene {
   }
 
   /**
-   * 在該角色 HIT 顯示的位置顯示彩票圖示 + 張數（關卡結算的彩票飛到 P位面板、COMBO 報獎都用這個；不另外噴發彩票）
+   * 在該角色 HIT 顯示的正上方顯示彩票圖示 + 張數（關卡結算的彩票飛到 P位面板、COMBO 報獎都用這個；不另外噴發彩票）；
+   * 不疊在 HIT 上，報獎期間又累積連段時兩者都看得到
    *
    * @param index 角色索引（對應 panelHitCounters）
    * @param tickets 張數（0 以下不顯示）
@@ -1725,7 +1731,8 @@ export class UIScene extends Phaser.Scene {
   showTicketGain(index: number, tickets: number): void {
     const counter = this.panelHitCounters[index];
     if (!counter) return;
-    popTicketReward(this, counter.centerX, counter.centerY, tickets, { depth: this.PANEL_COMBO_CONFIG.REWARD_TEXT_DEPTH, scrollFactor: 0 });
+    const y = counter.topY - this.PANEL_COMBO_CONFIG.REWARD_ABOVE_HIT;
+    popTicketReward(this, counter.centerX, y, tickets, { depth: this.PANEL_COMBO_CONFIG.REWARD_TEXT_DEPTH, scrollFactor: 0 });
   }
 
   /**
