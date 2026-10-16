@@ -173,7 +173,8 @@ export class ComboSkillController {
 
   /**
    * 施放連段技：立即開始播動作並進入表演時間（無敵、不能操作，涵蓋到最後一段判定結束 + performanceTime），
-   * 每個打擊點（moveHitPoints）在自己的判定段內每幀判定（runHitWindow，同一個目標每段只打一次）；判定範圍的方向在放出時決定
+   * 每個打擊點（moveHitPoints）在自己的判定段內每幀判定（runHitWindow，同一個目標每段只打一次）；判定範圍的方向在放出時決定。
+   * 打擊點的時間是動作時間（編輯器時間軸上的格），依該招動作的播放速度（playerSpine.speeds.comboCircle / comboLine）換算成實際時間，判定才會對上畫面
    *
    * @param c 角色
    * @param kind 連段技
@@ -181,13 +182,15 @@ export class ComboSkillController {
    */
   private performCombo(c: Character, kind: ReadyCombo, time: number): void {
     const perf = GameConfig.performanceTime;
-    c.markAction(kind === 'circle' ? 'comboCircle' : 'comboLine');
-    this.enterPerformance(c, lastHitMs(kind) + (kind === 'circle' ? perf.circle : perf.line), time);
+    const animKey = kind === 'circle' ? 'comboCircle' : 'comboLine';
+    c.markAction(animKey);
+    const animSpeed = GameConfig.playerSpine.speeds[animKey] ?? 1;
+    this.enterPerformance(c, lastHitMs(kind) / animSpeed + (kind === 'circle' ? perf.circle : perf.line), time);
     const dir = c.aimAngle;
     const cast: ComboCast = { kind, dir, rewardCounted: false };
     moveHitPoints(kind).forEach((point, index) => {
       const hitWindow = createHitWindowState();
-      runHitWindow(c, point.timeMs, point.durationMs, time, (hitTime, first) => {
+      runHitWindow(c, point.timeMs / animSpeed, point.durationMs / animSpeed, time, (hitTime, first) => {
         if (!c.alive) return false;
         this.resolveComboHit(c, cast, index, point, hitWindow, first, hitTime);
         return true;

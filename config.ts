@@ -228,7 +228,7 @@ export const GameConfig = {
       sprint: ['Sprint'],
       hit: ['hit']
     } as Record<string, ReadonlyArray<string>>,
-    speeds: { idle: 1, move: 1, attack: 1.4, comboCircle: 1, comboLine: 1, unique: 1, sprint: 1, hit: 1 } as Record<string, number>,
+    speeds: { idle: 1, move: 1, attack: 1.4, comboCircle: 1.3, comboLine: 1.3, unique: 1, sprint: 1, hit: 1 } as Record<string, number>,
     moveSpeedThreshold: 30,
     mixMs: 80,
     /** 原檔動作本身朝背後出招的動作鍵：播放時左右翻轉，讓招式朝面向打出去（目前的動作都朝面向，沒有需要翻轉的） */
@@ -603,11 +603,12 @@ export const GameConfig = {
    * 【實驗性】招式「表演時間」——施放圓/直/爆發時角色進入定身無敵(不能移動:走/衝刺/位移全鎖,但免傷免擊退)。
    * 時間到才恢復可動可被打。用 Character.skillLockUntil 實作(該狀態本就鎖 fast衝刺/slow走位輸入 + 賦予無敵)。
    * easy拔:enabled=false 即整組還原(不設 skillLockUntil→維持原本瞬發不鎖)。手感值可調。
+   * circle / line = 最後一個打擊點判定結束後再鎖多久（實際時間；判定時間本身依 playerSpine.speeds 加快）
    */
   performanceTime: {
     enabled: true,
-    circle: 600,
-    line: 600,
+    circle: 450,
+    line: 450,
     burst: 1000
   },
 
