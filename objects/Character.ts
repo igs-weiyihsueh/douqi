@@ -78,6 +78,12 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
   dashStartX = 0;
   dashStartY = 0;
   dashTotalDist = 0;
+  /** 普攻出手到判定結束：這個時間之前慢速移動乘上 moveFeel.attackMoveMult（0 = 不在出招中） */
+  attackMoveSlowUntil = 0;
+  /** 近戰往前踏一步：這個時間之前滑向踏步終點 stepInTarget（0 = 沒在踏步；慢速模式 P1） */
+  stepInUntil = 0;
+  stepInTargetX = 0;
+  stepInTargetY = 0;
   /**
    * 衝刺切入：撞到敵人後以減速繼續陷入，直到這個時間才停下（0 = 不在切入中；見 CharacterActionController.handleDash）
    */
@@ -246,7 +252,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * 攻擊者頓點：出招者的動作停住 ms 毫秒（重疊時只延長到較晚的結束時間），普攻冷卻與招式演出鎖跟著順延，
+   * 攻擊者頓點：出招者的動作停住 ms 毫秒（重疊時只延長到較晚的結束時間），普攻冷卻、招式演出鎖與出招減速跟著順延，
    * 排程中的打擊點由 afterHitDelay 依 hitPauseTotalMs 順延，整招節奏不變、只是中間卡一下
    *
    * @param ms 頓點長度（毫秒；0 以下不停）
@@ -261,6 +267,7 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
     this.hitPauseTotalMs += added;
     if (this.nextAttackAllowedAt > time) this.nextAttackAllowedAt += added;
     if (this.skillLockUntil > time) this.skillLockUntil += added;
+    if (this.attackMoveSlowUntil > time) this.attackMoveSlowUntil += added;
     return added;
   }
 
@@ -605,6 +612,8 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
     this.isDashing = false;
     this.dashToItem = false;
     this.dashWindupUntil = 0;
+    this.attackMoveSlowUntil = 0;
+    this.stepInUntil = 0;
     this.dashEmpowerStrike = false;
     this.cutInUntil = 0;
     this.cutInTarget = null;
@@ -664,6 +673,8 @@ export class Character extends Phaser.Physics.Arcade.Sprite {
     this.isDashing = false;
     this.dashToItem = false;
     this.dashWindupUntil = 0;
+    this.attackMoveSlowUntil = 0;
+    this.stepInUntil = 0;
     this.dashEmpowerStrike = false;
     this.cutInUntil = 0;
     this.cutInTarget = null;

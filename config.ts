@@ -297,6 +297,7 @@ export const GameConfig = {
    * - walkAnimSmoothMs：P1 走路速度量測的平滑時間（避免單幀抖動讓腳步忽快忽慢）
    * - dashWindupMs / dashWindupSquash：衝刺前原地蓄力多久、身體壓扁幅度；dashStartSpeedMult / dashEndSpeedMult：衝刺速度從初速倍率
    *   依已衝距離線性降到結尾倍率（衝刺距離不變）
+   * - attackMoveMult：慢速模式 P1 普攻出手到判定結束時的移動速度倍率；stepInMs：近戰往前踏一步滑過去的時間
    * - walkDemo：招式編輯器的怪物走路示範——木樁在出生點左右 range 內來回走，每 phaseMs 輪流用巡邏速度與追擊速度
    */
   moveFeel: {
@@ -310,6 +311,8 @@ export const GameConfig = {
     dashWindupSquash: 0.15,
     dashStartSpeedMult: 1.8,
     dashEndSpeedMult: 0.5,
+    attackMoveMult: 0.3,
+    stepInMs: 80,
     walkDemo: { range: 200, phaseMs: 2000 }
   },
 

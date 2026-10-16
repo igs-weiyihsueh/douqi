@@ -9,12 +9,13 @@ import { createParamStore, type ParamDef } from './paramStore';
  * - P1 起步 / 停下：從靜止加速到全速、從全速減到停下各花多少毫秒（0 = 立刻）
  * - 衝刺蓄力（慢速模式）：衝刺前原地停住並壓扁身體多久（撿道具的衝刺不蓄力）；衝刺速度依已衝距離的比例，從初速倍率線性降到結尾倍率，
  *   衝刺距離不變（1.8 → 0.5 時總時間跟等速差不多，但起步有蹬出去的爆發感）
+ * - 出招：慢速模式 P1 普攻出手到最後一個打擊點判定結束，移動速度乘上倍率（0 = 站定揮刀）；近戰往前踏一步花多少毫秒滑過去（0 = 瞬間到位）
  * - 預設值取自 GameConfig.moveFeel；只存跟預設不同的項目，每局開始（GameScene.resetState）重新讀取
  */
 
 /** 移動手感參數鍵 */
 export type MoveFeelKey = 'playerWalkAnimSpeed' | 'normalWalkAnimSpeed' | 'tankWalkAnimSpeed' | 'playerAccelMs' | 'playerDecelMs'
-  | 'dashWindupMs' | 'dashWindupSquash' | 'dashStartSpeedMult' | 'dashEndSpeedMult';
+  | 'dashWindupMs' | 'dashWindupSquash' | 'dashStartSpeedMult' | 'dashEndSpeedMult' | 'attackMoveMult' | 'stepInMs';
 
 /** 移動手感參數數值表 */
 export type MoveFeel = Record<MoveFeelKey, number>;
@@ -31,7 +32,9 @@ export const MOVE_FEEL_DEFS: ReadonlyArray<ParamDef<MoveFeelKey>> = [
   { key: 'dashWindupMs', label: '衝刺蓄力時間', unit: 'ms', hint: '衝出前原地停住多久（0 = 不蓄力）', min: 0, max: 300, step: 10, defaultValue: cfg.dashWindupMs },
   { key: 'dashWindupSquash', label: '衝刺蓄力壓扁', unit: '', hint: '蓄力時身體壓扁幅度', min: 0, max: 0.4, step: 0.02, defaultValue: cfg.dashWindupSquash },
   { key: 'dashStartSpeedMult', label: '衝刺初速倍率', unit: '×', hint: '剛衝出時 = 衝刺速度 × 此倍率', min: 0.5, max: 3, step: 0.05, defaultValue: cfg.dashStartSpeedMult },
-  { key: 'dashEndSpeedMult', label: '衝刺結尾倍率', unit: '×', hint: '到終點前降到 衝刺速度 × 此倍率', min: 0.1, max: 2, step: 0.05, defaultValue: cfg.dashEndSpeedMult }
+  { key: 'dashEndSpeedMult', label: '衝刺結尾倍率', unit: '×', hint: '到終點前降到 衝刺速度 × 此倍率', min: 0.1, max: 2, step: 0.05, defaultValue: cfg.dashEndSpeedMult },
+  { key: 'attackMoveMult', label: '出招時移動倍率', unit: '×', hint: '普攻出手到判定結束（0 = 站定）', min: 0, max: 1, step: 0.05, defaultValue: cfg.attackMoveMult },
+  { key: 'stepInMs', label: '往前踏一步時間', unit: 'ms', hint: '近戰踏向敵人（0 = 瞬間到位；建議小於出手時間）', min: 0, max: 200, step: 10, defaultValue: cfg.stepInMs }
 ];
 
 /** 參數存檔與顯示的小數位數（倍率每格 0.05、壓扁每格 0.02，避免浮點誤差累積） */

@@ -10,7 +10,7 @@ import { isStructureEnemy } from '../systems/enemyKinds';
 import type { EdgeMargins } from '../systems/spriteFeet';
 import type { LockTarget, TargetingController } from './TargetingController';
 import {
-  ATTACK_HIT_EVENT, applyWindowHitPause, attackTuning, createHitWindowState, meleeMove, moveHitPoints, moveReach, runHitWindow, type AttackMove, type HitPoint,
+  ATTACK_HIT_EVENT, applyWindowHitPause, attackTuning, createHitWindowState, lastHitMs, meleeMove, moveHitPoints, moveReach, runHitWindow, type AttackMove, type HitPoint,
   type HitWindowState
 } from '../systems/attackTuningParams';
 import { dashParams } from '../systems/dashParams';
@@ -89,6 +89,8 @@ const DASH_ARRIVE_MIN = 12;
 const DASH_ARRIVE_LOOKAHEAD_SEC = 0.032;
 /** 慢速移動加減速一幀最多算多少毫秒（分頁切回來等長時間停頓不會一次跳到全速） */
 const SLOW_MOVE_MAX_DT_MS = 50;
+/** 近戰踏步算速度時剩下時間的下限（約一幀，避免最後一幀除以很小的數字而暴衝） */
+const STEP_IN_MIN_FRAME_MS = 16;
 /** 一下普攻（多個打擊點）的計數狀態：連段與 HIT 每下普攻只算一次 */
 interface SwingHits {
   comboCounted: boolean;
@@ -399,10 +401,17 @@ export class CharacterActionController {
     const r = GameConfig.player.radius;
     const step = Math.min(GameConfig.lock.meleeStep, Math.max(0, dist - stopAt));
     const a = this.host.arena();
-    c.setPosition(
-      Phaser.Math.Clamp(c.x + Math.cos(c.aimAngle) * step, a.left + r, a.right - r),
-      Phaser.Math.Clamp(c.y + Math.sin(c.aimAngle) * step, a.top + r, a.bottom - r)
-    );
+    const destX = Phaser.Math.Clamp(c.x + Math.cos(c.aimAngle) * step, a.left + r, a.right - r);
+    const destY = Phaser.Math.Clamp(c.y + Math.sin(c.aimAngle) * step, a.top + r, a.bottom - r);
+    const stepInMs = moveFeel().stepInMs;
+    if (step > 0 && stepInMs > 0 && c === this.host.player() && this.host.isSlowMode()) {
+      // 慢速模式 P1：在 stepInMs 內滑到踏步終點（handleSlowMovement 接手速度），不瞬間移動
+      c.stepInUntil = time + stepInMs;
+      c.stepInTargetX = destX;
+      c.stepInTargetY = destY;
+    } else {
+      c.setPosition(destX, destY);
+    }
     this.performMeleeArc(c, time);
     c.nextAttackAllowedAt = time + this.attackCooldownMs();
   }
@@ -474,6 +483,8 @@ export class CharacterActionController {
     const aim = c.aimAngle;
     const swing: SwingHits = { comboCounted: false, rewardCounted: false };
     const animSpeed = GameConfig.playerSpine.speeds.attack ?? 1;
+    // 出手到最後一個打擊點判定結束：慢速移動減速（moveFeel.attackMoveMult）
+    c.attackMoveSlowUntil = time + lastHitMs(move) / animSpeed;
     moveHitPoints(move).forEach((point, index) => {
       const hitWindow = createHitWindowState();
       runHitWindow(c, point.timeMs / animSpeed, point.durationMs / animSpeed, time, (hitTime, first) => {
@@ -534,7 +545,8 @@ export class CharacterActionController {
 
   /**
    * 慢速模式：P1 鍵盤八方向持續移動（對角線正規化）並把面向設為移動方向；無輸入時停下、維持最後面向。
-   * 起步 / 停下依 moveFeel.playerAccelMs / playerDecelMs 加減速（速度每幀朝目標逼近，最多變化「全速 × 經過時間 ÷ 加減速時間」）。
+   * 起步 / 停下依 moveFeel.playerAccelMs / playerDecelMs 加減速（速度每幀朝目標逼近，最多變化「全速 × 經過時間 ÷ 加減速時間」）；
+   * 普攻出手到判定結束時速度乘上 moveFeel.attackMoveMult（立刻減下來，之後照起步加速恢復）；近戰踏步中以踏步速度滑過去、不吃輸入。
    * 時停被凍結、定身、受擊硬直、攻擊者頓點時立刻停下；衝刺、招式演出、爆發中不接管（速度由各自邏輯控制）
    *
    * @param time 目前場景時間
@@ -548,21 +560,35 @@ export class CharacterActionController {
     if (this.host.isFrozenByTimestop(p)) { body.setVelocity(0, 0); return; }
     if (p.isDashing || p.isSkillLocked(time) || p.isBursting) return;
     if (p.isRooted(time) || p.isHurtStunned(time) || p.isHitPaused(time)) { body.setVelocity(0, 0); return; }
+    if (time < p.stepInUntil) {
+      // 速度 = 剩下的距離 ÷ 剩下的時間（至少一幀），時間到剛好踏到終點
+      const leftSec = Math.max(STEP_IN_MIN_FRAME_MS, p.stepInUntil - time) / 1000;
+      body.setVelocity((p.stepInTargetX - p.x) / leftSec, (p.stepInTargetY - p.y) / leftSec);
+      return;
+    }
+    if (p.stepInUntil > 0) {
+      // 踏步剛結束：停在踏到的位置，之後照起步加速
+      p.stepInUntil = 0;
+      body.setVelocity(0, 0);
+    }
     const k = this.host.slowKeys();
     let dx = 0, dy = 0;
     if (k.left.isDown || k.a.isDown) dx -= 1;
     if (k.right.isDown || k.d.isDown) dx += 1;
     if (k.up.isDown || k.w.isDown) dy -= 1;
     if (k.down.isDown || k.s.isDown) dy += 1;
-    const spd = this.host.charParams().moveSpeed;
     const feel = moveFeel();
+    const attacking = time < p.attackMoveSlowUntil;
+    const fullSpeed = this.host.charParams().moveSpeed;
+    const spd = fullSpeed * (attacking ? feel.attackMoveMult : 1);
     if (dx === 0 && dy === 0) {
-      this.rampVelocity(body, 0, 0, spd, feel.playerDecelMs, dt);
+      this.rampVelocity(body, 0, 0, fullSpeed, attacking ? 0 : feel.playerDecelMs, dt);
       return;
     }
     const len = Math.hypot(dx, dy);
     const nx = dx / len, ny = dy / len;
-    this.rampVelocity(body, nx * spd, ny * spd, spd, feel.playerAccelMs, dt);
+    // 出招中立刻減到出招速度；出招結束後照起步加速回到全速
+    this.rampVelocity(body, nx * spd, ny * spd, fullSpeed, attacking ? 0 : feel.playerAccelMs, dt);
     p.aimAngle = Math.atan2(ny, nx);
   }
 
