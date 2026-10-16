@@ -52,6 +52,7 @@
 | 招式編輯器 | 主選單攻擊招式編輯入口，獨立編輯畫面 | 主選單 › 招式編輯器 | — |
 | 怪物頁 | 一般兵/大怪/遠程幽靈攻擊參數編輯頁面 | 招式編輯器 › 怪物頁 | — |
 | 木箱頁 | 招式編輯器調整木箱排列的頁面：每波數量、每群最少/最多、群間距、群內間隔、排法；可「落下一波木箱」「清除木箱」，P 收起面板後按 O 用整個畫面落下 | 招式編輯器 › 木箱頁 | `breakable.drop` |
+| 移動手感頁 | 招式編輯器調整移動手感的頁面：走路動畫基準速度（P1/一般兵/大怪）、P1 起步加速/停下減速時間，有「一般兵/大怪走路示範」按鈕（後續會再加衝刺、出招） | 招式編輯器 › 移動手感頁 | `moveFeel` |
 | A/B比較 | 兩組設定數值對比+一鍵切換功能（匯出/匯入/比較會帶上木箱排列） | 招式編輯器 › A/B比較 | — |
 | 循環出招 | 選中招式自動重複施放測試功能 | 招式編輯器 › 循環出招 | — |
 | 免費模式 | 除錯用：攻擊不扣 CREDIT（X 鍵） | `controllers/CreditController.ts` › `toggleFreePlay` | — |
@@ -61,6 +62,8 @@
 | 正式名稱 | 說明 | 程式名稱 | 設定 |
 |---|---|---|---|
 | 移動 | 八方向移動 | `controllers/CharacterActionController.ts` | `slow.moveSpeed` |
+| 移動手感 | 走路動畫隨實際速度調播放速度（腳步不打滑）、P1 起步/停下加減速、衝刺蓄力與速度曲線的統稱；招式編輯器移動手感頁可調 | `systems/moveFeelParams.ts` › `moveFeel`、`walkAnimScale` | `moveFeel` |
+| 走路動畫基準速度 | 以此速度移動時走路動畫照原速播放，實際較慢腳步放慢、較快加快（P1 與各 Spine 怪種各一個） | `systems/moveFeelParams.ts` › `walkAnimScale`、`enemyWalkAnimSpeed` | `moveFeel.playerWalkAnimSpeed`、`moveFeel.enemyWalkAnimSpeed` |
 | 攻擊鍵 | 出招 | `scenes/GameScene.ts` › `queuePlayerAttack` | — |
 | 特殊鍵 | 進入二段變身；靠近虛弱BOSS時改為 BOSS變身 | `controllers/ComboSkillController.ts` › `tryManualEmpower`；`controllers/BossController.ts` › `tryTransform` | — |
 | 投幣 | 投幣取得 CREDIT，待機時直接加入 | `controllers/CreditController.ts` › `insertCoin` | `credit` |
