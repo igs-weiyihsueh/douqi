@@ -4,6 +4,7 @@ import { GameConfig } from '../config';
 import type { Character, CharacterActionKind } from '../objects/Character';
 import { visibleBottomOffset } from '../systems/spriteFeet';
 import { moveFeel, walkAnimScale } from '../systems/moveFeelParams';
+import { dashWindupSquashMult } from './DashFx';
 
 /** 定格預覽：動作鍵、同一鍵的第幾個動作（普攻兩段輪流）與時間 */
 export interface PlayerPosePreview {
@@ -96,6 +97,9 @@ export class PlayerSpineController {
     const cfg = GameConfig.playerSpine;
     const footY = skin.y + visibleBottomOffset(this.scene.textures, skin.texture.key) * skin.scaleY + cfg.offsetY;
     spine.setVisible(true).setPosition(skin.x, footY).setDepth(skin.depth).setAlpha(skin.alpha);
+    // 衝刺蓄力中壓扁身體（Spine 以腳底為原點，腳底不動）
+    const squash = p.isDashing && time < p.dashWindupUntil ? dashWindupSquashMult() : null;
+    spine.setScale(cfg.scale * (squash?.sx ?? 1), cfg.scale * (squash?.sy ?? 1));
     // Spine 物件本身的 alpha 不會套用到繪製，受擊閃爍要寫進骨架顏色
     spine.skeleton.color.a = skin.alpha;
     skin.setAlpha(0);

@@ -295,6 +295,8 @@ export const GameConfig = {
    *   實際速度不同時播放速度等比例調整（夾在 walkAnimScaleRange），腳步跟位移對得上；預設 = 各自的全速，全速時跟原本一樣
    * - playerAccelMs / playerDecelMs：慢速模式 P1 起步加速、停下減速各花多少毫秒
    * - walkAnimSmoothMs：P1 走路速度量測的平滑時間（避免單幀抖動讓腳步忽快忽慢）
+   * - dashWindupMs / dashWindupSquash：衝刺前原地蓄力多久、身體壓扁幅度；dashStartSpeedMult / dashEndSpeedMult：衝刺速度從初速倍率
+   *   依已衝距離線性降到結尾倍率（衝刺距離不變）
    * - walkDemo：招式編輯器的怪物走路示範——木樁在出生點左右 range 內來回走，每 phaseMs 輪流用巡邏速度與追擊速度
    */
   moveFeel: {
@@ -304,6 +306,10 @@ export const GameConfig = {
     playerAccelMs: 80,
     playerDecelMs: 80,
     walkAnimSmoothMs: 80,
+    dashWindupMs: 80,
+    dashWindupSquash: 0.15,
+    dashStartSpeedMult: 1.8,
+    dashEndSpeedMult: 0.5,
     walkDemo: { range: 200, phaseMs: 2000 }
   },
 

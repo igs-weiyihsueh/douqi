@@ -3,6 +3,7 @@ import { GameConfig } from '../config';
 import type { Character } from '../objects/Character';
 import { hitFeel } from '../systems/hitFeelParams';
 import { visibleBottomOffset } from '../systems/spriteFeet';
+import { moveFeel } from '../systems/moveFeelParams';
 
 /** 畫面變形倍率（相對原始縮放） */
 export interface ScaleMult {
@@ -21,6 +22,12 @@ export function dashStretchMult(angle: number): ScaleMult {
   const sy = 1 + s * Math.abs(Math.sin(angle));
   const norm = Math.sqrt(sx * sy);
   return { sx: sx / norm, sy: sy / norm };
+}
+
+/** 衝刺蓄力時的壓扁倍率（moveFeel.dashWindupSquash：橫向放大、縱向壓扁同樣幅度） */
+export function dashWindupSquashMult(): ScaleMult {
+  const s = moveFeel().dashWindupSquash;
+  return { sx: 1 + s, sy: 1 - s };
 }
 
 /**
@@ -87,10 +94,13 @@ export class DashFx {
     for (const c of this.host.characters()) {
       if (!c.alive) continue;
       const img = this.host.displayImageOf(c);
-      const dashingFree = c.isDashing && c.cutInUntil === 0; // 衝刺中、尚未撞到敵人
-      const mult = dashingFree
-        ? dashStretchMult(Math.atan2(c.dashDestY - c.y, c.dashDestX - c.x))
-        : c.dashImpactAt > 0 ? impactSquashAt(now - c.dashImpactAt) : null;
+      const windup = c.isDashing && now < c.dashWindupUntil; // 衝刺蓄力中：原地壓扁
+      const dashingFree = c.isDashing && !windup && c.cutInUntil === 0; // 衝刺中、尚未撞到敵人
+      const mult = windup
+        ? dashWindupSquashMult()
+        : dashingFree
+          ? dashStretchMult(Math.atan2(c.dashDestY - c.y, c.dashDestX - c.x))
+          : c.dashImpactAt > 0 ? impactSquashAt(now - c.dashImpactAt) : null;
       if (mult) this.transform(img, mult);
       if (dashingFree) this.maybeSpawnGhost(c, img, now);
     }

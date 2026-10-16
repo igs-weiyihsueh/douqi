@@ -14,7 +14,7 @@ import {
   type HitWindowState
 } from '../systems/attackTuningParams';
 import { dashParams } from '../systems/dashParams';
-import { moveFeel } from '../systems/moveFeelParams';
+import { dashSpeedCurve, moveFeel } from '../systems/moveFeelParams';
 import { hitShapeContains, placeHitShape, type PlacedHitShape } from '../systems/hitShapes';
 
 /** 慢速模式八方向移動鍵（方向鍵 + WASD） */
@@ -630,6 +630,13 @@ export class CharacterActionController {
     c.dashDestY = Phaser.Math.Clamp(destY, bnd.top + m.top, bnd.bottom - m.bottom);
     c.isDashing = true;
     c.dashToItem = toItem;
+    // 蓄力（只在慢速模式；撿道具不蓄力）與速度曲線用的起點、總距離
+    const windupMs = toItem || !this.host.isSlowMode() ? 0 : moveFeel().dashWindupMs;
+    c.dashWindupUntil = windupMs > 0 ? time + windupMs : 0;
+    c.dashStartX = c.x;
+    c.dashStartY = c.y;
+    c.dashTotalDist = Phaser.Math.Distance.Between(c.x, c.y, c.dashDestX, c.dashDestY);
+    if (windupMs > 0) c.stopMoving();
     this.dashHitBreakables.get(c)?.clear();
     this.dashPiercedEnemies.get(c)?.clear();
     c.nextAttackAllowedAt = time + this.attackCooldownMs();
@@ -643,6 +650,7 @@ export class CharacterActionController {
     this.attackDashTargets.delete(c);
     c.isDashing = false;
     c.dashToItem = false;
+    c.dashWindupUntil = 0;
     c.dashEmpowerStrike = false;
     c.cutInUntil = 0;
     c.cutInTarget = null;
@@ -661,6 +669,11 @@ export class CharacterActionController {
    */
   handleDash(c: Character, time: number): void {
     if (!c.isDashing) return;
+    // 蓄力中：原地停住，時間到才衝出
+    if (time < c.dashWindupUntil) {
+      (c.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
+      return;
+    }
     if (c === this.host.player()) {
       let hitSet = this.dashHitBreakables.get(c);
       if (!hitSet) {
@@ -722,10 +735,15 @@ export class CharacterActionController {
     this.endDashState(c);
   }
 
-  /** 目前衝刺速度：慢速模式讀招式編輯器的衝刺參數，強化中加乘 */
+  /**
+   * 目前衝刺速度：慢速模式讀招式編輯器的衝刺參數，強化中加乘；慢速模式再乘上依已衝距離比例由快到慢的速度曲線（moveFeel，衝向道具時不套用）
+   */
   private currentDashSpeed(c: Character, time: number): number {
-    const base = this.host.isSlowMode() ? dashParams().dashSpeed : GameConfig.player.dashSpeed;
-    return base * (c.isEmpowered(time) ? dashParams().empowerSpeedMult : 1);
+    const slow = this.host.isSlowMode();
+    const base = slow ? dashParams().dashSpeed : GameConfig.player.dashSpeed;
+    const progress = c.dashTotalDist > 0 ? Phaser.Math.Distance.Between(c.dashStartX, c.dashStartY, c.x, c.y) / c.dashTotalDist : 1;
+    const curve = !slow || c.dashToItem ? 1 : dashSpeedCurve(progress);
+    return base * (c.isEmpowered(time) ? dashParams().empowerSpeedMult : 1) * curve;
   }
 
   /**
