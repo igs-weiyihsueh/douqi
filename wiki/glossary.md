@@ -51,7 +51,8 @@
 | 頓點 | 攻擊命中時攻擊者動作停頓的毫秒數，0~300ms範圍，增強打擊感與節奏保護 | 範圍編輯器 › 頓點欄位 | `attackDefaults.moveTimelines` |
 | 招式編輯器 | 主選單攻擊招式編輯入口，獨立編輯畫面 | 主選單 › 招式編輯器 | — |
 | 怪物頁 | 一般兵/大怪/遠程幽靈攻擊參數編輯頁面 | 招式編輯器 › 怪物頁 | — |
-| A/B比較 | 兩組設定數值對比+一鍵切換功能 | 招式編輯器 › A/B比較 | — |
+| 木箱頁 | 招式編輯器調整木箱排列的頁面：每波數量、每群最少/最多、群間距、群內間隔、排法；可「落下一波木箱」「清除木箱」，P 收起面板後按 O 用整個畫面落下 | 招式編輯器 › 木箱頁 | `breakable.drop` |
+| A/B比較 | 兩組設定數值對比+一鍵切換功能（匯出/匯入/比較會帶上木箱排列） | 招式編輯器 › A/B比較 | — |
 | 循環出招 | 選中招式自動重複施放測試功能 | 招式編輯器 › 循環出招 | — |
 | 免費模式 | 除錯用：攻擊不扣 CREDIT（X 鍵） | `controllers/CreditController.ts` › `toggleFreePlay` | — |
 
@@ -94,8 +95,10 @@
 | 招式1 | 蓄力 4 下：圓形範圍攻擊 | `controllers/ComboSkillController.ts` › `comboCircle` | `combo.circle` |
 | 招式2 | 蓄力 8 下：直線貫穿攻擊 | `controllers/ComboSkillController.ts` › `comboLine` | `combo.line` |
 | 受擊 | 被怪打中（不扣血，連段中斷） | `scenes/GameScene.ts` › `damageCharacterFrom` | — |
-| 木箱 | 場上可打破的箱子 | `controllers/BreakableController.ts` › `BreakableController`；`objects/Breakable.ts` | `breakable` |
+| 木箱 | 場上可打破的箱子，掉落排列由木箱排列參數決定 | `controllers/BreakableController.ts` › `BreakableController`；`objects/Breakable.ts` | `breakable` |
 | 木箱獎勵 | 打破木箱發的彩票 | `controllers/PayoutController.ts` › `payCrate` | `payout.shares.crate` |
+| 木箱排列 | 每波木箱如何成群掉落：數量、每群大小、群間距、群內間隔、排法 | `systems/crateLayoutParams.ts` › `crateLayout`、`CRATE_LAYOUT_DEFS` | `breakable.drop`（`total`／`groupSize`／`groupSpacing`／`groupGap`／`shape`）|
+| 排法 | 同一群木箱的排列方式：隨機堆／橫排／方陣（木箱排列新功能） | `systems/crateLayoutParams.ts` › `CRATE_SHAPES`、`CRATE_SHAPE` | `breakable.drop.shape` |
 
 ## 敵人
 
