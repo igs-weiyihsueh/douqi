@@ -343,7 +343,8 @@ export class ArtStyleController {
   }
 
   /**
-   * 呼叫 UIScene 的方法；對應的 UI 元件還沒建立時每 UI_RETRY_MS 重試，最多 UI_RETRY_MAX 次
+   * 呼叫 UIScene 的方法；UIScene 這一局還沒跑起來、或對應的 UI 元件還沒建立時每 UI_RETRY_MS 重試，最多 UI_RETRY_MAX 次
+   * （重開場景時 Phaser 沿用同一個 UIScene 物件，上一局的 UI 元件欄位還留著，只看元件會誤判成已建立）
    *
    * @param method UIScene 的方法名稱
    * @param isReady UI 元件是否已建立
@@ -357,7 +358,7 @@ export class ArtStyleController {
       console.error(`❌ [美術切換] UIScene.${method} 不存在`);
       return;
     }
-    if (isReady(ui)) {
+    if (this.scene.scene.isActive('UIScene') && isReady(ui)) {
       fn.call(ui, value);
     } else if (attempt < UI_RETRY_MAX) {
       this.scene.time.delayedCall(UI_RETRY_MS, () => this.callUiWhenReady(method, isReady, value, attempt + 1));
