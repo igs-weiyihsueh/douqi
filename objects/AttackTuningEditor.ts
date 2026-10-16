@@ -7,6 +7,7 @@ import {
   hasHitShape, isTimedMove, moveHitPoints, resetAllAttackTuning, resetMoveHitPoints, setMeleeEnemyRange, setMoveHitPoints,
   type AttackMove, type HitPoint, type HitPointField, type TimedAttackMove
 } from '../systems/attackTuningParams';
+import { CRATE_LAYOUT_DEFS, crateLayout, crateLayoutValueText, resetCrateLayout, setCrateLayoutParam } from '../systems/crateLayoutParams';
 import {
   DASH_PARAM_DEFS, EMPOWER_DASH_KEYS, PIERCE_DASH_KEYS, dashParams, resetDashParams, setDashParam, type DashParamKey
 } from '../systems/dashParams';
@@ -186,11 +187,12 @@ function shapeValueText(shape: HitShape, field: ShapeField): string {
 /** 怪物頁的數值欄位順序 */
 const MONSTER_VALUE_FIELDS: ReadonlyArray<MonsterValueField> = ['engage', 'chargeMs', 'cooldownMs', 'damage'];
 
-/** 編輯器的頁面：我方招式 / 怪物 */
-type EditorMode = 'player' | 'monster';
+/** 編輯器的頁面：我方招式 / 怪物 / 木箱排列 */
+type EditorMode = 'player' | 'monster' | 'crate';
 const EDITOR_MODES: ReadonlyArray<{ mode: EditorMode; label: string }> = [
   { mode: 'player', label: '我方招式' },
-  { mode: 'monster', label: '怪物' }
+  { mode: 'monster', label: '怪物' },
+  { mode: 'crate', label: '木箱' }
 ];
 
 /** 打擊點本身（不在判定範圍 shape 裡）的數值欄位 */
@@ -239,6 +241,10 @@ export interface AttackTuningEditorHost {
   setDummyType(kind: MonsterKind | null): void;
   /** 面板打開 / 收起（招式編輯器模式依此把遊戲畫面縮到面板右邊的演示區，或恢復全畫面） */
   panelShown(open: boolean): void;
+  /** 清掉場上的木箱，照目前的木箱排列參數在目前畫面內落下一波（跟遊戲同一套落下流程） */
+  dropCrates(): void;
+  /** 清掉場上的木箱 */
+  clearCrates(): void;
 }
 
 /**
@@ -256,7 +262,8 @@ export interface AttackTuningEditorHost {
  * - 最下面是普攻共用的近戰觸發距離與恢復預設、匯出設定（我方招式與怪物一起存成 JSON，複製到剪貼簿並下載，交給開發寫成預設值）、關閉
  * - 工具列：循環出招（選中的招式自動朝木樁重複放）、匯入設定（選匯出的 JSON 檔套用）、A/B 比較（目前設定存成 A / B、
  *   套用 A / B，並排列出兩組不同的數值；systems/tuningSettings）
- * - 標題下方切換「我方招式 / 怪物」。怪物頁：一般兵、大怪、遠程幽靈分頁，調攻擊範圍（形狀 / 位置偏移 / 尺寸）、
+ * - 木箱頁：調木箱排列（每波數量、每群數量、群間距、群內間隔、排法；systems/crateLayoutParams），按「落下一波木箱」在演示區照遊戲的落下流程預覽
+ * - 標題下方切換「我方招式 / 怪物 / 木箱」。怪物頁：一般兵、大怪、遠程幽靈分頁，調攻擊範圍（形狀 / 位置偏移 / 尺寸）、
  *   出手距離、蓄力時間、攻擊冷卻、傷害（systems/monsterAttackParams）；木樁換成選中的怪種，照設定蓄力攻擊 P1，可直接看預警與出手
  *
  * 我方招式頁在角色身上畫選中招式的打擊點：時間軸目前這一格判定的打擊點畫深色、其他畫淡色、選中的打擊點線框加粗；
@@ -330,6 +337,7 @@ export class AttackTuningEditor {
       this.drawMonsterOverlay(g, p);
       return;
     }
+    if (this.mode === 'crate') return;
     const now = this.scene.time.now;
     const color = OVERLAY.MOVES[this.selected];
     const anchor = this.anchorOf(this.selected, p);
@@ -421,9 +429,13 @@ export class AttackTuningEditor {
     if (mode === 'player') {
       this.host.setDummyType(null);
       this.selectMove(this.selected);
-    } else {
+    } else if (mode === 'monster') {
       this.host.previewPose(null);
       this.selectMonster(this.selectedMonster);
+    } else {
+      this.host.previewPose(null);
+      this.host.setDummyType(null);
+      this.render();
     }
   }
 
@@ -593,25 +605,16 @@ export class AttackTuningEditor {
     let y = this.renderModeTabs(ui, panel, LAYOUT.TITLE_HEIGHT) + LAYOUT.TAB_GAP;
     y = this.renderToolbar(ui, panel, y) + LAYOUT.SECTION_GAP;
     if (this.comparing) y = this.renderComparePage(ui, panel, y);
-    else y = this.mode === 'player' ? this.renderPlayerPage(ui, panel, y) : this.renderMonsterPage(ui, panel, y);
+    else if (this.mode === 'player') y = this.renderPlayerPage(ui, panel, y);
+    else y = this.mode === 'monster' ? this.renderMonsterPage(ui, panel, y) : this.renderCratePage(ui, panel, y);
     y += LAYOUT.SECTION_GAP;
     const buttonY = y + LAYOUT.BUTTON_HEIGHT / 2;
     const status = this.text(ui, LAYOUT.PADDING, y + LAYOUT.BUTTON_HEIGHT + LAYOUT.SECTION_GAP, this.statusMessage, LAYOUT.COLORS.HINT, LAYOUT.FONT_SIZES.STATUS);
     this.status = status;
-    const monster = this.mode === 'monster';
+    const resets = this.pageResets();
     const bottomButtons: Array<{ label: string; color: number; onClick: () => void }> = [
-      {
-        label: monster ? '這隻恢復預設' : '這招恢復預設',
-        color: LAYOUT.COLORS.MOVE_RESET,
-        onClick: monster
-          ? () => { resetMonsterAttack(this.selectedMonster); this.render(); }
-          : () => { resetMoveHitPoints(this.selected); resetDashParams(this.dashKeys()); this.selectPoint(0); }
-      },
-      {
-        label: '全部恢復預設',
-        color: LAYOUT.COLORS.RESET,
-        onClick: monster ? () => { resetAllMonsterAttacks(); this.render(); } : () => { resetAllAttackTuning(); resetDashParams([...PIERCE_DASH_KEYS, ...EMPOWER_DASH_KEYS]); this.selectPoint(0); }
-      },
+      { label: resets.oneLabel, color: LAYOUT.COLORS.MOVE_RESET, onClick: resets.one },
+      { label: '全部恢復預設', color: LAYOUT.COLORS.RESET, onClick: resets.all },
       { label: '匯出設定', color: LAYOUT.COLORS.EXPORT, onClick: () => this.exportSettings() },
       { label: '關閉', color: LAYOUT.COLORS.CLOSE, onClick: () => this.close() }
     ];
@@ -628,6 +631,56 @@ export class AttackTuningEditor {
     this.blockClicks(background);
     this.panel = panel;
     this.refreshValues();
+  }
+
+  /** 目前頁面的恢復預設：選中的這一招 / 這隻怪 / 木箱排列，以及這一頁的全部 */
+  private pageResets(): { oneLabel: string; one: () => void; all: () => void } {
+    if (this.mode === 'monster') {
+      return {
+        oneLabel: '這隻恢復預設',
+        one: () => { resetMonsterAttack(this.selectedMonster); this.render(); },
+        all: () => { resetAllMonsterAttacks(); this.render(); }
+      };
+    }
+    if (this.mode === 'crate') {
+      const reset = (): void => { resetCrateLayout(); this.render(); };
+      return { oneLabel: '木箱恢復預設', one: reset, all: reset };
+    }
+    return {
+      oneLabel: '這招恢復預設',
+      one: () => { resetMoveHitPoints(this.selected); resetDashParams(this.dashKeys()); this.selectPoint(0); },
+      all: () => { resetAllAttackTuning(); resetDashParams([...PIERCE_DASH_KEYS, ...EMPOWER_DASH_KEYS]); this.selectPoint(0); }
+    };
+  }
+
+  /**
+   * 木箱頁：木箱排列參數（排法用 ◀ ▶ 切換），以及在演示區落下一波 / 清除木箱的按鈕
+   *
+   * @param ui 面板所在場景
+   * @param panel 面板
+   * @param y 上緣（相對面板）
+   * @returns 下緣
+   */
+  private renderCratePage(ui: Phaser.Scene, panel: Phaser.GameObjects.Container, y: number): number {
+    for (const def of CRATE_LAYOUT_DEFS) {
+      this.addRow(ui, panel, y, `crate:${def.key}`, () => crateLayoutValueText(def.key),
+        (dir) => setCrateLayoutParam(def.key, crateLayout()[def.key] + dir * def.step), def.label, def.hint, def.key === 'shape');
+      y += LAYOUT.ROW_HEIGHT;
+    }
+    panel.add(this.text(ui, LAYOUT.LABEL_X, y, `演示區只有半個畫面寬，放不下的會少掉；按 ${GameConfig.moveEditor.panelToggleKey} 收起面板後按 ${GameConfig.moveEditor.crateDropKey} 用整個畫面落下（跟遊戲一樣）`,
+      LAYOUT.COLORS.HINT, LAYOUT.FONT_SIZES.ROW_HINT).setWordWrapWidth(LAYOUT.WIDTH - LAYOUT.LABEL_X * 2));
+    y += LAYOUT.ROW_HEIGHT;
+    const actions: Array<{ label: string; onClick: () => void }> = [
+      { label: '落下一波木箱', onClick: () => this.host.dropCrates() },
+      { label: '清除木箱', onClick: () => this.host.clearCrates() }
+    ];
+    const width = LAYOUT.WIDTH - LAYOUT.PADDING * 2;
+    const bw = (width - LAYOUT.TAB_GAP * (actions.length - 1)) / actions.length;
+    actions.forEach((a, i) => {
+      const cx = LAYOUT.PADDING + i * (bw + LAYOUT.TAB_GAP) + bw / 2;
+      panel.add(this.button(ui, cx, y + LAYOUT.TOOL_HEIGHT / 2, bw, LAYOUT.TOOL_HEIGHT, a.label, LAYOUT.TOOL_COLOR, a.onClick));
+    });
+    return y + LAYOUT.TOOL_HEIGHT;
   }
 
   /**
@@ -692,7 +745,7 @@ export class AttackTuningEditor {
       void file.text().then((text) => {
         const result = importSettings(text);
         this.setStatus(result
-          ? `已匯入 ${file.name}：${result.moves} 招、${result.monsters} 種怪${result.meleeRange ? '、近戰觸發距離' : ''}${result.dash ? '、衝刺參數' : ''}`
+          ? `已匯入 ${file.name}：${result.moves} 招、${result.monsters} 種怪${result.meleeRange ? '、近戰觸發距離' : ''}${result.dash ? '、衝刺參數' : ''}${result.crate ? '、木箱排列' : ''}`
           : `${file.name} 不是匯出的設定檔，沒有套用`);
         if (this.panel) this.selectMode(this.mode);
       });
@@ -1064,10 +1117,11 @@ export class AttackTuningEditor {
    * @param onStep 按 − / + 時呼叫（−1 / +1）
    * @param label 名稱（打擊點欄位省略時取 HIT_POINT_FIELDS）
    * @param hint 說明（同上）
+   * @param arrows 用 ◀ / ▶ 而不是 − / +（切換選項的列；形狀與打擊點選擇自動判斷）
    */
   private addRow(
     ui: Phaser.Scene, panel: Phaser.GameObjects.Container, y: number, id: string,
-    valueText: () => string, onStep: (dir: -1 | 1) => void, label?: string, hint?: string
+    valueText: () => string, onStep: (dir: -1 | 1) => void, label?: string, hint?: string, arrows = id === 'shape' || id === 'point'
   ): void {
     const fieldDef = id in HIT_POINT_FIELDS ? HIT_POINT_FIELDS[id as HitPointField] : null;
     const rowY = y + LAYOUT.ROW_HEIGHT / 2;
@@ -1078,7 +1132,6 @@ export class AttackTuningEditor {
     value.setData('valueText', valueText);
     this.valueTexts.set(id, value);
     panel.add(value);
-    const arrows = id === 'shape' || id === 'point';
     panel.add(this.stepButton(ui, LAYOUT.MINUS_X, rowY, arrows ? '◀' : '−', () => { onStep(-1); this.refreshValues(); }));
     panel.add(this.stepButton(ui, LAYOUT.PLUS_X, rowY, arrows ? '▶' : '+', () => { onStep(1); this.refreshValues(); }));
   }

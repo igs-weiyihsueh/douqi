@@ -1,10 +1,11 @@
 import { ATTACK_MOVES, HIT_POINT_FIELDS, applyAttackTuning, attackTuningSnapshot, type HitPoint } from './attackTuningParams';
+import { CRATE_LAYOUT_DEFS, CRATE_SHAPES, applyCrateLayout, crateLayout, type CrateLayout } from './crateLayoutParams';
 import { DASH_PARAM_DEFS, applyDashParams, dashParams, type DashParamKey, type DashParams } from './dashParams';
 import { HIT_SHAPE_LABELS, type HitShape } from './hitShapes';
 import { MONSTER_KINDS, applyMonsterAttacks, monsterAttackSnapshot, monsterFieldDefs, type MonsterAttack, type MonsterKind } from './monsterAttackParams';
 
 /**
- * 範圍 / 判定編輯器的整份設定（我方各招的打擊點、近戰觸發距離、衝刺參數、各怪種的攻擊設定）：
+ * 範圍 / 判定編輯器的整份設定（我方各招的打擊點、近戰觸發距離、衝刺參數、各怪種的攻擊設定、木箱排列）：
  * 匯出 / 匯入 JSON 與 A / B 兩組設定的存放、套用、比較
  */
 
@@ -15,14 +16,17 @@ export interface TuningSettings {
   /** 衝刺參數（較早存的 A / B 沒有這一項） */
   dash?: Readonly<DashParams>;
   monsterAttacks: Readonly<Record<MonsterKind, MonsterAttack>>;
+  /** 木箱排列（較早存的 A / B 沒有這一項） */
+  crateLayout?: Readonly<CrateLayout>;
 }
 
-/** 套用一份設定的結果：套用了幾招、幾種怪、是否含近戰觸發距離 / 衝刺參數 */
+/** 套用一份設定的結果：套用了幾招、幾種怪、是否含近戰觸發距離 / 衝刺參數 / 木箱排列 */
 export interface ApplyResult {
   moves: number;
   monsters: number;
   meleeRange: boolean;
   dash: boolean;
+  crate: boolean;
 }
 
 /** 比較用的兩組設定 */
@@ -34,7 +38,7 @@ const SLOT_STORAGE_KEY = 'douqi.tuningSlots.v1';
 
 /** 目前生效的整份設定（深複製，之後調整不會改到它） */
 export function currentSettings(): TuningSettings {
-  return JSON.parse(JSON.stringify({ ...attackTuningSnapshot(), dash: dashParams(), monsterAttacks: monsterAttackSnapshot() })) as TuningSettings;
+  return JSON.parse(JSON.stringify({ ...attackTuningSnapshot(), dash: dashParams(), monsterAttacks: monsterAttackSnapshot(), crateLayout: crateLayout() })) as TuningSettings;
 }
 
 /**
@@ -44,9 +48,9 @@ export function currentSettings(): TuningSettings {
  */
 export function applySettings(data: unknown): ApplyResult {
   const tuning = applyAttackTuning(data);
-  const d = data as { monsterAttacks?: unknown; dash?: unknown } | null;
+  const d = data as { monsterAttacks?: unknown; dash?: unknown; crateLayout?: unknown } | null;
   const monsters = applyMonsterAttacks(d?.monsterAttacks);
-  return { ...tuning, monsters, dash: applyDashParams(d?.dash) };
+  return { ...tuning, monsters, dash: applyDashParams(d?.dash), crate: applyCrateLayout(d?.crateLayout) };
 }
 
 /**
@@ -63,7 +67,7 @@ export function importSettings(text: string): ApplyResult | null {
     return null;
   }
   const result = applySettings(data);
-  return result.moves + result.monsters > 0 || result.meleeRange || result.dash ? result : null;
+  return result.moves + result.monsters > 0 || result.meleeRange || result.dash || result.crate ? result : null;
 }
 
 /** 讀取 A / B 存檔（無法讀取時為空） */
@@ -158,6 +162,14 @@ export function diffSettings(a: TuningSettings, b: TuningSettings): string[] {
   if (a.dash && b.dash) {
     for (const key of Object.keys(DASH_PARAM_DEFS) as DashParamKey[]) {
       if (a.dash[key] !== b.dash[key]) lines.push(`${DASH_PARAM_DEFS[key].label}：${a.dash[key]} ｜ ${b.dash[key]}`);
+    }
+  }
+  if (a.crateLayout && b.crateLayout) {
+    for (const def of CRATE_LAYOUT_DEFS) {
+      const va = a.crateLayout[def.key], vb = b.crateLayout[def.key];
+      if (va === vb) continue;
+      const show = (v: number): string | number => (def.key === 'shape' ? CRATE_SHAPES[v] ?? v : v);
+      lines.push(`木箱${def.label}：${show(va)} ｜ ${show(vb)}`);
     }
   }
   for (const { kind, label } of MONSTER_KINDS) {

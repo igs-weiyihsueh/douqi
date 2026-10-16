@@ -185,7 +185,8 @@ export const GameConfig = {
    * 招式編輯器模式（主選單「招式編輯器」，調我方招式與怪物攻擊用）：慢速操作，不開關卡、不生怪也不灑木箱，只在 P1 右方 dummyOffsetX
    * 生一隻打不死的 dummyType 當木樁（血量見底就補滿、站在原地不移動、不會被擊退、玩家靠近時照常攻擊）；P1 自動進場且 CREDIT 維持在 credit。
    * 範圍 / 判定編輯器（見 objects/AttackTuningEditor）一開始就打開，佔畫面左邊 panelWidth，遊戲畫面縮到右邊的演示區（角色置中）；
-   * panelToggleKey 收起 / 打開面板（收起時遊戲畫面恢復全畫面）；
+   * panelToggleKey 收起 / 打開面板（收起時遊戲畫面恢復全畫面）；crateDropKey 照木箱頁的排列參數在目前畫面落下一波木箱
+   * （面板收起時用整個畫面，跟遊戲落點範圍一樣）；
    * 招式的判定範圍特效（普攻劍氣扇形、招式1 / 2、強化衝刺的範圍圖形）只在招式編輯器畫出，正式的慢速模式靠動作本身的特效
    */
   moveEditor: {
@@ -193,6 +194,7 @@ export const GameConfig = {
     dummyOffsetX: 260,
     credit: 999,
     panelToggleKey: 'P',
+    crateDropKey: 'O',
     panelWidth: 960
   },
 
@@ -2005,15 +2007,17 @@ export const GameConfig = {
     /**
      * 關卡制：木箱從天而降（進區域時不再預先擺放）。每波一次：該波第一批怪出現後 delayAfterMonstersMs 才降落（開打前、波間休息都不掉，
      * 延遲期間這一波已打完就不掉）。共 total 個，分成每群 groupSize 個的數群：群中心彼此相隔至少 groupSpacing，
-     * 同群木箱緊貼排列（間隔 groupGap），一群一群相隔 groupIntervalMs 依序落下。
+     * 同群木箱依 shape 排列（0 隨機堆 / 1 橫排 / 2 方陣，見 systems/crateLayoutParams；間隔 groupGap），一群一群相隔 groupIntervalMs 依序落下。
+     * total / groupSize / groupSpacing / groupGap / shape 是預設值，招式編輯器的「木箱」頁可調整並預覽。
      * 場上（含降落中）達 maxAlive 就不掉；擠不下的少掉幾個（不疊放）
      */
     drop: {
       delayAfterMonstersMs: 1500,
       total: 10,
-      groupSize: [3, 5] as const,
-      groupSpacing: 150,
-      groupGap: 4,
+      groupSize: [4, 6] as const,
+      groupSpacing: 120,
+      groupGap: 2,
+      shape: 0,
       groupIntervalMs: 300,
       maxAlive: 30,
       /** 落點限制：在鏡頭畫面內（內縮 viewInset）；木箱碰撞範圍離每位玩家至少 minDistFromPlayer、離怪的身體至少 enemyGap；每群中心嘗試 placeTries 次 */

@@ -8,6 +8,7 @@ import { isFixedEnemy } from '../systems/enemyKinds';
 import { orientedRectIntersectsBox, sectorIntersectsBox } from '../systems/geometry';
 import type { VisibleBounds } from '../systems/spriteFeet';
 import { hitShapeContains, type PlacedHitShape } from '../systems/hitShapes';
+import { CRATE_SHAPE, crateGroupSizeRange, crateLayout } from '../systems/crateLayoutParams';
 
 /**
  * BreakableController 需要場景提供的能力。由 GameScene 建立並傳入；控制器不直接存取場景私有成員。
@@ -123,6 +124,9 @@ const BREAK_PARTICLES = 8;
  * - 推動與碰撞分離在 systems/bodySeparation
  */
 export class BreakableController {
+  /** 這一波還沒落下的木箱群（依序延遲落下；clearAll 時一併取消，清場後不會再掉） */
+  private pendingDrops: Phaser.Time.TimerEvent[] = [];
+
   constructor(private readonly host: BreakableHost) {}
 
   private get scene(): Phaser.Scene {
@@ -208,28 +212,34 @@ export class BreakableController {
   /**
    * 關卡制：這一波的木箱（由場景在該波第一批怪出現 drop.delayAfterMonstersMs 後呼叫）——drop.total 個
    * （場上含降落中最多 drop.maxAlive），分成每群 drop.groupSize 個的數群，一群一群相隔 groupIntervalMs 依序落下；
-   * 輪到的群若這一波已打完（host.canDropCrates 為 false）就不掉
+   * 輪到的群若這一波已打完（host.canDropCrates 為 false）就不掉。每波數量、每群數量、間距與排法讀 systems/crateLayoutParams
+   *
+   * @param preview 招式編輯器的預覽：不看這一波是否還在打，照樣落下
    */
-  dropForWave(): void {
+  dropForWave(preview = false): void {
     const cfg = GameConfig.breakable.drop;
-    const total = Math.min(cfg.total, cfg.maxAlive - this.host.group().countActive(true));
+    const layout = crateLayout();
+    const total = Math.min(layout.total, cfg.maxAlive - this.host.group().countActive(true));
     const centers: Array<{ x: number; y: number }> = [];
-    splitIntoGroups(total, cfg.groupSize[0], cfg.groupSize[1]).forEach((size, i) => {
-      const drop = (): void => { if (this.host.canDropCrates()) this.dropGroup(size, centers); };
+    this.pendingDrops = this.pendingDrops.filter((t) => t.getOverallProgress() < 1);
+    const [minSize, maxSize] = crateGroupSizeRange();
+    splitIntoGroups(total, minSize, maxSize).forEach((size, i) => {
+      const drop = (): void => { if (preview || this.host.canDropCrates()) this.dropGroup(size, centers); };
       if (i === 0) drop();
-      else this.scene.time.delayedCall(i * cfg.groupIntervalMs, drop);
+      else this.pendingDrops.push(this.scene.time.delayedCall(i * cfg.groupIntervalMs, drop));
     });
   }
 
   /**
-   * 落下一群木箱：先找群中心（離這一波其他群中心至少 groupSpacing），再把其餘木箱緊貼著已放的木箱上下左右排開
-   * （間隔 groupGap）；擠不下的少掉幾個
+   * 落下一群木箱：先找群中心（離這一波其他群中心至少 groupSpacing），再依排法把其餘木箱排開（間隔 groupGap）：
+   * 隨機堆 = 緊貼已放的木箱上下左右隨機長出去；橫排 = 往左右延伸；方陣 = 以群中心為中心排成接近正方形；擠不下的少掉幾個
    *
    * @param size 這一群的木箱數
    * @param centers 這一波已落下的群中心（找到的中心會加進去）
    */
   private dropGroup(size: number, centers: Array<{ x: number; y: number }>): void {
     const cfg = GameConfig.breakable.drop;
+    const layout = crateLayout();
     const bounds = crateBodyBounds(this.scene.textures);
     const area = this.dropArea(bounds);
     if (!area) return;
@@ -237,23 +247,36 @@ export class BreakableController {
     for (let attempt = 0; attempt < cfg.placeTries && !center; attempt++) {
       const x = Phaser.Math.FloatBetween(area.left, area.right);
       const y = Phaser.Math.FloatBetween(area.top, area.bottom);
-      if (centers.some((c) => Phaser.Math.Distance.Between(x, y, c.x, c.y) < cfg.groupSpacing)) continue;
+      if (centers.some((c) => Phaser.Math.Distance.Between(x, y, c.x, c.y) < layout.groupSpacing)) continue;
       if (this.isDropPointFree(x, y, bounds)) center = { x, y };
     }
     if (!center) return;
     centers.push(center);
-    const stepX = bounds.right - bounds.left + cfg.groupGap;
-    const stepY = bounds.bottom - bounds.top + cfg.groupGap;
+    const stepX = bounds.right - bounds.left + layout.groupGap;
+    const stepY = bounds.bottom - bounds.top + layout.groupGap;
+    const inArea = (x: number, y: number): boolean => x >= area.left && x <= area.right && y >= area.top && y <= area.bottom;
+    if (layout.shape === CRATE_SHAPE.GRID) {
+      // 方陣：cols × rows 的格子以群中心為中心，依序放到可放的格子
+      const cols = Math.ceil(Math.sqrt(size)), rows = Math.ceil(size / cols);
+      for (let i = 0; i < size; i++) {
+        const x = center.x + ((i % cols) - (cols - 1) / 2) * stepX;
+        const y = center.y + (Math.floor(i / cols) - (rows - 1) / 2) * stepY;
+        if (inArea(x, y) && this.isDropPointFree(x, y, bounds) && !this.dropCrateAt(x, y)) return;
+      }
+      return;
+    }
+    const directions = layout.shape === CRATE_SHAPE.ROW
+      ? [[stepX, 0], [-stepX, 0]]
+      : [[stepX, 0], [-stepX, 0], [0, stepY], [0, -stepY]];
     const placed = [center];
     this.dropCrateAt(center.x, center.y);
     while (placed.length < size) {
-      // 候選：已放木箱的上下左右緊鄰位置，隨機挑一個可放的
+      // 候選：已放木箱依排法的緊鄰位置，隨機挑一個可放的
       const options: Array<{ x: number; y: number }> = [];
       for (const q of placed) {
-        for (const [dx, dy] of [[stepX, 0], [-stepX, 0], [0, stepY], [0, -stepY]]) {
+        for (const [dx, dy] of directions) {
           const x = q.x + dx, y = q.y + dy;
-          if (x < area.left || x > area.right || y < area.top || y > area.bottom) continue;
-          if (this.isDropPointFree(x, y, bounds)) options.push({ x, y });
+          if (inArea(x, y) && this.isDropPointFree(x, y, bounds)) options.push({ x, y });
         }
       }
       if (options.length === 0) return;
@@ -309,7 +332,7 @@ export class BreakableController {
     }
     for (const child of this.host.group().getChildren()) {
       const o = child as Breakable;
-      if (o.active && cratesOverlap(x, y, o.x, o.groundY, bounds, cfg.groupGap)) return false;
+      if (o.active && cratesOverlap(x, y, o.x, o.groundY, bounds, crateLayout().groupGap)) return false;
     }
     return true;
   }
@@ -335,8 +358,10 @@ export class BreakableController {
     this.host.shakeOnce(cfg.shakeMs, cfg.shakeIntensity);
   }
 
-  /** 清掉場上所有可破壞物件（換區、轉場時） */
+  /** 清掉場上所有可破壞物件，並取消這一波還沒落下的木箱群（換區、轉場、招式編輯器重新預覽時） */
   clearAll(): void {
+    for (const timer of this.pendingDrops) timer.remove(false);
+    this.pendingDrops = [];
     for (const child of this.host.group().getChildren()) {
       const bk = child as Breakable;
       if (bk.active) bk.despawn();

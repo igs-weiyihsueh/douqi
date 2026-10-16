@@ -56,6 +56,7 @@ import { AttackTuningEditor } from '../objects/AttackTuningEditor';
 import { reloadAttackTuning } from '../systems/attackTuningParams';
 import { monsterAttackFor, reloadMonsterAttacks } from '../systems/monsterAttackParams';
 import { dashParams, reloadDashParams } from '../systems/dashParams';
+import { reloadCrateLayout } from '../systems/crateLayoutParams';
 
 /** 敵人上方彩票獲得提示的深度與離敵人中心的高度（樣式見 GameConfig.ticketFx；不受特效節流，獎勵一定要看得到） */
 const TICKET_POP_DEPTH = 51;
@@ -522,12 +523,15 @@ export class GameScene extends Phaser.Scene {
         animationMs: (key, index) => this.playerSpine.animationDurationMs(key, index),
         setDummyType: (kind) => this.setEditorDummy(kind ?? GameConfig.moveEditor.dummyType, kind !== null),
         panelShown: (open) => this.setEditorDemoView(open),
+        dropCrates: () => this.dropPreviewCrates(),
+        clearCrates: () => this.breakableCtl.clearAll(),
         loopMove: (move) => {
           const d = this.editorDummy;
           if (d?.active && !d.dead && this.player.alive) this.actions.performLoopMove(this.player, move, d, this.time.now);
         }
       });
       this.input.keyboard!.on(`keydown-${GameConfig.moveEditor.panelToggleKey}`, () => this.tuningEditor?.toggle());
+      this.input.keyboard!.on(`keydown-${GameConfig.moveEditor.crateDropKey}`, () => this.dropPreviewCrates());
       this.openEditorWhenUiReady();
     } else {
       // 開場第一波灑幾個可打破物件
@@ -561,6 +565,7 @@ export class GameScene extends Phaser.Scene {
     reloadAttackTuning(); // 攻擊範圍參數：每局重新讀取（招式編輯器可能剛改過）
     reloadMonsterAttacks(); // 怪物攻擊參數：同上（範圍編輯器的怪物頁）
     reloadDashParams(); // 衝刺參數：同上（招式編輯器的一般衝刺 / 強化衝刺頁）
+    reloadCrateLayout(); // 木箱排列參數：同上（招式編輯器的木箱頁）
     this.characters = [];
     this.survivalMs = 0;
     this.gameOver = false;
@@ -2219,6 +2224,12 @@ export class GameScene extends Phaser.Scene {
     const dummy = this.editorDummy;
     const midX = dummy?.active ? (this.player.x + dummy.x) / 2 : this.player.x;
     cam.centerOn(midX, this.player.y);
+  }
+
+  /** 招式編輯器的木箱預覽：清掉場上的木箱，照目前的木箱排列參數在目前畫面內落下一波（跟遊戲同一套落下流程） */
+  private dropPreviewCrates(): void {
+    this.breakableCtl.clearAll();
+    this.breakableCtl.dropForWave(true);
   }
 
   /** UIScene 建好後打開範圍 / 判定編輯器（面板建在 UIScene，GameScene 先建立時它可能還沒開始） */
