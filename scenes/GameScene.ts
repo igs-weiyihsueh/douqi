@@ -1685,6 +1685,7 @@ export class GameScene extends Phaser.Scene {
   private createTargetingHost(): TargetingHost {
     return {
       scene: this,
+      enemyFootprint: (e) => this.artStyle.enemyFootprint(e),
       enemies: () => this.enemies,
       items: () => this.items,
       breakables: () => this.breakables,

@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { GameConfig } from '../config';
 import type { Character } from '../objects/Character';
 import { Breakable } from '../objects/Breakable';
+import type { GroundFootprint } from '../systems/bodySeparation';
+import { FOOT_DISC_DEPTH } from '../systems/footDisc';
 import type { Enemy } from '../objects/Enemy';
 import { Item } from '../objects/Item';
 
@@ -28,14 +30,20 @@ export interface TargetingHost {
   isSlowMode(): boolean;
   /** 慢速模式的鎖定範圍圈半徑（遊戲中可調） */
   slowLockRadius(): number;
+  /** 敵人的地面佔位（新美術外觀的怪才有，鎖定框畫在腳底）；null = 舊美術，鎖定框畫在中心 */
+  enemyFootprint(e: Enemy): GroundFootprint | null;
 }
 
 /** 鎖定標記深度 */
 const LOCK_MARKER_DEPTH = 12;
+/** 腳底鎖定框的深度：在腳下圓盤之上、角色與怪物之下（像影子一樣貼在地面，不蓋住腳） */
+const LOCK_FOOT_MARKER_DEPTH = FOOT_DISC_DEPTH + 1;
+/** 腳底橢圓框的四分之一弧用幾段折線畫 */
+const FOOT_ARC_SEGMENTS = 12;
 /** 圓框四角短線長度 */
 const LOCK_CORNER_LEN = 8;
 /**
- * 鎖定框的四個角，依角色 index 歸屬（1P 右上、2P 左上、3P 右下、4P 左下）；
+ * 鎖定框的四個角，依角色 index 歸屬（1P 右上、2P 左上、3P 右下、4P 左下）；腳底橢圓框也照同樣的四段分配；
  * arcFrom / arcTo 為圓框上該角那一段四分之一圓弧的角度（Phaser 角度：0 = 右、順時針為正）
  */
 const SLOT_CORNERS: ReadonlyArray<{ right: boolean; top: boolean; arcFrom: number; arcTo: number }> = [
@@ -60,9 +68,12 @@ export class TargetingController {
   /** 滑鼠最後移動時間（判斷瞄準是否活躍） */
   private lastPointerMoveAt = -Infinity;
   private readonly gfx: Phaser.GameObjects.Graphics;
+  /** 新美術怪物的腳底鎖定框（畫在地面那一層） */
+  private readonly footGfx: Phaser.GameObjects.Graphics;
 
   constructor(private readonly host: TargetingHost) {
     this.gfx = host.scene.add.graphics().setDepth(LOCK_MARKER_DEPTH);
+    this.footGfx = host.scene.add.graphics().setDepth(LOCK_FOOT_MARKER_DEPTH);
   }
 
   /** P1 目前鎖定的目標 */
@@ -380,12 +391,12 @@ export class TargetingController {
   }
 
   /**
-   * 畫所有角色的鎖定標記：同一目標只畫一個共用框（怪 / 道具：圓 + 四角；木箱：四角括號），框用鎖定者的 P 位代表色，
+   * 畫所有角色的鎖定標記：同一目標只畫一個共用框（新美術的怪：腳底扁橢圓 + 四角；舊美術的怪 / 道具：圓 + 四角；木箱：四角括號），框用鎖定者的 P 位代表色，
    * 多人鎖定時依 cornerOwners 分段上色；每段先畫深色描邊再畫彩色線，在任何地面上都看得清楚
    */
   drawMarkers(): void {
-    const g = this.gfx;
-    g.clear();
+    this.footGfx.clear();
+    this.gfx.clear();
     const m = GameConfig.lock.marker;
     const colors = GameConfig.characters.colors;
     // 目標 → 鎖定它的角色 index（依 P 位順序）
@@ -400,12 +411,15 @@ export class TargetingController {
     }
     for (const [t, lockers] of groups) {
       const owners = this.cornerOwners(lockers.sort((a, b) => a - b));
+      const footprint = this.footprintOf(t);
+      const g = footprint ? this.footGfx : this.gfx;
       // 兩趟：先畫描邊（較粗、深色），再疊上各角的 P 位顏色
       for (const outline of [true, false]) {
         SLOT_CORNERS.forEach((corner, i) => {
           if (outline) g.lineStyle(m.thickness + m.outlineExtra, m.outlineColor, m.outlineAlpha);
           else g.lineStyle(m.thickness, colors[owners[i] % colors.length], 1);
-          this.strokeFrameCorner(t, corner);
+          if (footprint) this.strokeFootCorner(t, footprint, corner);
+          else this.strokeFrameCorner(t, corner);
         });
       }
     }
@@ -452,6 +466,41 @@ export class TargetingController {
     g.arc(t.x, t.y, rad, Phaser.Math.DegToRad(corner.arcFrom), Phaser.Math.DegToRad(corner.arcTo));
     g.strokePath();
     const x = t.x + sx * rad, y = t.y + sy * rad;
+    g.lineBetween(x, y, x - sx * LOCK_CORNER_LEN, y);
+    g.lineBetween(x, y, x, y - sy * LOCK_CORNER_LEN);
+  }
+
+  /**
+   * 鎖定目標的地面佔位：新美術外觀的怪才有（鎖定框改畫在腳底），道具、木箱與舊美術的怪為 null
+   *
+   * @param t 鎖定目標
+   */
+  private footprintOf(t: LockTarget): GroundFootprint | null {
+    return this.isItem(t) || this.isBreakable(t) ? null : this.host.enemyFootprint(t);
+  }
+
+  /**
+   * 畫腳底橢圓框的其中一角：腳底佔位橢圓外擴 marker.footPadding（上下依同樣扁度）的四分之一弧，加外接矩形的角線
+   *
+   * @param t 鎖定的怪
+   * @param fp 怪的地面佔位
+   * @param corner 哪一角
+   */
+  private strokeFootCorner(t: LockTarget, fp: GroundFootprint, corner: (typeof SLOT_CORNERS)[number]): void {
+    const g = this.footGfx;
+    const pad = GameConfig.lock.marker.footPadding;
+    const cx = t.x, cy = t.y + fp.footY;
+    const rx = fp.rx + pad, ry = fp.ry + pad * (fp.ry / fp.rx);
+    const from = Phaser.Math.DegToRad(corner.arcFrom), to = Phaser.Math.DegToRad(corner.arcTo);
+    const points: Phaser.Math.Vector2[] = [];
+    for (let i = 0; i <= FOOT_ARC_SEGMENTS; i++) {
+      const a = from + ((to - from) * i) / FOOT_ARC_SEGMENTS;
+      points.push(new Phaser.Math.Vector2(cx + Math.cos(a) * rx, cy + Math.sin(a) * ry));
+    }
+    g.strokePoints(points);
+    const sx = corner.right ? 1 : -1;
+    const sy = corner.top ? -1 : 1;
+    const x = cx + sx * rx, y = cy + sy * ry;
     g.lineBetween(x, y, x - sx * LOCK_CORNER_LEN, y);
     g.lineBetween(x, y, x, y - sy * LOCK_CORNER_LEN);
   }
