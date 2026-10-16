@@ -2,32 +2,48 @@
 
 **系統概述**：遊戲戰鬥節奏、敵人數值、玩家能力的綜合平衡設計，確保挑戰性與可玩性的最佳平衡點，通過數據驅動的調整方法持續優化遊戲體驗。
 
-## ⚡ **最新平衡調整** (eb9592c)
+## ⚡ **最新平衡調整：5A 降血量** (98b27bc, 2026-10-16)
+
+純 config 調整（bundle `index-7vtffxRZ.js`）：降怪物血量、提高每波怪數，維持單人每關 CREDIT 預算。
+
+| 怪種 | 血量 (舊→新) | 每波怪數 (舊→新) |
+|---|---|---|
+| 一般兵 | 90 → **70** | 每波 20/23/26 → **30/35/40** |
+| 大怪 | 200 → **140** | （三種出怪組合 swarm/armor/artillery 皆 waves `[30,35,40]`）|
+| 遠程幽靈 | 60 → **36** | 每關 69 → **105 隻** |
+
+**經濟效果**：
+- 單人每關 CREDIT：約 127 → **約 130**（基本持平）
+- 每殺一隻：**約 1.24 CREDIT**（105 隻 × 1.24 ≈ 130）
+- ⚠️ **舊基準已過時**：「單人每關 150、每隻 2.2 CREDIT、3 波 20/23/26」為更早版本，勿再引用
+- 程式位置：`config.ts:892/901/910`（maxHp）、`config.ts:1061-1090`（profiles.*.waves `[30,35,40]`）
+
+## ⚡ **平衡調整歷程** (eb9592c)
 
 ### **怪物移動速度提升** (2026-10-12)
 基於戰鬥節奏優化需求，怪物移動速度全面提升約+22%：
 
 ```typescript
-// config.ts - 敵人移動速度調整 (eb9592c)
+// config.ts - 敵人移動速度調整 (eb9592c)；血量 5A 降血量 (98b27bc)
 const enemySpeedBalance = {
-  /** 一般近戰怪：90 → 110 (+22%) */
+  /** 一般近戰怪：speed 90 → 110 (+22%)；HP 90 → 70 (5A) */
   normal: {
     speed: 110,           // 原90，提升20點
-    maxHp: 90,           // 血量不變
+    maxHp: 70,           // 5A降血量：90→70 (98b27bc)
     radius: 14           // 體型不變
   },
   
-  /** 肉盾坦克：52 → 64 (+23%) */  
+  /** 肉盾坦克：speed 52 → 64 (+23%)；HP 200 → 140 (5A) */  
   tank: {
     speed: 64,            // 原52，提升12點
-    maxHp: 200,          // 血量不變
+    maxHp: 140,          // 5A降血量：200→140 (98b27bc)
     radius: 22           // 體型不變
   },
   
-  /** 投擲兵：72 → 88 (+22%) */
+  /** 投擲兵(遠程幽靈)：speed 72 → 88 (+22%)；HP 60 → 36 (5A) */
   bomber: {
     speed: 88,            // 原72，提升16點
-    maxHp: 60,           // 血量不變
+    maxHp: 36,           // 5A降血量：60→36 (98b27bc)
     radius: 15           // 體型不變
   }
 };
@@ -155,7 +171,7 @@ interface EnemyRoleBalance {
   normal: {
     role: 'primary_threat',
     speed: 110,              // 最快追擊
-    hp: 90,                  // 中等血量
+    hp: 70,                  // 5A降血量：90→70 (98b27bc)
     spawnWeight: 75,         // 主要數量
     tactics: 'rush_player'   // 直衝玩家
   },
@@ -164,7 +180,7 @@ interface EnemyRoleBalance {
   tank: {
     role: 'blocker',
     speed: 64,               // 慢速移動
-    hp: 200,                 // 高血量
+    hp: 140,                 // 5A降血量：200→140 (98b27bc)
     spawnWeight: 12,         // 少量出現
     tactics: 'block_escape'  // 阻擋逃跑路線
   },
@@ -173,7 +189,7 @@ interface EnemyRoleBalance {
   bomber: {
     role: 'ranged_harass',
     speed: 88,               // 中速保距
-    hp: 60,                  // 低血量
+    hp: 36,                  // 5A降血量：60→36 (98b27bc)
     spawnWeight: 8,          // 最少數量
     tactics: 'keep_distance' // 保持距離投擲
   }
