@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { Skin, type SpineGameObject, type TrackEntry } from '@esotericsoftware/spine-phaser';
 import { GameConfig } from '../config';
+import { enemyWalkAnimSpeed, walkAnimScale } from '../systems/moveFeelParams';
 import type { Enemy, EnemyType } from '../objects/Enemy';
 import { visibleBottomOffset } from '../systems/spriteFeet';
 
@@ -82,6 +83,17 @@ class EnemySpineDisplay {
   setAlpha(alpha: number): void {
     this.object.setAlpha(alpha);
     this.object.skeleton.color.a = alpha;
+  }
+
+  /**
+   * 調整目前重複播放動畫的播放速度（走路依實際速度調整用）：設定的播放速度 × scale
+   *
+   * @param key 目前播放的動畫鍵
+   * @param scale 倍率
+   */
+  setLoopScale(key: SpineAnimKey, scale: number): void {
+    const entry = this.object.animationState.getCurrent(0);
+    if (entry) entry.timeScale = this.cfg.speeds[key] * scale;
   }
 
   /**
@@ -284,6 +296,9 @@ export class EnemySpineController {
     } else if (time >= view.oneShotUntil || view.state === 'charge') {
       this.playLoop(view, view.moving ? 'move' : 'idle');
     }
+    // 走路動畫依實際速度調整播放速度（基準速度見 moveFeel；沒有設定的怪種照原速）
+    const baseSpeed = enemyWalkAnimSpeed(view.type);
+    if (view.state === 'move' && baseSpeed !== null) view.display.setLoopScale('move', walkAnimScale(view.speed, baseSpeed));
     view.lastHp = e.hp;
     view.wasCharging = charging;
     view.lastChargeProgress = progress;

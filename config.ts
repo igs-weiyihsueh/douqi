@@ -290,6 +290,24 @@ export const GameConfig = {
   },
 
   /**
+   * 移動手感預設值（招式編輯器「移動手感」頁可調，見 systems/moveFeelParams）：
+   * - playerWalkAnimSpeed / enemyWalkAnimSpeed：走路動畫基準速度（像素 / 秒），以這個速度移動時走路動畫照原速播放，
+   *   實際速度不同時播放速度等比例調整（夾在 walkAnimScaleRange），腳步跟位移對得上；預設 = 各自的全速，全速時跟原本一樣
+   * - playerAccelMs / playerDecelMs：慢速模式 P1 起步加速、停下減速各花多少毫秒
+   * - walkAnimSmoothMs：P1 走路速度量測的平滑時間（避免單幀抖動讓腳步忽快忽慢）
+   * - walkDemo：招式編輯器的怪物走路示範——木樁在出生點左右 range 內來回走，每 phaseMs 輪流用巡邏速度與追擊速度
+   */
+  moveFeel: {
+    playerWalkAnimSpeed: 400,
+    enemyWalkAnimSpeed: { normal: 125, tank: 75 },
+    walkAnimScaleRange: [0.2, 2.5] as const,
+    playerAccelMs: 80,
+    playerDecelMs: 80,
+    walkAnimSmoothMs: 80,
+    walkDemo: { range: 200, phaseMs: 2000 }
+  },
+
+  /**
    * 敵人↔敵人碰撞分離（讓怪不再完全重疊擠成團）——照異靈藍圖：軟分離 steering(主力) + 硬 de-overlap(補刀)。
    * 純幾何、不走 Phaser collider，config 可調手感。舊美術純俯視無縱深壓縮→圓形判定；新美術改用腳底佔位橢圓（footprintFlatten / footprintSteerScale）。
    */

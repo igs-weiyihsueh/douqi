@@ -7,6 +7,7 @@ import {
   hasHitShape, isTimedMove, moveHitPoints, resetAllAttackTuning, resetMoveHitPoints, setMeleeEnemyRange, setMoveHitPoints,
   type AttackMove, type HitPoint, type HitPointField, type TimedAttackMove
 } from '../systems/attackTuningParams';
+import { MOVE_FEEL_DEFS, moveFeel, resetMoveFeel, setMoveFeelParam } from '../systems/moveFeelParams';
 import { CRATE_LAYOUT_DEFS, crateLayout, crateLayoutValueText, resetCrateLayout, setCrateLayoutParam } from '../systems/crateLayoutParams';
 import {
   DASH_PARAM_DEFS, EMPOWER_DASH_KEYS, PIERCE_DASH_KEYS, dashParams, resetDashParams, setDashParam, type DashParamKey
@@ -187,12 +188,13 @@ function shapeValueText(shape: HitShape, field: ShapeField): string {
 /** 怪物頁的數值欄位順序 */
 const MONSTER_VALUE_FIELDS: ReadonlyArray<MonsterValueField> = ['engage', 'chargeMs', 'cooldownMs', 'damage'];
 
-/** 編輯器的頁面：我方招式 / 怪物 / 木箱排列 */
-type EditorMode = 'player' | 'monster' | 'crate';
+/** 編輯器的頁面：我方招式 / 怪物 / 木箱排列 / 移動手感 */
+type EditorMode = 'player' | 'monster' | 'crate' | 'feel';
 const EDITOR_MODES: ReadonlyArray<{ mode: EditorMode; label: string }> = [
   { mode: 'player', label: '我方招式' },
   { mode: 'monster', label: '怪物' },
-  { mode: 'crate', label: '木箱' }
+  { mode: 'crate', label: '木箱' },
+  { mode: 'feel', label: '移動手感' }
 ];
 
 /** 打擊點本身（不在判定範圍 shape 裡）的數值欄位 */
@@ -245,6 +247,8 @@ export interface AttackTuningEditorHost {
   dropCrates(): void;
   /** 清掉場上的木箱 */
   clearCrates(): void;
+  /** 怪物走路示範：木樁換成該怪種並在原地左右來回走（輪流用巡邏與追擊速度）；null = 停止示範 */
+  setWalkDemo(kind: 'normal' | 'tank' | null): void;
 }
 
 /**
@@ -263,7 +267,9 @@ export interface AttackTuningEditorHost {
  * - 工具列：循環出招（選中的招式自動朝木樁重複放）、匯入設定（選匯出的 JSON 檔套用）、A/B 比較（目前設定存成 A / B、
  *   套用 A / B，並排列出兩組不同的數值；systems/tuningSettings）
  * - 木箱頁：調木箱排列（每波數量、每群數量、群間距、群內間隔、排法；systems/crateLayoutParams），按「落下一波木箱」在演示區照遊戲的落下流程預覽
- * - 標題下方切換「我方招式 / 怪物 / 木箱」。怪物頁：一般兵、大怪、遠程幽靈分頁，調攻擊範圍（形狀 / 位置偏移 / 尺寸）、
+ * - 移動手感頁：調走路動畫基準速度（P1 / 一般兵 / 大怪）與 P1 起步 / 停下加減速（systems/moveFeelParams）；
+ *   用方向鍵走動試 P1，按「走路示範」讓木樁換成該怪種左右來回走
+ * - 標題下方切換「我方招式 / 怪物 / 木箱 / 移動手感」。怪物頁：一般兵、大怪、遠程幽靈分頁，調攻擊範圍（形狀 / 位置偏移 / 尺寸）、
  *   出手距離、蓄力時間、攻擊冷卻、傷害（systems/monsterAttackParams）；木樁換成選中的怪種，照設定蓄力攻擊 P1，可直接看預警與出手
  *
  * 我方招式頁在角色身上畫選中招式的打擊點：時間軸目前這一格判定的打擊點畫深色、其他畫淡色、選中的打擊點線框加粗；
@@ -337,7 +343,7 @@ export class AttackTuningEditor {
       this.drawMonsterOverlay(g, p);
       return;
     }
-    if (this.mode === 'crate') return;
+    if (this.mode === 'crate' || this.mode === 'feel') return;
     const now = this.scene.time.now;
     const color = OVERLAY.MOVES[this.selected];
     const anchor = this.anchorOf(this.selected, p);
@@ -426,6 +432,7 @@ export class AttackTuningEditor {
    */
   private selectMode(mode: EditorMode): void {
     this.mode = mode;
+    this.host.setWalkDemo(null);
     if (mode === 'player') {
       this.host.setDummyType(null);
       this.selectMove(this.selected);
@@ -433,6 +440,7 @@ export class AttackTuningEditor {
       this.host.previewPose(null);
       this.selectMonster(this.selectedMonster);
     } else {
+      // 木箱頁 / 移動手感頁：結束定格，木樁恢復預設怪種
       this.host.previewPose(null);
       this.host.setDummyType(null);
       this.render();
@@ -606,7 +614,8 @@ export class AttackTuningEditor {
     y = this.renderToolbar(ui, panel, y) + LAYOUT.SECTION_GAP;
     if (this.comparing) y = this.renderComparePage(ui, panel, y);
     else if (this.mode === 'player') y = this.renderPlayerPage(ui, panel, y);
-    else y = this.mode === 'monster' ? this.renderMonsterPage(ui, panel, y) : this.renderCratePage(ui, panel, y);
+    else if (this.mode === 'monster') y = this.renderMonsterPage(ui, panel, y);
+    else y = this.mode === 'crate' ? this.renderCratePage(ui, panel, y) : this.renderFeelPage(ui, panel, y);
     y += LAYOUT.SECTION_GAP;
     const buttonY = y + LAYOUT.BUTTON_HEIGHT / 2;
     const status = this.text(ui, LAYOUT.PADDING, y + LAYOUT.BUTTON_HEIGHT + LAYOUT.SECTION_GAP, this.statusMessage, LAYOUT.COLORS.HINT, LAYOUT.FONT_SIZES.STATUS);
@@ -646,6 +655,10 @@ export class AttackTuningEditor {
       const reset = (): void => { resetCrateLayout(); this.render(); };
       return { oneLabel: '木箱恢復預設', one: reset, all: reset };
     }
+    if (this.mode === 'feel') {
+      const reset = (): void => { resetMoveFeel(); this.render(); };
+      return { oneLabel: '手感恢復預設', one: reset, all: reset };
+    }
     return {
       oneLabel: '這招恢復預設',
       one: () => { resetMoveHitPoints(this.selected); resetDashParams(this.dashKeys()); this.selectPoint(0); },
@@ -673,6 +686,37 @@ export class AttackTuningEditor {
     const actions: Array<{ label: string; onClick: () => void }> = [
       { label: '落下一波木箱', onClick: () => this.host.dropCrates() },
       { label: '清除木箱', onClick: () => this.host.clearCrates() }
+    ];
+    const width = LAYOUT.WIDTH - LAYOUT.PADDING * 2;
+    const bw = (width - LAYOUT.TAB_GAP * (actions.length - 1)) / actions.length;
+    actions.forEach((a, i) => {
+      const cx = LAYOUT.PADDING + i * (bw + LAYOUT.TAB_GAP) + bw / 2;
+      panel.add(this.button(ui, cx, y + LAYOUT.TOOL_HEIGHT / 2, bw, LAYOUT.TOOL_HEIGHT, a.label, LAYOUT.TOOL_COLOR, a.onClick));
+    });
+    return y + LAYOUT.TOOL_HEIGHT;
+  }
+
+  /**
+   * 移動手感頁：走路動畫基準速度與 P1 加減速參數，以及怪物走路示範按鈕
+   *
+   * @param ui 面板所在場景
+   * @param panel 面板
+   * @param y 上緣（相對面板）
+   * @returns 下緣
+   */
+  private renderFeelPage(ui: Phaser.Scene, panel: Phaser.GameObjects.Container, y: number): number {
+    for (const def of MOVE_FEEL_DEFS) {
+      this.addRow(ui, panel, y, `feel:${def.key}`, () => `${moveFeel()[def.key]}${def.unit}`,
+        (dir) => setMoveFeelParam(def.key, moveFeel()[def.key] + dir * def.step), def.label, def.hint);
+      y += LAYOUT.ROW_HEIGHT;
+    }
+    panel.add(this.text(ui, LAYOUT.LABEL_X, y, '用方向鍵走動試 P1；按走路示範讓木樁換成該怪種，左右來回走（輪流用巡邏與追擊速度）',
+      LAYOUT.COLORS.HINT, LAYOUT.FONT_SIZES.ROW_HINT).setWordWrapWidth(LAYOUT.WIDTH - LAYOUT.LABEL_X * 2));
+    y += LAYOUT.ROW_HEIGHT;
+    const actions: Array<{ label: string; onClick: () => void }> = [
+      { label: '一般兵走路示範', onClick: () => this.host.setWalkDemo('normal') },
+      { label: '大怪走路示範', onClick: () => this.host.setWalkDemo('tank') },
+      { label: '停止示範', onClick: () => this.host.setWalkDemo(null) }
     ];
     const width = LAYOUT.WIDTH - LAYOUT.PADDING * 2;
     const bw = (width - LAYOUT.TAB_GAP * (actions.length - 1)) / actions.length;
@@ -745,7 +789,7 @@ export class AttackTuningEditor {
       void file.text().then((text) => {
         const result = importSettings(text);
         this.setStatus(result
-          ? `已匯入 ${file.name}：${result.moves} 招、${result.monsters} 種怪${result.meleeRange ? '、近戰觸發距離' : ''}${result.dash ? '、衝刺參數' : ''}${result.crate ? '、木箱排列' : ''}`
+          ? `已匯入 ${file.name}：${result.moves} 招、${result.monsters} 種怪${result.meleeRange ? '、近戰觸發距離' : ''}${result.dash ? '、衝刺參數' : ''}${result.crate ? '、木箱排列' : ''}${result.feel ? '、移動手感' : ''}`
           : `${file.name} 不是匯出的設定檔，沒有套用`);
         if (this.panel) this.selectMode(this.mode);
       });

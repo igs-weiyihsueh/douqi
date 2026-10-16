@@ -57,6 +57,7 @@ import { reloadAttackTuning } from '../systems/attackTuningParams';
 import { monsterAttackFor, reloadMonsterAttacks } from '../systems/monsterAttackParams';
 import { dashParams, reloadDashParams } from '../systems/dashParams';
 import { reloadCrateLayout } from '../systems/crateLayoutParams';
+import { reloadMoveFeel } from '../systems/moveFeelParams';
 
 /** 敵人上方彩票獲得提示的深度與離敵人中心的高度（樣式見 GameConfig.ticketFx；不受特效節流，獎勵一定要看得到） */
 const TICKET_POP_DEPTH = 51;
@@ -200,6 +201,8 @@ export class GameScene extends Phaser.Scene {
    */
   private editorDummyType: EnemyType = GameConfig.moveEditor.dummyType;
   private editorDummyHits = false;
+  /** 招式編輯器的怪物走路示範（null = 沒在示範）：出生點 x（木樁重新生成後第一幀記下）、目前方向、開始時間 */
+  private editorWalkDemo: { homeX: number | null; dir: 1 | -1; since: number } | null = null;
   /** 招式編輯器模式的範圍 / 判定編輯器（其他模式為 null） */
   private tuningEditor: AttackTuningEditor | null = null;
   /** 角色編輯器的參數（慢速模式套用於 P1 與 BOT）；每次開局從存檔讀取 */
@@ -525,6 +528,7 @@ export class GameScene extends Phaser.Scene {
         panelShown: (open) => this.setEditorDemoView(open),
         dropCrates: () => this.dropPreviewCrates(),
         clearCrates: () => this.breakableCtl.clearAll(),
+        setWalkDemo: (kind) => this.setEditorWalkDemo(kind),
         loopMove: (move) => {
           const d = this.editorDummy;
           if (d?.active && !d.dead && this.player.alive) this.actions.performLoopMove(this.player, move, d, this.time.now);
@@ -566,6 +570,7 @@ export class GameScene extends Phaser.Scene {
     reloadMonsterAttacks(); // 怪物攻擊參數：同上（範圍編輯器的怪物頁）
     reloadDashParams(); // 衝刺參數：同上（招式編輯器的一般衝刺 / 強化衝刺頁）
     reloadCrateLayout(); // 木箱排列參數：同上（招式編輯器的木箱頁）
+    reloadMoveFeel(); // 移動手感參數：同上（招式編輯器的移動手感頁）
     this.characters = [];
     this.survivalMs = 0;
     this.gameOver = false;
@@ -2140,8 +2145,11 @@ export class GameScene extends Phaser.Scene {
         const target: Character | { x: number; y: number } | null = this.resolveEnemyTarget(enemy, time);
         if (target) enemy.updateAI(target.x, target.y, time, this.vacuumMeleeInRange(enemy, target, monsterAttackFor(enemy.enemyType).engage));
         else enemy.updateIdle(time); // 場上沒有玩家（例如都在等投幣）：巡邏、不攻擊
-        // 木樁（anchored）站在原地不移動：AI 照跑（面向、蓄力攻擊靠近的玩家），只是不走路，不會擠到玩家
-        if (enemy.anchored) (enemy.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
+        // 木樁（anchored）站在原地不移動：AI 照跑（面向、蓄力攻擊靠近的玩家），只是不走路，不會擠到玩家；走路示範中改由示範控制移動
+        if (enemy.anchored) {
+          if (enemy === this.editorDummy && this.editorWalkDemo) this.stepEditorWalkDemo(enemy, time);
+          else (enemy.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
+        }
 
         drawEnemyChargeWarnings(this.chargeWarnGfx, enemy, time);
       }
@@ -2238,6 +2246,38 @@ export class GameScene extends Phaser.Scene {
     const open = (): void => { if (!this.tuningEditor?.isOpen) this.tuningEditor?.toggle(); };
     if (ui.sys.isActive()) open();
     else ui.events.once(Phaser.Scenes.Events.CREATE, open);
+  }
+
+  /**
+   * 招式編輯器的怪物走路示範：木樁換成該怪種（攻擊打不到 P1）並開始左右來回走；null = 停止示範、木樁恢復預設怪種並站定。
+   * 開始或停止示範時木樁一律重新生成在 P1 右方的原位（怪種沒變也一樣），不會停在走到一半的地方，重按示範也不會讓來回範圍越飄越遠
+   *
+   * @param kind 示範的怪種
+   */
+  private setEditorWalkDemo(kind: 'normal' | 'tank' | null): void {
+    const respawn = kind !== null || this.editorWalkDemo !== null;
+    this.setEditorDummy(kind ?? GameConfig.moveEditor.dummyType, false);
+    this.editorWalkDemo = kind ? { homeX: null, dir: 1, since: this.time.now } : null;
+    const dummy = this.editorDummy;
+    if (respawn && dummy?.active && !dummy.dead) dummy.kill();
+  }
+
+  /**
+   * 走路示範每幀：在出生點左右 moveFeel.walkDemo.range 內來回走，每 phaseMs 輪流用巡邏速度與這隻怪的追擊速度（看得出慢走與快走的腳步差別）
+   *
+   * @param e 木樁
+   * @param time 目前場景時間
+   */
+  private stepEditorWalkDemo(e: Enemy, time: number): void {
+    const demo = this.editorWalkDemo!;
+    const cfg = GameConfig.moveFeel.walkDemo;
+    if (demo.homeX === null) demo.homeX = e.x;
+    if (e.x > demo.homeX + cfg.range) demo.dir = -1;
+    else if (e.x < demo.homeX - cfg.range) demo.dir = 1;
+    const chasing = Math.floor((time - demo.since) / cfg.phaseMs) % 2 === 1;
+    const speed = chasing ? GameConfig.enemy.types[e.enemyType].speed : GameConfig.enemy.ai.patrolSpeed;
+    e.facing = demo.dir > 0 ? 0 : Math.PI;
+    (e.body as Phaser.Physics.Arcade.Body).setVelocity(demo.dir * speed, 0);
   }
 
   /**

@@ -1,11 +1,12 @@
 import { ATTACK_MOVES, HIT_POINT_FIELDS, applyAttackTuning, attackTuningSnapshot, type HitPoint } from './attackTuningParams';
 import { CRATE_LAYOUT_DEFS, CRATE_SHAPES, applyCrateLayout, crateLayout, type CrateLayout } from './crateLayoutParams';
+import { MOVE_FEEL_DEFS, applyMoveFeel, moveFeel, type MoveFeel } from './moveFeelParams';
 import { DASH_PARAM_DEFS, applyDashParams, dashParams, type DashParamKey, type DashParams } from './dashParams';
 import { HIT_SHAPE_LABELS, type HitShape } from './hitShapes';
 import { MONSTER_KINDS, applyMonsterAttacks, monsterAttackSnapshot, monsterFieldDefs, type MonsterAttack, type MonsterKind } from './monsterAttackParams';
 
 /**
- * 範圍 / 判定編輯器的整份設定（我方各招的打擊點、近戰觸發距離、衝刺參數、各怪種的攻擊設定、木箱排列）：
+ * 範圍 / 判定編輯器的整份設定（我方各招的打擊點、近戰觸發距離、衝刺參數、各怪種的攻擊設定、木箱排列、移動手感）：
  * 匯出 / 匯入 JSON 與 A / B 兩組設定的存放、套用、比較
  */
 
@@ -18,15 +19,18 @@ export interface TuningSettings {
   monsterAttacks: Readonly<Record<MonsterKind, MonsterAttack>>;
   /** 木箱排列（較早存的 A / B 沒有這一項） */
   crateLayout?: Readonly<CrateLayout>;
+  /** 移動手感（較早存的 A / B 沒有這一項） */
+  moveFeel?: Readonly<MoveFeel>;
 }
 
-/** 套用一份設定的結果：套用了幾招、幾種怪、是否含近戰觸發距離 / 衝刺參數 / 木箱排列 */
+/** 套用一份設定的結果：套用了幾招、幾種怪、是否含近戰觸發距離 / 衝刺參數 / 木箱排列 / 移動手感 */
 export interface ApplyResult {
   moves: number;
   monsters: number;
   meleeRange: boolean;
   dash: boolean;
   crate: boolean;
+  feel: boolean;
 }
 
 /** 比較用的兩組設定 */
@@ -38,7 +42,7 @@ const SLOT_STORAGE_KEY = 'douqi.tuningSlots.v1';
 
 /** 目前生效的整份設定（深複製，之後調整不會改到它） */
 export function currentSettings(): TuningSettings {
-  return JSON.parse(JSON.stringify({ ...attackTuningSnapshot(), dash: dashParams(), monsterAttacks: monsterAttackSnapshot(), crateLayout: crateLayout() })) as TuningSettings;
+  return JSON.parse(JSON.stringify({ ...attackTuningSnapshot(), dash: dashParams(), monsterAttacks: monsterAttackSnapshot(), crateLayout: crateLayout(), moveFeel: moveFeel() })) as TuningSettings;
 }
 
 /**
@@ -48,9 +52,9 @@ export function currentSettings(): TuningSettings {
  */
 export function applySettings(data: unknown): ApplyResult {
   const tuning = applyAttackTuning(data);
-  const d = data as { monsterAttacks?: unknown; dash?: unknown; crateLayout?: unknown } | null;
+  const d = data as { monsterAttacks?: unknown; dash?: unknown; crateLayout?: unknown; moveFeel?: unknown } | null;
   const monsters = applyMonsterAttacks(d?.monsterAttacks);
-  return { ...tuning, monsters, dash: applyDashParams(d?.dash), crate: applyCrateLayout(d?.crateLayout) };
+  return { ...tuning, monsters, dash: applyDashParams(d?.dash), crate: applyCrateLayout(d?.crateLayout), feel: applyMoveFeel(d?.moveFeel) };
 }
 
 /**
@@ -67,7 +71,7 @@ export function importSettings(text: string): ApplyResult | null {
     return null;
   }
   const result = applySettings(data);
-  return result.moves + result.monsters > 0 || result.meleeRange || result.dash || result.crate ? result : null;
+  return result.moves + result.monsters > 0 || result.meleeRange || result.dash || result.crate || result.feel ? result : null;
 }
 
 /** 讀取 A / B 存檔（無法讀取時為空） */
@@ -170,6 +174,11 @@ export function diffSettings(a: TuningSettings, b: TuningSettings): string[] {
       if (va === vb) continue;
       const show = (v: number): string | number => (def.key === 'shape' ? CRATE_SHAPES[v] ?? v : v);
       lines.push(`木箱${def.label}：${show(va)} ｜ ${show(vb)}`);
+    }
+  }
+  if (a.moveFeel && b.moveFeel) {
+    for (const def of MOVE_FEEL_DEFS) {
+      if (a.moveFeel[def.key] !== b.moveFeel[def.key]) lines.push(`${def.label}：${a.moveFeel[def.key]} ｜ ${b.moveFeel[def.key]}`);
     }
   }
   for (const { kind, label } of MONSTER_KINDS) {

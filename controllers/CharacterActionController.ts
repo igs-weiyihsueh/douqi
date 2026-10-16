@@ -14,6 +14,7 @@ import {
   type HitWindowState
 } from '../systems/attackTuningParams';
 import { dashParams } from '../systems/dashParams';
+import { moveFeel } from '../systems/moveFeelParams';
 import { hitShapeContains, placeHitShape, type PlacedHitShape } from '../systems/hitShapes';
 
 /** 慢速模式八方向移動鍵（方向鍵 + WASD） */
@@ -86,6 +87,8 @@ const STANDOFF_MARGIN = 6;
 const DASH_ARRIVE_MIN = 12;
 /** 衝刺到點距離 = 速度 × 此秒數（約兩幀），避免高速衝刺越過終點後反向、在牆邊來回震盪 */
 const DASH_ARRIVE_LOOKAHEAD_SEC = 0.032;
+/** 慢速移動加減速一幀最多算多少毫秒（分頁切回來等長時間停頓不會一次跳到全速） */
+const SLOW_MOVE_MAX_DT_MS = 50;
 /** 一下普攻（多個打擊點）的計數狀態：連段與 HIT 每下普攻只算一次 */
 interface SwingHits {
   comboCounted: boolean;
@@ -111,6 +114,8 @@ const SWING_STOP_RATIO = 0.7;
 export class CharacterActionController {
   /** 各角色這一次衝刺已撞過的可破壞物件（衝刺每幀判定，一次衝刺每個物件只算一下；開始衝刺時清空） */
   private readonly dashHitBreakables = new Map<Character, Set<Breakable>>();
+  /** 慢速模式移動上一次更新的場景時間（加減速用的經過時間） */
+  private lastSlowMoveAt = 0;
   /** 二段強化衝刺衝向的木箱（衝到木箱外緣時以木箱為中心炸強化 AOE；結束衝刺時清除） */
   private readonly empowerCrateTargets = new Map<Character, Breakable>();
   /**
@@ -529,12 +534,15 @@ export class CharacterActionController {
 
   /**
    * 慢速模式：P1 鍵盤八方向持續移動（對角線正規化）並把面向設為移動方向；無輸入時停下、維持最後面向。
-   * 時停被凍結、定身、受擊硬直、攻擊者頓點時停下；衝刺、招式演出、爆發中不接管（速度由各自邏輯控制）
+   * 起步 / 停下依 moveFeel.playerAccelMs / playerDecelMs 加減速（速度每幀朝目標逼近，最多變化「全速 × 經過時間 ÷ 加減速時間」）。
+   * 時停被凍結、定身、受擊硬直、攻擊者頓點時立刻停下；衝刺、招式演出、爆發中不接管（速度由各自邏輯控制）
    *
    * @param time 目前場景時間
    */
   handleSlowMovement(time: number): void {
     const p = this.host.player();
+    const dt = this.lastSlowMoveAt > 0 ? Math.min(SLOW_MOVE_MAX_DT_MS, time - this.lastSlowMoveAt) : 0;
+    this.lastSlowMoveAt = time;
     if (!p.alive) return;
     const body = p.body as Phaser.Physics.Arcade.Body;
     if (this.host.isFrozenByTimestop(p)) { body.setVelocity(0, 0); return; }
@@ -546,15 +554,37 @@ export class CharacterActionController {
     if (k.right.isDown || k.d.isDown) dx += 1;
     if (k.up.isDown || k.w.isDown) dy -= 1;
     if (k.down.isDown || k.s.isDown) dy += 1;
+    const spd = this.host.charParams().moveSpeed;
+    const feel = moveFeel();
     if (dx === 0 && dy === 0) {
-      body.setVelocity(0, 0);
+      this.rampVelocity(body, 0, 0, spd, feel.playerDecelMs, dt);
       return;
     }
     const len = Math.hypot(dx, dy);
     const nx = dx / len, ny = dy / len;
-    const spd = this.host.charParams().moveSpeed;
-    body.setVelocity(nx * spd, ny * spd);
+    this.rampVelocity(body, nx * spd, ny * spd, spd, feel.playerAccelMs, dt);
     p.aimAngle = Math.atan2(ny, nx);
+  }
+
+  /**
+   * 速度朝目標逼近：這一幀最多變化「全速 × dt ÷ rampMs」；rampMs 為 0 時直接設成目標
+   *
+   * @param body 物理身體
+   * @param tx 目標速度 x
+   * @param ty 目標速度 y
+   * @param fullSpeed 全速（決定每毫秒能變化多少）
+   * @param rampMs 從 0 到全速（或從全速到 0）要花的毫秒
+   * @param dt 這一幀經過的毫秒
+   */
+  private rampVelocity(body: Phaser.Physics.Arcade.Body, tx: number, ty: number, fullSpeed: number, rampMs: number, dt: number): void {
+    const vx = body.velocity.x, vy = body.velocity.y;
+    const diff = Math.hypot(tx - vx, ty - vy);
+    const maxStep = rampMs > 0 ? (fullSpeed * dt) / rampMs : Infinity;
+    if (diff <= maxStep) {
+      body.setVelocity(tx, ty);
+      return;
+    }
+    body.setVelocity(vx + ((tx - vx) / diff) * maxStep, vy + ((ty - vy) / diff) * maxStep);
   }
 
   /** 普攻冷卻（毫秒）：慢速模式讀角色編輯器參數，快速模式讀 config */

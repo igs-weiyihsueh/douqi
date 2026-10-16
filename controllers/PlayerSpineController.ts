@@ -3,6 +3,7 @@ import type { SpineGameObject, TrackEntry } from '@esotericsoftware/spine-phaser
 import { GameConfig } from '../config';
 import type { Character, CharacterActionKind } from '../objects/Character';
 import { visibleBottomOffset } from '../systems/spriteFeet';
+import { moveFeel, walkAnimScale } from '../systems/moveFeelParams';
 
 /** 定格預覽：動作鍵、同一鍵的第幾個動作（普攻兩段輪流）與時間 */
 export interface PlayerPosePreview {
@@ -48,6 +49,8 @@ export class PlayerSpineController {
   private baseHidden = false;
   /** 上一幀是否在受擊硬直 */
   private wasHurt = false;
+  /** 實際移動速度（像素 / 秒，依 moveFeel.walkAnimSmoothMs 平滑；走路動畫播放速度依此調整） */
+  private moveSpeed = 0;
   /** 上一幀的位置與場景時間（用實際位移判斷有沒有在走） */
   private lastX = 0;
   private lastY = 0;
@@ -108,6 +111,7 @@ export class PlayerSpineController {
       if (halted) this.oneShotUntil += Math.max(0, frameMs);
       spine.animationState.timeScale = halted ? 0 : 1;
       this.updateAnimation(p, time);
+      this.applyWalkAnimSpeed(spine);
     }
     // 原檔朝背後出招的動作（mirroredAnims）播放時再翻一次，招式才會朝面向打出去
     const mirrored = this.current !== null && cfg.mirroredAnims.includes(this.current);
@@ -222,7 +226,18 @@ export class PlayerSpineController {
   }
 
   /**
-   * 依實際位移判斷有沒有在走（被推動也算，P1 不會被擊退）
+   * 走路中依實際移動速度調整走路動畫的播放速度（實際速度 ÷ moveFeel.playerWalkAnimSpeed），腳步跟位移對得上
+   *
+   * @param spine Spine 物件
+   */
+  private applyWalkAnimSpeed(spine: SpineGameObject): void {
+    if (this.current !== 'move') return;
+    const entry = spine.animationState.getCurrent(0);
+    if (entry) entry.timeScale = (GameConfig.playerSpine.speeds.move ?? 1) * walkAnimScale(this.moveSpeed, moveFeel().playerWalkAnimSpeed);
+  }
+
+  /**
+   * 依實際位移判斷有沒有在走（被推動也算，P1 不會被擊退）；同時更新平滑後的實際移動速度
    *
    * @param p P1
    * @param time 目前場景時間
@@ -231,6 +246,7 @@ export class PlayerSpineController {
     const dt = time - this.lastTime;
     if (dt <= 0) return this.current === 'move';
     const speed = (Phaser.Math.Distance.Between(this.lastX, this.lastY, p.x, p.y) * 1000) / dt;
+    this.moveSpeed += (speed - this.moveSpeed) * Math.min(1, dt / Math.max(1, GameConfig.moveFeel.walkAnimSmoothMs));
     this.lastX = p.x;
     this.lastY = p.y;
     this.lastTime = time;
