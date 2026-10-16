@@ -97,7 +97,7 @@
 | 受擊 | 被怪打中（不扣血，連段中斷） | `scenes/GameScene.ts` › `damageCharacterFrom` | — |
 | 木箱 | 場上可打破的箱子，掉落排列由木箱排列參數決定 | `controllers/BreakableController.ts` › `BreakableController`；`objects/Breakable.ts` | `breakable` |
 | 木箱獎勵 | 打破木箱發的彩票 | `controllers/PayoutController.ts` › `payCrate` | `payout.shares.crate` |
-| 木箱排列 | 每波木箱如何成群掉落：數量、每群大小、群間距、群內間隔、排法 | `systems/crateLayoutParams.ts` › `crateLayout`、`CRATE_LAYOUT_DEFS` | `breakable.drop`（`total`／`groupSize`／`groupSpacing`／`groupGap`／`shape`）|
+| 木箱排列 | 每波木箱如何成群掉落：數量、每群大小、群間距、群內間隔、排法；招式編輯器木箱頁可調 | `systems/crateLayoutParams.ts` › `crateLayout`、`CRATE_LAYOUT_DEFS` | `breakable.drop.total`、`breakable.drop.groupSize`、`breakable.drop.groupSpacing`、`breakable.drop.groupGap`、`breakable.drop.shape` |
 | 排法 | 同一群木箱的排列方式：隨機堆／橫排／方陣（木箱排列新功能） | `systems/crateLayoutParams.ts` › `CRATE_SHAPES`、`CRATE_SHAPE` | `breakable.drop.shape` |
 
 ## 敵人
