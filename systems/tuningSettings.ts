@@ -1,9 +1,10 @@
 import { ATTACK_MOVES, HIT_POINT_FIELDS, applyAttackTuning, attackTuningSnapshot, type HitPoint } from './attackTuningParams';
+import { DASH_PARAM_DEFS, applyDashParams, dashParams, type DashParamKey, type DashParams } from './dashParams';
 import { HIT_SHAPE_LABELS, type HitShape } from './hitShapes';
 import { MONSTER_KINDS, applyMonsterAttacks, monsterAttackSnapshot, monsterFieldDefs, type MonsterAttack, type MonsterKind } from './monsterAttackParams';
 
 /**
- * 範圍 / 判定編輯器的整份設定（我方各招的打擊點、近戰觸發距離、各怪種的攻擊設定）：
+ * 範圍 / 判定編輯器的整份設定（我方各招的打擊點、近戰觸發距離、衝刺參數、各怪種的攻擊設定）：
  * 匯出 / 匯入 JSON 與 A / B 兩組設定的存放、套用、比較
  */
 
@@ -11,7 +12,17 @@ import { MONSTER_KINDS, applyMonsterAttacks, monsterAttackSnapshot, monsterField
 export interface TuningSettings {
   moveTimelines: Record<string, ReadonlyArray<HitPoint>>;
   meleeEnemyRange: number;
+  /** 衝刺參數（較早存的 A / B 沒有這一項） */
+  dash?: Readonly<DashParams>;
   monsterAttacks: Readonly<Record<MonsterKind, MonsterAttack>>;
+}
+
+/** 套用一份設定的結果：套用了幾招、幾種怪、是否含近戰觸發距離 / 衝刺參數 */
+export interface ApplyResult {
+  moves: number;
+  monsters: number;
+  meleeRange: boolean;
+  dash: boolean;
 }
 
 /** 比較用的兩組設定 */
@@ -23,19 +34,19 @@ const SLOT_STORAGE_KEY = 'douqi.tuningSlots.v1';
 
 /** 目前生效的整份設定（深複製，之後調整不會改到它） */
 export function currentSettings(): TuningSettings {
-  return JSON.parse(JSON.stringify({ ...attackTuningSnapshot(), monsterAttacks: monsterAttackSnapshot() })) as TuningSettings;
+  return JSON.parse(JSON.stringify({ ...attackTuningSnapshot(), dash: dashParams(), monsterAttacks: monsterAttackSnapshot() })) as TuningSettings;
 }
 
 /**
- * 套用一份設定（匯入的 JSON 或 A / B）：有列出的招式 / 怪種與近戰觸發距離換成它的，其他維持不變；數值逐欄夾在合法範圍內
+ * 套用一份設定（匯入的 JSON 或 A / B）：有列出的招式 / 怪種、近戰觸發距離與衝刺參數換成它的，其他維持不變；數值逐欄夾在合法範圍內
  *
  * @param data 設定
- * @returns 套用了幾招、幾種怪、是否含近戰觸發距離
  */
-export function applySettings(data: unknown): { moves: number; monsters: number; meleeRange: boolean } {
+export function applySettings(data: unknown): ApplyResult {
   const tuning = applyAttackTuning(data);
-  const monsters = applyMonsterAttacks((data as { monsterAttacks?: unknown } | null)?.monsterAttacks);
-  return { ...tuning, monsters };
+  const d = data as { monsterAttacks?: unknown; dash?: unknown } | null;
+  const monsters = applyMonsterAttacks(d?.monsterAttacks);
+  return { ...tuning, monsters, dash: applyDashParams(d?.dash) };
 }
 
 /**
@@ -44,7 +55,7 @@ export function applySettings(data: unknown): { moves: number; monsters: number;
  * @param text JSON 文字
  * @returns 套用結果；格式錯誤或什麼都沒套用時為 null
  */
-export function importSettings(text: string): { moves: number; monsters: number; meleeRange: boolean } | null {
+export function importSettings(text: string): ApplyResult | null {
   let data: unknown;
   try {
     data = JSON.parse(text);
@@ -52,7 +63,7 @@ export function importSettings(text: string): { moves: number; monsters: number;
     return null;
   }
   const result = applySettings(data);
-  return result.moves + result.monsters > 0 || result.meleeRange ? result : null;
+  return result.moves + result.monsters > 0 || result.meleeRange || result.dash ? result : null;
 }
 
 /** 讀取 A / B 存檔（無法讀取時為空） */
@@ -144,6 +155,11 @@ export function diffSettings(a: TuningSettings, b: TuningSettings): string[] {
     });
   }
   if (a.meleeEnemyRange !== b.meleeEnemyRange) lines.push(`近戰觸發距離：${a.meleeEnemyRange} ｜ ${b.meleeEnemyRange}`);
+  if (a.dash && b.dash) {
+    for (const key of Object.keys(DASH_PARAM_DEFS) as DashParamKey[]) {
+      if (a.dash[key] !== b.dash[key]) lines.push(`${DASH_PARAM_DEFS[key].label}：${a.dash[key]} ｜ ${b.dash[key]}`);
+    }
+  }
   for (const { kind, label } of MONSTER_KINDS) {
     const ma = a.monsterAttacks?.[kind], mb = b.monsterAttacks?.[kind];
     if (!ma || !mb) continue;

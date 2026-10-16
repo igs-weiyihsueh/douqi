@@ -294,7 +294,8 @@ export function pushEnemyOutOfStructures(e: Enemy, enemies: Phaser.Physics.Arcad
 }
 
 /**
- * 角色不可穿過 BOSS / 塔本體與不會被推動的怪（Enemy.anchored，木樁）（衝刺中也擋）：重疊時把角色推回它的外緣，它不動
+ * 角色不可穿過 BOSS / 塔本體（衝刺中也擋）與不會被推動的怪（Enemy.anchored，木樁；衝刺中可穿過，衝刺結束還重疊時才推出）：
+ * 重疊時把角色推回它的外緣，它不動
  *
  * @param c 角色
  * @param enemies 敵人物件池
@@ -303,7 +304,7 @@ export function pushCharacterOutOfStructures(c: Character, enemies: Phaser.Physi
   const pr = GameConfig.player.radius;
   for (const child of enemies.getChildren()) {
     const e = child as Enemy;
-    if (!e.active || e.dead || e.telegraphing || !(isStructureEnemy(e) || e.anchored)) continue;
+    if (!e.active || e.dead || e.telegraphing || !(isStructureEnemy(e) || (e.anchored && !c.isDashing))) continue;
     const minDist = pr + e.getBodyRadius();
     const { nx, ny, d } = normalBetween(e.x, e.y, c.x, c.y); // 結構 → 角色
     if (d < minDist) c.setPosition(c.x + nx * (minDist - d), c.y + ny * (minDist - d));

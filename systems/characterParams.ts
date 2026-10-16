@@ -4,14 +4,15 @@ import { createParamStore, type ParamDef } from './paramStore';
 /**
  * 角色參數（主選單「角色編輯器」可調整，慢速模式套用於 P1 與 BOT）。
  *
- * - 預設值取自 config 的 slow.attackCooldownMs / moveSpeed / dashSpeed / dashDistance / vacuumRadius / vacuumFlatten / vacuumOffsetX / vacuumOffsetY
+ * - 預設值取自 config 的 slow.attackCooldownMs / moveSpeed / vacuumRadius / vacuumFlatten / vacuumOffsetX / vacuumOffsetY
+ * - 衝刺距離 / 速度改在招式編輯器調整（systems/dashParams）
  * - 編輯後只存跟預設不同的項目到瀏覽器 localStorage，重新整理仍保留；讀取時會夾在合法範圍內，資料損壞則回到預設
  * - 結構或預設語意大改時升版，舊存檔自動失效
  * - 快速模式不受影響（仍讀 config 常數）
  */
 
 /** 可調整的角色參數鍵 */
-export type CharacterParamKey = 'attackCooldownMs' | 'moveSpeed' | 'dashSpeed' | 'dashDistance' | 'vacuumRadius' | 'vacuumFlatten' | 'vacuumOffsetY' | 'vacuumOffsetX';
+export type CharacterParamKey = 'attackCooldownMs' | 'moveSpeed' | 'vacuumRadius' | 'vacuumFlatten' | 'vacuumOffsetY' | 'vacuumOffsetX';
 
 /** 角色參數數值表 */
 export type CharacterParams = Record<CharacterParamKey, number>;
@@ -28,14 +29,6 @@ export const CHARACTER_PARAM_DEFS: ReadonlyArray<CharacterParamDef> = [
   {
     key: 'moveSpeed', label: '移動速度', unit: '', hint: '',
     min: 100, max: 500, step: 10, defaultValue: GameConfig.slow.moveSpeed
-  },
-  {
-    key: 'dashSpeed', label: '衝刺速度', unit: '', hint: '',
-    min: 200, max: 1500, step: 20, defaultValue: GameConfig.slow.dashSpeed
-  },
-  {
-    key: 'dashDistance', label: '衝刺距離', unit: 'px', hint: '',
-    min: 60, max: 400, step: 10, defaultValue: GameConfig.slow.dashDistance
   },
   {
     key: 'vacuumRadius', label: '真空圈大小', unit: 'px', hint: '',

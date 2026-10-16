@@ -13,6 +13,7 @@ import {
   ATTACK_HIT_EVENT, applyWindowHitPause, attackTuning, createHitWindowState, meleeMove, moveHitPoints, moveReach, runHitWindow, type AttackMove, type HitPoint,
   type HitWindowState
 } from '../systems/attackTuningParams';
+import { dashParams } from '../systems/dashParams';
 import { hitShapeContains, placeHitShape, type PlacedHitShape } from '../systems/hitShapes';
 
 /** 慢速模式八方向移動鍵（方向鍵 + WASD） */
@@ -21,12 +22,6 @@ export interface SlowMoveKeys {
   left: Phaser.Input.Keyboard.Key; right: Phaser.Input.Keyboard.Key;
   w: Phaser.Input.Keyboard.Key; a: Phaser.Input.Keyboard.Key;
   s: Phaser.Input.Keyboard.Key; d: Phaser.Input.Keyboard.Key;
-}
-
-/** 衝刺 / 慢速移動可調參數（遊戲中可調） */
-export interface SlowTuning {
-  dashDistance: number;
-  dashSpeed: number;
 }
 
 /**
@@ -47,8 +42,6 @@ export interface CharacterActionHost {
   targeting(): TargetingController;
   /** 是否為慢速模式 */
   isSlowMode(): boolean;
-  /** 慢速模式的衝刺距離 / 速度 */
-  slowTuning(): SlowTuning;
   /** 角色編輯器參數（慢速模式的移動速度與普攻冷卻） */
   charParams(): CharacterParams;
   /** 慢速模式移動鍵 */
@@ -576,8 +569,8 @@ export class CharacterActionController {
    */
   private startDirectionDash(c: Character, time: number, maxDist = Infinity): void {
     const slow = this.host.isSlowMode();
-    const baseDist = slow ? this.host.slowTuning().dashDistance : GameConfig.aim.dashDistance;
-    const dist = Math.min(maxDist, baseDist * (c.isEmpowered(time) ? GameConfig.combo.empower.moveMult : 1));
+    const baseDist = slow ? dashParams().dashDistance : GameConfig.aim.dashDistance;
+    const dist = Math.min(maxDist, baseDist * (c.isEmpowered(time) ? dashParams().empowerDistanceMult : 1));
     const destX = c.x + Math.cos(c.aimAngle) * dist;
     const destY = c.y + Math.sin(c.aimAngle) * dist;
     if (c === this.host.player() && slow) {
@@ -692,10 +685,10 @@ export class CharacterActionController {
     this.endDashState(c);
   }
 
-  /** 目前衝刺速度：慢速模式讀即時調參，強化中加乘 */
+  /** 目前衝刺速度：慢速模式讀招式編輯器的衝刺參數，強化中加乘 */
   private currentDashSpeed(c: Character, time: number): number {
-    const base = this.host.isSlowMode() ? this.host.slowTuning().dashSpeed : GameConfig.player.dashSpeed;
-    return base * (c.isEmpowered(time) ? GameConfig.combo.empower.dashSpeedMult : 1);
+    const base = this.host.isSlowMode() ? dashParams().dashSpeed : GameConfig.player.dashSpeed;
+    return base * (c.isEmpowered(time) ? dashParams().empowerSpeedMult : 1);
   }
 
   /**
@@ -703,7 +696,8 @@ export class CharacterActionController {
    * 畫刀光；這次衝刺第一次打中時切入（頓點 → 減速陷入 → 繼續衝刺），並且：
    * - 一般衝刺：算一次連段與 HIT、頓點用一般衝刺的頓點
    * - 二段強化衝刺（不含衝向木箱的）：以撞到的敵人為中心炸強化 AOE（COMBO、頓點用強化衝刺的設定），AOE 打中的之後不再穿透打
-   * 撞到 BOSS / 塔就攻擊（強化衝刺炸 AOE）並停在它外緣、結束衝刺；穿不過的木樁（anchored）照樣打，打完停在它外緣、結束衝刺
+   * 撞到 BOSS / 塔就攻擊（強化衝刺炸 AOE）並停在它外緣、結束衝刺；木樁（anchored）跟一般怪一樣穿過去，
+   * 只有普攻衝向它（它就是這次衝刺的目標，終點在它身上）時打完停在它外緣、結束衝刺
    *
    * @param c 衝刺中的角色
    * @param dashSpeed 目前的衝刺速度
@@ -732,7 +726,7 @@ export class CharacterActionController {
         return true;
       }
       hits.push(enemy);
-      if (enemy.anchored) blocker = enemy;
+      if (enemy.anchored && this.attackDashTargets.get(c) === enemy) blocker = enemy;
     }
     if (hits.length === 0) return false;
     const firstHit = pierced.size === 0;

@@ -55,6 +55,7 @@ import { PlayerSpineController } from '../controllers/PlayerSpineController';
 import { AttackTuningEditor } from '../objects/AttackTuningEditor';
 import { reloadAttackTuning } from '../systems/attackTuningParams';
 import { monsterAttackFor, reloadMonsterAttacks } from '../systems/monsterAttackParams';
+import { dashParams, reloadDashParams } from '../systems/dashParams';
 
 /** 敵人上方彩票獲得提示的深度與離敵人中心的高度（樣式見 GameConfig.ticketFx；不受特效節流，獎勵一定要看得到） */
 const TICKET_POP_DEPTH = 51;
@@ -200,15 +201,6 @@ export class GameScene extends Phaser.Scene {
   private editorDummyHits = false;
   /** 招式編輯器模式的範圍 / 判定編輯器（其他模式為 null） */
   private tuningEditor: AttackTuningEditor | null = null;
-  /**
-   * 慢速模式【即時可調參數】——遊戲中用下方調參欄位 −/+ 調整，即時生效。
-   * 初值取自 config；slow 模式的鎖定範圍/衝刺距離/衝刺速度改讀這組(fast 仍讀 config 常數不受影響)。
-   */
-  private slowTuning: Record<'lockRadius' | 'dashDistance' | 'dashSpeed', number> = {
-    lockRadius: GameConfig.slow.dashDistance, // 鎖敵範圍跟衝刺距離同步（開局後改用角色編輯器的值）
-    dashDistance: GameConfig.slow.dashDistance,
-    dashSpeed: GameConfig.slow.dashSpeed
-  };
   /** 角色編輯器的參數（慢速模式套用於 P1 與 BOT）；每次開局從存檔讀取 */
   private charParams: CharacterParams = loadCharacterParams();
   /** slow：八方向移動鍵（方向鍵 + WASD） */
@@ -563,14 +555,12 @@ export class GameScene extends Phaser.Scene {
     this.editorDummyType = GameConfig.moveEditor.dummyType;
     this.editorDummyHits = false;
     this.tuningEditor = null;
-    // 角色編輯器參數：每局重新讀取（主選單可能剛改過），衝刺距離/速度同步到慢速即時調參，鎖敵範圍跟衝刺距離同步
+    // 角色編輯器參數：每局重新讀取（主選單可能剛改過）
     this.charParams = loadCharacterParams();
     reloadHitFeel(); // 打擊感參數：每局重新讀取（主選單打擊感編輯器可能剛改過）
     reloadAttackTuning(); // 攻擊範圍參數：每局重新讀取（招式編輯器可能剛改過）
     reloadMonsterAttacks(); // 怪物攻擊參數：同上（範圍編輯器的怪物頁）
-    this.slowTuning.dashDistance = this.charParams.dashDistance;
-    this.slowTuning.dashSpeed = this.charParams.dashSpeed;
-    this.slowTuning.lockRadius = this.charParams.dashDistance; // 鎖敵範圍跟衝刺距離同步
+    reloadDashParams(); // 衝刺參數：同上（招式編輯器的一般衝刺 / 強化衝刺頁）
     this.characters = [];
     this.survivalMs = 0;
     this.gameOver = false;
@@ -1451,7 +1441,7 @@ export class GameScene extends Phaser.Scene {
       player: () => this.player,
       isGameOver: () => this.gameOver,
       isSlowMode: () => this.controlMode === 'slow',
-      slowLockRadius: () => this.slowTuning.lockRadius,
+      slowLockRadius: () => dashParams().dashDistance,
       targeting: () => this.targeting,
       damageEnemyFrom: (actor, enemy, damage, knockback, fromX, fromY, time) => this.damageEnemyFrom(actor, enemy, damage, knockback, fromX, fromY, time),
       damageEnemy: (actor, enemy, damage, knockback, time) => this.damageEnemy(actor, enemy, damage, knockback, time),
@@ -1701,7 +1691,7 @@ export class GameScene extends Phaser.Scene {
       characters: () => this.characters,
       player: () => this.player,
       isSlowMode: () => this.controlMode === 'slow',
-      slowLockRadius: () => this.slowTuning.lockRadius
+      slowLockRadius: () => dashParams().dashDistance
     };
   }
 
@@ -1717,7 +1707,6 @@ export class GameScene extends Phaser.Scene {
       edgeMargins: (c) => this.edgeMarginsOf(c),
       targeting: () => this.targeting,
       isSlowMode: () => this.controlMode === 'slow',
-      slowTuning: () => this.slowTuning,
       charParams: () => this.charParams,
       slowKeys: () => this.slowKeys!,
       isFrozenByTimestop: (c) => this.isFrozenByTimestop(c),

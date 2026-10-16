@@ -7,6 +7,9 @@ import {
   hasHitShape, isTimedMove, moveHitPoints, resetAllAttackTuning, resetMoveHitPoints, setMeleeEnemyRange, setMoveHitPoints,
   type AttackMove, type HitPoint, type HitPointField, type TimedAttackMove
 } from '../systems/attackTuningParams';
+import {
+  DASH_PARAM_DEFS, EMPOWER_DASH_KEYS, PIERCE_DASH_KEYS, dashParams, resetDashParams, setDashParam, type DashParamKey
+} from '../systems/dashParams';
 import { HIT_SHAPE_KINDS, HIT_SHAPE_LABELS, drawHitShape, placeHitShape, type HitShape, type HitShapeKind } from '../systems/hitShapes';
 import {
   MONSTER_KINDS, clampMonsterField, monsterAttack, monsterFieldDefs, placeBombAttack, resetAllMonsterAttacks,
@@ -130,6 +133,10 @@ const OVERLAY = {
   LINE_WIDTH: 2,
   SELECTED_LINE_WIDTH: 4,
   TRIGGER: { color: 0xfacc15, line: 0.6 },
+  /** 衝刺頁：衝刺路線（角色 → 終點）的線寬與透明度、終點標記半徑、鎖敵範圍圈的透明度 */
+  DASH_PATH_LINE: 0.8,
+  DASH_END_RADIUS: 10,
+  LOCK_RANGE_LINE: 0.35,
   /** 沒有木樁時，強化衝刺的範圍畫在角色前方這個距離（強化衝刺以撞擊點為基準） */
   DASH_PREVIEW_DISTANCE: 150,
   /** 判定那一刻該打擊點閃亮：填色透明度改成 FLASH_FILL，持續 FLASH_MS */
@@ -244,7 +251,8 @@ export interface AttackTuningEditorHost {
  *   加 / 刪打擊點時，各打擊點的傷害自動平均分配（之後可個別調）
  * - 選中打擊點的參數：形狀（扇形 / 圓形 / 長方形）、判定中心往前 / 往上下偏移、該形狀的尺寸、傷害 %、頓點（打中怪時出招者停住多久）
  *   （systems/attackTuningParams，每次調整即時套用並存在瀏覽器）；爆發、強化衝刺、一般衝刺只有一個打擊點、沒有時間軸，
- *   一般衝刺只有傷害 % 與頓點（以衝刺判定半徑碰撞，沒有判定範圍）
+ *   一般衝刺只有傷害 % 與頓點（以衝刺判定半徑碰撞，沒有判定範圍）；一般衝刺頁另外調衝刺距離（同時是鎖敵範圍）/ 速度，
+ *   強化衝刺頁另外調二段變身中的衝刺距離 / 速度倍率（systems/dashParams），角色身上畫出衝刺路線與終點
  * - 最下面是普攻共用的近戰觸發距離與恢復預設、匯出設定（我方招式與怪物一起存成 JSON，複製到剪貼簿並下載，交給開發寫成預設值）、關閉
  * - 工具列：循環出招（選中的招式自動朝木樁重複放）、匯入設定（選匯出的 JSON 檔套用）、A/B 比較（目前設定存成 A / B、
  *   套用 A / B，並排列出兩組不同的數值；systems/tuningSettings）
@@ -337,6 +345,23 @@ export class AttackTuningEditor {
     });
     g.lineStyle(OVERLAY.LINE_WIDTH, OVERLAY.TRIGGER.color, OVERLAY.TRIGGER.line)
       .strokeCircle(p.x, p.y, attackTuning().meleeEnemyRange + (this.host.dummy()?.radius ?? 0));
+    if (this.dashKeys().length > 0) this.drawDashPath(g, p, color);
+  }
+
+  /**
+   * 衝刺頁的範圍顯示：沿 P1 面向畫出衝刺路線與終點（強化衝刺頁乘上強化距離倍率；實際衝刺會夾在場內），一般衝刺頁再畫鎖敵範圍圈
+   *
+   * @param g 畫布
+   * @param p P1
+   * @param color 招式顏色
+   */
+  private drawDashPath(g: Phaser.GameObjects.Graphics, p: Character, color: number): void {
+    const dash = dashParams();
+    const distance = dash.dashDistance * (this.selected === 'dash' ? dash.empowerDistanceMult : 1);
+    const endX = p.x + Math.cos(p.aimAngle) * distance, endY = p.y + Math.sin(p.aimAngle) * distance;
+    g.lineStyle(OVERLAY.SELECTED_LINE_WIDTH, color, OVERLAY.DASH_PATH_LINE).lineBetween(p.x, p.y, endX, endY)
+      .strokeCircle(endX, endY, OVERLAY.DASH_END_RADIUS);
+    if (this.selected === 'pierce') g.lineStyle(OVERLAY.LINE_WIDTH, color, OVERLAY.LOCK_RANGE_LINE).strokeCircle(p.x, p.y, dash.dashDistance);
   }
 
   /**
@@ -580,12 +605,12 @@ export class AttackTuningEditor {
         color: LAYOUT.COLORS.MOVE_RESET,
         onClick: monster
           ? () => { resetMonsterAttack(this.selectedMonster); this.render(); }
-          : () => { resetMoveHitPoints(this.selected); this.selectPoint(0); }
+          : () => { resetMoveHitPoints(this.selected); resetDashParams(this.dashKeys()); this.selectPoint(0); }
       },
       {
         label: '全部恢復預設',
         color: LAYOUT.COLORS.RESET,
-        onClick: monster ? () => { resetAllMonsterAttacks(); this.render(); } : () => { resetAllAttackTuning(); this.selectPoint(0); }
+        onClick: monster ? () => { resetAllMonsterAttacks(); this.render(); } : () => { resetAllAttackTuning(); resetDashParams([...PIERCE_DASH_KEYS, ...EMPOWER_DASH_KEYS]); this.selectPoint(0); }
       },
       { label: '匯出設定', color: LAYOUT.COLORS.EXPORT, onClick: () => this.exportSettings() },
       { label: '關閉', color: LAYOUT.COLORS.CLOSE, onClick: () => this.close() }
@@ -667,7 +692,7 @@ export class AttackTuningEditor {
       void file.text().then((text) => {
         const result = importSettings(text);
         this.setStatus(result
-          ? `已匯入 ${file.name}：${result.moves} 招、${result.monsters} 種怪${result.meleeRange ? '、近戰觸發距離' : ''}`
+          ? `已匯入 ${file.name}：${result.moves} 招、${result.monsters} 種怪${result.meleeRange ? '、近戰觸發距離' : ''}${result.dash ? '、衝刺參數' : ''}`
           : `${file.name} 不是匯出的設定檔，沒有套用`);
         if (this.panel) this.selectMode(this.mode);
       });
@@ -758,6 +783,12 @@ export class AttackTuningEditor {
     const point = moveHitPoints(this.selected)[this.selectedPoint];
     for (const field of this.pointFields(point)) {
       this.addRow(ui, panel, y, field, () => this.pointValueText(field), (dir) => this.stepPoint(field, dir));
+      y += LAYOUT.ROW_HEIGHT;
+    }
+    for (const key of this.dashKeys()) {
+      const def = DASH_PARAM_DEFS[key];
+      this.addRow(ui, panel, y, `dash:${key}`, () => `${dashParams()[key]}${def.unit}`,
+        (dir) => setDashParam(key, dashParams()[key] + dir * def.step), def.label, def.hint);
       y += LAYOUT.ROW_HEIGHT;
     }
     y += LAYOUT.SECTION_GAP;
@@ -930,6 +961,12 @@ export class AttackTuningEditor {
     });
     markers.fillStyle(LAYOUT.PLAYHEAD_COLOR, 1).fillRect(toX(this.playheadMs) - LAYOUT.PLAYHEAD_WIDTH / 2, barTop - LAYOUT.PLAYHEAD_OVERHANG,
       LAYOUT.PLAYHEAD_WIDTH, LAYOUT.BAR_HEIGHT + LAYOUT.PLAYHEAD_OVERHANG * 2);
+  }
+
+  /** 選中的招式頁要顯示的衝刺參數：一般衝刺頁是衝刺距離 / 速度，強化衝刺頁是強化倍率，其他招式沒有 */
+  private dashKeys(): ReadonlyArray<DashParamKey> {
+    if (this.selected === 'pierce') return PIERCE_DASH_KEYS;
+    return this.selected === 'dash' ? EMPOWER_DASH_KEYS : [];
   }
 
   /**
